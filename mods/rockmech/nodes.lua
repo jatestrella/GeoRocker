@@ -205,7 +205,7 @@ end
 
 -- 碎石：軸差破壞後的岩石。不參與軸差判定（非岩性），
 -- 但在 collapse.lua 中套用懸空掉落與安息角滑動。
--- 碎石種類：一般碎石（灰）與花崗岩碎石（偏白）。皆屬 group rockmech_rubble。
+-- 碎石種類：一般碎石（灰）與花崗岩碎石（粉紅，同花崗岩色調）。皆屬 group rockmech_rubble。
 local gravel_sounds = has_default and default.node_sound_gravel_defaults and default.node_sound_gravel_defaults() or sounds
 
 rockmech.RUBBLE = rockmech.modname .. ":rubble"
@@ -219,7 +219,9 @@ core.register_node(rockmech.RUBBLE, {
 rockmech.RUBBLE_GRANITE = rockmech.modname .. ":rubble_granite"
 core.register_node(rockmech.RUBBLE_GRANITE, {
 	description = "Granite rubble (花崗岩碎石)\n破碎的花崗岩",
-	tiles = {has_default and "default_gravel.png^[colorize:#f0e8e2:170" or "[fill:16x16:#ddd4cc"},
+	-- 與花崗岩本身相同的粉紅色調（cfg 的岩性顏色），以礫石紋理呈現
+	tiles = {has_default and ("default_gravel.png^[colorize:" .. cfg.lithologies.granite.color .. ":150")
+		or ("[fill:16x16:" .. cfg.lithologies.granite.color)},
 	groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
 	sounds = gravel_sounds,
 })
