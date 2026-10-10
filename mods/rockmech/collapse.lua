@@ -770,6 +770,16 @@ local function register_physics_events(name, intact)
             -- 落石離開原位）都可能讓上方岩石懸空。判定很便宜，且只會讓
             -- 懸空群落下，不會無限連鎖。
             collapse.queue_support_check(pos)
+            -- 正上方若是碎石（不在支撐判定的鍵結範圍內），也要重新判定掉落／滑動
+            local above = {x = pos.x, y = pos.y + 1, z = pos.z}
+            core.after(0, function()
+                if core.get_node(above).name == rockmech.RUBBLE then
+                    local prev = physics_updating
+                    physics_updating = true
+                    check_stability_and_move(above)
+                    physics_updating = prev
+                end
+            end)
             if physics_updating then return end  -- 物理系統內部操作，不重複觸發
             core.after(0.05, function()
                 physics_updating = true
