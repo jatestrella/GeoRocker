@@ -717,6 +717,10 @@ local function register_physics_events(name, intact)
             physics_updating = false
         end,
         on_destruct = function(pos)
+            -- 支撐判定不受防護限制：任何移除（包括物理系統把碎石移走、
+            -- 落石離開原位）都可能讓上方岩石懸空。判定很便宜，且只會讓
+            -- 懸空群落下，不會無限連鎖。
+            collapse.queue_support_check(pos)
             if physics_updating then return end  -- 物理系統內部操作，不重複觸發
             core.after(0.05, function()
                 physics_updating = true
@@ -724,7 +728,6 @@ local function register_physics_events(name, intact)
                 physics_updating = false
             end)
             collapse.queue_failure_check(pos)
-            collapse.queue_support_check(pos)
         end
     }
     if intact then
