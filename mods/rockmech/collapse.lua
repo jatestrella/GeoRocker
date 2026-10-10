@@ -698,7 +698,56 @@ core.register_on_dignode(function(pos, oldnode)
     collapse.queue_support_check(pos)
 end)
 
--- 9. 註冊行為：放置／移除岩石時觸發區域更新
+-- 9. 掉落破碎：包裝原版 falling node entity
+-- 開始掉落時記下高度；落地放回 node 前，完整岩石依落下高度有機率變成碎石。
+-- 變成碎石後接著依安息角判定。（原版 entity 的定義表是所有實例的 metatable，
+-- 直接包裝其方法即可套用到每個 falling node。）
+do
+    local fb = cfg.fallbreak
+    local ent = core.registered_entities["__builtin:falling_node"]
+    local orig_set_node = ent.set_node
+    local orig_try_place = ent.try_place
+
+    ent.set_node = function(self, node, meta)
+        local pos = self.object:get_pos()
+        if pos then self.rm_start_y = pos.y end
+        return orig_set_node(self, node, meta)
+    end
+
+    ent.try_place = function(self, bcp, bcn)
+        local broke = false
+        local name = self.node and self.node.name
+        if fb.enabled and name and is_rock(name) and name ~= rockmech.RUBBLE and self.rm_start_y then
+            local pos = self.object:get_pos()
+            local h = self.rm_start_y - pos.y
+            local lith = rockmech.lith_of_node[name]
+            local h_ref = lith and lith.break_height or fb.break_height
+            if math.random() < rockmech.rockfall.break_probability(h, h_ref) then
+                self.node = {name = rockmech.RUBBLE}
+                broke = true
+            end
+        end
+        local ok = orig_try_place(self, bcp, bcn)
+        if ok and broke then
+            -- 碎石落地後依安息角判定（下一個 tick，等 node 放好）
+            local p = vector.round(self.object:get_pos())
+            core.after(0, function()
+                for dy = 0, 1 do
+                    local q = {x = p.x, y = p.y + dy, z = p.z}
+                    if core.get_node(q).name == rockmech.RUBBLE then
+                        physics_updating = true
+                        check_stability_and_move(q)
+                        physics_updating = false
+                        break
+                    end
+                end
+            end)
+        end
+        return ok
+    end
+end
+
+-- 10. 註冊行為：放置／移除岩石時觸發區域更新
 -- intact = true：完整岩石。玩家挖掘後原地變成碎石（不掉落物品），
 -- 碎石要再挖一次才會移除（相當於出碴）。
 local function register_physics_events(name, intact)

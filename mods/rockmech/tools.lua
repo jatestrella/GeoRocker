@@ -350,6 +350,13 @@ local TOGGLES = {
 		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
 	},
 	{
+		id = "fallbreak", tbl = cfg.fallbreak,
+		label = "完整岩石掉落時有機率變成碎石",
+		short = "掉落破碎",
+		info = function() return "機率 p = 1 − exp(−落下高度 / h_ref)，h_ref 依岩性" end,
+		off_note = "關閉：完整岩石掉落後仍是完整岩石",
+	},
+	{
 		id = "slope", tbl = cfg.slope,
 		label = "碎石安息角滑動（完整岩石不受影響）",
 		short = "碎石安息角滑動",

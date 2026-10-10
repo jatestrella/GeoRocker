@@ -20,24 +20,26 @@ local config = {}
 --   cracky      Luanti 挖掘群組等級（1 最硬、3 最軟）
 --   rn, rt      落石撞擊此岩面時的法向／切向回彈係數
 --   mu_roll     落石在此岩面上的滾動阻力係數（tan 滾動摩擦角）
+--   break_height 掉落破碎特徵高度 h_ref (m)：落下 h 公尺後變碎石的機率
+--               p = 1 − exp(−h / h_ref)，越硬越大
 config.lithologies = {
 	sandstone = {
 		name = "sandstone", description = "Sandstone (砂岩)",
 		gamma = 24.0, ucs = 60.0, tensile = 4.0,
 		color = "#c9a46a", cracky = 3,
-		rn = 0.35, rt = 0.85, mu_roll = 0.40,
+		rn = 0.35, rt = 0.85, mu_roll = 0.40, break_height = 4.0,
 	},
 	shale = {
 		name = "shale", description = "Shale (頁岩)",
 		gamma = 25.0, ucs = 30.0, tensile = 2.0,
 		color = "#3c4048", cracky = 3,
-		rn = 0.30, rt = 0.80, mu_roll = 0.50,
+		rn = 0.30, rt = 0.80, mu_roll = 0.50, break_height = 2.5,
 	},
 	granite = {
 		name = "granite", description = "Granite (花崗岩)",
 		gamma = 26.5, ucs = 180.0, tensile = 10.0,
 		color = "#d2b4ac", cracky = 2,
-		rn = 0.45, rt = 0.90, mu_roll = 0.35,
+		rn = 0.45, rt = 0.90, mu_roll = 0.35, break_height = 8.0,
 	},
 }
 
@@ -92,6 +94,12 @@ config.failure_defaults = {
 	max_cascade = 5,          -- 連鎖重算輪數上限
 	cascade_delay = 0.6,      -- 每輪間隔 (s)，讓剝落的岩塊先就位
 	budget_ms = 5,            -- 單次檢查超過此時間就記 log
+}
+
+-- 掉落破碎；設定鍵為 rockmech_fallbreak_<key>
+config.fallbreak_defaults = {
+	enabled = true,           -- 完整岩石掉落後依落下高度有機率變成碎石
+	break_height = 4.0,       -- 非岩性（如 default:stone）的破碎特徵高度 (m)
 }
 
 -- 支撐判定（support.lua）；設定鍵為 rockmech_support_<key>
@@ -244,6 +252,10 @@ function config.load(get)
 		f.strength_scale = 1
 	end
 	cfg.failure = f
+
+	-- 掉落破碎
+	cfg.fallbreak = load_section("fallbreak", config.fallbreak_defaults)
+	cfg.fallbreak.break_height = math.max(0.01, cfg.fallbreak.break_height)
 
 	-- 支撐判定
 	cfg.support = load_section("support", config.support_defaults)

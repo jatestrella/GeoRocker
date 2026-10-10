@@ -101,6 +101,13 @@ function rockfall.roll_rotation(roll, yaw)
 	return {x = -roll, y = yaw, z = 0}
 end
 
+-- 掉落破碎機率：落下高度 h (m)、破碎特徵高度 h_ref (m)
+-- p = 1 − exp(−h / h_ref)；h ≤ 0.5（同一格內）不破碎
+function rockfall.break_probability(h, h_ref)
+	if h <= 0.5 or h_ref <= 0 then return 0 end
+	return 1 - math.exp(-h / h_ref)
+end
+
 rockfall.add, rockfall.sub, rockfall.scale = add, sub, scale
 
 return rockfall
