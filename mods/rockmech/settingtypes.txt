@@ -1,0 +1,24 @@
+[Lithology and stress]
+
+# Ground surface elevation y0 (m). Depth h = y0 - y. 1 node = 1 m.
+# Also controls the depth layering of lithologies (new chunks only).
+rockmech_surface_y (Surface elevation y0) int 0 -31000 31000
+
+# Lateral earth pressure coefficient K0: sigma_h = K0 * sigma_v.
+rockmech_k0 (K0 = sigma_h / sigma_v) float 0.5 0.0 10.0
+
+# Replace mapgen stone with rockmech lithologies by depth layer (new chunks only).
+rockmech_replace_stone (Replace mapgen stone) bool true
+
+[Joint sets]
+
+# Override joint set 1: "dip,dipdir,spacing,persistence,phi"
+# (degrees, degrees clockwise from north, m >= 1, 0-1, degrees).
+# Empty = use the default in config.lua.
+rockmech_joint_set_1 (Joint set 1 override) string
+
+# Override joint set 2: "dip,dipdir,spacing,persistence,phi". Empty = default.
+rockmech_joint_set_2 (Joint set 2 override) string
+
+# Override joint set 3: "dip,dipdir,spacing,persistence,phi". Empty = default.
+rockmech_joint_set_3 (Joint set 3 override) string
