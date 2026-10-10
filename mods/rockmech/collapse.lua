@@ -14,12 +14,11 @@ rockmech.collapse = collapse
 
 -- 安息角設定
 -- SLOPE_THRESHOLD：絕對下限，drop < 此值完全不滑（單位：格）
--- ANGLE_OF_REPOSE：目標安息角（度），實際機率以此計算
+-- 安息角（度）：設定 rockmech_slope_angle（預設 35°，有稜角岩屑約 34–40°）
 -- SLOPE_RANDOMNESS：機率曲線平滑度，小→硬門檻、大→較隨機
 local SLOPE_THRESHOLD = 1
-local ANGLE_OF_REPOSE = 30
 local SLOPE_RANDOMNESS = 1.0
-local SLOPE_TAN = math.tan(math.rad(ANGLE_OF_REPOSE))
+local SLOPE_TAN = math.tan(math.rad(rockmech.cfg.slope.angle))
 
 -- 8 方向鄰居（含對角），h 為水平距離
 local SLOPE_NEIGHBORS = {
@@ -108,7 +107,10 @@ local sliding_node_def = {
                 -- 落地後仍檢查下方：若仍是空氣（例如 escape 落到懸空位置）就掉落
                 local below = {x=tp.x, y=tp.y-1, z=tp.z}
                 if core.get_node(below).name == "air" then
+                    -- 物理系統內部操作：不當作新的開挖觸發
+                    physics_updating = true
                     core.spawn_falling_node(tp)
+                    physics_updating = false
                 end
             end
             if self.reserved_landing then release_pos(self.reserved_landing) end
@@ -175,10 +177,38 @@ local function compute_landing_y(pos)
     return nil
 end
 
--- 嘗試讓岩石依機率 + 安息角滑落到相鄰 8 方向較低的柱子
-local function try_slope_slide(pos)
+-- 把 pos 的岩石變成翻滾落石（rockfall_entity.lua）。數量達上限時回傳 false，
+-- 呼叫者改用原本的掉落／滑動方式。
+-- start：產生位置（預設為格中心）
+local function launch_rockfall(pos, velocity, start)
+    local rfe = rockmech.rockfall_entity
+    if not rfe or not rfe.can_spawn() then return false end
     local node = core.get_node(pos)
     if not is_rock(node.name) then return false end
+    local prev = physics_updating
+    physics_updating = true  -- 移除 node 不當作新的開挖觸發
+    core.remove_node(pos)
+    physics_updating = prev
+    if not rfe.spawn(start or {x=pos.x, y=pos.y, z=pos.z}, node.name, velocity) then
+        core.set_node(pos, node)
+        return false
+    end
+    return true
+end
+collapse.launch_rockfall = launch_rockfall
+
+-- 安息角滑落改為翻滾：從格子邊緣（往滑動方向偏移 0.5 m）以此初速推出 (m/s)，
+-- 確保能離開原本那一格（滾動阻力下 1.5 m/s 只滑約 0.3 m 就停住）
+local SLIDE_LAUNCH_SPEED = 3.0
+local SLIDE_LAUNCH_OFFSET = 0.5
+
+-- 嘗試讓岩石依機率 + 安息角滑落到相鄰 8 方向較低的柱子
+local function try_slope_slide(pos)
+    -- 遊戲中可關閉（物品欄 rockmech 分頁 / /rockmech_toggle slope）
+    if not rockmech.cfg.slope.enabled then return false end
+    local node = core.get_node(pos)
+    -- 只有碎石受安息角控制；完整岩石由軸差破壞準則控制
+    if node.name ~= rockmech.RUBBLE then return false end
     -- 下方無支撐 → 留給正常掉落邏輯處理
     if core.get_node({x=pos.x, y=pos.y-1, z=pos.z}).name == "air" then return false end
 
@@ -199,6 +229,13 @@ local function try_slope_slide(pos)
                 local drop = pos.y - (top_y + 1)
                 local p = slope_slide_probability(drop, d.h)
                 if p > 0 and math.random() < p then
+                    -- 優先改為往該方向翻滾（之後的運動由落石物理處理）
+                    local s = SLIDE_LAUNCH_SPEED / d.h
+                    local o = SLIDE_LAUNCH_OFFSET / d.h
+                    if launch_rockfall(pos, {x = d.x * s, y = 0, z = d.z * s},
+                            {x = pos.x + d.x * o, y = pos.y, z = pos.z + d.z * o}) then
+                        return true
+                    end
                     local landing = {x=side.x, y=top_y+1, z=side.z}
                     if not is_reserved(landing) then
                         local original_name = node.name
@@ -248,6 +285,8 @@ local function iterative_slope_slide(start_pos, depth)
 end
 
 -- 結合掉落 + 安息角整理：spawn_falling_node 後排程滑落收尾
+-- 垂直落下沿用原版 falling node；落地後若坡度超過安息角，才由
+-- iterative_slope_slide → try_slope_slide 改為翻滾落石。
 local function fall_with_slope_settle(pos)
     local target_y = compute_landing_y(pos)
     if target_y then
@@ -319,19 +358,46 @@ end
 collapse.try_escape_or_destroy = try_escape_or_destroy
 
 -- 5. 單點擾動檢查：懸空掉落 → 安息角滑動（不連鎖）
+-- 某格是否為實心（walkable；未載入視為實心）
+local function is_solid_at(p)
+    local n = core.get_node_or_nil(p)
+    if not n then return true end
+    local d = core.registered_nodes[n.name]
+    return not d or d.walkable ~= false
+end
+
+-- 完整岩石是否完全孤立：上方與四個側面都沒有實心格
+local function is_isolated(pos)
+    return not is_solid_at({x=pos.x, y=pos.y+1, z=pos.z})
+        and not is_solid_at({x=pos.x+1, y=pos.y, z=pos.z})
+        and not is_solid_at({x=pos.x-1, y=pos.y, z=pos.z})
+        and not is_solid_at({x=pos.x, y=pos.y, z=pos.z+1})
+        and not is_solid_at({x=pos.x, y=pos.y, z=pos.z-1})
+end
+collapse.is_isolated = is_isolated
+
+-- 碎石：下方懸空就落下，否則依安息角滑動。
+-- 完整岩石：只有「下方懸空且完全孤立」才落下；頂板、懸臂由相鄰岩石撐住，
+--           其破壞交給軸差破壞準則（之後再加關鍵塊、張力破壞）。
 check_stability_and_move = function(pos)
     local node = core.get_node_or_nil(pos)
     if not node or not is_rock(node.name) then return end
 
-    -- 無支撐自動掉落：下方是空氣就直接落下
     local below = {x=pos.x, y=pos.y-1, z=pos.z}
-    if core.get_node(below).name == "air" then
-        fall_with_slope_settle(pos)
+    local unsupported = core.get_node(below).name == "air"
+
+    if node.name == rockmech.RUBBLE then
+        if unsupported then
+            fall_with_slope_settle(pos)
+        else
+            try_slope_slide(pos)
+        end
         return
     end
 
-    -- 安息角：相鄰柱子過低就滑落
-    try_slope_slide(pos)
+    if unsupported and is_isolated(pos) then
+        fall_with_slope_settle(pos)
+    end
 end
 
 -- 6. 區域更新：僅開挖點周圍5格，判定但不再連鎖
@@ -352,7 +418,206 @@ update_affected_area = function(center_pos)
 end
 collapse.update_affected_area = update_affected_area
 
--- 7. 註冊行為：放置／移除岩石時觸發區域更新
+-- 7. 軸差破壞（模型見 failure.lua）
+-- 開挖觸發 → 同一 tick 內合併 → VoxelManip 一次讀取 → 純函式評估 →
+-- 破壞的臨空格以 try_escape_or_destroy 剝落 → 有限輪數連鎖重算
+local cfg = rockmech.cfg
+local fcfg = cfg.failure
+local failure = rockmech.failure
+
+local solid_of, weight_of, lith_of
+local function build_cid_maps()
+    if solid_of then return end
+    solid_of, weight_of, lith_of = {}, {}, {}
+    for name, def in pairs(core.registered_nodes) do
+        local cid = core.get_content_id(name)
+        solid_of[cid] = def.walkable ~= false
+        if def.walkable ~= false then
+            weight_of[cid] = fcfg.gamma_other
+        end
+    end
+    -- 未載入區塊：側向視為實心（保守），但不計入荷重
+    local c_ignore = core.get_content_id("ignore")
+    solid_of[c_ignore] = true
+    weight_of[c_ignore] = nil
+    for key, nodename in pairs(rockmech.node_of_lith) do
+        local cid = core.get_content_id(nodename)
+        lith_of[cid] = key
+        weight_of[cid] = cfg.lithologies[key].gamma
+    end
+end
+
+-- 讀取 [minp, maxp] 成為 failure.lua 的網格格式。
+-- 往上多讀 overburden_scan 公尺以累計柱狀荷重。
+function collapse.read_grid(minp, maxp)
+    build_cid_maps()
+    local vm = core.get_voxel_manip()
+    local top = {x = maxp.x, y = maxp.y + fcfg.overburden_scan, z = maxp.z}
+    local emin, emax = vm:read_from_map(minp, top)
+    local data = vm:get_data()
+    vm:close()
+    return {
+        data = data,
+        ox = emin.x, oy = emin.y, oz = emin.z,
+        nx = emax.x - emin.x + 1, ny = emax.y - emin.y + 1, nz = emax.z - emin.z + 1,
+        solid_of = solid_of, weight_of = weight_of, lith_of = lith_of,
+    }
+end
+
+function collapse.failure_params()
+    return {
+        surface_y = cfg.surface_y, k0 = cfg.k0, lithologies = cfg.lithologies,
+        window = fcfg.window,
+        strength_scale = fcfg.strength_scale,
+    }
+end
+
+-- 盒子工具
+local function cube(c, r)
+    return {{x = c.x - r, y = c.y - r, z = c.z - r}, {x = c.x + r, y = c.y + r, z = c.z + r}}
+end
+local function union(boxes)
+    local a = {x = math.huge, y = math.huge, z = math.huge}
+    local b = {x = -math.huge, y = -math.huge, z = -math.huge}
+    for _, bx in ipairs(boxes) do
+        for _, k in ipairs({"x", "y", "z"}) do
+            a[k] = math.min(a[k], bx[1][k]); b[k] = math.max(b[k], bx[2][k])
+        end
+    end
+    return a, b
+end
+local function volume(a, b)
+    return (b.x - a.x + 1) * (b.y - a.y + 1) * (b.z - a.z + 1)
+end
+
+-- 評估一組盒子（不修改地圖）。回傳 failed（由上往下）, stats, ms
+-- 盒子分散時（聯集體積遠大於各盒總和）逐盒讀取，避免讀入巨大區域。
+function collapse.evaluate_failure_boxes(boxes)
+    local t0 = core.get_us_time()
+    local params = collapse.failure_params()
+    local margin = fcfg.window + 1
+    local groups = {boxes}
+    local ua, ub = union(boxes)
+    local sum = 0
+    for _, bx in ipairs(boxes) do sum = sum + volume(bx[1], bx[2]) end
+    if #boxes > 1 and volume(ua, ub) > 2 * sum then
+        groups = {}
+        for _, bx in ipairs(boxes) do groups[#groups + 1] = {bx} end
+    end
+
+    local all, seen = {}, {}
+    local stats = {evaluated = 0, failed = 0, min_fs = math.huge}
+    for _, grp in ipairs(groups) do
+        local a, b = union(grp)
+        local grid = collapse.read_grid(
+            {x = a.x - margin, y = a.y - 1, z = a.z - margin},
+            {x = b.x + margin, y = b.y + 1, z = b.z + margin})
+        local failed, st = failure.evaluate_boxes(grid, params, grp)
+        stats.evaluated = stats.evaluated + st.evaluated
+        if st.min_fs < stats.min_fs then
+            stats.min_fs, stats.min_fs_pos, stats.min_fs_state =
+                st.min_fs, st.min_fs_pos, st.min_fs_state
+        end
+        for _, f in ipairs(failed) do
+            local k = pos_key(f)
+            if not seen[k] then
+                seen[k] = true
+                all[#all + 1] = f
+            end
+        end
+    end
+    table.sort(all, function(u, v) return u.y > v.y end)
+    stats.failed = #all
+    return all, stats, (core.get_us_time() - t0) / 1000
+end
+
+-- 以中心點與半徑評估（指令／除錯用）
+function collapse.evaluate_failure(centers, r)
+    local boxes = {}
+    for _, c in ipairs(centers) do boxes[#boxes + 1] = cube(c, r) end
+    return collapse.evaluate_failure_boxes(boxes)
+end
+
+-- 破壞格：原地換成碎石（swap_node 不觸發 on_destruct）。碎石仍是實心、提供側向
+-- 支撐，避免在岩體內部產生空洞；之後是否移動交給懸空掉落／安息角滑動。
+function collapse.apply_failure(failed)
+    local rubble = {name = rockmech.RUBBLE}
+    physics_updating = true
+    for _, f in ipairs(failed) do
+        local p = {x = f.x, y = f.y, z = f.z}
+        if rockmech.lith_of_node[core.get_node(p).name] then
+            core.swap_node(p, rubble)
+        end
+    end
+    -- 由上往下（failed 已排序）判定掉落／滑動
+    for _, f in ipairs(failed) do
+        check_stability_and_move({x = f.x, y = f.y, z = f.z})
+    end
+    physics_updating = false
+end
+
+-- 單一佇列：所有觸發（開挖、連鎖）合併成同一批處理
+local queue_boxes, queue_round = {}, 0
+local queue_scheduled = false
+local process_queue
+
+local function enqueue(box, round)
+    queue_boxes[#queue_boxes + 1] = box
+    if round > queue_round then queue_round = round end
+    if queue_scheduled then return end
+    queue_scheduled = true
+    core.after(0, process_queue)
+end
+
+process_queue = function()
+    queue_scheduled = false
+    local boxes, round = queue_boxes, queue_round
+    queue_boxes, queue_round = {}, 0
+    -- 遊戲中關閉破壞準則時，進行中的連鎖也一併停止
+    if #boxes == 0 or not fcfg.enabled then return end
+
+    local failed, stats, ms = collapse.evaluate_failure_boxes(boxes)
+    if ms > fcfg.budget_ms then
+        core.log("warning", ("[rockmech] 軸差破壞檢查 %.1f ms（預算 %g ms），第 %d 輪、%d 盒、評估 %d 格")
+            :format(ms, fcfg.budget_ms, round, #boxes, stats.evaluated))
+    end
+    if #failed == 0 then return end
+
+    core.log("action", ("[rockmech] 軸差破壞 第 %d 輪：%d 格（%.1f ms）"):format(round, #failed, ms))
+    collapse.apply_failure(failed)
+
+    if round >= fcfg.max_cascade then
+        core.log("action", ("[rockmech] 軸差破壞連鎖達上限 %d 輪，停止"):format(fcfg.max_cascade))
+        return
+    end
+    -- 下一輪只檢查破壞格附近（外包盒 ±2）
+    local a, b = union((function()
+        local t = {}
+        for _, f in ipairs(failed) do t[#t + 1] = cube(f, 0) end
+        return t
+    end)())
+    local next_box = {
+        {x = a.x - 2, y = a.y - 2, z = a.z - 2},
+        {x = b.x + 2, y = b.y + 2, z = b.z + 2},
+    }
+    core.after(fcfg.cascade_delay, function()
+        physics_updating = true
+        for _, f in ipairs(failed) do
+            -- 剝落後上方可能懸空：沿用懸空掉落／滑動判定
+            check_stability_and_move({x = f.x, y = f.y + 1, z = f.z})
+        end
+        physics_updating = false
+        enqueue(next_box, round + 1)
+    end)
+end
+
+-- 開挖觸發：同一 tick 內的多次觸發合併成一次檢查
+function collapse.queue_failure_check(pos)
+    if not fcfg.enabled then return end
+    enqueue(cube(vector.round(pos), fcfg.radius), 1)
+end
+
+-- 8. 註冊行為：放置／移除岩石時觸發區域更新
 local function register_physics_events(name)
     local def = core.registered_nodes[name]
     if not def then return end
@@ -375,11 +640,13 @@ local function register_physics_events(name)
                 update_affected_area(pos)
                 physics_updating = false
             end)
+            collapse.queue_failure_check(pos)
         end
     })
 end
 
 register_physics_events("default:stone")
+register_physics_events(rockmech.RUBBLE)
 for _, nodename in pairs(rockmech.node_of_lith) do
     register_physics_events(nodename)
 end

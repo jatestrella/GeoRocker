@@ -54,6 +54,13 @@ describe("config.load", function()
 		assert.are.equal(3, #warn)
 	end)
 
+	it("碎石安息角：預設 35°，可設定並夾限", function()
+		assert.are.equal(35, config.load(getter({})).slope.angle)
+		assert.are.equal(38, config.load(getter({rockmech_slope_angle = "38"})).slope.angle)
+		assert.are.equal(89, config.load(getter({rockmech_slope_angle = "120"})).slope.angle)
+		assert.is_false(config.load(getter({rockmech_slope_enabled = "false"})).slope.enabled)
+	end)
+
 	it("不修改原始表", function()
 		local before = config.joint_sets[1].dip
 		local cfg = config.load(getter({rockmech_joint_set_1 = "33,20,3,0.5,30"}))

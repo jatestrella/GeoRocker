@@ -11,6 +11,8 @@ rockmech = {modname = modname, modpath = modpath}
 rockmech.config = dofile(modpath .. "/config.lua")
 rockmech.joints = dofile(modpath .. "/joints.lua")
 rockmech.stress = dofile(modpath .. "/stress.lua")
+rockmech.failure = assert(loadfile(modpath .. "/failure.lua"))(rockmech.stress)
+rockmech.rockfall = dofile(modpath .. "/rockfall.lua")
 
 -- 解析設定
 local cfg, warnings = rockmech.config.load(function(key)
@@ -37,6 +39,7 @@ end
 
 -- 引擎端模組
 dofile(modpath .. "/nodes.lua")
+dofile(modpath .. "/rockfall_entity.lua")
 dofile(modpath .. "/collapse.lua") -- 沿用 physics_core 的坍塌機制，階段 3 由 keyblock.lua 取代
 dofile(modpath .. "/tools.lua")
 

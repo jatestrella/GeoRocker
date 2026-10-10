@@ -7,8 +7,9 @@ local src = debug.getinfo(1, "S").source
 local root = src:match("^@(.*[/\\])tests[/\\]helper%.lua$") or "./"
 ROCKMECH_ROOT = root
 
-function load_module(name)
-	return dofile(root .. name .. ".lua")
+-- 額外參數會傳給模組（對應模組內的 `...`，例如 failure.lua 需要 stress）
+function load_module(name, ...)
+	return assert(loadfile(root .. name .. ".lua"))(...)
 end
 
 if type(describe) == "function" then

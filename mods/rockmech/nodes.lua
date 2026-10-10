@@ -48,3 +48,13 @@ end
 if core.registered_nodes["default:stone"] then
 	core.register_alias("physics_core:large_rock", "default:stone")
 end
+
+-- 碎石：軸差破壞後的岩石。不參與軸差判定（非岩性），
+-- 但在 collapse.lua 中套用懸空掉落與安息角滑動。
+rockmech.RUBBLE = rockmech.modname .. ":rubble"
+core.register_node(rockmech.RUBBLE, {
+	description = "Rubble (碎石)\n軸差破壞後的破碎岩石",
+	tiles = {has_default and "default_gravel.png^[colorize:#5a5048:90" or "[fill:16x16:#6a6058"},
+	groups = {crumbly = 2, cracky = 3},
+	sounds = has_default and default.node_sound_gravel_defaults and default.node_sound_gravel_defaults() or sounds,
+})

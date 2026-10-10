@@ -18,21 +18,26 @@ local config = {}
 --   tensile     張力強度 σt (MPa)
 --   color       著色（ColorString），用於材質
 --   cracky      Luanti 挖掘群組等級（1 最硬、3 最軟）
+--   rn, rt      落石撞擊此岩面時的法向／切向回彈係數
+--   mu_roll     落石在此岩面上的滾動阻力係數（tan 滾動摩擦角）
 config.lithologies = {
 	sandstone = {
 		name = "sandstone", description = "Sandstone (砂岩)",
 		gamma = 24.0, ucs = 60.0, tensile = 4.0,
 		color = "#c9a46a", cracky = 3,
+		rn = 0.35, rt = 0.85, mu_roll = 0.40,
 	},
 	shale = {
 		name = "shale", description = "Shale (頁岩)",
 		gamma = 25.0, ucs = 30.0, tensile = 2.0,
 		color = "#3c4048", cracky = 3,
+		rn = 0.30, rt = 0.80, mu_roll = 0.50,
 	},
 	granite = {
 		name = "granite", description = "Granite (花崗岩)",
 		gamma = 26.5, ucs = 180.0, tensile = 10.0,
 		color = "#d2b4ac", cracky = 2,
+		rn = 0.45, rt = 0.90, mu_roll = 0.35,
 	},
 }
 
@@ -74,6 +79,37 @@ config.defaults = {
 	surface_y = 0,        -- 地表高程 y0
 	k0 = 0.5,             -- σh / σv
 	replace_stone = true, -- 地圖生成時把 stone 換成本 mod 岩性
+}
+
+-- 軸差破壞（failure.lua）的預設值；設定鍵為 rockmech_failure_<key>
+config.failure_defaults = {
+	enabled = true,
+	radius = 12,              -- 開挖後檢查半徑 (m)
+	window = 4,               -- 荷重擴散窗格半寬 w，窗格 (2w+1)² (m)
+	gamma_other = 20,         -- 非岩性實心格（土、礦石等）的單位重 (kN/m³)
+	overburden_scan = 64,     -- 柱狀荷重往上讀取的高度 (m)，超出部分假設連續到 y0
+	strength_scale = 1.0,     -- 強度縮放：破壞門檻 = UCS × scale
+	max_cascade = 5,          -- 連鎖重算輪數上限
+	cascade_delay = 0.6,      -- 每輪間隔 (s)，讓剝落的岩塊先就位
+	budget_ms = 5,            -- 單次檢查超過此時間就記 log
+}
+
+-- 安息角滑動（collapse.lua）；設定鍵為 rockmech_slope_<key>
+config.slope_defaults = {
+	enabled = true,           -- 碎石超過安息角會移動（完整岩石不受安息角影響）
+	angle = 35,               -- 碎石安息角 (deg)
+}
+
+-- 落石翻滾（rockfall.lua）的預設值；設定鍵為 rockmech_rockfall_<key>
+config.rockfall_defaults = {
+	enabled = true,
+	max_active = 64,          -- 同時翻滾的岩塊上限，超過時改用直接落下
+	rn = 0.30,                -- 非岩性表面（土、碎石等）的法向回彈係數
+	rt = 0.75,                -- 非岩性表面的切向回彈係數
+	mu_roll = 0.55,           -- 非岩性表面的滾動阻力係數
+	impact_speed = 2.0,       -- 法向速度超過此值 (m/s) 才算撞擊（否則視為貼地滾動）
+	stop_speed = 0.4,         -- 貼地且速度低於此值 (m/s) 持續 0.5 s 即停止
+	max_time = 20,            -- 最長翻滾時間 (s)
 }
 
 -- 節理組可由設定覆寫的槽位數（rockmech_joint_set_1 .. _N）
@@ -166,6 +202,51 @@ function config.load(get)
 	local rs = parse_bool(get("rockmech_replace_stone"))
 	if rs == nil then rs = config.defaults.replace_stone end
 	cfg.replace_stone = rs
+
+	-- 讀取一組 rockmech_<prefix>_<key> 設定
+	local function load_section(prefix, defaults)
+		local t = copy(defaults)
+		for key, def in pairs(defaults) do
+			local name = "rockmech_" .. prefix .. "_" .. key
+			local raw = get(name)
+			if type(def) == "boolean" then
+				local b = parse_bool(raw)
+				if b ~= nil then t[key] = b end
+			elseif raw ~= nil and raw ~= "" then
+				local v = tonumber(raw)
+				if v then
+					t[key] = v
+				else
+					warnings[#warnings + 1] = name .. " 不是數字（忽略）"
+				end
+			end
+		end
+		return t
+	end
+
+	-- 軸差破壞
+	local f = load_section("failure", config.failure_defaults)
+	f.radius = math.max(1, math.floor(f.radius))
+	f.window = math.max(1, math.floor(f.window))
+	f.overburden_scan = math.max(0, math.floor(f.overburden_scan))
+	f.gamma_other = math.max(0, f.gamma_other)
+	f.max_cascade = math.max(0, math.floor(f.max_cascade))
+	if f.strength_scale <= 0 then
+		warnings[#warnings + 1] = "rockmech_failure_strength_scale ≤ 0，改為 1"
+		f.strength_scale = 1
+	end
+	cfg.failure = f
+
+	-- 安息角滑動
+	cfg.slope = load_section("slope", config.slope_defaults)
+	cfg.slope.angle = math.min(89, math.max(1, cfg.slope.angle))
+
+	-- 落石翻滾
+	local rf = load_section("rockfall", config.rockfall_defaults)
+	rf.max_active = math.max(0, math.floor(rf.max_active))
+	for _, k in ipairs({"rn", "rt"}) do rf[k] = math.min(1, math.max(0, rf[k])) end
+	rf.mu_roll = math.max(0, rf.mu_roll)
+	cfg.rockfall = rf
 
 	-- 節理組覆寫
 	for i = 1, config.MAX_SET_OVERRIDES do

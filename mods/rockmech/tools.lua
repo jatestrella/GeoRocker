@@ -2,8 +2,10 @@
 -- 除錯／地質工具（引擎端）：
 --   rockmech:compass     地質羅盤，右鍵一格顯示岩性、深度、應力與六個面的節理
 --   /rockmech_traces [r] 以 particle 標示附近臨空面上的節理跡線
+--   /rockmech_failure    軸差破壞檢查（回報／apply）
 --   /convert_rocks       把附近的 stone 依深度換成岩性（舊世界測試用）
 --   方位 HUD             畫面上方顯示面向（沿用 physics_core）
+--   物品欄「rockmech」分頁 / /rockmech_toggle   遊戲中開關（破壞準則、安息角滑動、翻滾）
 
 local cfg = rockmech.cfg
 local joints = rockmech.joints
@@ -36,6 +38,29 @@ local function compass_report(pos, nodename)
 		lith.gamma, lith.ucs, lith.tensile)
 	lines[#lines + 1] = ("  深度 h=%.1f m (y0=%d)  σv=%.3f MPa  σh=%.3f MPa (K0=%.2f)"):format(
 		st.h, cfg.surface_y, st.sv, st.sh, cfg.k0)
+
+	-- 開挖後的局部應力與軸差破壞判定（只對本 mod 岩性）
+	if rockmech.lith_of_node[nodename] then
+		local w = cfg.failure.window + 1
+		local grid = rockmech.collapse.read_grid(vector.subtract(pos, w), vector.add(pos, w))
+		local fs = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
+			rockmech.collapse.failure_params())
+		if fs then
+			lines[#lines + 1] = ("  柱狀荷重 %.3f → 擴散後 %.3f MPa（×%.2f）  σx=%.3f σy=%.3f σz=%.3f MPa%s"):format(
+				fs.sv0, fs.sv, fs.factor, fs.sx, fs.sy, fs.sz,
+				fs.exposed and "（臨空）" or "")
+			local verdict
+			if fs.fails then
+				verdict = core.colorize("#ff6060", "破壞")
+			elseif fs.q >= fs.strength then
+				verdict = core.colorize("#ffb060", "超過強度但未臨空")
+			else
+				verdict = core.colorize("#80ff80", "穩定")
+			end
+			lines[#lines + 1] = ("  q=σ1−σ3=%.2f MPa  強度=%.2f MPa  FS=%.2f  → %s"):format(
+				fs.q, fs.strength, fs.fs, verdict)
+		end
+	end
 
 	for _, face in ipairs(joints.FACES) do
 		local fx, fy, fz, axis = joints.face_key(pos.x, pos.y, pos.z, face)
@@ -266,3 +291,168 @@ core.register_globalstep(function(dtime)
 		end
 	end
 end)
+
+---------------------------------------------------------------------------
+-- /rockmech_failure：對目前位置強制執行一次軸差破壞檢查
+---------------------------------------------------------------------------
+
+core.register_chatcommand("rockmech_failure", {
+	params = "[半徑] [apply]",
+	description = "軸差破壞檢查（預設只回報，不改地圖；加 apply 才實際剝落）",
+	func = function(name, param)
+		local player = core.get_player_by_name(name)
+		if not player then return false, "找不到玩家" end
+		local r = cfg.failure.radius
+		local apply = false
+		for tok in (param or ""):gmatch("%S+") do
+			if tok == "apply" then apply = true
+			elseif tonumber(tok) then r = math.max(1, math.min(32, math.floor(tonumber(tok)))) end
+		end
+		local c = vector.round(player:get_pos())
+		local failed, stats, ms = rockmech.collapse.evaluate_failure({c}, r)
+		local msg = ("臨空岩格 %d 格，破壞 %d 格，%.1f ms（半徑 %d，強度縮放 %g）"):format(
+			stats.evaluated, stats.failed, ms, r, cfg.failure.strength_scale)
+		local s = stats.min_fs_state
+		if s then
+			local p = stats.min_fs_pos
+			msg = msg .. ("\n  最低 FS=%.2f @ (%d,%d,%d) %s h=%.0f m  柱荷重=%.2f ×%.2f  σ1=%.2f σ3=%.2f  q=%.2f / 強度 %.2f MPa")
+				:format(s.fs, p.x, p.y, p.z, s.lith, s.h, s.sv0, s.factor, s.s1, s.s3, s.q, s.strength)
+		end
+		if apply and #failed > 0 then
+			rockmech.collapse.apply_failure(failed)
+			msg = msg .. "\n  已破壞為碎石 " .. #failed .. " 格（只做一輪，不連鎖）"
+		end
+		return true, msg
+	end,
+})
+
+---------------------------------------------------------------------------
+-- 遊戲中開關：破壞準則、翻滾落石
+-- 即時生效，並存入 mod storage（重開世界後保留）。設定選單中的
+-- rockmech_failure_enabled / rockmech_rockfall_enabled 只作為尚未在遊戲中
+-- 切換過時的預設值。
+---------------------------------------------------------------------------
+
+local storage = core.get_mod_storage()
+local TOGGLE_PRIV = "server"
+
+-- 開關表（依顯示順序）
+local TOGGLES = {
+	{
+		id = "failure", tbl = cfg.failure,
+		label = "軸差破壞準則  q = σ1 − σ3 ≥ UCS × 縮放",
+		short = "軸差破壞準則",
+		info = function()
+			local f = cfg.failure
+			return ("強度縮放 %g，檢查半徑 %d m，連鎖上限 %d 輪"):format(
+				f.strength_scale, f.radius, f.max_cascade)
+		end,
+		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
+	},
+	{
+		id = "slope", tbl = cfg.slope,
+		label = "碎石安息角滑動（完整岩石不受影響）",
+		short = "碎石安息角滑動",
+		info = function() return ("安息角 %g°；碎石懸空時仍會垂直落下"):format(cfg.slope.angle) end,
+		off_note = "關閉：碎石超過安息角也不移動",
+	},
+	{
+		id = "rockfall", tbl = cfg.rockfall,
+		label = "碎石滑動時以翻滾方式移動",
+		short = "翻滾落石",
+		info = function()
+			return ("目前翻滾中 %d 顆，上限 %d"):format(
+				rockmech.rockfall_entity and rockmech.rockfall_entity.active_count() or 0,
+				cfg.rockfall.max_active)
+		end,
+		off_note = "關閉：改回原本的平移滑動（安息角滑動關閉時此項無作用）",
+	},
+}
+local TOGGLE_BY_ID = {}
+for _, t in ipairs(TOGGLES) do
+	TOGGLE_BY_ID[t.id] = t
+	local saved = storage:get_string(t.id .. "_enabled")
+	if saved == "true" then
+		t.tbl.enabled = true
+	elseif saved == "false" then
+		t.tbl.enabled = false
+	end
+end
+
+-- 切換開關。回傳 ok, 訊息
+function rockmech.set_toggle(id, on, by_name)
+	local t = TOGGLE_BY_ID[id]
+	if not t then return false, "沒有這個開關: " .. tostring(id) end
+	if by_name and not core.check_player_privs(by_name, {[TOGGLE_PRIV] = true}) then
+		return false, "需要 " .. TOGGLE_PRIV .. " 權限才能切換"
+	end
+	t.tbl.enabled = on and true or false
+	storage:set_string(id .. "_enabled", tostring(t.tbl.enabled))
+	local state = t.tbl.enabled and "開啟" or "關閉"
+	core.log("action", ("[rockmech] %s 將%s%s"):format(by_name or "?", t.short, state))
+	return true, t.short .. "：" .. state
+end
+
+local ids = {}
+for _, t in ipairs(TOGGLES) do ids[#ids + 1] = t.id end
+
+core.register_chatcommand("rockmech_toggle", {
+	params = "<" .. table.concat(ids, "|") .. "> [on|off]",
+	description = "遊戲中開關（不加 on/off 則切換）",
+	privs = {[TOGGLE_PRIV] = true},
+	func = function(name, param)
+		local id, state = param:match("^%s*(%S+)%s*(%S*)")
+		local t = id and TOGGLE_BY_ID[id]
+		if not t then
+			return false, "用法：/rockmech_toggle <" .. table.concat(ids, "|") .. "> [on|off]"
+		end
+		local on
+		if state == "on" then on = true
+		elseif state == "off" then on = false
+		elseif state == "" then on = not t.tbl.enabled
+		else return false, "狀態只能是 on 或 off" end
+		return rockmech.set_toggle(id, on, name)
+	end,
+})
+
+-- 物品欄分頁（需要 sfinv；devtest 等沒有 sfinv 的遊戲改用 /rockmech_toggle）
+if core.get_modpath("sfinv") and sfinv then
+	local F = core.formspec_escape
+
+	sfinv.register_page("rockmech:settings", {
+		title = "rockmech",
+		get = function(self, player, context)
+			local can = core.check_player_privs(player, {[TOGGLE_PRIV] = true})
+			local parts = {"label[0,0;", F("岩石力學開關（即時生效）"), "]"}
+			local y = 0.6
+			for _, t in ipairs(TOGGLES) do
+				parts[#parts + 1] = ("checkbox[0,%g;rm_%s;%s;%s]"):format(
+					y, t.id, F(t.label), tostring(t.tbl.enabled))
+				parts[#parts + 1] = ("label[0.4,%g;%s]"):format(y + 0.75, F(t.info()))
+				parts[#parts + 1] = ("label[0.4,%g;%s]"):format(y + 1.15, F(t.off_note))
+				y = y + 1.9
+			end
+			if not can then
+				parts[#parts + 1] = ("label[0,%g;%s]"):format(y,
+					F("（需要 " .. TOGGLE_PRIV .. " 權限才能修改）"))
+			end
+			return sfinv.make_formspec(player, context, table.concat(parts), true)
+		end,
+		on_player_receive_fields = function(self, player, context, fields)
+			local name = player:get_player_name()
+			local handled = false
+			for _, t in ipairs(TOGGLES) do
+				local v = fields["rm_" .. t.id]
+				if v ~= nil then
+					local _, msg = rockmech.set_toggle(t.id, v == "true", name)
+					core.chat_send_player(name, "[rockmech] " .. msg)
+					handled = true
+				end
+			end
+			if handled then
+				sfinv.set_player_inventory_formspec(player)
+				return true
+			end
+		end,
+	})
+end

@@ -22,3 +22,68 @@ rockmech_joint_set_2 (Joint set 2 override) string
 
 # Override joint set 3: "dip,dipdir,spacing,persistence,phi". Empty = default.
 rockmech_joint_set_3 (Joint set 3 override) string
+
+[Deviatoric failure]
+
+# Check exposed rock for deviatoric failure (sigma1 - sigma3 >= UCS * scale) after excavation.
+rockmech_failure_enabled (Enable deviatoric failure) bool true
+
+# Radius (m) of the region checked around each excavation.
+rockmech_failure_radius (Check radius) int 12 1 32
+
+# Half-width w of the horizontal load-spreading window (2w+1)^2.
+# sigma_y = (sum of column loads in the window, incl. roof loads over openings) / (solid cells in window).
+rockmech_failure_window (Load-spreading window half-width) int 4 1 16
+
+# Unit weight (kN/m3) of non-lithology solid nodes (dirt, ores, ...) in the column load.
+rockmech_failure_gamma_other (Unit weight of other solids) float 20 0 50
+
+# Height (m) scanned upward for the column load; rock beyond is assumed continuous up to y0.
+rockmech_failure_overburden_scan (Overburden scan height) int 64 0 512
+
+# Failure threshold = UCS * scale. 1 = real strength; smaller values make failure visible at shallow depth.
+rockmech_failure_strength_scale (Strength scale) float 1.0 0.001 10
+
+# Maximum number of cascade rounds after a failure.
+rockmech_failure_max_cascade (Max cascade rounds) int 5 0 50
+
+# Delay between cascade rounds (s).
+rockmech_failure_cascade_delay (Cascade delay) float 0.6 0 10
+
+# Log a warning when one check takes longer than this (ms).
+rockmech_failure_budget_ms (Time budget per check) float 5 0.1 1000
+
+[Rockfall]
+
+# Falling rock becomes a tumbling entity (bounce, roll, stop) instead of dropping straight down.
+rockmech_rockfall_enabled (Enable tumbling rockfall) bool true
+
+# Maximum number of tumbling rocks at once; extra rocks fall straight down.
+rockmech_rockfall_max_active (Max tumbling rocks) int 64 0 1000
+
+# Normal restitution Rn of non-lithology surfaces (dirt, rubble, ...). Lithologies use config.lua.
+rockmech_rockfall_rn (Normal restitution of other surfaces) float 0.30 0 1
+
+# Tangential restitution Rt of non-lithology surfaces.
+rockmech_rockfall_rt (Tangential restitution of other surfaces) float 0.75 0 1
+
+# Rolling resistance (tan of rolling friction angle) of non-lithology surfaces.
+rockmech_rockfall_mu_roll (Rolling resistance of other surfaces) float 0.55 0 5
+
+# Normal impact speed (m/s) above which a contact is a bounce; below it the rock rolls.
+rockmech_rockfall_impact_speed (Impact speed threshold) float 2.0 0 20
+
+# A rock in contact with the ground slower than this (m/s) for 0.5 s stops and becomes a node.
+rockmech_rockfall_stop_speed (Stop speed) float 0.4 0 10
+
+# Maximum tumbling time (s).
+rockmech_rockfall_max_time (Max tumbling time) float 20 1 300
+
+[Angle of repose]
+
+# Rubble steeper than the angle of repose moves (slides or tumbles). Intact rock is not affected.
+# Can also be toggled in game.
+rockmech_slope_enabled (Enable rubble angle-of-repose sliding) bool true
+
+# Angle of repose of rubble (degrees). Angular rock debris is typically 34-40.
+rockmech_slope_angle (Rubble angle of repose) float 35 1 89
