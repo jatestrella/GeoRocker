@@ -618,7 +618,9 @@ function collapse.queue_failure_check(pos)
 end
 
 -- 8. 註冊行為：放置／移除岩石時觸發區域更新
-local function register_physics_events(name)
+-- intact = true：完整岩石。玩家挖掘後原地變成碎石（不掉落物品），
+-- 碎石要再挖一次才會移除（相當於出碴）。
+local function register_physics_events(name, intact)
     local def = core.registered_nodes[name]
     if not def then return end
 
@@ -626,7 +628,7 @@ local function register_physics_events(name)
     new_groups.falling_node = nil
     new_groups.rockmech_rock = 1
 
-    core.override_item(name, {
+    local overrides = {
         groups = new_groups,
         after_place_node = function(pos)
             physics_updating = true
@@ -642,11 +644,21 @@ local function register_physics_events(name)
             end)
             collapse.queue_failure_check(pos)
         end
-    })
+    }
+    if intact then
+        overrides.drop = ""
+        -- on_destruct 排定的檢查在之後的 tick 才執行，屆時這裡已經是碎石：
+        -- 碎石下方懸空就落下、超過安息角就滑動；軸差破壞要等碎石被清走、
+        -- 真正出現開口時才會觸發。
+        overrides.after_dig_node = function(pos)
+            core.set_node(pos, {name = rockmech.RUBBLE})
+        end
+    end
+    core.override_item(name, overrides)
 end
 
-register_physics_events("default:stone")
-register_physics_events(rockmech.RUBBLE)
+register_physics_events("default:stone", true)
+register_physics_events(rockmech.RUBBLE, false)
 for _, nodename in pairs(rockmech.node_of_lith) do
-    register_physics_events(nodename)
+    register_physics_events(nodename, true)
 end
