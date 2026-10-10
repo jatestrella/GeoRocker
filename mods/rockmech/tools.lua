@@ -544,3 +544,50 @@ if core.get_modpath("sfinv") and sfinv then
 		end,
 	})
 end
+
+---------------------------------------------------------------------------
+-- /rockmech_orient：材質方向測試方塊
+-- 6 面各畫一個「F」（不對稱：鏡像或旋轉一看就知道），底色區分是哪一面。
+-- 用來確認 joints.TILE_EDGES / jointtex.FACES 的貼圖方向假設。
+---------------------------------------------------------------------------
+
+do
+	local F = "^[fill:2x10:4,3:#000000^[fill:8x2:4,3:#000000^[fill:6x2:4,7:#000000"
+	local FACE_COLORS = {
+		{"上", "#ffffff"}, {"下", "#404040"}, {"東", "#e04040"},
+		{"西", "#40c040"}, {"北", "#4080ff"}, {"南", "#f0d020"},
+	}
+	local tiles = {}
+	for i, fc in ipairs(FACE_COLORS) do
+		tiles[i] = "[fill:16x16:" .. fc[2] .. F
+	end
+	core.register_node("rockmech:orient_test", {
+		description = "材質方向測試方塊（/rockmech_orient）",
+		tiles = tiles,
+		groups = {cracky = 3, oddly_breakable_by_hand = 3, not_in_creative_inventory = 1},
+	})
+
+	core.register_chatcommand("rockmech_orient", {
+		description = "在前方放材質方向測試方塊（6 面各一個 F，顏色區分哪一面）",
+		privs = {rockmech = true},
+		func = function(name)
+			local player = core.get_player_by_name(name)
+			if not player then return false, "找不到玩家" end
+			local p = vector.round(player:get_pos())
+			-- 放兩個：一個在眼睛高度（看側面與頂面），一個在頭頂上方（看底面）
+			local a = {x = p.x + 2, y = p.y + 1, z = p.z}
+			local b = {x = p.x + 2, y = p.y + 3, z = p.z + 2}
+			core.set_node(a, {name = "rockmech:orient_test"})
+			core.set_node(b, {name = "rockmech:orient_test"})
+			return true, table.concat({
+				"[rockmech] 已在東邊放兩個測試方塊（一個眼睛高度、一個在上方可看底面）。",
+				"  顏色：上=白 下=深灰 東=紅 西=綠 北=藍 南=黃",
+				"  我的假設（請告訴我哪一面不符合）：",
+				"  ・紅、綠、藍、黃（四個側面）：從外面看是正常的「F」（直立、不左右顛倒）",
+				"  ・白（頂面）：面向北方往下看時，是正常的「F」（F 的頂端朝北）",
+				"  ・深灰（底面）：從下往上看、面向北方時，F 的頂端朝南，且不左右顛倒",
+				"  （右上角 HUD 有方位顯示）",
+			}, "\n")
+		end,
+	})
+end
