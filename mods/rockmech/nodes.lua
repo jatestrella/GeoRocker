@@ -90,6 +90,99 @@ for _, key in ipairs(cfg.lithology_order) do
 	end
 end
 
+-- 平面跡線變體（style = plane）：<岩性>_p<組字母><級>…，例如 shale_pa3c5
+-- 跡線貼圖於啟動時以 core.encode_png 產生，寫入世界資料夾 rockmech_media/，
+-- 再以 dynamic_add_media（filepath）傳給客戶端。
+-- （用 filedata 直接傳在 Windows 上會有部分檔案「failed writing media file」。）
+rockmech.lith_plane_variant = {} -- 岩性名稱 → {[後綴] = node 名稱}，後綴 "" 為基本 node
+do
+	local jtx = rockmech.jointtex
+	local Q, R, MAXL = jt.bins, jt.plane_res, jt.max_lines
+	-- 只需法向量，與種子無關
+	local sets = joints.prepare(cfg.joint_sets, 0)
+	local nsets = math.min(#sets, 4)
+	local r = tonumber(jt.line_color:sub(2, 3), 16)
+	local g = tonumber(jt.line_color:sub(4, 5), 16)
+	local b = tonumber(jt.line_color:sub(6, 7), 16)
+
+	-- tex[face][set][bin] = 貼圖檔名（該面沒有跡線則為 nil）
+	local tex, n_png = {}, 0
+	local media_dir = core.get_worldpath() .. "/rockmech_media"
+	core.mkdir(media_dir)
+	for f, face in ipairs(jtx.FACES) do
+		tex[f] = {}
+		for i = 1, nsets do
+			tex[f][i] = {}
+			for bin = 0, Q - 1 do
+				local alpha = jtx.face_line_alpha(sets[i], face, bin, Q, R, jt.plane_width)
+				if alpha then
+					local px = {}
+					for k = 1, R * R do
+						px[k] = string.char(r, g, b, math.floor(alpha[k] * jt.line_alpha + 0.5))
+					end
+					local fname = ("rockmech_jl_f%d_s%d_b%d.png"):format(f, i, bin)
+					local path = media_dir .. "/" .. fname
+					local fh = io.open(path, "wb")
+					if fh then
+						fh:write(core.encode_png(R, R, table.concat(px)))
+						fh:close()
+						if core.dynamic_add_media({filepath = path}) then
+							tex[f][i][bin] = fname
+							n_png = n_png + 1
+						else
+							core.log("warning", "[rockmech] 無法加入跡線貼圖 " .. fname)
+						end
+					else
+						core.log("warning", "[rockmech] 無法寫入 " .. path)
+					end
+				end
+			end
+		end
+	end
+
+	local combos = jtx.all_combos(nsets, Q, MAXL)
+	for _, key in ipairs(cfg.lithology_order) do
+		local lith = cfg.lithologies[key]
+		local base = rockmech.node_of_lith[key]
+		local base_def = core.registered_nodes[base]
+		local base_tile = base_def.tiles[1]
+		base_tile = type(base_tile) == "table" and base_tile.name or base_tile
+		rockmech.lith_plane_variant[key] = {[""] = base}
+		for _, combo in ipairs(combos) do
+			if #combo > 0 then
+				local name = base .. jtx.suffix(combo)
+				local tiles = {}
+				for f = 1, 6 do
+					local t = base_tile
+					for _, tr in ipairs(combo) do
+						local fn = tex[f][tr.set][tr.bin]
+						if fn then t = t .. "^" .. fn end
+					end
+					tiles[f] = t
+				end
+				core.register_node(name, {
+					description = base_def.description,
+					tiles = tiles,
+					is_ground_content = true,
+					groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1,
+						not_in_creative_inventory = 1},
+					sounds = sounds,
+				})
+				rockmech.lith_of_node[name] = lith
+				rockmech.lith_nodes[#rockmech.lith_nodes + 1] = name
+				rockmech.lith_plane_variant[key][jtx.suffix(combo)] = name
+			end
+		end
+	end
+	core.log("action", ("[rockmech] 平面跡線：%d 張貼圖、每岩性 %d 種變體"):format(n_png, #combos - 1))
+
+	-- 依格位置取 node 名稱（style = plane；sets 需為依世界種子前處理者）
+	function rockmech.plane_variant_name(key, world_sets, x, y, z)
+		local tr = jtx.cell_traces(joints, world_sets, x, y, z, Q, MAXL)
+		return rockmech.lith_plane_variant[key][jtx.suffix(tr)]
+	end
+end
+
 -- 依 y 取該深度分層的岩性條目
 function rockmech.lith_at_y(y)
 	local h = rockmech.stress.depth(y, cfg.surface_y)

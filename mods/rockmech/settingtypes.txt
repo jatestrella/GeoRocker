@@ -125,6 +125,22 @@ rockmech_fallbreak_break_height (Break height of other rock) float 4.0 0.01 1000
 # during map generation and /convert_rocks. Texture changes need a world restart.
 rockmech_jointtex_enabled (Joint textures) bool true
 
+# plane: draw the true trace of each joint plane across block faces (inclined lines).
+# edges: draw lines along block edges where the neighboring face is a joint, and tint joint faces.
+rockmech_jointtex_style (Joint texture style) enum plane plane,edges
+
+# plane style: number of position levels of a plane inside a block (error <= 1/(2*bins) block).
+rockmech_jointtex_bins (Plane position levels) int 8 2 16
+
+# plane style: maximum number of joint sets drawn in one block.
+rockmech_jointtex_max_lines (Max joint traces per block) int 2 1 3
+
+# plane style: trace texture resolution in pixels.
+rockmech_jointtex_plane_res (Trace texture resolution) int 32 16 64
+
+# plane style: trace width in pixels (at the trace texture resolution).
+rockmech_jointtex_plane_width (Trace width) float 1.5 0.5 8
+
 # Color of joint trace lines (#RRGGBB).
 rockmech_jointtex_line_color (Joint trace color) string #000000
 

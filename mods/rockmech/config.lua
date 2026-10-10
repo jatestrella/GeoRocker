@@ -100,6 +100,11 @@ config.failure_defaults = {
 -- 改動後需重新進入世界（材質在載入時產生）
 config.jointtex_defaults = {
 	enabled = true,           -- 地圖生成／轉換時依節理放置材質變體
+	style = "plane",          -- plane：真實平面跡線（斜線）；edges：沿方塊邊緣＋節理面上色
+	bins = 8,                 -- plane：平面在格內位置的量化級數（誤差 ≤ 1/(2·bins) 格）
+	max_lines = 2,            -- plane：每格最多畫幾組節理
+	plane_res = 32,           -- plane：跡線貼圖解析度（像素）
+	plane_width = 1.5,        -- plane：跡線寬度（像素，以 plane_res 計）
 	line_color = "#000000",   -- 節理跡線顏色
 	line_alpha = 170,         -- 跡線不透明度 0..255
 	line_width = 1,           -- 跡線寬度（像素，材質為 16×16）
@@ -272,6 +277,14 @@ function config.load(get)
 	local jt = load_section("jointtex", config.jointtex_defaults)
 	jt.line_alpha = math.max(0, math.min(255, math.floor(jt.line_alpha)))
 	jt.face_ratio = math.max(0, math.min(255, math.floor(jt.face_ratio)))
+	if jt.style ~= "plane" and jt.style ~= "edges" then
+		warnings[#warnings + 1] = "rockmech_jointtex_style 只能是 plane 或 edges，改用 plane"
+		jt.style = "plane"
+	end
+	jt.bins = math.max(2, math.min(16, math.floor(jt.bins)))
+	jt.max_lines = math.max(1, math.min(3, math.floor(jt.max_lines)))
+	jt.plane_res = math.max(16, math.min(64, math.floor(jt.plane_res)))
+	jt.plane_width = math.max(0.5, math.min(8, jt.plane_width))
 	for _, k in ipairs({"line_color", "face_color"}) do
 		if not jt[k]:match("^#%x%x%x%x%x%x$") then
 			warnings[#warnings + 1] = "rockmech_jointtex_" .. k .. " 應為 #RRGGBB，改用預設"

@@ -7,6 +7,7 @@ local modpath = core.ipc_get("rockmech:modpath")
 local config = dofile(modpath .. "/config.lua")
 local stress = dofile(modpath .. "/stress.lua")
 local joints = dofile(modpath .. "/joints.lua")
+local jointtex = dofile(modpath .. "/jointtex.lua")
 
 local cfg = config.load(function(key) return core.settings:get(key) end)
 if not cfg.replace_stone then
@@ -39,6 +40,22 @@ local sets = joints.prepare(cfg.joint_sets,
 local cell_mask = joints.cell_mask
 local logged = 0
 
+-- 平面跡線樣式：c_plane[岩性][後綴] = content id
+local plane = use_joints and cfg.jointtex.style == "plane"
+local Q, MAXL = cfg.jointtex.bins, cfg.jointtex.max_lines
+local c_plane = {}
+if plane then
+	local combos = jointtex.all_combos(math.min(#sets, 4), Q, MAXL)
+	for key, lith in pairs(cfg.lithologies) do
+		c_plane[key] = {}
+		for _, combo in ipairs(combos) do
+			local sfx = jointtex.suffix(combo)
+			c_plane[key][sfx] = core.get_content_id("rockmech:" .. lith.name .. sfx)
+		end
+	end
+end
+local cell_traces, suffix = jointtex.cell_traces, jointtex.suffix
+
 local data = {}
 
 core.register_on_generated(function(vm, minp, maxp, blockseed)
@@ -48,9 +65,10 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 
 	-- 每個 y 的目標 content id
 	local layer = stress.layer_table(cfg, minp.y, maxp.y)
-	local var_y = {}
+	local var_y, plane_y = {}, {}
 	for y = minp.y, maxp.y do
 		var_y[y] = c_var[layer[y]]
+		plane_y[y] = c_plane[layer[y]]
 	end
 
 	local t0 = os.clock()
@@ -61,7 +79,11 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 			local vi = area:index(minp.x, y, z)
 			for x = minp.x, maxp.x do
 				if data[vi] == c_stone then
-					data[vi] = cv[use_joints and cell_mask(sets, x, y, z) or 0]
+					if plane then
+						data[vi] = plane_y[y][suffix(cell_traces(joints, sets, x, y, z, Q, MAXL))]
+					else
+						data[vi] = cv[use_joints and cell_mask(sets, x, y, z) or 0]
+					end
 					changed = true
 					n = n + 1
 				end

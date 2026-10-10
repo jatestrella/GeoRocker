@@ -221,8 +221,39 @@ core.register_chatcommand("rockmech_traces", {
 -- 在玩家前方放 6 個花崗岩，各只有一個面是節理面
 ---------------------------------------------------------------------------
 
+core.register_chatcommand("rockmech_jointcube", {
+	params = "[邊長 3-15，預設 7]",
+	description = "在前方放一個帶節理跡線的花崗岩立方體（依目前節理組與世界種子）",
+	privs = {rockmech = true},
+	func = function(name, param)
+		local player = core.get_player_by_name(name)
+		if not player then return false, "找不到玩家" end
+		local L = math.max(3, math.min(15, math.floor(tonumber(param) or 7)))
+		local p = vector.round(player:get_pos())
+		local x0, y0, z0 = p.x + 3, p.y, p.z - math.floor(L / 2)
+		local sets = rockmech.get_joint_sets()
+		local style = cfg.jointtex.style
+		for x = x0, x0 + L - 1 do for y = y0, y0 + L - 1 do for z = z0, z0 + L - 1 do
+			local n
+			if style == "plane" then
+				n = rockmech.plane_variant_name("granite", sets, x, y, z)
+			else
+				n = rockmech.lith_variant.granite[joints.cell_mask(sets, x, y, z)]
+			end
+			core.set_node({x = x, y = y, z = z}, {name = n})
+		end end end
+		local legend = {}
+		for _, js in ipairs(sets) do
+			legend[#legend + 1] = ("%s %g°/%g° S=%gm P=%.2f"):format(js.name, js.dip, js.dipdir, js.spacing, js.persistence)
+		end
+		return true, ("[rockmech] 已在 x=%d..%d、y=%d..%d、z=%d..%d 放置 %d³ 花崗岩（樣式 %s）。\n" ..
+			"  檢查：同一條跡線在相鄰方塊、相鄰面（例如頂面接側面）之間應連續。\n  節理組：%s"):format(
+			x0, x0 + L - 1, y0, y0 + L - 1, z0, z0 + L - 1, L, style, table.concat(legend, "；"))
+	end,
+})
+
 core.register_chatcommand("rockmech_jointtex_demo", {
-	description = "在前方放 6 個花崗岩方塊，各只有一個面是節理面，用來檢查材質方向",
+	description = "（edges 樣式用）在前方放 6 個花崗岩方塊，各只有一個面是節理面，用來檢查材質方向",
 	privs = {rockmech = true},
 	func = function(name)
 		local player = core.get_player_by_name(name)
@@ -277,6 +308,7 @@ core.register_chatcommand("convert_rocks", {
 		end
 		local sets = rockmech.get_joint_sets()
 		local use_joints = cfg.jointtex.enabled
+		local plane = use_joints and cfg.jointtex.style == "plane"
 
 		local replaced = 0
 		for z = p1.z, p2.z do
@@ -284,7 +316,12 @@ core.register_chatcommand("convert_rocks", {
 				local vi = area:index(p1.x, y, z)
 				for x = p1.x, p2.x do
 					if data[vi] == c_stone then
-						data[vi] = var_y[y][use_joints and joints.cell_mask(sets, x, y, z) or 0]
+						if plane then
+							data[vi] = core.get_content_id(rockmech.plane_variant_name(
+								rockmech.lith_at_y(y).name, sets, x, y, z))
+						else
+							data[vi] = var_y[y][use_joints and joints.cell_mask(sets, x, y, z) or 0]
+						end
 						replaced = replaced + 1
 					end
 					vi = vi + 1
