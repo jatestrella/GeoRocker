@@ -51,54 +51,110 @@ local function is_solid(g, x, y, z)
 end
 failure.is_solid = is_solid
 
--- 計算整個網格的柱狀荷重 L 與頂板荷重 R（kPa），存入 g.L、g.R
+-- 計算柱狀荷重 L 與頂板荷重 R（kPa），存成「緊湊陣列」：
+-- 只存需要評估的範圍（g.req 的欄 × 高度帶），上方只做累加不儲存。
+-- 緊湊索引：c = 1 + (x−cx) + (y−cy)·cW + (z−cz)·cW·cH（世界座標）
+-- 依序預先填滿，讓陣列使用 Lua 表的陣列部分（從中間寫入會落到雜湊部分，慢很多）。
 function failure.compute_loads(g, p)
 	local nx, ny, nz = g.nx, g.ny, g.nz
 	local data, weight_of = g.data, g.weight_of
-	local L, R = {}, {}
 	local ytop = g.oy + ny - 1
 	local extra = math.max(0, p.surface_y - 1 - ytop) -- 網格上方假設的岩層厚度
-	for lz = 0, nz - 1 do
-		for lx = 0, nx - 1 do
+	-- 需要的範圍（網格局部座標）；沒有 g.req 時為整個網格
+	local x1, x2, z1, z2, y1, y2 = 0, nx - 1, 0, nz - 1, 0, ny - 1
+	if g.req then
+		x1 = math.max(0, g.req.x1 - g.ox); x2 = math.min(nx - 1, g.req.x2 - g.ox)
+		z1 = math.max(0, g.req.z1 - g.oz); z2 = math.min(nz - 1, g.req.z2 - g.oz)
+		y1 = math.max(0, g.req.y1 - g.oy); y2 = math.min(ny - 1, (g.req.y2 or ytop) - g.oy)
+	end
+	local cW, cH, cD = x2 - x1 + 1, y2 - y1 + 1, z2 - z1 + 1
+	local L, R = {}, {}
+	for c = 1, cW * cH * cD do
+		L[c] = 0
+		R[c] = 0
+	end
+	local cs = cW * cH
+	for lz = z1, z2 do
+		for lx = x1, x2 do
 			local i = 1 + lx + (ny - 1) * nx + lz * nx * ny
 			local w = weight_of[data[i]]
-			if w then
-				L[i] = w * (1 + extra)
-			else
-				L[i] = 0
+			local lv = w and w * (1 + extra) or 0
+			local rv = 0
+			local c0 = 1 + (lx - x1) + (lz - z1) * cs -- 本欄在緊湊陣列的底（ly = y1）
+			if ny - 1 <= y2 then
+				L[c0 + (ny - 1 - y1) * cW] = lv
+				R[c0 + (ny - 1 - y1) * cW] = rv
 			end
-			R[i] = 0
-			for _ = ny - 2, 0, -1 do
-				local ia = i
+			for ly = ny - 2, y1, -1 do
 				i = i - nx
 				w = weight_of[data[i]]
 				if w then
-					L[i] = w + L[ia]
-					R[i] = 0
+					lv, rv = w + lv, 0
 				else
-					L[i] = 0
-					R[i] = L[ia] > 0 and L[ia] or R[ia]
+					rv = lv > 0 and lv or rv
+					lv = 0
+				end
+				if ly <= y2 then
+					local c = c0 + (ly - y1) * cW
+					L[c] = lv
+					R[c] = rv
 				end
 			end
 		end
 	end
 	g.L, g.R = L, R
+	g.cx, g.cy, g.cz = g.ox + x1, g.oy + y1, g.oz + z1
+	g.cW, g.cH, g.cD = cW, cH, cD
 	return L, R
 end
+
+-- 緊湊陣列索引（不在範圍內回傳 nil）
+local function cindex(g, x, y, z)
+	local lx, ly, lz = x - g.cx, y - g.cy, z - g.cz
+	if lx < 0 or ly < 0 or lz < 0 or lx >= g.cW or ly >= g.cH or lz >= g.cD then
+		return nil
+	end
+	return 1 + lx + ly * g.cW + lz * g.cW * g.cH
+end
+failure.cindex = cindex
 
 -- 荷重擴散後的垂直應力 σy (MPa)。回傳 σy, 窗格總荷重 (kPa·格), 實心格數
 function failure.spread_load(g, x, y, z, w)
 	local L, R, weight_of, data = g.L, g.R, g.weight_of, g.data
 	local total, n = 0, 0
-	for dz = -w, w do
-		for dx = -w, w do
-			local i = index(g, x + dx, y, z + dz)
-			if i then
+	-- 快速路徑：窗格完全在緊湊範圍內時，兩個陣列同步以索引步進
+	local cx, cy, cz = x - g.cx, y - g.cy, z - g.cz
+	if cx - w >= 0 and cz - w >= 0 and cx + w < g.cW and cz + w < g.cD and cy >= 0 and cy < g.cH then
+		local nx, gs = g.nx, g.nx * g.ny
+		local cW, cs = g.cW, g.cW * g.cH
+		local grow = 1 + (x - w - g.ox) + (y - g.oy) * nx + (z - w - g.oz) * gs
+		local crow = 1 + (cx - w) + cy * cW + (cz - w) * cs
+		local span = 2 * w
+		for _ = 0, span do
+			local i, c = grow, crow
+			for _ = 0, span do
 				if weight_of[data[i]] then
-					total = total + L[i]
+					total = total + L[c]
 					n = n + 1
 				else
-					total = total + R[i]
+					total = total + R[c]
+				end
+				i, c = i + 1, c + 1
+			end
+			grow, crow = grow + gs, crow + cs
+		end
+	else
+		for dz = -w, w do
+			for dx = -w, w do
+				local i = index(g, x + dx, y, z + dz)
+				local c = cindex(g, x + dx, y, z + dz)
+				if i and c then
+					if weight_of[data[i]] then
+						total = total + L[c]
+						n = n + 1
+					else
+						total = total + R[c]
+					end
 				end
 			end
 		end
@@ -116,7 +172,8 @@ function failure.cell_state(g, x, y, z, p)
 	if not lith then return nil end
 	if not g.L then failure.compute_loads(g, p) end
 
-	local sv0 = g.L[i] / 1000                 -- 自身柱狀荷重 (MPa)
+	local ci = cindex(g, x, y, z)
+	local sv0 = (ci and g.L[ci] or 0) / 1000   -- 自身柱狀荷重 (MPa)
 	local sh = stress.sigma_h(sv0, p.k0)
 	local sv = failure.spread_load(g, x, y, z, p.window)
 

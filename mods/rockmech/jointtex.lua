@@ -33,15 +33,18 @@ local function mvec(js)
 	return {x = js.mx, y = js.my, z = js.mz}
 end
 
--- 2·tmin、2·tmax 與第一級的 2t
+-- 2·tmin、2·tmax 與第一級的 2t（每組固定，快取在 js 上）
 local function level_info(js)
+	if js._lo then return js._lo, js._hi, js._first end
 	local tmin, tmax, sum = 0, 0, 0
 	for _, c in ipairs({js.mx, js.my, js.mz}) do
 		if c < 0 then tmin = tmin + c else tmax = tmax + c end
 		sum = sum + c
 	end
-	local first = 2 * tmin + ((sum % 2 == 0) and 2 or 1)
-	return 2 * tmin, 2 * tmax, first
+	js._lo, js._hi = 2 * tmin, 2 * tmax
+	js._first = 2 * tmin + ((sum % 2 == 0) and 2 or 1)
+	js._sum = sum
+	return js._lo, js._hi, js._first
 end
 
 -- 此組的級數
@@ -51,21 +54,49 @@ function jointtex.levels(js)
 	return floor((hi - 1 - first) / 2) + 1
 end
 
--- 平面 k 是否在此格「存在」（延續性），與 joints 的面判定一致
+-- 平面 k 是否在此格「存在」（延續性），與 joints 的面判定一致。
+-- 熱路徑：先用整數運算判斷 6 個面是否被平面 k 切過，只對被切過的面算雜湊。
+-- 面 (fx,fy,fz | axis) 被平面 k 切過 ⇔ k = max(⌊a1/L⌋, ⌊a2/L⌋) 且兩者不同，
+-- 其中 a1 = m·f + o、a2 = a1 + m_axis。
+local function crosses_k(a1, a2, L, k)
+	local k1, k2 = (a1 - a1 % L) / L, (a2 - a2 % L) / L
+	if k1 == k2 then return false end
+	return (k1 > k2 and k1 or k2) == k
+end
+
 local function plane_present(joints, js, k, x, y, z)
+	local L, P = js.L, js.persistence
+	local mx, my, mz = js.mx, js.my, js.mz
+	local a = mx * x + my * y + mz * z + js.o -- 本格中心
+	local hash = joints.face_hash01
 	local touched = false
-	local nb = {
-		{x, y, z, 1}, {x - 1, y, z, 1}, {x, y, z, 2}, {x, y - 1, z, 2}, {x, y, z, 3}, {x, y, z - 1, 3},
-	}
-	for _, f in ipairs(nb) do
-		local kk, r = joints.face_crossing(js, f[1], f[2], f[3], f[4])
-		if kk == k then
-			touched = true
-			if r < js.persistence then return true end
-		end
+	-- +x 面（本格 → 東鄰）與 −x 面（西鄰 → 本格）
+	if crosses_k(a, a + mx, L, k) then
+		touched = true
+		if hash(js, k, x, y, z, 1) < P then return true end
+	end
+	if crosses_k(a - mx, a, L, k) then
+		touched = true
+		if hash(js, k, x - 1, y, z, 1) < P then return true end
+	end
+	if crosses_k(a, a + my, L, k) then
+		touched = true
+		if hash(js, k, x, y, z, 2) < P then return true end
+	end
+	if crosses_k(a - my, a, L, k) then
+		touched = true
+		if hash(js, k, x, y - 1, z, 2) < P then return true end
+	end
+	if crosses_k(a, a + mz, L, k) then
+		touched = true
+		if hash(js, k, x, y, z, 3) < P then return true end
+	end
+	if crosses_k(a - mz, a, L, k) then
+		touched = true
+		if hash(js, k, x, y, z - 1, 3) < P then return true end
 	end
 	if touched then return false end
-	return joints.hash01(js.seed, js.id, k, x, y, z, 7) < js.persistence
+	return joints.hash01(js.seed, js.id, k, x, y, z, 7) < P
 end
 
 -- 回傳此格的跡線清單 {{set=i, level=j}, ...}（依組號排序，最多 max_lines 條）
@@ -75,7 +106,7 @@ function jointtex.cell_traces(joints, sets, x, y, z, max_lines)
 		if #out >= max_lines then break end
 		local js = sets[i]
 		local lo, hi, first = level_info(js)
-		local sum = js.mx + js.my + js.mz
+		local sum = js._sum
 		local mc = js.mx * x + js.my * y + js.mz * z
 		-- 2t(k) = 2Lk − 2o − 2m·c + Σm，需 lo < 2t < hi
 		local base = -2 * js.o - 2 * mc + sum

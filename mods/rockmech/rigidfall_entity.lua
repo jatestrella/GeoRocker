@@ -48,11 +48,11 @@ local function place_cells(self, drop)
 	for _, c in ipairs(self.cells) do
 		local p = {x = self.origin.x + c.dx, y = self.origin.y + c.dy - drop, z = self.origin.z + c.dz}
 		local name = c.name
-		if fb.enabled and name ~= rockmech.RUBBLE then
+		if fb.enabled and not rockmech.is_rubble(name) then
 			local lith = rockmech.lith_of_node[name]
 			local h_ref = lith and lith.break_height or fb.break_height
 			if math.random() < rf.break_probability(drop, h_ref) then
-				name = rockmech.RUBBLE
+				name = rockmech.rubble_for(name)
 			end
 		end
 		if can_place(p) then

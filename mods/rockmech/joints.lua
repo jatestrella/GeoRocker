@@ -72,6 +72,28 @@ function joints.hash01(...)
 	return joints.hash(...) / TWO32
 end
 
+-- 雜湊前綴：hash(a, b, …) 的中間狀態，之後可接著混入其餘參數
+function joints.hash_prefix(...)
+	local h = 0x9e3779b9
+	for i = 1, select("#", ...) do
+		h = mix((h + floor(select(i, ...)) % TWO32) % TWO32)
+	end
+	return h
+end
+
+-- 面的延續性雜湊（熱路徑）：等同 hash01(js.seed, js.id, k, x, y, z, axis)，
+-- 但 (seed, id) 已預先混入 js.hp，且不用可變參數
+local function face_hash01(js, k, x, y, z, axis)
+	local h = js.hp
+	h = mix((h + k % TWO32) % TWO32)
+	h = mix((h + x % TWO32) % TWO32)
+	h = mix((h + y % TWO32) % TWO32)
+	h = mix((h + z % TWO32) % TWO32)
+	h = mix((h + axis % TWO32) % TWO32)
+	return h / TWO32
+end
+joints.face_hash01 = face_hash01
+
 -- 世界種子字串（可能超過 2^53）→ 32-bit 整數。逐字元雜湊以免精度損失。
 function joints.seed_from_string(s)
 	s = tostring(s or "0")
@@ -149,6 +171,7 @@ function joints.prepare(sets, seed, lattice)
 		p.spacing_eff = p.L / mlen
 		p.dvec = joints.dip_vector(p.dip_eff, p.dipdir_eff)
 		p.seed = seed
+		p.hp = joints.hash_prefix(seed, js.id)
 		out[i] = p
 	end
 	return out
@@ -191,8 +214,7 @@ function joints.face_crossing(js, x, y, z, axis)
 	local k1, k2 = idiv(a1, js.L), idiv(a2, js.L)
 	if k1 == k2 then return nil end
 	local k = k1 > k2 and k1 or k2
-	local r = joints.hash01(js.seed, js.id, k, x, y, z, axis)
-	return k, r
+	return k, face_hash01(js, k, x, y, z, axis)
 end
 
 -- 該組是否在此面形成節理（含延續性判斷）
@@ -212,7 +234,7 @@ function joints.face_joint(sets, x, y, z, axis)
 		local k1, k2 = (a1 - a1 % L) / L, (a2 - a2 % L) / L
 		if k1 ~= k2 then
 			local k = k1 > k2 and k1 or k2
-			if joints.hash01(js.seed, js.id, k, x, y, z, axis) < js.persistence then
+			if face_hash01(js, k, x, y, z, axis) < js.persistence then
 				return i
 			end
 		end

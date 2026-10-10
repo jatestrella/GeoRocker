@@ -208,7 +208,7 @@ local function try_slope_slide(pos)
     if not rockmech.cfg.slope.enabled then return false end
     local node = core.get_node(pos)
     -- 只有碎石受安息角控制；完整岩石由軸差破壞準則控制
-    if node.name ~= rockmech.RUBBLE then return false end
+    if not rockmech.is_rubble(node.name) then return false end
     -- 下方無支撐 → 留給正常掉落邏輯處理
     if core.get_node({x=pos.x, y=pos.y-1, z=pos.z}).name == "air" then return false end
 
@@ -376,7 +376,7 @@ check_stability_and_move = function(pos)
     local below = {x=pos.x, y=pos.y-1, z=pos.z}
     local unsupported = core.get_node(below).name == "air"
 
-    if node.name == rockmech.RUBBLE then
+    if rockmech.is_rubble(node.name) then
         if unsupported then
             fall_with_slope_settle(pos)
         else
@@ -422,7 +422,7 @@ local function build_cid_maps()
             -- 鍵結：天然的實心地層（完整岩石、土、礦石…）；碎石、沙等鬆散材料
             -- 以及玩家建築（is_ground_content = false）不鍵結
             local groups = def.groups or {}
-            if def.is_ground_content ~= false and name ~= rockmech.RUBBLE
+            if def.is_ground_content ~= false and (groups.rockmech_rubble or 0) == 0
                     and (groups.falling_node or 0) == 0 then
                 bonded_of[cid] = true
             end
@@ -454,6 +454,8 @@ function collapse.read_grid(minp, maxp, no_overburden)
         ox = emin.x, oy = emin.y, oz = emin.z,
         nx = emax.x - emin.x + 1, ny = emax.y - emin.y + 1, nz = emax.z - emin.z + 1,
         solid_of = solid_of, weight_of = weight_of, lith_of = lith_of, bonded_of = bonded_of,
+        -- 實際需要的範圍（failure.compute_loads 只算這些欄）
+        req = {x1 = minp.x, x2 = maxp.x, z1 = minp.z, z2 = maxp.z, y1 = minp.y, y2 = maxp.y},
     }
 end
 
@@ -534,12 +536,12 @@ end
 -- 破壞格：原地換成碎石（swap_node 不觸發 on_destruct）。碎石仍是實心、提供側向
 -- 支撐，避免在岩體內部產生空洞；之後是否移動交給懸空掉落／安息角滑動。
 function collapse.apply_failure(failed)
-    local rubble = {name = rockmech.RUBBLE}
     physics_updating = true
     for _, f in ipairs(failed) do
         local p = {x = f.x, y = f.y, z = f.z}
-        if rockmech.lith_of_node[core.get_node(p).name] then
-            core.swap_node(p, rubble)
+        local name = core.get_node(p).name
+        if rockmech.lith_of_node[name] then
+            core.swap_node(p, {name = rockmech.rubble_for(name)})
         end
     end
     -- 由上往下（failed 已排序）判定掉落／滑動
@@ -706,7 +708,7 @@ end
 function collapse.after_rigid_land(placed)
     physics_updating = true
     for _, it in ipairs(placed) do
-        if it.name == rockmech.RUBBLE then
+        if rockmech.is_rubble(it.name) then
             check_stability_and_move(it.pos)
         end
     end
@@ -750,13 +752,13 @@ do
     ent.try_place = function(self, bcp, bcn)
         local broke = false
         local name = self.node and self.node.name
-        if fb.enabled and name and is_rock(name) and name ~= rockmech.RUBBLE and self.rm_start_y then
+        if fb.enabled and name and is_rock(name) and not rockmech.is_rubble(name) and self.rm_start_y then
             local pos = self.object:get_pos()
             local h = self.rm_start_y - pos.y
             local lith = rockmech.lith_of_node[name]
             local h_ref = lith and lith.break_height or fb.break_height
             if math.random() < rockmech.rockfall.break_probability(h, h_ref) then
-                self.node = {name = rockmech.RUBBLE}
+                self.node = {name = rockmech.rubble_for(name)}
                 broke = true
             end
         end
@@ -767,7 +769,7 @@ do
             core.after(0, function()
                 for dy = 0, 1 do
                     local q = {x = p.x, y = p.y + dy, z = p.z}
-                    if core.get_node(q).name == rockmech.RUBBLE then
+                    if rockmech.is_rubble(core.get_node(q).name) then
                         physics_updating = true
                         check_stability_and_move(q)
                         physics_updating = false
@@ -806,7 +808,7 @@ local function register_physics_events(name, intact)
             -- 正上方若是碎石（不在支撐判定的鍵結範圍內），也要重新判定掉落／滑動
             local above = {x = pos.x, y = pos.y + 1, z = pos.z}
             core.after(0, function()
-                if core.get_node(above).name == rockmech.RUBBLE then
+                if rockmech.is_rubble(core.get_node(above).name) then
                     local prev = physics_updating
                     physics_updating = true
                     check_stability_and_move(above)
@@ -827,15 +829,17 @@ local function register_physics_events(name, intact)
         -- on_destruct 排定的檢查在之後的 tick 才執行，屆時這裡已經是碎石：
         -- 碎石下方懸空就落下、超過安息角就滑動；軸差破壞要等碎石被清走、
         -- 真正出現開口時才會觸發。
-        overrides.after_dig_node = function(pos)
-            core.set_node(pos, {name = rockmech.RUBBLE})
+        overrides.after_dig_node = function(pos, oldnode)
+            core.set_node(pos, {name = rockmech.rubble_for(oldnode.name)})
         end
     end
     core.override_item(name, overrides)
 end
 
 register_physics_events("default:stone", true)
-register_physics_events(rockmech.RUBBLE, false)
+for _, nodename in ipairs(rockmech.rubble_nodes) do
+    register_physics_events(nodename, false)
+end
 for _, nodename in ipairs(rockmech.lith_nodes) do
     register_physics_events(nodename, true)
 end

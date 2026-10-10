@@ -205,10 +205,36 @@ end
 
 -- 碎石：軸差破壞後的岩石。不參與軸差判定（非岩性），
 -- 但在 collapse.lua 中套用懸空掉落與安息角滑動。
+-- 碎石種類：一般碎石（灰）與花崗岩碎石（偏白）。皆屬 group rockmech_rubble。
+local gravel_sounds = has_default and default.node_sound_gravel_defaults and default.node_sound_gravel_defaults() or sounds
+
 rockmech.RUBBLE = rockmech.modname .. ":rubble"
 core.register_node(rockmech.RUBBLE, {
-	description = "Rubble (碎石)\n軸差破壞後的破碎岩石",
+	description = "Rubble (碎石)\n破碎的岩石",
 	tiles = {has_default and "default_gravel.png^[colorize:#5a5048:90" or "[fill:16x16:#6a6058"},
-	groups = {crumbly = 2, cracky = 3},
-	sounds = has_default and default.node_sound_gravel_defaults and default.node_sound_gravel_defaults() or sounds,
+	groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
+	sounds = gravel_sounds,
 })
+
+rockmech.RUBBLE_GRANITE = rockmech.modname .. ":rubble_granite"
+core.register_node(rockmech.RUBBLE_GRANITE, {
+	description = "Granite rubble (花崗岩碎石)\n破碎的花崗岩",
+	tiles = {has_default and "default_gravel.png^[colorize:#f0e8e2:170" or "[fill:16x16:#ddd4cc"},
+	groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
+	sounds = gravel_sounds,
+})
+
+rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE}
+-- 岩性 → 碎石；未列出的岩性用一般碎石
+rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
+
+function rockmech.is_rubble(name)
+	return core.get_item_group(name, "rockmech_rubble") > 0
+end
+
+-- 某個岩石 node 破碎後變成哪種碎石（碎石本身不變）
+function rockmech.rubble_for(nodename)
+	if rockmech.is_rubble(nodename) then return nodename end
+	local lith = rockmech.lith_of_node[nodename]
+	return lith and rockmech.rubble_of_lith[lith.name] or rockmech.RUBBLE
+end
