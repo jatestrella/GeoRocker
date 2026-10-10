@@ -1,0 +1,8 @@
+# Local backups
+_backup/
+
+# Editor / OS
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store
