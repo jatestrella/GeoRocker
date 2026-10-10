@@ -13,6 +13,7 @@ rockmech.joints = dofile(modpath .. "/joints.lua")
 rockmech.stress = dofile(modpath .. "/stress.lua")
 rockmech.failure = assert(loadfile(modpath .. "/failure.lua"))(rockmech.stress)
 rockmech.rockfall = dofile(modpath .. "/rockfall.lua")
+rockmech.support = dofile(modpath .. "/support.lua")
 
 -- 解析設定
 local cfg, warnings = rockmech.config.load(function(key)

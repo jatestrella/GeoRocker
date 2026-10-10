@@ -94,6 +94,14 @@ config.failure_defaults = {
 	budget_ms = 5,            -- 單次檢查超過此時間就記 log
 }
 
+-- 支撐判定（support.lua）；設定鍵為 rockmech_support_<key>
+config.support_defaults = {
+	enabled = true,
+	radius = 12,              -- 搜尋範圍半徑 (m)；碰到範圍邊界視為連回大岩體
+	max_voxels = 2000,        -- 懸空群超過此格數保守視為穩定
+	budget_ms = 5,            -- 單次判定超過此時間就記 log
+}
+
 -- 安息角滑動（collapse.lua）；設定鍵為 rockmech_slope_<key>
 config.slope_defaults = {
 	enabled = true,           -- 碎石超過安息角會移動（完整岩石不受安息角影響）
@@ -236,6 +244,11 @@ function config.load(get)
 		f.strength_scale = 1
 	end
 	cfg.failure = f
+
+	-- 支撐判定
+	cfg.support = load_section("support", config.support_defaults)
+	cfg.support.radius = math.max(2, math.floor(cfg.support.radius))
+	cfg.support.max_voxels = math.max(1, math.floor(cfg.support.max_voxels))
 
 	-- 安息角滑動
 	cfg.slope = load_section("slope", config.slope_defaults)

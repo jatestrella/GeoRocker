@@ -366,19 +366,9 @@ local function is_solid_at(p)
     return not d or d.walkable ~= false
 end
 
--- 完整岩石是否完全孤立：上方與四個側面都沒有實心格
-local function is_isolated(pos)
-    return not is_solid_at({x=pos.x, y=pos.y+1, z=pos.z})
-        and not is_solid_at({x=pos.x+1, y=pos.y, z=pos.z})
-        and not is_solid_at({x=pos.x-1, y=pos.y, z=pos.z})
-        and not is_solid_at({x=pos.x, y=pos.y, z=pos.z+1})
-        and not is_solid_at({x=pos.x, y=pos.y, z=pos.z-1})
-end
-collapse.is_isolated = is_isolated
-
 -- 碎石：下方懸空就落下，否則依安息角滑動。
--- 完整岩石：只有「下方懸空且完全孤立」才落下；頂板、懸臂由相鄰岩石撐住，
---           其破壞交給軸差破壞準則（之後再加關鍵塊、張力破壞）。
+-- 完整岩石：這裡不處理。是否懸空由支撐判定（support.lua，連通性）決定；
+--           破壞由軸差破壞準則決定。
 check_stability_and_move = function(pos)
     local node = core.get_node_or_nil(pos)
     if not node or not is_rock(node.name) then return end
@@ -392,11 +382,6 @@ check_stability_and_move = function(pos)
         else
             try_slope_slide(pos)
         end
-        return
-    end
-
-    if unsupported and is_isolated(pos) then
-        fall_with_slope_settle(pos)
     end
 end
 
@@ -425,15 +410,22 @@ local cfg = rockmech.cfg
 local fcfg = cfg.failure
 local failure = rockmech.failure
 
-local solid_of, weight_of, lith_of
+local solid_of, weight_of, lith_of, bonded_of
 local function build_cid_maps()
     if solid_of then return end
-    solid_of, weight_of, lith_of = {}, {}, {}
+    solid_of, weight_of, lith_of, bonded_of = {}, {}, {}, {}
     for name, def in pairs(core.registered_nodes) do
         local cid = core.get_content_id(name)
         solid_of[cid] = def.walkable ~= false
         if def.walkable ~= false then
             weight_of[cid] = fcfg.gamma_other
+            -- 鍵結：天然的實心地層（完整岩石、土、礦石…）；碎石、沙等鬆散材料
+            -- 以及玩家建築（is_ground_content = false）不鍵結
+            local groups = def.groups or {}
+            if def.is_ground_content ~= false and name ~= rockmech.RUBBLE
+                    and (groups.falling_node or 0) == 0 then
+                bonded_of[cid] = true
+            end
         end
     end
     -- 未載入區塊：側向視為實心（保守），但不計入荷重
@@ -447,12 +439,12 @@ local function build_cid_maps()
     end
 end
 
--- 讀取 [minp, maxp] 成為 failure.lua 的網格格式。
--- 往上多讀 overburden_scan 公尺以累計柱狀荷重。
-function collapse.read_grid(minp, maxp)
+-- 讀取 [minp, maxp] 成為 failure.lua / support.lua 的網格格式。
+-- 預設往上多讀 overburden_scan 公尺以累計柱狀荷重；no_overburden 時不多讀。
+function collapse.read_grid(minp, maxp, no_overburden)
     build_cid_maps()
     local vm = core.get_voxel_manip()
-    local top = {x = maxp.x, y = maxp.y + fcfg.overburden_scan, z = maxp.z}
+    local top = {x = maxp.x, y = maxp.y + (no_overburden and 0 or fcfg.overburden_scan), z = maxp.z}
     local emin, emax = vm:read_from_map(minp, top)
     local data = vm:get_data()
     vm:close()
@@ -460,7 +452,7 @@ function collapse.read_grid(minp, maxp)
         data = data,
         ox = emin.x, oy = emin.y, oz = emin.z,
         nx = emax.x - emin.x + 1, ny = emax.y - emin.y + 1, nz = emax.z - emin.z + 1,
-        solid_of = solid_of, weight_of = weight_of, lith_of = lith_of,
+        solid_of = solid_of, weight_of = weight_of, lith_of = lith_of, bonded_of = bonded_of,
     }
 end
 
@@ -617,7 +609,96 @@ function collapse.queue_failure_check(pos)
     enqueue(cube(vector.round(pos), fcfg.radius), 1)
 end
 
--- 8. 註冊行為：放置／移除岩石時觸發區域更新
+-- 8. 支撐判定（模型見 support.lua）
+-- 移除方塊 → 同一 tick 合併 → VoxelManip 一次讀取 → 純函式找懸空群 →
+-- 懸空群以原版 falling node 由下往上落下
+local scfg = cfg.support
+local pending_starts, support_scheduled = {}, false
+local NB6 = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}}
+
+local function run_support_check()
+    support_scheduled = false
+    local starts = pending_starts
+    pending_starts = {}
+    if #starts == 0 or not scfg.enabled then return end
+
+    local t0 = core.get_us_time()
+    local r = scfg.radius
+    -- 起點分群：相距不超過 r 的歸同一群，各群分別讀取（避免遠處的觸發合併成巨大區域）
+    local groups = {}
+    for _, s in ipairs(starts) do
+        local g
+        for _, cand in ipairs(groups) do
+            if s.x >= cand.a.x - r and s.x <= cand.b.x + r and s.y >= cand.a.y - r
+                    and s.y <= cand.b.y + r and s.z >= cand.a.z - r and s.z <= cand.b.z + r then
+                g = cand
+                break
+            end
+        end
+        if not g then
+            g = {a = {x = s.x, y = s.y, z = s.z}, b = {x = s.x, y = s.y, z = s.z}, starts = {}}
+            groups[#groups + 1] = g
+        end
+        g.starts[#g.starts + 1] = s
+        for _, k in ipairs({"x", "y", "z"}) do
+            g.a[k] = math.min(g.a[k], s[k]); g.b[k] = math.max(g.b[k], s[k])
+        end
+    end
+
+    local comps, stats = {}, {visited = 0}
+    for _, g in ipairs(groups) do
+        local grid = collapse.read_grid(
+            {x = g.a.x - r, y = g.a.y - r, z = g.a.z - r},
+            {x = g.b.x + r, y = g.b.y + r, z = g.b.z + r}, true)
+        local c, st = rockmech.support.find_unsupported(grid, g.starts, scfg.max_voxels)
+        for _, comp in ipairs(c) do comps[#comps + 1] = comp end
+        stats.visited = stats.visited + st.visited
+    end
+    local ms = (core.get_us_time() - t0) / 1000
+    if ms > scfg.budget_ms then
+        core.log("warning", ("[rockmech] 支撐判定 %.1f ms（預算 %g ms），起點 %d、展開 %d 格")
+            :format(ms, scfg.budget_ms, #starts, stats.visited))
+    end
+    if #comps == 0 then return end
+
+    local n = 0
+    physics_updating = true
+    for _, c in ipairs(comps) do
+        for _, p in ipairs(c.cells) do   -- 由低到高
+            core.spawn_falling_node(p)
+            n = n + 1
+        end
+    end
+    -- 群上方若有碎石等，可能因此懸空
+    for _, c in ipairs(comps) do
+        for _, p in ipairs(c.cells) do
+            check_stability_and_move({x = p.x, y = p.y + 1, z = p.z})
+        end
+    end
+    physics_updating = false
+    core.log("action", ("[rockmech] 支撐判定：%d 群懸空、共 %d 格落下（%.1f ms，展開 %d 格）")
+        :format(#comps, n, ms, stats.visited))
+end
+
+-- 某格被移除後：以其 6 個鄰格為起點排入支撐判定
+function collapse.queue_support_check(pos)
+    if not scfg.enabled then return end
+    local p = vector.round(pos)
+    for _, d in ipairs(NB6) do
+        pending_starts[#pending_starts + 1] = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
+    end
+    if support_scheduled then return end
+    support_scheduled = true
+    core.after(0, run_support_check)
+end
+
+-- 挖掉非岩石（例如土）也可能讓上方岩石懸空；岩石本身由 on_destruct 觸發
+core.register_on_dignode(function(pos, oldnode)
+    if physics_updating or is_rock(oldnode.name) then return end
+    collapse.queue_support_check(pos)
+end)
+
+-- 9. 註冊行為：放置／移除岩石時觸發區域更新
 -- intact = true：完整岩石。玩家挖掘後原地變成碎石（不掉落物品），
 -- 碎石要再挖一次才會移除（相當於出碴）。
 local function register_physics_events(name, intact)
@@ -643,6 +724,7 @@ local function register_physics_events(name, intact)
                 physics_updating = false
             end)
             collapse.queue_failure_check(pos)
+            collapse.queue_support_check(pos)
         end
     }
     if intact then
