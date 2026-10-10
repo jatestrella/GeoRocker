@@ -8,6 +8,14 @@
 --   物品欄「rockmech」分頁 / /rockmech_toggle   遊戲中開關（破壞準則、安息角滑動、翻滾）
 
 local cfg = rockmech.cfg
+
+-- rockmech 管理權限：遊戲中開關、轉換岩石、測試指令。
+-- Luanti 5.x 單人模式不會給 server 權限，所以另設一個單人模式自動擁有的權限。
+core.register_privilege("rockmech", {
+	description = "可使用 rockmech 的管理指令與遊戲中開關",
+	give_to_singleplayer = true,
+	give_to_admin = true,
+})
 local joints = rockmech.joints
 local stress = rockmech.stress
 
@@ -215,7 +223,7 @@ core.register_chatcommand("rockmech_traces", {
 
 core.register_chatcommand("rockmech_jointtex_demo", {
 	description = "在前方放 6 個花崗岩方塊，各只有一個面是節理面，用來檢查材質方向",
-	privs = {server = true},
+	privs = {rockmech = true},
 	func = function(name)
 		local player = core.get_player_by_name(name)
 		if not player then return false, "找不到玩家" end
@@ -242,7 +250,7 @@ core.register_chatcommand("rockmech_jointtex_demo", {
 core.register_chatcommand("convert_rocks", {
 	params = "[半徑，預設 20，上限 48]",
 	description = "把玩家附近的 default:stone（含舊的 physics_core:large_rock）依深度換成 rockmech 岩性",
-	privs = {server = true},
+	privs = {rockmech = true},
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
 		if not player then return false, "找不到玩家" end
@@ -370,7 +378,7 @@ core.register_chatcommand("rockmech_failure", {
 ---------------------------------------------------------------------------
 
 local storage = core.get_mod_storage()
-local TOGGLE_PRIV = "server"
+local TOGGLE_PRIV = "rockmech"
 
 -- 開關表（依顯示順序）
 local TOGGLES = {
