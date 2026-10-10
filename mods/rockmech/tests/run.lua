@@ -16,6 +16,7 @@ local SPECS = {
 	"failure_spec.lua",
 	"rockfall_spec.lua",
 	"support_spec.lua",
+	"rigidfall_spec.lua",
 }
 
 for _, f in ipairs(SPECS) do

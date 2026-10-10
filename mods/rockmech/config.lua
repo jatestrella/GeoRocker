@@ -107,6 +107,8 @@ config.support_defaults = {
 	enabled = true,
 	radius = 12,              -- 搜尋範圍半徑 (m)；碰到範圍邊界視為連回大岩體
 	max_voxels = 2000,        -- 懸空群超過此格數保守視為穩定
+	rigid = true,             -- 懸空群整塊（剛體）落下；false 則逐格落下
+	rigid_max = 128,          -- 剛體落下的格數上限，超過改為逐格落下
 	budget_ms = 5,            -- 單次判定超過此時間就記 log
 }
 
@@ -261,6 +263,7 @@ function config.load(get)
 	cfg.support = load_section("support", config.support_defaults)
 	cfg.support.radius = math.max(2, math.floor(cfg.support.radius))
 	cfg.support.max_voxels = math.max(1, math.floor(cfg.support.max_voxels))
+	cfg.support.rigid_max = math.max(1, math.floor(cfg.support.rigid_max))
 
 	-- 安息角滑動
 	cfg.slope = load_section("slope", config.slope_defaults)

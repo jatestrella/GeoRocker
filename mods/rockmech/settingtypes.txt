@@ -100,6 +100,13 @@ rockmech_support_radius (Support search radius) int 12 2 32
 # Unsupported groups larger than this are conservatively treated as stable.
 rockmech_support_max_voxels (Max falling group size) int 2000 1 100000
 
+# Unsupported groups fall as one rigid block (vertical translation, no rotation).
+# Off: each node falls separately (vanilla falling nodes).
+rockmech_support_rigid (Rigid block falling) bool true
+
+# Groups larger than this fall node by node instead of as one block.
+rockmech_support_rigid_max (Max rigid block size) int 128 1 2000
+
 # Log a warning when one support check takes longer than this (ms).
 rockmech_support_budget_ms (Support check time budget) float 5 0.1 1000
 

@@ -661,13 +661,34 @@ local function run_support_check()
     end
     if #comps == 0 then return end
 
-    local n = 0
+    local n, n_rigid = 0, 0
+    local rfe = rockmech.rigidfall_entity
     physics_updating = true
     for _, c in ipairs(comps) do
-        for _, p in ipairs(c.cells) do   -- 由低到高
-            core.spawn_falling_node(p)
-            n = n + 1
+        local done = false
+        -- 剛體整塊落下
+        if scfg.rigid and rfe and #c.cells <= scfg.rigid_max then
+            local d = rockmech.rigidfall.drop_distance(c.cells, rfe.is_solid, 256)
+            if d and d >= 1 then
+                local cells = {}
+                for _, p in ipairs(c.cells) do
+                    cells[#cells + 1] = {x = p.x, y = p.y, z = p.z, name = core.get_node(p).name}
+                end
+                for _, p in ipairs(c.cells) do core.remove_node(p) end
+                done = rfe.spawn(cells, d)
+                if not done then
+                    for _, p in ipairs(cells) do core.set_node(p, {name = p.name}) end
+                end
+                if done then n_rigid = n_rigid + 1 end
+            end
         end
+        -- 否則逐格（原版 falling node）
+        if not done then
+            for _, p in ipairs(c.cells) do   -- 由低到高
+                core.spawn_falling_node(p)
+            end
+        end
+        n = n + #c.cells
     end
     -- 群上方若有碎石等，可能因此懸空
     for _, c in ipairs(comps) do
@@ -676,8 +697,19 @@ local function run_support_check()
         end
     end
     physics_updating = false
-    core.log("action", ("[rockmech] 支撐判定：%d 群懸空、共 %d 格落下（%.1f ms，展開 %d 格）")
-        :format(#comps, n, ms, stats.visited))
+    core.log("action", ("[rockmech] 支撐判定：%d 群懸空（%d 群整塊落下）、共 %d 格（%.1f ms，展開 %d 格）")
+        :format(#comps, n_rigid, n, ms, stats.visited))
+end
+
+-- 剛體落地後：碎石依安息角判定
+function collapse.after_rigid_land(placed)
+    physics_updating = true
+    for _, it in ipairs(placed) do
+        if it.name == rockmech.RUBBLE then
+            check_stability_and_move(it.pos)
+        end
+    end
+    physics_updating = false
 end
 
 -- 某格被移除後：以其 6 個鄰格為起點排入支撐判定
