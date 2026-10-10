@@ -118,3 +118,24 @@ rockmech_fallbreak_enabled (Break falling rock into rubble) bool true
 
 # h_ref (m) for non-lithology rock such as default:stone.
 rockmech_fallbreak_break_height (Break height of other rock) float 4.0 0.01 1000
+
+[Joint textures]
+
+# Place joint texture variants (trace lines on block edges, colored joint faces)
+# during map generation and /convert_rocks. Texture changes need a world restart.
+rockmech_jointtex_enabled (Joint textures) bool true
+
+# Color of joint trace lines (#RRGGBB).
+rockmech_jointtex_line_color (Joint trace color) string #000000
+
+# Opacity of joint trace lines (0-255).
+rockmech_jointtex_line_alpha (Joint trace opacity) int 170 0 255
+
+# Width of joint trace lines in pixels (textures are 16x16).
+rockmech_jointtex_line_width (Joint trace width) int 1 1 8
+
+# Tint of exposed joint faces (#RRGGBB).
+rockmech_jointtex_face_color (Joint face tint) string #8a5a2a
+
+# Strength of the joint face tint (0-255).
+rockmech_jointtex_face_ratio (Joint face tint strength) int 110 0 255

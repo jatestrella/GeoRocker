@@ -245,3 +245,44 @@ describe("joints 節理面判定", function()
 		assert.truthy(a.phase ~= b.phase)
 	end)
 end)
+
+describe("joints 節理遮罩", function()
+	local sets = joints.prepare({
+		{id = 1, name = "A", dip = 10, dipdir = 135, spacing = 2, persistence = 0.9, phi = 25},
+		{id = 2, name = "B", dip = 70, dipdir = 40, spacing = 3, persistence = 0.8, phi = 30},
+	}, 777)
+
+	it("遮罩與 face_joint 一致、範圍 0..63", function()
+		for x = -6, 6 do for y = -6, 6 do for z = -3, 3 do
+			local m = joints.cell_mask(sets, x, y, z)
+			assert.truthy(m >= 0 and m <= 63)
+			assert.are.equal(joints.face_joint(sets, x, y, z, 1) ~= nil, joints.has_bit(m, joints.MASK.E))
+			assert.are.equal(joints.face_joint(sets, x, y - 1, z, 2) ~= nil, joints.has_bit(m, joints.MASK.Dn))
+		end end end
+	end)
+
+	it("相鄰兩格看同一個面結果一致（東↔西、上↔下、北↔南）", function()
+		local M = joints.MASK
+		for x = -5, 5 do for y = -5, 5 do for z = -5, 5 do
+			local m = joints.cell_mask(sets, x, y, z)
+			assert.are.equal(joints.has_bit(m, M.E), joints.has_bit(joints.cell_mask(sets, x + 1, y, z), M.W))
+			assert.are.equal(joints.has_bit(m, M.Up), joints.has_bit(joints.cell_mask(sets, x, y + 1, z), M.Dn))
+			assert.are.equal(joints.has_bit(m, M.N), joints.has_bit(joints.cell_mask(sets, x, y, z + 1), M.S))
+		end end end
+	end)
+
+	it("材質邊緣對照：每面的四條邊恰為四個側向、且不含自己與對面", function()
+		local M = joints.MASK
+		local opposite = {[M.E] = M.W, [M.W] = M.E, [M.Up] = M.Dn, [M.Dn] = M.Up, [M.N] = M.S, [M.S] = M.N}
+		for _, e in ipairs(joints.TILE_EDGES) do
+			local seen = {}
+			for _, k in ipairs({"top", "bottom", "left", "right"}) do
+				local b = e[k]
+				assert.truthy(b ~= e.self and b ~= opposite[e.self])
+				assert.is_nil(seen[b]); seen[b] = true
+			end
+			assert.are.equal(opposite[e.top], e.bottom)
+			assert.are.equal(opposite[e.left], e.right)
+		end
+	end)
+end)

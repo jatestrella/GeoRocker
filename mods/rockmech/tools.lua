@@ -208,6 +208,37 @@ core.register_chatcommand("rockmech_traces", {
 -- （沿用 physics_core 的指令名稱；原本是換成 2×2×2 大岩塊）
 ---------------------------------------------------------------------------
 
+---------------------------------------------------------------------------
+-- /rockmech_jointtex_demo：檢查節理材質方向
+-- 在玩家前方放 6 個花崗岩，各只有一個面是節理面
+---------------------------------------------------------------------------
+
+core.register_chatcommand("rockmech_jointtex_demo", {
+	description = "在前方放 6 個花崗岩方塊，各只有一個面是節理面，用來檢查材質方向",
+	privs = {server = true},
+	func = function(name)
+		local player = core.get_player_by_name(name)
+		if not player then return false, "找不到玩家" end
+		local p = vector.round(player:get_pos())
+		local M = joints.MASK
+		local list = {
+			{bit = M.E, label = "東(+x)"}, {bit = M.W, label = "西(−x)"},
+			{bit = M.N, label = "北(+z)"}, {bit = M.S, label = "南(−z)"},
+			{bit = M.Up, label = "上(+y)"}, {bit = M.Dn, label = "下(−y)"},
+		}
+		local lines = {"[rockmech] 在 x=" .. (p.x + 3) .. "、z 由 " .. (p.z - 5) ..
+			" 往北每隔 2 格放置（y=" .. (p.y + 2) .. "）："}
+		for i, it in ipairs(list) do
+			local q = {x = p.x + 3, y = p.y + 2, z = p.z - 5 + (i - 1) * 2}
+			core.set_node(q, {name = rockmech.lith_variant.granite[it.bit]})
+			lines[#lines + 1] = ("  第 %d 個（z=%d）：只有%s面是節理 → 該面為鏽色，與它相鄰的四個面在靠%s的邊上有深色線")
+				:format(i, q.z, it.label, it.label)
+		end
+		lines[#lines + 1] = "  （放置的方塊浮在空中，附近挖掘會觸發支撐判定讓它掉落）"
+		return true, table.concat(lines, "\n")
+	end,
+})
+
 core.register_chatcommand("convert_rocks", {
 	params = "[半徑，預設 20，上限 48]",
 	description = "把玩家附近的 default:stone（含舊的 physics_core:large_rock）依深度換成 rockmech 岩性",
@@ -228,19 +259,24 @@ core.register_chatcommand("convert_rocks", {
 		local data = vm:get_data()
 
 		local c_stone = core.get_content_id("default:stone")
-		local cid_y = {}
+		local var_y = {}
 		for y = p1.y, p2.y do
-			local lith = rockmech.lith_at_y(y)
-			cid_y[y] = core.get_content_id(rockmech.node_of_lith[lith.name])
+			local key = rockmech.lith_at_y(y).name
+			var_y[y] = {}
+			for mask = 0, 63 do
+				var_y[y][mask] = core.get_content_id(rockmech.lith_variant[key][mask])
+			end
 		end
+		local sets = rockmech.get_joint_sets()
+		local use_joints = cfg.jointtex.enabled
 
 		local replaced = 0
 		for z = p1.z, p2.z do
 			for y = p1.y, p2.y do
 				local vi = area:index(p1.x, y, z)
-				for _ = p1.x, p2.x do
+				for x = p1.x, p2.x do
 					if data[vi] == c_stone then
-						data[vi] = cid_y[y]
+						data[vi] = var_y[y][use_joints and joints.cell_mask(sets, x, y, z) or 0]
 						replaced = replaced + 1
 					end
 					vi = vi + 1

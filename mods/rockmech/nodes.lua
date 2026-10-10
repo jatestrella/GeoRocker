@@ -1,8 +1,13 @@
 -- rockmech/nodes.lua
 -- 註冊岩性 node（引擎端）。
 -- 有 default mod 時以 default_stone.png 著色；否則用 [fill 產生純色材質（devtest 可用）。
+--
+-- 節理材質變體：每種岩性另有 63 種變體 <岩性>_jNN（NN = 節理遮罩 1..63，
+-- 見 joints.cell_mask），各面依遮罩畫節理跡線（邊緣深色線）與節理面（上色）。
+-- 遮罩 0 即原本的 node。變體不出現在創造模式物品欄。
 
 local cfg = rockmech.cfg
+local joints = rockmech.joints
 local has_default = core.get_modpath("default") ~= nil
 
 local sounds
@@ -10,32 +15,79 @@ if has_default and default and default.node_sound_stone_defaults then
 	sounds = default.node_sound_stone_defaults()
 end
 
-rockmech.node_of_lith = {} -- 岩性名稱 → node 名稱
-rockmech.lith_of_node = {} -- node 名稱 → 岩性條目
+rockmech.node_of_lith = {}    -- 岩性名稱 → 基本 node 名稱（遮罩 0）
+rockmech.lith_of_node = {}    -- node 名稱（含變體）→ 岩性條目
+rockmech.lith_nodes = {}      -- 所有岩性 node 名稱（含變體）
+rockmech.lith_variant = {}    -- 岩性名稱 → {[遮罩] = node 名稱}，遮罩 0..63
+
+-- 節理材質參數
+local jt = cfg.jointtex
+local TEX = 16 -- 基底材質解析度（default_stone.png 為 16×16）
+local W = math.max(1, math.min(8, math.floor(jt.line_width)))
+local line_color = jt.line_color .. string.format("%02x", jt.line_alpha)
+
+local function variant_name(base, mask)
+	if mask == 0 then return base end
+	return ("%s_j%02d"):format(base, mask)
+end
+rockmech.variant_name = variant_name
+
+-- 依遮罩產生 6 面材質（tiles 順序 +Y, -Y, +X, -X, +Z, -Z）
+local function joint_tiles(base_tile, mask)
+	local tiles = {}
+	for i, e in ipairs(joints.TILE_EDGES) do
+		local t = base_tile
+		if joints.has_bit(mask, e.self) then
+			t = t .. "^[colorize:" .. jt.face_color .. ":" .. jt.face_ratio
+		end
+		if joints.has_bit(mask, e.top) then
+			t = t .. ("^[fill:%dx%d:0,0:%s"):format(TEX, W, line_color)
+		end
+		if joints.has_bit(mask, e.bottom) then
+			t = t .. ("^[fill:%dx%d:0,%d:%s"):format(TEX, W, TEX - W, line_color)
+		end
+		if joints.has_bit(mask, e.left) then
+			t = t .. ("^[fill:%dx%d:0,0:%s"):format(W, TEX, line_color)
+		end
+		if joints.has_bit(mask, e.right) then
+			t = t .. ("^[fill:%dx%d:%d,0:%s"):format(W, TEX, TEX - W, line_color)
+		end
+		tiles[i] = t
+	end
+	return tiles
+end
+rockmech.joint_tiles = joint_tiles
 
 for _, key in ipairs(cfg.lithology_order) do
 	local lith = cfg.lithologies[key]
-	local nodename = rockmech.modname .. ":" .. lith.name
-	local tile
+	local base = rockmech.modname .. ":" .. lith.name
+	local base_tile
 	if lith.texture then
-		tile = lith.texture
+		base_tile = lith.texture
 	elseif has_default then
-		tile = "default_stone.png^[colorize:" .. lith.color .. ":150"
+		base_tile = "default_stone.png^[colorize:" .. lith.color .. ":150"
 	else
-		tile = "[fill:16x16:" .. lith.color
+		base_tile = ("[fill:%dx%d:%s"):format(TEX, TEX, lith.color)
 	end
 
-	core.register_node(nodename, {
-		description = lith.description .. "\n" ..
-			("γ=%.1f kN/m³  UCS=%g MPa  σt=%g MPa"):format(lith.gamma, lith.ucs, lith.tensile),
-		tiles = {tile},
-		is_ground_content = true,
-		groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1},
-		sounds = sounds,
-	})
-
-	rockmech.node_of_lith[key] = nodename
-	rockmech.lith_of_node[nodename] = lith
+	rockmech.node_of_lith[key] = base
+	rockmech.lith_variant[key] = {}
+	for mask = 0, 63 do
+		local name = variant_name(base, mask)
+		local groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1}
+		if mask ~= 0 then groups.not_in_creative_inventory = 1 end
+		core.register_node(name, {
+			description = lith.description .. "\n" ..
+				("γ=%.1f kN/m³  UCS=%g MPa  σt=%g MPa"):format(lith.gamma, lith.ucs, lith.tensile),
+			tiles = mask == 0 and {base_tile} or joint_tiles(base_tile, mask),
+			is_ground_content = true,
+			groups = groups,
+			sounds = sounds,
+		})
+		rockmech.lith_of_node[name] = lith
+		rockmech.lith_nodes[#rockmech.lith_nodes + 1] = name
+		rockmech.lith_variant[key][mask] = name
+	end
 end
 
 -- 依 y 取該深度分層的岩性條目

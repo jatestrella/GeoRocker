@@ -432,7 +432,8 @@ local function build_cid_maps()
     local c_ignore = core.get_content_id("ignore")
     solid_of[c_ignore] = true
     weight_of[c_ignore] = nil
-    for key, nodename in pairs(rockmech.node_of_lith) do
+    for _, nodename in ipairs(rockmech.lith_nodes) do
+        local key = rockmech.lith_of_node[nodename].name
         local cid = core.get_content_id(nodename)
         lith_of[cid] = key
         weight_of[cid] = cfg.lithologies[key].gamma
@@ -835,6 +836,6 @@ end
 
 register_physics_events("default:stone", true)
 register_physics_events(rockmech.RUBBLE, false)
-for _, nodename in pairs(rockmech.node_of_lith) do
+for _, nodename in ipairs(rockmech.lith_nodes) do
     register_physics_events(nodename, true)
 end

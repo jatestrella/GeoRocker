@@ -220,4 +220,45 @@ function joints.face_key(x, y, z, face)
 	return x - e[1], y - e[2], z - e[3], face.axis
 end
 
+---------------------------------------------------------------------------
+-- 節理遮罩（給材質變體用）
+---------------------------------------------------------------------------
+-- 每格 6 個面各一個位元：E=1 W=2 Up=4 Dn=8 N=16 S=32（順序同 joints.FACES）
+joints.MASK = {E = 1, W = 2, Up = 4, Dn = 8, N = 16, S = 32}
+
+-- 格 (x,y,z) 的節理遮罩 0..63
+function joints.cell_mask(sets, x, y, z)
+	local m = 0
+	if joints.face_joint(sets, x, y, z, 1) then m = m + 1 end
+	if joints.face_joint(sets, x - 1, y, z, 1) then m = m + 2 end
+	if joints.face_joint(sets, x, y, z, 2) then m = m + 4 end
+	if joints.face_joint(sets, x, y - 1, z, 2) then m = m + 8 end
+	if joints.face_joint(sets, x, y, z, 3) then m = m + 16 end
+	if joints.face_joint(sets, x, y, z - 1, 3) then m = m + 32 end
+	return m
+end
+
+function joints.has_bit(mask, bit)
+	return math.floor(mask / bit) % 2 == 1
+end
+
+-- Luanti 方塊 6 個面（tiles 順序 +Y, -Y, +X, -X, +Z, -Z）的貼圖邊緣對應的方位位元。
+-- self：此面本身是節理面時上色；top/bottom/left/right：貼圖該邊緣對應的側面，
+-- 那個側面是節理時，在這條邊畫跡線。
+-- 推導：從外側看該面、貼圖不鏡像；側面的貼圖上方 = +y；
+-- Luanti 為左手系，right = up × forward（forward 為視線方向）。
+--   頂面：視線 −y、上方 +z → 右 = +x
+--   東面：視線 −x → 右 = +z；西面 → 右 = −z
+--   北面：視線 −z → 右 = −x；南面 → 右 = +x
+--   底面：假設貼圖上方 = −z → 右 = +x（未經畫面確認，見 /rockmech_jointtex_demo）
+local M = joints.MASK
+joints.TILE_EDGES = {
+	{self = M.Up, top = M.N,  bottom = M.S,  left = M.W, right = M.E}, -- +Y
+	{self = M.Dn, top = M.S,  bottom = M.N,  left = M.W, right = M.E}, -- -Y
+	{self = M.E,  top = M.Up, bottom = M.Dn, left = M.S, right = M.N}, -- +X
+	{self = M.W,  top = M.Up, bottom = M.Dn, left = M.N, right = M.S}, -- -X
+	{self = M.N,  top = M.Up, bottom = M.Dn, left = M.E, right = M.W}, -- +Z
+	{self = M.S,  top = M.Up, bottom = M.Dn, left = M.W, right = M.E}, -- -Z
+}
+
 return joints

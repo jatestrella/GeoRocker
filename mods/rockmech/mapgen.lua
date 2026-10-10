@@ -6,6 +6,7 @@
 local modpath = core.ipc_get("rockmech:modpath")
 local config = dofile(modpath .. "/config.lua")
 local stress = dofile(modpath .. "/stress.lua")
+local joints = dofile(modpath .. "/joints.lua")
 
 local cfg = config.load(function(key) return core.settings:get(key) end)
 if not cfg.replace_stone then
@@ -20,10 +21,23 @@ if not core.registered_nodes[stone_name] then
 end
 
 local c_stone = core.get_content_id(stone_name)
-local c_lith = {}
+-- c_var[岩性][遮罩] = content id（遮罩 0 為基本 node）
+local c_var = {}
 for key, lith in pairs(cfg.lithologies) do
-	c_lith[key] = core.get_content_id("rockmech:" .. lith.name)
+	c_var[key] = {}
+	for mask = 0, 63 do
+		local name = "rockmech:" .. lith.name
+		if mask > 0 then name = ("%s_j%02d"):format(name, mask) end
+		c_var[key][mask] = core.get_content_id(name)
+	end
 end
+
+-- 節理組（與主環境相同的種子與前處理，結果一致）
+local use_joints = cfg.jointtex.enabled
+local sets = joints.prepare(cfg.joint_sets,
+	joints.seed_from_string(core.get_mapgen_setting("seed") or "0"))
+local cell_mask = joints.cell_mask
+local logged = 0
 
 local data = {}
 
@@ -34,24 +48,31 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 
 	-- 每個 y 的目標 content id
 	local layer = stress.layer_table(cfg, minp.y, maxp.y)
-	local cid_y = {}
+	local var_y = {}
 	for y = minp.y, maxp.y do
-		cid_y[y] = c_lith[layer[y]]
+		var_y[y] = c_var[layer[y]]
 	end
 
-	local changed = false
+	local t0 = os.clock()
+	local changed, n = false, 0
 	for z = minp.z, maxp.z do
 		for y = minp.y, maxp.y do
-			local c_new = cid_y[y]
+			local cv = var_y[y]
 			local vi = area:index(minp.x, y, z)
-			for _ = minp.x, maxp.x do
+			for x = minp.x, maxp.x do
 				if data[vi] == c_stone then
-					data[vi] = c_new
+					data[vi] = cv[use_joints and cell_mask(sets, x, y, z) or 0]
 					changed = true
+					n = n + 1
 				end
 				vi = vi + 1
 			end
 		end
+	end
+	if logged < 3 and n > 0 then
+		logged = logged + 1
+		core.log("action", ("[rockmech] mapgen 岩性＋節理遮罩：%d 格，%.0f ms"):format(
+			n, (os.clock() - t0) * 1000))
 	end
 
 	if changed then

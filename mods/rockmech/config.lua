@@ -96,6 +96,17 @@ config.failure_defaults = {
 	budget_ms = 5,            -- 單次檢查超過此時間就記 log
 }
 
+-- 節理材質（nodes.lua 的材質變體）；設定鍵為 rockmech_jointtex_<key>
+-- 改動後需重新進入世界（材質在載入時產生）
+config.jointtex_defaults = {
+	enabled = true,           -- 地圖生成／轉換時依節理放置材質變體
+	line_color = "#000000",   -- 節理跡線顏色
+	line_alpha = 170,         -- 跡線不透明度 0..255
+	line_width = 1,           -- 跡線寬度（像素，材質為 16×16）
+	face_color = "#8a5a2a",   -- 節理面（沿節理挖開的面）上色
+	face_ratio = 110,         -- 節理面上色強度 0..255
+}
+
 -- 掉落破碎；設定鍵為 rockmech_fallbreak_<key>
 config.fallbreak_defaults = {
 	enabled = true,           -- 完整岩石掉落後依落下高度有機率變成碎石
@@ -230,6 +241,8 @@ function config.load(get)
 			if type(def) == "boolean" then
 				local b = parse_bool(raw)
 				if b ~= nil then t[key] = b end
+			elseif type(def) == "string" then
+				if raw ~= nil and raw ~= "" then t[key] = raw end
 			elseif raw ~= nil and raw ~= "" then
 				local v = tonumber(raw)
 				if v then
@@ -254,6 +267,18 @@ function config.load(get)
 		f.strength_scale = 1
 	end
 	cfg.failure = f
+
+	-- 節理材質
+	local jt = load_section("jointtex", config.jointtex_defaults)
+	jt.line_alpha = math.max(0, math.min(255, math.floor(jt.line_alpha)))
+	jt.face_ratio = math.max(0, math.min(255, math.floor(jt.face_ratio)))
+	for _, k in ipairs({"line_color", "face_color"}) do
+		if not jt[k]:match("^#%x%x%x%x%x%x$") then
+			warnings[#warnings + 1] = "rockmech_jointtex_" .. k .. " 應為 #RRGGBB，改用預設"
+			jt[k] = config.jointtex_defaults[k]
+		end
+	end
+	cfg.jointtex = jt
 
 	-- 掉落破碎
 	cfg.fallbreak = load_section("fallbreak", config.fallbreak_defaults)
