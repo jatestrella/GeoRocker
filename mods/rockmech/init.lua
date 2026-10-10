@@ -35,7 +35,7 @@ function rockmech.get_joint_sets()
 			core.log("warning", "[rockmech] 讀不到世界種子，節理延續性改用種子 0")
 		end
 		rockmech.seed = rockmech.joints.seed_from_string(seed_str or "0")
-		prepared_sets = rockmech.joints.prepare(cfg.joint_sets, rockmech.seed)
+		prepared_sets = rockmech.joints.prepare(cfg.joint_sets, rockmech.seed, cfg.joint_lattice)
 	end
 	return prepared_sets
 end

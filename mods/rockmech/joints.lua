@@ -17,11 +17,11 @@
 -- 檢查：δ=0 → n=(0,1,0)；α=90°, δ=90° → n=(1,0,0)（朝東的直立面）。
 --
 -- ## 節理面判定
--- 一組節理是一族平行平面 n·p = (k - φ)·S，k 為整數平面編號，S 為間距，
--- φ ∈ [0,1) 為該組相位（由世界種子決定，或由 offset 指定）。
--- 令 s(p) = n·p / S + φ。相鄰兩格中心 p1, p2 之間的面被該組切過
--- ⇔ floor(s(p1)) ≠ floor(s(p2))，平面編號 k = max(floor(s1), floor(s2))。
--- 因 S ≥ 1 且 |n·(p2-p1)| ≤ 1，同一組在一個面上最多只切過一個平面。
+-- 一組節理是一族平行平面。為了讓跡線材質在方塊間完美連接，法向量對齊到
+-- 整數格點 m（見 joints.prepare），平面寫成 m·p + o = L·k（k 為平面編號）。
+-- 相鄰兩格中心 p1, p2 之間的面被該組切過
+-- ⇔ floor((m·p1+o)/L) ≠ floor((m·p2+o)/L)，平面編號 k 取兩者較大者。
+-- 因 L ≥ max|m_i|，同一組在一個面上最多只切過一個平面。
 --
 -- ## 延續性
 -- r = hash01(seed, set_id, k, fx, fy, fz, axis)，r < persistence 才算節理。
@@ -105,42 +105,64 @@ function joints.strike_vector(dipdir)
 end
 
 ---------------------------------------------------------------------------
--- 節理組前處理
+-- 節理組前處理（格點對齊）
 ---------------------------------------------------------------------------
-
--- sets: config 的節理組陣列；seed: 32-bit 整數。
+-- 為了讓節理跡線在方塊之間完美連接，平面的法向量對齊到整數格點：
+--   m = round(n · D)（整數向量，D 為格點密度 lattice，預設 8）
+-- 平面族寫成 m·p + o = L·k（k 為整數平面編號），其中
+--   L = round(S · |m|)（整數），有效間距 S_eff = L / |m|
+--   o ∈ [0, L) 為整數相位（由世界種子決定，或由 offset 指定）
+-- 格中心 p 為整數 → m·p + o 為整數 → 平面編號以整數除法精確求得。
+-- 有效位態（dip_eff / dipdir_eff）由 m 反算，與輸入值差約 1°（D=8）。
+--
+-- sets: config 的節理組陣列；seed: 32-bit 整數；lattice: D（預設 8）。
 -- 回傳前處理後的陣列（原表不修改），每組多出：
---   n, nx, ny, nz, inv_s (=1/spacing), phase, dvec
-function joints.prepare(sets, seed)
+--   n（輸入位態的單位法向）、mx,my,mz、m_axis、L、o、
+--   n_eff、dip_eff、dipdir_eff、spacing_eff、dvec（有效位態的順傾向向量）
+function joints.prepare(sets, seed, lattice)
+	local D = lattice or 8
 	local out = {}
 	for i, js in ipairs(sets) do
 		local p = {}
 		for k, v in pairs(js) do p[k] = v end
 		p.index = i
 		p.n = joints.normal(js.dip, js.dipdir)
-		p.nx, p.ny, p.nz = p.n.x, p.n.y, p.n.z
-		p.n_axis = {p.nx, p.ny, p.nz}
-		p.inv_s = 1 / js.spacing
+		local mx = floor(p.n.x * D + 0.5)
+		local my = floor(p.n.y * D + 0.5)
+		local mz = floor(p.n.z * D + 0.5)
+		if mx == 0 and my == 0 and mz == 0 then my = 1 end
+		p.mx, p.my, p.mz = mx, my, mz
+		p.m_axis = {mx, my, mz}
+		local mlen = math.sqrt(mx * mx + my * my + mz * mz)
+		p.L = math.max(1, floor(js.spacing * mlen + 0.5))
+		-- 保證同一組在一個面上最多只切過一個平面：L ≥ max|m_i|
+		p.L = math.max(p.L, math.abs(mx), math.abs(my), math.abs(mz))
 		if js.offset then
-			p.phase = (js.offset / js.spacing) % 1
+			p.o = floor(js.offset * mlen + 0.5) % p.L
 		else
-			p.phase = joints.hash01(seed, js.id, 0x5eed)
+			p.o = floor(joints.hash01(seed, js.id, 0x5eed) * p.L)
 		end
-		p.dvec = joints.dip_vector(js.dip, js.dipdir)
+		p.n_eff = {x = mx / mlen, y = my / mlen, z = mz / mlen}
+		p.dip_eff = math.deg(math.acos(math.max(-1, math.min(1, p.n_eff.y))))
+		p.dipdir_eff = (math.deg(math.atan2 and math.atan2(mx, mz) or math.atan(mx, mz))) % 360
+		if mx == 0 and mz == 0 then p.dipdir_eff = js.dipdir end
+		p.spacing_eff = p.L / mlen
+		p.dvec = joints.dip_vector(p.dip_eff, p.dipdir_eff)
 		p.seed = seed
 		out[i] = p
 	end
 	return out
 end
 
--- 位置 (x,y,z) 的平面座標 s = n·p/S + φ
-function joints.plane_coord(js, x, y, z)
-	return (js.nx * x + js.ny * y + js.nz * z) * js.inv_s + js.phase
+-- 整數除法取下界（Lua 5.1 / 5.4 皆精確；L > 0）
+local function idiv(a, L)
+	return (a - a % L) / L
 end
+joints.idiv = idiv
 
--- 第 k 號平面上距原點最近的點（除錯用）：n·p = (k - φ)·S
-function joints.plane_distance(js, k)
-	return (k - js.phase) * js.spacing
+-- 位置 (x,y,z) 的平面座標 s = (m·p + o) / L（平面位於 s 為整數處）
+function joints.plane_coord(js, x, y, z)
+	return (js.mx * x + js.my * y + js.mz * z + js.o) / js.L
 end
 
 -- 軸向單位位移
@@ -164,9 +186,9 @@ joints.FACES = {
 -- 面 (x,y,z | axis) = 格 (x,y,z) 與 (x,y,z)+e_axis 之間的面。
 -- 回傳此組切過該面的平面編號 k，以及延續性雜湊值 r；未切過回傳 nil。
 function joints.face_crossing(js, x, y, z, axis)
-	local s1 = (js.nx * x + js.ny * y + js.nz * z) * js.inv_s + js.phase
-	local s2 = s1 + js.n_axis[axis] * js.inv_s
-	local k1, k2 = floor(s1), floor(s2)
+	local a1 = js.mx * x + js.my * y + js.mz * z + js.o
+	local a2 = a1 + js.m_axis[axis]
+	local k1, k2 = idiv(a1, js.L), idiv(a2, js.L)
 	if k1 == k2 then return nil end
 	local k = k1 > k2 and k1 or k2
 	local r = joints.hash01(js.seed, js.id, k, x, y, z, axis)
@@ -184,9 +206,10 @@ end
 function joints.face_joint(sets, x, y, z, axis)
 	for i = 1, #sets do
 		local js = sets[i]
-		local s1 = (js.nx * x + js.ny * y + js.nz * z) * js.inv_s + js.phase
-		local s2 = s1 + js.n_axis[axis] * js.inv_s
-		local k1, k2 = floor(s1), floor(s2)
+		local L = js.L
+		local a1 = js.mx * x + js.my * y + js.mz * z + js.o
+		local a2 = a1 + js.m_axis[axis]
+		local k1, k2 = (a1 - a1 % L) / L, (a2 - a2 % L) / L
 		if k1 ~= k2 then
 			local k = k1 > k2 and k1 or k2
 			if joints.hash01(js.seed, js.id, k, x, y, z, axis) < js.persistence then

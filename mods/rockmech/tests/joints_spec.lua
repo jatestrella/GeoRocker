@@ -238,11 +238,23 @@ describe("joints 節理面判定", function()
 		assert.is_true(info[2].joint)
 	end)
 
-	it("未指定 offset 時相位由種子決定且在 [0,1)", function()
-		local a = one_set({dip = 10, dipdir = 0, spacing = 3, persistence = 1}, 11)[1]
-		local b = one_set({dip = 10, dipdir = 0, spacing = 3, persistence = 1}, 12)[1]
-		assert.truthy(a.phase >= 0 and a.phase < 1)
-		assert.truthy(a.phase ~= b.phase)
+	it("未指定 offset 時相位由種子決定且在 [0,L)", function()
+		local a = one_set({dip = 30, dipdir = 0, spacing = 7, persistence = 1}, 11)[1]
+		local b = one_set({dip = 30, dipdir = 0, spacing = 7, persistence = 1}, 12)[1]
+		assert.truthy(a.o >= 0 and a.o < a.L and a.o == math.floor(a.o))
+		assert.truthy(a.o ~= b.o)
+	end)
+
+	it("格點對齊：整數法向、有效位態接近輸入（D=8 誤差約 1°）", function()
+		for _, t in ipairs({{10, 135}, {70, 40}, {80, 300}, {30, 90}, {45, 200}}) do
+			local js = one_set({dip = t[1], dipdir = t[2], spacing = 3, persistence = 1})[1]
+			assert.are.equal(math.floor(js.mx), js.mx)
+			local n = joints.normal(t[1], t[2])
+			local cosang = n.x * js.n_eff.x + n.y * js.n_eff.y + n.z * js.n_eff.z
+			assert.truthy(math.deg(math.acos(math.min(1, cosang))) < 5,
+				("%g/%g → %.1f/%.1f"):format(t[1], t[2], js.dip_eff, js.dipdir_eff))
+			assert.near(3, js.spacing_eff, 1 / 16 + 1e-9)
+		end
 	end)
 end)
 

@@ -79,6 +79,7 @@ config.joint_sets = {
 -- 設定的預設值（鍵名不含 "rockmech_" 前綴）
 config.defaults = {
 	surface_y = 0,        -- 地表高程 y0
+	joint_lattice = 8,    -- 節理法向量對齊的整數格點密度 D（越大越接近輸入位態、材質變體越多）
 	k0 = 0.5,             -- σh / σv
 	replace_stone = true, -- 地圖生成時把 stone 換成本 mod 岩性
 }
@@ -101,7 +102,6 @@ config.failure_defaults = {
 config.jointtex_defaults = {
 	enabled = true,           -- 地圖生成／轉換時依節理放置材質變體
 	style = "plane",          -- plane：真實平面跡線（斜線）；edges：沿方塊邊緣＋節理面上色
-	bins = 8,                 -- plane：平面在格內位置的量化級數（誤差 ≤ 1/(2·bins) 格）
 	max_lines = 2,            -- plane：每格最多畫幾組節理
 	plane_res = 32,           -- plane：跡線貼圖解析度（像素）
 	plane_width = 1.5,        -- plane：跡線寬度（像素，以 plane_res 計）
@@ -228,6 +228,8 @@ function config.load(get)
 	}
 
 	cfg.surface_y = tonumber(get("rockmech_surface_y")) or config.defaults.surface_y
+	cfg.joint_lattice = math.max(2, math.min(16, math.floor(
+		tonumber(get("rockmech_joint_lattice")) or config.defaults.joint_lattice)))
 	cfg.k0 = tonumber(get("rockmech_k0")) or config.defaults.k0
 	if cfg.k0 < 0 then
 		warnings[#warnings + 1] = "rockmech_k0 < 0，改為 0"
@@ -281,7 +283,6 @@ function config.load(get)
 		warnings[#warnings + 1] = "rockmech_jointtex_style 只能是 plane 或 edges，改用 plane"
 		jt.style = "plane"
 	end
-	jt.bins = math.max(2, math.min(16, math.floor(jt.bins)))
 	jt.max_lines = math.max(1, math.min(3, math.floor(jt.max_lines)))
 	jt.plane_res = math.max(16, math.min(64, math.floor(jt.plane_res)))
 	jt.plane_width = math.max(0.5, math.min(8, jt.plane_width))

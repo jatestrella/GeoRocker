@@ -12,6 +12,12 @@ rockmech_replace_stone (Replace mapgen stone) bool true
 
 [Joint sets]
 
+# Joint plane normals are snapped to an integer lattice of this density so that joint
+# traces connect exactly between blocks. Larger = closer to the input orientation
+# (about 1 degree at 8) but more texture variants. The effective orientation is shown
+# by the compass. Changing it changes the joint geometry of the world.
+rockmech_joint_lattice (Joint orientation lattice) int 8 2 16
+
 # Override joint set 1: "dip,dipdir,spacing,persistence,phi"
 # (degrees, degrees clockwise from north, m >= 1, 0-1, degrees).
 # Empty = use the default in config.lua.
@@ -128,9 +134,6 @@ rockmech_jointtex_enabled (Joint textures) bool true
 # plane: draw the true trace of each joint plane across block faces (inclined lines).
 # edges: draw lines along block edges where the neighboring face is a joint, and tint joint faces.
 rockmech_jointtex_style (Joint texture style) enum plane plane,edges
-
-# plane style: number of position levels of a plane inside a block (error <= 1/(2*bins) block).
-rockmech_jointtex_bins (Plane position levels) int 8 2 16
 
 # plane style: maximum number of joint sets drawn in one block.
 rockmech_jointtex_max_lines (Max joint traces per block) int 2 1 3

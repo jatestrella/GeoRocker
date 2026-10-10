@@ -70,6 +70,13 @@ local function compass_report(pos, nodename)
 		end
 	end
 
+	local eff = {}
+	for _, js in ipairs(sets) do
+		eff[#eff + 1] = core.colorize(js.color or "#ffffff",
+			("%s %.0f°/%.0f° S=%.2fm"):format(js.name, js.dip_eff, js.dipdir_eff, js.spacing_eff))
+	end
+	lines[#lines + 1] = "  節理組（格點對齊後）：" .. table.concat(eff, "  ")
+
 	for _, face in ipairs(joints.FACES) do
 		local fx, fy, fz, axis = joints.face_key(pos.x, pos.y, pos.z, face)
 		local info = joints.face_info(sets, fx, fy, fz, axis)
@@ -203,7 +210,7 @@ core.register_chatcommand("rockmech_traces", {
 		local legend = {}
 		for _, js in ipairs(sets) do
 			legend[#legend + 1] = core.colorize(js.color or "#ffffff",
-				("%s %g/%g S=%gm P=%.2f"):format(js.name, js.dip, js.dipdir, js.spacing, js.persistence))
+				("%s %.0f/%.0f S=%.1fm P=%.2f"):format(js.name, js.dip_eff, js.dipdir_eff, js.spacing_eff, js.persistence))
 		end
 		return true, ("節理跡線點 %d 個（半徑 %d，%.1f ms%s）  %s"):format(
 			count, r, ms, count >= MAX_PARTICLES and "，已達上限" or "",
@@ -244,7 +251,7 @@ core.register_chatcommand("rockmech_jointcube", {
 		end end end
 		local legend = {}
 		for _, js in ipairs(sets) do
-			legend[#legend + 1] = ("%s %g°/%g° S=%gm P=%.2f"):format(js.name, js.dip, js.dipdir, js.spacing, js.persistence)
+			legend[#legend + 1] = ("%s %.1f°/%.1f° S=%.2fm P=%.2f"):format(js.name, js.dip_eff, js.dipdir_eff, js.spacing_eff, js.persistence)
 		end
 		return true, ("[rockmech] 已在 x=%d..%d、y=%d..%d、z=%d..%d 放置 %d³ 花崗岩（樣式 %s）。\n" ..
 			"  檢查：同一條跡線在相鄰方塊、相鄰面（例如頂面接側面）之間應連續。\n  節理組：%s"):format(

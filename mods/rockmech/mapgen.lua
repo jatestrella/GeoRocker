@@ -36,16 +36,18 @@ end
 -- 節理組（與主環境相同的種子與前處理，結果一致）
 local use_joints = cfg.jointtex.enabled
 local sets = joints.prepare(cfg.joint_sets,
-	joints.seed_from_string(core.get_mapgen_setting("seed") or "0"))
+	joints.seed_from_string(core.get_mapgen_setting("seed") or "0"), cfg.joint_lattice)
 local cell_mask = joints.cell_mask
 local logged = 0
 
 -- 平面跡線樣式：c_plane[岩性][後綴] = content id
 local plane = use_joints and cfg.jointtex.style == "plane"
-local Q, MAXL = cfg.jointtex.bins, cfg.jointtex.max_lines
+local MAXL = cfg.jointtex.max_lines
 local c_plane = {}
 if plane then
-	local combos = jointtex.all_combos(math.min(#sets, 4), Q, MAXL)
+	local levels = {}
+	for i = 1, math.min(#sets, 4) do levels[i] = jointtex.levels(sets[i]) end
+	local combos = jointtex.all_combos(levels, MAXL)
 	for key, lith in pairs(cfg.lithologies) do
 		c_plane[key] = {}
 		for _, combo in ipairs(combos) do
@@ -80,7 +82,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 			for x = minp.x, maxp.x do
 				if data[vi] == c_stone then
 					if plane then
-						data[vi] = plane_y[y][suffix(cell_traces(joints, sets, x, y, z, Q, MAXL))]
+						data[vi] = plane_y[y][suffix(cell_traces(joints, sets, x, y, z, MAXL))]
 					else
 						data[vi] = cv[use_joints and cell_mask(sets, x, y, z) or 0]
 					end

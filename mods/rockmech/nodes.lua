@@ -97,15 +97,17 @@ end
 rockmech.lith_plane_variant = {} -- 岩性名稱 → {[後綴] = node 名稱}，後綴 "" 為基本 node
 do
 	local jtx = rockmech.jointtex
-	local Q, R, MAXL = jt.bins, jt.plane_res, jt.max_lines
-	-- 只需法向量，與種子無關
-	local sets = joints.prepare(cfg.joint_sets, 0)
+	local R, MAXL = jt.plane_res, jt.max_lines
+	-- 只需法向量與級數，與種子無關
+	local sets = joints.prepare(cfg.joint_sets, 0, cfg.joint_lattice)
 	local nsets = math.min(#sets, 4)
+	local levels = {}
+	for i = 1, nsets do levels[i] = jtx.levels(sets[i]) end
 	local r = tonumber(jt.line_color:sub(2, 3), 16)
 	local g = tonumber(jt.line_color:sub(4, 5), 16)
 	local b = tonumber(jt.line_color:sub(6, 7), 16)
 
-	-- tex[face][set][bin] = 貼圖檔名（該面沒有跡線則為 nil）
+	-- tex[face][set][level] = 貼圖檔名（該面沒有跡線則為 nil）
 	local tex, n_png = {}, 0
 	local media_dir = core.get_worldpath() .. "/rockmech_media"
 	core.mkdir(media_dir)
@@ -113,8 +115,8 @@ do
 		tex[f] = {}
 		for i = 1, nsets do
 			tex[f][i] = {}
-			for bin = 0, Q - 1 do
-				local alpha = jtx.face_line_alpha(sets[i], face, bin, Q, R, jt.plane_width)
+			for bin = 0, levels[i] - 1 do
+				local alpha = jtx.face_line_alpha(sets[i], face, bin, R, jt.plane_width)
 				if alpha then
 					local px = {}
 					for k = 1, R * R do
@@ -140,7 +142,7 @@ do
 		end
 	end
 
-	local combos = jtx.all_combos(nsets, Q, MAXL)
+	local combos = jtx.all_combos(levels, MAXL)
 	for _, key in ipairs(cfg.lithology_order) do
 		local lith = cfg.lithologies[key]
 		local base = rockmech.node_of_lith[key]
@@ -155,7 +157,7 @@ do
 				for f = 1, 6 do
 					local t = base_tile
 					for _, tr in ipairs(combo) do
-						local fn = tex[f][tr.set][tr.bin]
+						local fn = tex[f][tr.set][tr.level]
 						if fn then t = t .. "^" .. fn end
 					end
 					tiles[f] = t
@@ -174,11 +176,18 @@ do
 			end
 		end
 	end
-	core.log("action", ("[rockmech] 平面跡線：%d 張貼圖、每岩性 %d 種變體"):format(n_png, #combos - 1))
+	local eff = {}
+	for i = 1, nsets do
+		local js = sets[i]
+		eff[#eff + 1] = ("%s %g°/%g° → %.1f°/%.1f° m=(%d,%d,%d) S=%.2f 級數 %d"):format(js.name,
+			js.dip, js.dipdir, js.dip_eff, js.dipdir_eff, js.mx, js.my, js.mz, js.spacing_eff, levels[i])
+	end
+	core.log("action", ("[rockmech] 平面跡線：%d 張貼圖、每岩性 %d 種變體；格點 D=%d；%s"):format(
+		n_png, #combos - 1, cfg.joint_lattice, table.concat(eff, "；")))
 
 	-- 依格位置取 node 名稱（style = plane；sets 需為依世界種子前處理者）
 	function rockmech.plane_variant_name(key, world_sets, x, y, z)
-		local tr = jtx.cell_traces(joints, world_sets, x, y, z, Q, MAXL)
+		local tr = jtx.cell_traces(joints, world_sets, x, y, z, MAXL)
 		return rockmech.lith_plane_variant[key][jtx.suffix(tr)]
 	end
 end
