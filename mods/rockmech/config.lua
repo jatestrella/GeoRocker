@@ -155,7 +155,7 @@ config.blast_defaults = {
 }
 
 -- 只有開挖造成的惡化才破壞（collapse.lua）；設定鍵為 rockmech_induced_<key>
--- 生成的地形視為已平衡：比較開挖前後，開挖前就會破壞、且沒有變差的不處理
+-- 生成的地形視為已平衡：比較開挖前後，只有「開挖前穩定、開挖後不穩定」才破壞
 config.induced_defaults = {
 	enabled = true,
 }

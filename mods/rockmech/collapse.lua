@@ -656,7 +656,7 @@ function collapse.apply_failure(failed)
     physics_updating = false
 end
 
--- 只保留開挖造成的破壞：開挖前也會破壞、且 FS 沒有變低的格視為既有狀態。
+-- 只保留開挖造成的破壞（穩定 → 不穩定）：開挖前就會破壞的格視為既有狀態。
 -- 回傳 保留的 failed, 略過的格數
 local function filter_induced_failures(failed, changes)
     if #failed == 0 then return failed, 0 end
@@ -670,7 +670,7 @@ local function filter_induced_failures(failed, changes)
     local out, skipped = {}, 0
     for _, f in ipairs(failed) do
         local before = failure.cell_state(grid, f.x, f.y, f.z, params)
-        if before and before.fails and before.fs <= f.state.fs + 1e-9 then
+        if before and before.fails then
             skipped = skipped + 1
         else
             out[#out + 1] = f
@@ -709,7 +709,7 @@ process_queue = function()
         ms = ms + (core.get_us_time() - t0) / 1000
     end
     if skipped > 0 then
-        core.log("action", ("[rockmech] 破壞 第 %d 輪：%d 格開挖前就 FS ≤ 1 且未變差，視為既有狀態不處理")
+        core.log("action", ("[rockmech] 破壞 第 %d 輪：%d 格開挖前就 FS ≤ 1，視為既有狀態不處理")
             :format(round, skipped))
     end
     if ms > fcfg.budget_ms then
@@ -856,7 +856,7 @@ local function run_support_check()
         if ocfg.enabled then
             og = rockmech.overhang.find_failing_local(grid, oparams, g.starts)
         end
-        -- 只有開挖造成的才掉落：開挖前就懸空、或開挖前就會斷且 FS 沒有變低的群不處理
+        -- 只有開挖造成的才掉落（穩定 → 不穩定）：開挖前就懸空、或開挖前就會斷（FS < 1）的群不處理
         if icfg.enabled and (#c > 0 or #og > 0) then
             local fs_after = {}
             for k, comp in ipairs(og) do
@@ -875,7 +875,7 @@ local function run_support_check()
                 local o = rockmech.overhang.cell_state(grid, oparams, p.x, p.y, p.z)
                 local before = math.huge
                 if o and o.group_fs then before = o.group_fs end
-                if fs_after[k] < before - 1e-9 then
+                if before >= 1 then
                     keep_og[#keep_og + 1] = comp
                     core.log("action", ("[rockmech] 懸臂斷裂（開挖造成）：%d 格，整群 FS %.3f → %.3f")
                         :format(#comp.cells, before, fs_after[k]))
@@ -909,7 +909,7 @@ local function run_support_check()
             :format(ms, scfg.budget_ms, #starts, stats.visited))
     end
     if n_existing > 0 then
-        core.log("action", ("[rockmech] 支撐判定：%d 群開挖前就懸空或會斷、且未變差，視為既有狀態不處理")
+        core.log("action", ("[rockmech] 支撐判定：%d 群開挖前就懸空或會斷，視為既有狀態不處理")
             :format(n_existing))
     end
     if #comps == 0 then return end
