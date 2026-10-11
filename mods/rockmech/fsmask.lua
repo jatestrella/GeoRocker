@@ -217,8 +217,8 @@ end
 
 -- 地形改變（挖掘、放置、坍塌、爆破都會經過 queue_support_check）：附近的即時遮罩標記為需更新
 local orig_queue = collapse.queue_support_check
-collapse.queue_support_check = function(pos)
-	orig_queue(pos)
+collapse.queue_support_check = function(pos, prev)
+	orig_queue(pos, prev)
 	for _, a in pairs(active) do
 		if a.live and a.center and vector.distance(pos, a.center) <= LIVE_R + 2 * cfg.failure.window + 2 then
 			a.dirty = true

@@ -508,6 +508,15 @@ local TOGGLES = {
 		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
 	},
 	{
+		id = "induced", tbl = cfg.induced,
+		label = "只有開挖造成的惡化才破壞（生成的地形視為已平衡）",
+		short = "只算開挖造成的破壞",
+		info = function()
+			return "比較開挖前後：開挖前就 FS ≤ 1、且沒有變差的岩格／懸空群不處理"
+		end,
+		off_note = "關閉：附近原本就 FS ≤ 1 的岩體，一被觸發就會破壞",
+	},
+	{
 		id = "weakness", tbl = cfg.weakness,
 		label = "節理弱面滑動  τ ≥ cj + σn·tan φj",
 		short = "節理弱面滑動",

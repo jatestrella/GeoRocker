@@ -72,6 +72,7 @@ function rockmech.blast_rock(center, R)
 
 	local ejected, n_eject, n_rubble = {}, 0, 0
 	local removed, rubbled = {}, {}
+	local changes = {}     -- 開挖前的方塊（只有開挖造成的惡化才破壞）
 	for z = p1.z, p2.z do for y = p1.y, p2.y do
 		local vi = area:index(p1.x, y, z)
 		for x = p1.x, p2.x do
@@ -85,6 +86,7 @@ function rockmech.blast_rock(center, R)
 				if li then
 					local zone = blast.zone(d, R, li.lith.ucs, bcfg.ucs_ref, bcfg.inner)
 					local rname = rockmech.rubble_for(li.name)
+					if zone then changes[#changes + 1] = {pos = p, name = li.name} end
 					if zone == "eject" then
 						data[vi] = c_air
 						ejected[rname] = (ejected[rname] or 0) + 1
@@ -97,6 +99,7 @@ function rockmech.blast_rock(center, R)
 					end
 				elseif d <= bcfg.inner * R then
 					-- 已經是碎石：中心區一樣炸飛
+					changes[#changes + 1] = {pos = p, name = rb}
 					data[vi] = c_air
 					ejected[rb] = (ejected[rb] or 0) + 1
 					n_eject = n_eject + 1
@@ -117,6 +120,7 @@ function rockmech.blast_rock(center, R)
 
 	-- 觸發後續判定：爆炸範圍內的移除點（支撐判定、懸臂斷裂）與爆心（軸差破壞）
 	local col = rockmech.collapse
+	col.record_changes(changes)
 	col.queue_support_check(center)
 	for _, p in ipairs(removed) do col.queue_support_check(p) end
 	col.queue_failure_check(center)

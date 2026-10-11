@@ -154,6 +154,12 @@ config.blast_defaults = {
 	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
 }
 
+-- 只有開挖造成的惡化才破壞（collapse.lua）；設定鍵為 rockmech_induced_<key>
+-- 生成的地形視為已平衡：比較開挖前後，開挖前就會破壞、且沒有變差的不處理
+config.induced_defaults = {
+	enabled = true,
+}
+
 -- 節理弱面滑動（failure.lua，Jaeger single plane of weakness）；設定鍵為 rockmech_weakness_<key>
 -- 目前三組節理共用同一組 cj、φj
 config.weakness_defaults = {
@@ -371,6 +377,9 @@ function config.load(get)
 	cfg.blast = load_section("blast", config.blast_defaults)
 	cfg.blast.ucs_ref = math.max(0.1, cfg.blast.ucs_ref)
 	cfg.blast.inner = math.max(0, math.min(1, cfg.blast.inner))
+
+	-- 只有開挖造成的惡化才破壞
+	cfg.induced = load_section("induced", config.induced_defaults)
 
 	-- 節理弱面滑動
 	cfg.weakness = load_section("weakness", config.weakness_defaults)

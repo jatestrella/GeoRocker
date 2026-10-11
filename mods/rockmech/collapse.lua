@@ -535,6 +535,44 @@ function collapse.failure_params(detail)
 end
 
 -- 盒子工具
+-- 開挖前狀態（只有開挖造成的惡化才破壞）
+-- changes = {map = {[座標] = true}, list = {{x, y, z, cid}...}}：本次觸發中改變的格與其原本的方塊。
+-- 同一格多次改變時保留最早的（= 開挖前）。
+local icfg = cfg.induced
+local function new_changes() return {map = {}, list = {}} end
+local function name_cid(name)
+    if name and core.registered_nodes[name] then return core.get_content_id(name) end
+end
+local function add_change(chg, p, name, cid)
+    local k = pos_key(p)
+    if chg.map[k] then return end
+    chg.map[k] = true
+    chg.list[#chg.list + 1] = {x = p.x, y = p.y, z = p.z, cid = cid or name_cid(name)}
+end
+local function merge_changes(dst, src)
+    for _, c in ipairs(src.list) do add_change(dst, c, nil, c.cid) end
+end
+-- 把網格還原成開挖前（就地修改）。回傳復原函式
+local function restore_grid(grid, list)
+    local nx, ny, nz = grid.nx, grid.ny, grid.nz
+    local saved = {}
+    for _, c in ipairs(list) do
+        if c.cid then
+            local lx, ly, lz = c.x - grid.ox, c.y - grid.oy, c.z - grid.oz
+            if lx >= 0 and ly >= 0 and lz >= 0 and lx < nx and ly < ny and lz < nz then
+                local i = 1 + lx + ly * nx + lz * nx * ny
+                saved[#saved + 1] = {i, grid.data[i]}
+                grid.data[i] = c.cid
+            end
+        end
+    end
+    grid.L = nil   -- failure.compute_loads 的快取
+    return function()
+        for k = #saved, 1, -1 do grid.data[saved[k][1]] = saved[k][2] end
+        grid.L = nil
+    end
+end
+
 local function cube(c, r)
     return {{x = c.x - r, y = c.y - r, z = c.z - r}, {x = c.x + r, y = c.y + r, z = c.z + r}}
 end
@@ -618,12 +656,37 @@ function collapse.apply_failure(failed)
     physics_updating = false
 end
 
+-- 只保留開挖造成的破壞：開挖前也會破壞、且 FS 沒有變低的格視為既有狀態。
+-- 回傳 保留的 failed, 略過的格數
+local function filter_induced_failures(failed, changes)
+    if #failed == 0 then return failed, 0 end
+    local t = {}
+    for _, f in ipairs(failed) do t[#t + 1] = cube(f, 0) end
+    local a, b = union(t)
+    local m = fcfg.window + 1
+    local grid = collapse.read_grid(vector.subtract(a, m), vector.add(b, m))
+    local params = collapse.failure_params()
+    restore_grid(grid, changes.list)
+    local out, skipped = {}, 0
+    for _, f in ipairs(failed) do
+        local before = failure.cell_state(grid, f.x, f.y, f.z, params)
+        if before and before.fails and before.fs <= f.state.fs + 1e-9 then
+            skipped = skipped + 1
+        else
+            out[#out + 1] = f
+        end
+    end
+    return out, skipped
+end
+
 -- 單一佇列：所有觸發（開挖、連鎖）合併成同一批處理
 local queue_boxes, queue_round = {}, 0
+local queue_changes = new_changes()
 local queue_scheduled = false
 local process_queue
 
-local function enqueue(box, round)
+local function enqueue(box, round, changes)
+    if changes then merge_changes(queue_changes, changes) end
     queue_boxes[#queue_boxes + 1] = box
     if round > queue_round then queue_round = round end
     if queue_scheduled then return end
@@ -633,12 +696,22 @@ end
 
 process_queue = function()
     queue_scheduled = false
-    local boxes, round = queue_boxes, queue_round
-    queue_boxes, queue_round = {}, 0
+    local boxes, round, changes = queue_boxes, queue_round, queue_changes
+    queue_boxes, queue_round, queue_changes = {}, 0, new_changes()
     -- 遊戲中關閉破壞準則（軸差與弱面皆關）時，進行中的連鎖也一併停止
     if #boxes == 0 or not (fcfg.enabled or wcfg.enabled) then return end
 
     local failed, stats, ms = collapse.evaluate_failure_boxes(boxes)
+    local skipped = 0
+    if icfg.enabled and #failed > 0 then
+        local t0 = core.get_us_time()
+        failed, skipped = filter_induced_failures(failed, changes)
+        ms = ms + (core.get_us_time() - t0) / 1000
+    end
+    if skipped > 0 then
+        core.log("action", ("[rockmech] 破壞 第 %d 輪：%d 格開挖前就 FS ≤ 1 且未變差，視為既有狀態不處理")
+            :format(round, skipped))
+    end
     if ms > fcfg.budget_ms then
         core.log("warning", ("[rockmech] 軸差破壞檢查 %.1f ms（預算 %g ms），第 %d 輪、%d 盒、評估 %d 格")
             :format(ms, fcfg.budget_ms, round, #boxes, stats.evaluated))
@@ -651,6 +724,9 @@ process_queue = function()
     end
     core.log("action", ("[rockmech] 破壞 第 %d 輪：%d 格（其中節理滑動 %d）（%.1f ms）"):format(
         round, #failed, n_slip, ms))
+    -- 下一輪的「開挖」= 這一輪剝落的格（記下剝落前的方塊）
+    local next_changes = new_changes()
+    for _, f in ipairs(failed) do add_change(next_changes, f, core.get_node(f).name) end
     collapse.apply_failure(failed)
 
     if round >= fcfg.max_cascade then
@@ -674,14 +750,17 @@ process_queue = function()
             check_stability_and_move({x = f.x, y = f.y + 1, z = f.z})
         end
         physics_updating = false
-        enqueue(next_box, round + 1)
+        enqueue(next_box, round + 1, next_changes)
     end)
 end
 
--- 開挖觸發：同一 tick 內的多次觸發合併成一次檢查
-function collapse.queue_failure_check(pos)
+-- 開挖觸發：同一 tick 內的多次觸發合併成一次檢查。
+-- prev：該格改變前的方塊名稱（省略時取目前的方塊；在 on_destruct 中即為被移除的方塊）
+function collapse.queue_failure_check(pos, prev)
     if not (fcfg.enabled or wcfg.enabled) then return end
-    enqueue(cube(vector.round(pos), fcfg.radius), 1)
+    local p = vector.round(pos)
+    add_change(queue_changes, p, prev or core.get_node(p).name)
+    enqueue(cube(p, fcfg.radius), 1)
 end
 
 -- 8. 支撐判定（模型見 support.lua）
@@ -689,6 +768,16 @@ end
 -- 懸空群以原版 falling node 由下往上落下
 local scfg = cfg.support
 local pending_starts, support_scheduled = {}, false
+local support_changes = new_changes()
+
+-- 記下一批改變（爆破等以 VoxelManip 修改、不經過 on_destruct 者）：list = {{pos, name}...}
+function collapse.record_changes(list)
+    for _, c in ipairs(list) do
+        local p = vector.round(c.pos)
+        add_change(support_changes, p, c.name)
+        add_change(queue_changes, p, c.name)
+    end
+end
 local NB6 = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}}
 
 local function face_jointed(x, y, z, axis)
@@ -723,7 +812,10 @@ local function run_support_check()
     support_scheduled = false
     local starts = pending_starts
     pending_starts = {}
+    local changes = support_changes
+    support_changes = new_changes()
     if #starts == 0 or not scfg.enabled then return end
+    local n_existing = 0
 
     local t0 = core.get_us_time()
     local ocfg = cfg.overhang
@@ -759,24 +851,55 @@ local function run_support_check()
             {x = g.a.x - r, y = g.a.y - r, z = g.a.z - r},
             {x = g.b.x + r, y = g.b.y + r, z = g.b.z + r}, true)
         local c, st = rockmech.support.find_unsupported(grid, g.starts, scfg.max_voxels)
+        stats.visited = stats.visited + st.visited
+        local og = {}
+        if ocfg.enabled then
+            og = rockmech.overhang.find_failing_local(grid, oparams, g.starts)
+        end
+        -- 只有開挖造成的才掉落：開挖前就懸空、或開挖前就會斷且 FS 沒有變低的群不處理
+        if icfg.enabled and (#c > 0 or #og > 0) then
+            local fs_after = {}
+            for k, comp in ipairs(og) do
+                local o = rockmech.overhang.cell_state(grid, oparams, comp.cells[1].x, comp.cells[1].y, comp.cells[1].z)
+                fs_after[k] = o and o.group_fs or 0
+            end
+            local undo = restore_grid(grid, changes.list)
+            local keep_c = {}
+            for _, comp in ipairs(c) do
+                local before = rockmech.support.find_unsupported(grid, {comp.cells[1]}, scfg.max_voxels)
+                if #before > 0 then n_existing = n_existing + 1 else keep_c[#keep_c + 1] = comp end
+            end
+            local keep_og = {}
+            for k, comp in ipairs(og) do
+                local p = comp.cells[1]
+                local o = rockmech.overhang.cell_state(grid, oparams, p.x, p.y, p.z)
+                local before = math.huge
+                if o and o.group_fs then before = o.group_fs end
+                if fs_after[k] < before - 1e-9 then
+                    keep_og[#keep_og + 1] = comp
+                    core.log("action", ("[rockmech] 懸臂斷裂（開挖造成）：%d 格，整群 FS %.3f → %.3f")
+                        :format(#comp.cells, before, fs_after[k]))
+                else
+                    n_existing = n_existing + 1
+                end
+            end
+            undo()
+            c, og = keep_c, keep_og
+        end
         local taken = {}
         for _, comp in ipairs(c) do
             comps[#comps + 1] = comp
             for _, p in ipairs(comp.cells) do taken[pos_key(p)] = true end
         end
-        stats.visited = stats.visited + st.visited
         -- 懸臂／頂板彎曲斷裂：從根部整段斷開（與上面的懸空群不重複）
-        if ocfg.enabled then
-            local og = rockmech.overhang.find_failing_local(grid, oparams, g.starts)
-            for _, comp in ipairs(og) do
-                local cells = {}
-                for _, p in ipairs(comp.cells) do
-                    if not taken[pos_key(p)] then cells[#cells + 1] = p end
-                end
-                if #cells > 0 then
-                    comps[#comps + 1] = {cells = cells}
-                    n_overhang = n_overhang + 1
-                end
+        for _, comp in ipairs(og) do
+            local cells = {}
+            for _, p in ipairs(comp.cells) do
+                if not taken[pos_key(p)] then cells[#cells + 1] = p end
+            end
+            if #cells > 0 then
+                comps[#comps + 1] = {cells = cells}
+                n_overhang = n_overhang + 1
             end
         end
     end
@@ -784,6 +907,10 @@ local function run_support_check()
     if ms > scfg.budget_ms then
         core.log("warning", ("[rockmech] 支撐判定 %.1f ms（預算 %g ms），起點 %d、展開 %d 格")
             :format(ms, scfg.budget_ms, #starts, stats.visited))
+    end
+    if n_existing > 0 then
+        core.log("action", ("[rockmech] 支撐判定：%d 群開挖前就懸空或會斷、且未變差，視為既有狀態不處理")
+            :format(n_existing))
     end
     if #comps == 0 then return end
 
@@ -846,10 +973,12 @@ function collapse.check_cell(pos)
     physics_updating = prev
 end
 
--- 某格被移除後：以其 6 個鄰格為起點排入支撐判定
-function collapse.queue_support_check(pos)
+-- 某格改變後：以其 6 個鄰格為起點排入支撐判定。
+-- prev：該格改變前的方塊名稱（省略時取目前的方塊；在 on_destruct 中即為被移除的方塊）
+function collapse.queue_support_check(pos, prev)
     if not scfg.enabled then return end
     local p = vector.round(pos)
+    add_change(support_changes, p, prev or core.get_node(p).name)
     for _, d in ipairs(NB6) do
         pending_starts[#pending_starts + 1] = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
     end
@@ -861,7 +990,7 @@ end
 -- 挖掉非岩石（例如土）也可能讓上方岩石懸空；岩石本身由 on_destruct 觸發
 core.register_on_dignode(function(pos, oldnode)
     if physics_updating or is_rock(oldnode.name) then return end
-    collapse.queue_support_check(pos)
+    collapse.queue_support_check(pos, oldnode.name)
 end)
 
 -- 9. 掉落破碎：包裝原版 falling node entity
@@ -936,7 +1065,7 @@ local function register_physics_events(name, intact)
             update_affected_area(pos)
             physics_updating = false
             -- 放上去的岩石增加懸臂自重、也可能懸空：同樣做支撐判定與懸臂斷裂
-            collapse.queue_support_check(pos)
+            collapse.queue_support_check(pos, "air")
         end,
         on_destruct = function(pos)
             -- 支撐判定不受防護限制：任何移除（包括物理系統把碎石移走、

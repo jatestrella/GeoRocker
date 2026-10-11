@@ -95,6 +95,7 @@ rockmech_failure_cascade_delay (Cascade delay) float 0.6 0 10
 # Log a warning when one check takes longer than this (ms).
 rockmech_failure_budget_ms (Time budget per check) float 5 0.1 1000
 
+[Induced failure only]# Only failures caused by excavation: the generated terrain is taken as in equilibrium.# Before/after comparison: a cell or overhang that already had FS <= 1 before the change, and did not get worse, is left alone.rockmech_induced_enabled (Only excavation-induced failure) bool true
 [Joint plane of weakness]
 
 # Slip along joints crossing an exposed cell (Jaeger single plane of weakness): tau >= c + sigma_n * tan(phi).

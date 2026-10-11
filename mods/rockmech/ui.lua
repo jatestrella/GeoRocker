@@ -342,7 +342,7 @@ local function tab_toggles(name)
 	for _, t in ipairs(rockmech.toggles or {}) do
 		out[#out + 1] = ("checkbox[0.3,%g;rm_%s;%s;%s]"):format(y, t.id, F(t.label), tostring(t.tbl.enabled))
 		out[#out + 1] = ("label[0.8,%g;%s]"):format(y + 0.45, F(t.off_note))
-		y = y + 1.05
+		y = y + 0.95
 	end
 	out[#out + 1] = ("checkbox[0.3,%g;rm_hud;%s;%s]"):format(y, F("畫面上顯示現地應力（HUD）"),
 		tostring(player and hud_enabled(player) or false))
