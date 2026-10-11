@@ -632,6 +632,12 @@ if core.get_modpath("sfinv") and sfinv then
 					F("（需要 " .. TOGGLE_PRIV .. " 權限才能修改）"))
 				y = y + 0.6
 			end
+			-- 個人顯示設定（不需要權限）
+			if rockmech.fsmask_live then
+				parts[#parts + 1] = ("checkbox[0,%g;rm_fsmask;%s;%s]"):format(y,
+					F("標出周圍 FS ≤ 1 的岩格（個人顯示）"), tostring(rockmech.fsmask_live(player)))
+				y = y + 0.75
+			end
 			parts[#parts + 1] = ("button[0,%g;5,0.8;rm_open;%s]"):format(y + 0.2, F("完整資訊頁（/rockmech）"))
 			return sfinv.make_formspec(player, context, table.concat(parts), false)
 		end,
@@ -642,6 +648,10 @@ if core.get_modpath("sfinv") and sfinv then
 				return true
 			end
 			local handled = false
+			if fields.rm_fsmask and rockmech.set_fsmask_live then
+				rockmech.set_fsmask_live(player, fields.rm_fsmask == "true")
+				handled = true
+			end
 			for _, t in ipairs(TOGGLES) do
 				local v = fields["rm_" .. t.id]
 				if v ~= nil then
