@@ -117,25 +117,57 @@ function rockmech.nearby_line(nb)
 	return ("周圍 ±%d m 臨空格（%d 格）最小 FS：%s"):format(NEARBY_R, nb.exposed, table.concat(parts, "；"))
 end
 
-local function fmt_report_lines(r)
+-- HUD 用的精簡數字：∞、>99、兩位小數
+local function fs_short(f)
+	if not f or f == math.huge then return "∞" end
+	if f > 99 then return ">99" end
+	return ("%.2f"):format(f)
+end
+
+-- HUD 的精簡報告（4 行）。詳細數值在資訊頁（/rockmech）與羅盤
+local function fmt_report_lines(r, header)
 	local p, i = r.pos, r.init
 	local lines = {}
-	lines[#lines + 1] = ("(%d,%d,%d) %s%s  上覆 h=%d m%s"):format(p.x, p.y, p.z,
-		r.lith.description:gsub("\n.*", ""), r.is_rock and "" or "（非岩石，以該處岩性計）", i.h,
-		i.extrapolated and "（外插至 y0）" or "")
-	lines[#lines + 1] = ("初始：σv %.3f  σH %.3f  σh %.3f MPa（σH %g°）"):format(
-		i.sv, i.sH, i.shmin, cfg.sH_azimuth)
+	lines[#lines + 1] = ("%s (%d,%d,%d) %s%s　上覆 %d m"):format(header, p.x, p.y, p.z,
+		r.lith.description:gsub("\n.*", ""), r.is_rock and "" or "（非岩石）", i.h)
 	local s = r.local_state
 	if s then
-		lines[#lines + 1] = ("局部：σxx %.3f(×%.2f)  σyy %.3f  σzz %.3f(×%.2f)  σxz %.3f"):format(
-			s.sx, s.fx, s.sy, s.sz, s.fz, s.sxz)
-		local verdict = s.fails_axial and "破壞" or (s.q >= s.strength and "超過強度但未臨空" or "穩定")
-		lines[#lines + 1] = ("σ1 %.3f  σ3 %.3f  q %.3f / 強度 %.2f MPa  FS %.2f  %s%s"):format(
-			s.s1, s.s3, s.q, s.strength, s.fs_axial, verdict, s.exposed and "（臨空）" or "")
-		lines[#lines + 1] = rockmech.slip_line(s)
-		lines[#lines + 1] = rockmech.overhang_line(r.overhang)
-		lines[#lines + 1] = rockmech.nearby_line(r.nearby)
-		if cfg.keyblock.enabled then lines[#lines + 1] = rockmech.keyblock_line(r.keyblock) end
+		lines[#lines + 1] = ("應力 σv %.3f｜σ1 %.3f　σ3 %.3f MPa"):format(i.sv, s.s1, s.s3)
+	else
+		lines[#lines + 1] = ("初始應力 σv %.3f　σH %.3f　σh %.3f MPa"):format(i.sv, i.sH, i.shmin)
+		return lines
+	end
+	-- 四種機制的 FS
+	local parts = {"軸差 " .. fs_short(s.fs_axial)}
+	if cfg.weakness.enabled then
+		parts[#parts + 1] = "節理 " .. (s.slip_set and (fs_short(s.fs_joint) .. " " .. s.slip_set.name) or "—")
+	end
+	local o = r.overhang
+	if cfg.overhang.enabled then
+		local v = "—"
+		if o and o.supported then v = "∞"
+		elseif o and o.group_fs then v = fs_short(o.group_fs) end
+		parts[#parts + 1] = "懸臂 " .. v
+	end
+	local kb = r.keyblock
+	if cfg.keyblock.enabled then
+		local v = "—"
+		if kb then
+			local mode = ({fall = "落下", plane = "平面", wedge = "楔形"})[kb.mode]
+			v = mode and (fs_short(kb.fs) .. " " .. mode) or "卡住"
+		end
+		parts[#parts + 1] = "塊體 " .. v
+	end
+	lines[#lines + 1] = "FS　" .. table.concat(parts, "｜")
+	-- 周圍最低
+	local nb = r.nearby
+	if nb then
+		local best, what, at = math.huge, nil, nil
+		if nb.joint and nb.joint.fs < best then best, what, at = nb.joint.fs, "節理 " .. nb.joint.set.name, nb.joint end
+		if nb.axial and nb.axial.fs < best then best, what, at = nb.axial.fs, "軸差", nb.axial end
+		if what then
+			lines[#lines + 1] = ("周圍最低 FS %s　%s @(%d,%d,%d)"):format(fs_short(best), what, at.x, at.y, at.z)
+		end
 	end
 	return lines
 end
@@ -197,8 +229,8 @@ core.register_globalstep(function(dtime)
 			local key = core.pos_to_string(target)
 			-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
 			if not h or h.key ~= key or h.t > 2 then
-				local lines = fmt_report_lines(rockmech.stress_report(target))
-				table.insert(lines, 1, "[rockmech 現地應力]" .. (target == pos and "" or " 腳下"))
+				local lines = fmt_report_lines(rockmech.stress_report(target),
+					target == pos and "[rockmech]" or "[rockmech 腳下]")
 				hud_set(player, table.concat(lines, "\n"))
 				huds[name].key = key
 				huds[name].t = 0

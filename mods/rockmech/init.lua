@@ -93,3 +93,10 @@ dofile(modpath .. "/fsmask.lua")
 -- 地圖生成在 mapgen 執行緒中執行（另一個 Lua 環境），以 IPC 傳遞 modpath
 core.ipc_set("rockmech:modpath", modpath)
 core.register_mapgen_script(modpath .. "/mapgen.lua")
+
+-- default 的倒木結構檔（apple_log 等）引用 flowers 模組的蘑菇；本遊戲沒有 flowers，
+-- 每次載入都會出現 NodeResolver 錯誤。沒有 flowers 時把蘑菇指向空氣（倒木本來也不生成）
+if not core.get_modpath("flowers") then
+	core.register_alias("flowers:mushroom_brown", "air")
+	core.register_alias("flowers:mushroom_red", "air")
+end
