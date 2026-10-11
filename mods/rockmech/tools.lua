@@ -539,6 +539,7 @@ local TOGGLES = {
 		off_note = "關閉：改回原本的平移滑動（安息角滑動關閉時此項無作用）",
 	},
 }
+rockmech.toggles = TOGGLES
 local TOGGLE_BY_ID = {}
 for _, t in ipairs(TOGGLES) do
 	TOGGLE_BY_ID[t.id] = t
@@ -594,23 +595,28 @@ if core.get_modpath("sfinv") and sfinv then
 		title = "rockmech",
 		get = function(self, player, context)
 			local can = core.check_player_privs(player, {[TOGGLE_PRIV] = true})
+			-- 精簡版：每個開關一行；說明與數值在完整資訊頁
 			local parts = {"label[0,0;", F("岩石力學開關（即時生效）"), "]"}
 			local y = 0.6
 			for _, t in ipairs(TOGGLES) do
 				parts[#parts + 1] = ("checkbox[0,%g;rm_%s;%s;%s]"):format(
 					y, t.id, F(t.label), tostring(t.tbl.enabled))
-				parts[#parts + 1] = ("label[0.4,%g;%s]"):format(y + 0.75, F(t.info()))
-				parts[#parts + 1] = ("label[0.4,%g;%s]"):format(y + 1.15, F(t.off_note))
-				y = y + 1.9
+				y = y + 0.75
 			end
 			if not can then
 				parts[#parts + 1] = ("label[0,%g;%s]"):format(y,
 					F("（需要 " .. TOGGLE_PRIV .. " 權限才能修改）"))
+				y = y + 0.6
 			end
-			return sfinv.make_formspec(player, context, table.concat(parts), true)
+			parts[#parts + 1] = ("button[0,%g;5,0.8;rm_open;%s]"):format(y + 0.2, F("完整資訊頁（/rockmech）"))
+			return sfinv.make_formspec(player, context, table.concat(parts), false)
 		end,
 		on_player_receive_fields = function(self, player, context, fields)
 			local name = player:get_player_name()
+			if fields.rm_open and rockmech.show_info then
+				rockmech.show_info(name)
+				return true
+			end
 			local handled = false
 			for _, t in ipairs(TOGGLES) do
 				local v = fields["rm_" .. t.id]

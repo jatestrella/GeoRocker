@@ -76,6 +76,7 @@ dofile(modpath .. "/rockfall_entity.lua")
 dofile(modpath .. "/rigidfall_entity.lua")
 dofile(modpath .. "/collapse.lua") -- 沿用 physics_core 的坍塌機制，階段 3 由 keyblock.lua 取代
 dofile(modpath .. "/tools.lua")
+dofile(modpath .. "/ui.lua")
 
 -- 地圖生成在 mapgen 執行緒中執行（另一個 Lua 環境），以 IPC 傳遞 modpath
 core.ipc_set("rockmech:modpath", modpath)
