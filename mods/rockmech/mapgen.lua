@@ -9,7 +9,13 @@ local stress = dofile(modpath .. "/stress.lua")
 local joints = dofile(modpath .. "/joints.lua")
 local jointtex = dofile(modpath .. "/jointtex.lua")
 
-local cfg = config.load(function(key) return core.settings:get(key) end)
+-- 與主環境相同：世界的 rockmech.conf（經 IPC 傳來）優先於 minetest.conf
+local world_settings = core.ipc_get("rockmech:world_settings") or {}
+local cfg = config.load(function(key)
+	local v = world_settings[key]
+	if v ~= nil and v ~= "" then return v end
+	return core.settings:get(key)
+end)
 if not cfg.replace_stone then
 	return
 end

@@ -17,14 +17,37 @@ rockmech.rockfall = dofile(modpath .. "/rockfall.lua")
 rockmech.support = dofile(modpath .. "/support.lua")
 rockmech.rigidfall = dofile(modpath .. "/rigidfall.lua")
 
--- 解析設定
-local cfg, warnings = rockmech.config.load(function(key)
+-- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
+local world_conf_path = core.get_worldpath() .. "/rockmech.conf"
+local world_conf = Settings(world_conf_path)
+local function get_setting(key)
+	local v = world_conf:get(key)
+	if v ~= nil and v ~= "" then return v end
 	return core.settings:get(key)
-end)
+end
+local cfg, warnings = rockmech.config.load(get_setting)
 rockmech.cfg = cfg
 for _, w in ipairs(warnings) do
 	core.log("warning", "[rockmech] " .. w)
 end
+
+-- 世界第一次載入時，把決定節理幾何的設定凍結到該世界：之後改全域設定
+-- 不會讓這個世界已生成的節理對不上。要改這個世界的節理，請編輯 rockmech.conf。
+if not world_conf:has("rockmech_joint_lattice") then
+	world_conf:set("rockmech_surface_y", tostring(cfg.surface_y))
+	world_conf:set("rockmech_joint_lattice", tostring(cfg.joint_lattice))
+	for i, js in ipairs(cfg.joint_sets) do
+		if i <= rockmech.config.MAX_SET_OVERRIDES then
+			world_conf:set("rockmech_joint_set_" .. i, ("%g,%g,%g,%g,%g"):format(
+				js.dip, js.dipdir, js.spacing, js.persistence, js.phi))
+		end
+	end
+	if world_conf:write() then
+		core.log("action", "[rockmech] 已建立世界設定 " .. world_conf_path)
+	end
+end
+-- mapgen 執行緒無法讀主環境的變數，以 IPC 傳遞世界設定
+core.ipc_set("rockmech:world_settings", world_conf:to_table())
 
 -- 節理組（依世界種子前處理）。延遲到第一次使用才計算，避免載入期種子尚未就緒。
 local prepared_sets
