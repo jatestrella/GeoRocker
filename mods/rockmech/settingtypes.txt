@@ -14,6 +14,11 @@ rockmech_replace_stone (Replace mapgen stone) bool true
 # Usually set per world in <world>/rockmech.conf rather than globally.
 rockmech_strip_soil (Strip soil) bool false
 
+# Replace every other natural solid node (ores, permafrost, ice, biome stones, ...) with the
+# lithology at that position during map generation, so only rockmech lithologies remain.
+# Usually set per world in <world>/rockmech.conf.
+rockmech_only_lithologies (Only lithologies) bool false
+
 # Lithology distribution. layers: by depth (sandstone, shale, granite downward).
 # zones: vertical zones along x, each zone_width wide (shale around x = 0, granite to the east,
 # sandstone to the west, repeating). Usually set per world in <world>/rockmech.conf.

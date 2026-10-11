@@ -88,6 +88,7 @@ config.defaults = {
 	k0 = 0.5,             -- σh / σv
 	replace_stone = true, -- 地圖生成時把 stone 換成本 mod 岩性
 	strip_soil = false,   -- 地圖生成時移除土壤（露出岩盤）；建議只在個別世界的 rockmech.conf 開啟
+	only_lithologies = false, -- 地圖生成時把其他天然實心方塊（礦石、凍土、冰、生態系岩石…）也換成岩性
 	lith_mode = "layers", -- 岩性分布：layers（依深度分層）或 zones（沿 x 方向的區帶）
 	zone_width = 80,      -- zones 模式的區帶寬度 (m)
 }
@@ -267,6 +268,9 @@ function config.load(get)
 	local ss = parse_bool(get("rockmech_strip_soil"))
 	if ss == nil then ss = config.defaults.strip_soil end
 	cfg.strip_soil = ss
+	local ol = parse_bool(get("rockmech_only_lithologies"))
+	if ol == nil then ol = config.defaults.only_lithologies end
+	cfg.only_lithologies = ol
 	local lm = get("rockmech_lith_mode")
 	cfg.lith_mode = (lm == "zones" or lm == "layers") and lm or config.defaults.lith_mode
 	cfg.zone_width = math.max(4, math.floor(tonumber(get("rockmech_zone_width")) or config.defaults.zone_width))

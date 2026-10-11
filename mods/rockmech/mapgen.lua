@@ -65,6 +65,20 @@ end
 local cell_traces, suffix = jointtex.cell_traces, jointtex.suffix
 local zones = cfg.lith_mode == "zones"
 
+-- 只保留岩性（世界設定 rockmech_only_lithologies）：其他天然實心方塊（非土壤，
+-- 例如礦石、凍土、冰、沙漠石）視同 stone，換成該位置的岩性
+local as_stone = {[c_stone] = true}
+if cfg.only_lithologies then
+	for name, def in pairs(core.registered_nodes) do
+		local g = def.groups or {}
+		if def.walkable ~= false and def.is_ground_content ~= false and name ~= "ignore"
+				and not name:find("^rockmech:")
+				and not config.is_soil(name, def.groups, def.is_ground_content) then
+			as_stone[core.get_content_id(name)] = true
+		end
+	end
+end
+
 -- 剝除土壤（世界設定 rockmech_strip_soil）：土壤改成空氣，露出岩盤
 local strip = {}
 local c_air = core.get_content_id("air")
@@ -108,7 +122,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 			local pv = plane_y[y]
 			local vi = area:index(minp.x, y, z)
 			for x = minp.x, maxp.x do
-				if data[vi] == c_stone then
+				if as_stone[data[vi]] then
 					if zones then
 						cv, pv = var_x[x], plane_x[x]
 					end
@@ -127,11 +141,22 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 	-- 剝除土壤：處理整個 VoxelManip 範圍（含 chunk 外圍一圈 mapblock）。
 	-- 相鄰 chunk 生成時，引擎會把地表的土壤也寫進已生成 chunk 的邊緣，
 	-- 只處理 minp..maxp 會留下邊緣的土壤。
-	if next(strip) then
+	if next(strip) or cfg.only_lithologies then
 		for i = 1, #data do
-			if strip[data[i]] then
+			local cid = data[i]
+			if strip[cid] then
 				data[i] = c_air
 				stripped = stripped + 1
+			elseif cid ~= c_stone and as_stone[cid] then
+				-- 鄰近 chunk 寫進邊緣的其他天然方塊（礦石、凍土、冰…）→ 該位置的岩性
+				local p = area:position(i)
+				local key = stress.lith_key_at(cfg, p.x, p.y)
+				if plane then
+					data[i] = c_plane[key][suffix(cell_traces(joints, sets, p.x, p.y, p.z, MAXL))]
+				else
+					data[i] = c_var[key][use_joints and cell_mask(sets, p.x, p.y, p.z) or 0]
+				end
+				changed = true
 			end
 		end
 		if stripped > 0 then changed = true end
