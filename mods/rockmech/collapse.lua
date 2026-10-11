@@ -653,7 +653,12 @@ end
 
 -- 破壞格：原地換成碎石（swap_node 不觸發 on_destruct）。碎石仍是實心、提供側向
 -- 支撐，避免在岩體內部產生空洞；之後是否移動交給懸空掉落／安息角滑動。
-function collapse.apply_failure(failed)
+-- 目前正在處理的剝落連鎖輪數（0 = 不在剝落處理中）。物理造成的移除依此決定後續檢查的輪數
+local fail_gen = 0
+
+function collapse.apply_failure(failed, round)
+    local prev_gen = fail_gen
+    fail_gen = round or fcfg.max_cascade
     physics_updating = true
     for _, f in ipairs(failed) do
         local p = {x = f.x, y = f.y, z = f.z}
@@ -667,6 +672,7 @@ function collapse.apply_failure(failed)
         check_stability_and_move({x = f.x, y = f.y, z = f.z})
     end
     physics_updating = false
+    fail_gen = prev_gen
 end
 
 -- 只保留開挖造成的破壞（穩定 → 不穩定）：開挖前就會破壞的格視為既有狀態。
@@ -740,7 +746,7 @@ process_queue = function()
     -- 下一輪的「開挖」= 這一輪剝落的格（記下剝落前的方塊；物理造成 → 延伸範圍）
     local next_changes = new_changes()
     for _, f in ipairs(failed) do add_change(next_changes, f, core.get_node(f).name, nil, secondary_radius()) end
-    collapse.apply_failure(failed)
+    collapse.apply_failure(failed, round)
 
     if round >= fcfg.max_cascade then
         core.log("action", ("[rockmech] 軸差破壞連鎖達上限 %d 輪，停止"):format(fcfg.max_cascade))
@@ -758,12 +764,15 @@ process_queue = function()
         {x = b.x + r2, y = b.y + r2, z = b.z + r2},
     }
     core.after(fcfg.cascade_delay, function()
+        local prev_gen = fail_gen
+        fail_gen = round
         physics_updating = true
         for _, f in ipairs(failed) do
             -- 剝落後上方可能懸空：沿用懸空掉落／滑動判定
             check_stability_and_move({x = f.x, y = f.y + 1, z = f.z})
         end
         physics_updating = false
+        fail_gen = prev_gen
         enqueue(next_box, round + 1, next_changes)
     end)
 end
@@ -1310,9 +1319,16 @@ local function register_physics_events(name, intact)
                     physics_updating = prev
                 end
             end)
-            -- 物理系統內部操作（崩落、滑出、碎石移動）不觸發破壞檢查：碎石被移走會露出新岩面、
-            -- 再剝落、再產生碎石，形成漸進崩解。破壞檢查的延伸只走連鎖（剝落格 ± 延伸範圍，最多 5 輪）
-            if physics_updating then return end
+            -- 物理系統造成的移除（崩落、滑出、碎石滑走）也會露出新岩面，要檢查（延伸範圍），
+            -- 但連鎖要有上限：剝落連鎖第 k 輪中的移除 → 第 k + 1 輪；其他物理移除只檢查一次
+            -- （不再往下連鎖），避免「碎石滑走 → 露出新岩面 → 再剝落」無限往後退
+            if physics_updating then
+                local rnd = fail_gen > 0 and fail_gen + 1 or fcfg.max_cascade
+                if rnd <= fcfg.max_cascade then
+                    collapse.queue_failure_check(pos, nil, secondary_radius(), rnd)
+                end
+                return
+            end
             core.after(0.05, function()
                 physics_updating = true
                 update_affected_area(pos)
