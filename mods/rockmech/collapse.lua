@@ -691,11 +691,16 @@ local scfg = cfg.support
 local pending_starts, support_scheduled = {}, false
 local NB6 = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}}
 
+local function face_jointed(x, y, z, axis)
+    return rockmech.joints.face_joint(rockmech.get_joint_sets(), x, y, z, axis) ~= nil
+end
+
 function collapse.overhang_params()
     local ocfg = cfg.overhang
     return {
         lithologies = cfg.lithologies, scale = ocfg.scale, tensile_other = ocfg.tensile_other,
         gamma_other = cfg.failure.gamma_other, max_voxels = ocfg.max_voxels,
+        face_jointed = ocfg.joints and face_jointed or nil,
     }
 end
 

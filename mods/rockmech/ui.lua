@@ -68,11 +68,16 @@ function rockmech.overhang_line(o)
 	if not o then return "懸臂：—" end
 	if o.supported then return "懸臂：此欄下方有支撐（FS ∞）" end
 	if o.aborted then return ("懸臂：懸空群超過 %d 格，不判定"):format(cfg.overhang.max_voxels) end
-	if not o.d then return "懸臂：整段碰不到支撐（由支撐判定處理）" end
+	if not o.d then return "懸臂：被節理切離、碰不到有支撐的岩柱（FS 0，會掉落）" end
 	local c = o.crit
-	return ("懸臂 d %d m、t %d m：σb=3γd²/t %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
-		o.d, o.t, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax, fs_str(o.group_fs), c.x, c.z,
+	local root = ""
+	if o.rho and o.rho < 1 then
+		root = ("、根部斷面被節理切過，完好 %.0f%%"):format(o.rho * 100)
+	end
+	return ("懸臂 d %d m、t %d m%s：σb=3γ·t·d²/t_eff² %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
+		o.d, o.t, root, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax * (o.rho or 1), fs_str(o.group_fs), c.x, c.z,
 		o.edge and ("（懸空群超出 ±%d m 檢查範圍，FS 可能高估）"):format(cfg.overhang.radius) or "")
+		.. ((o.cut_cells or 0) > 0 and ("；相鄰有 %d 格被節理切離、會掉落"):format(o.cut_cells) or "")
 end
 
 -- 周圍臨空格的最小 FS 一行說明

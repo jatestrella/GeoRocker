@@ -532,7 +532,8 @@ local TOGGLES = {
 		label = "懸臂／頂板斷裂（依張力強度與厚度）",
 		short = "懸臂斷裂",
 		info = function()
-			return ("L_max = √(σt·t/(3γ))；強度縮放 %g"):format(cfg.overhang.scale)
+			return ("L_max = √(σt·t/(3γ))；強度縮放 %g；%s"):format(cfg.overhang.scale,
+				cfg.overhang.joints and "節理切過的根部斷面不傳張力" or "不考慮節理")
 		end,
 		off_note = "關閉：連著岩體的懸空岩石不會因為伸太長而斷",
 	},

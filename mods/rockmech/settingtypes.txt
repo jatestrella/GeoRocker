@@ -198,6 +198,10 @@ rockmech_overhang_radius (Overhang check radius) int 16 4 48
 # Overhangs larger than this many nodes are left alone (conservative).
 rockmech_overhang_max_voxels (Max overhang size) int 2000 1 100000
 
+# Joints carry no tension across the faces they cut: the root section of a cantilever only counts intact faces
+# (L_max scales with intact/total), and a block cut off completely by joints falls.
+rockmech_overhang_joints (Joints cut overhangs) bool true
+
 [Fall breakage]
 
 # Intact rock that falls may break into rubble on landing: p = 1 - exp(-h / h_ref).

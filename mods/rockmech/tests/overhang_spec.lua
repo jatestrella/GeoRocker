@@ -249,3 +249,83 @@ describe("overhang 懸空群碰到範圍邊界", function()
 		assert.is_true(cut.group_fs > inside.group_fs)
 	end)
 end)
+
+describe("overhang 節理切過根部斷面", function()
+	-- 指定被節理切過的面：key = "x,y,z,axis"（face_jointed 的參數）
+	local function with_joints(faces)
+		local set = {}
+		for _, k in ipairs(faces) do set[k] = true end
+		local p = {}
+		for k, v in pairs(P) do p[k] = v end
+		p.face_jointed = function(x, y, z, axis) return set[x .. "," .. y .. "," .. z .. "," .. axis] or false end
+		return p
+	end
+	local function fell(groups, x, y, z)
+		for _, gr in ipairs(groups) do
+			for _, c in ipairs(gr.cells) do
+				if c.x == x and c.y == y and c.z == z then return true end
+			end
+		end
+		return false
+	end
+
+	it("1 m 厚的短梁：根部被節理切斷 → 張力為 0，整段掉落", function()
+		local g = cantilever("g", 2, 1)
+		assert.are.equal(0, #overhang.find_failing_local(g, P, {{x = 1, y = 8, z = 0}}))
+		local pj = with_joints({"0,8,0,1"})   -- x=0 與 x=1 之間的面
+		local groups = overhang.find_failing_local(g, pj, {{x = 1, y = 8, z = 0}})
+		assert.are.equal(1, #groups)
+		assert.is_true(fell(groups, 2, 8, 0))
+		local st = overhang.cell_state(g, pj, 1, 8, 0)
+		assert.is_nil(st.d)
+		assert.are.equal(0, st.group_fs)
+	end)
+
+	it("2 m 厚的梁：根部一半被切 → L_max × 1/2", function()
+		-- 頁岩 t=2：L_max = 7.30；切一半 → 3.65，L=4 會斷、L=3 不會
+		local pj = with_joints({"0,8,0,1"})
+		local st = overhang.cell_state(cantilever("h", 4, 2), pj, 1, 8, 0)
+		assert.near(0.5, st.rho, 1e-12)
+		assert.near((overhang.lmax(2, 25, 2) * 0.5 / 4) ^ 2, st.group_fs, 1e-9)
+		assert.are.equal(1, #overhang.find_failing_local(cantilever("h", 4, 2), pj, {{x = 1, y = 8, z = 0}}))
+		assert.are.equal(0, #overhang.find_failing_local(cantilever("h", 3, 2), pj, {{x = 1, y = 8, z = 0}}))
+		assert.are.equal(0, #overhang.find_failing_local(cantilever("h", 4, 2), P, {{x = 1, y = 8, z = 0}}))
+		-- σb = 3γ·t·d²/t_eff²
+		local tip = overhang.cell_state(cantilever("h", 4, 2), pj, 4, 8, 0)
+		assert.near(3 * 25 * 2 * 16 / 1 / 1000, tip.sigma_b, 1e-12)
+	end)
+
+	it("梁中間被節理切斷：外側那段被切離而掉落，內側保留", function()
+		local g = cantilever("g", 4, 1)
+		local pj = with_joints({"2,8,0,1"})   -- x=2 與 x=3 之間
+		local groups = overhang.find_failing_local(g, pj, {{x = 1, y = 8, z = 0}})
+		assert.are.equal(1, #groups)
+		assert.is_true(fell(groups, 3, 8, 0))
+		assert.is_true(fell(groups, 4, 8, 0))
+		assert.is_false(fell(groups, 1, 8, 0))
+		assert.is_false(fell(groups, 2, 8, 0))
+		local inner = overhang.cell_state(g, pj, 2, 8, 0)
+		assert.is_true(inner.group_fs > 1)
+		assert.are.equal(0, overhang.cell_state(g, pj, 3, 8, 0).group_fs)
+	end)
+end)
+
+describe("overhang 被節理切離的相鄰塊", function()
+	it("從梁內側那格查詢：回報外側被切離、會掉落的格數", function()
+		local set = {["2,8,0,1"] = true}
+		local p = {}
+		for k, v in pairs(P) do p[k] = v end
+		p.face_jointed = function(x, y, z, axis) return set[x .. "," .. y .. "," .. z .. "," .. axis] or false end
+		local st = overhang.cell_state(cantilever("g", 4, 1), p, 1, 8, 0)
+		assert.are.equal(2, st.cut_cells)
+		assert.is_true(st.group_fs > 1)
+		assert.are.equal(0, overhang.cell_state(cantilever("g", 4, 1), P, 1, 8, 0).cut_cells)
+	end)
+
+	it("支撐岩柱只在垂直方向超出範圍：不標示 edge", function()
+		local g = cantilever("g", 3, 1)
+		g.req.y1 = 5   -- 岩柱往下超出範圍
+		local st = overhang.cell_state(g, P, 1, 8, 0)
+		assert.is_false(st.edge)
+	end)
+end)
