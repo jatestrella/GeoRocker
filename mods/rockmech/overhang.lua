@@ -182,7 +182,9 @@ end
 --     遇到有支撐的 run 即停止往外；d = 到最近有支撐 run 的水平步數
 -- 一般開挖時周圍都是厚岩體，起點的 run 往下就碰到支撐，幾乎立刻結束。
 -- 回傳格式同 find_failing。
-function overhang.find_failing_local(g, p, starts)
+-- 局部搜尋的共用部分：get_run（垂直 run 與其 L_max）、explore（從一個懸空 run
+-- 探索出整群並以多源 BFS 求每個 run 的 d）
+local function local_ctx(g, p)
 	local nx, ny, nz = g.nx, g.ny, g.nz
 	local sy, sz = nx, nx * ny
 	local data, bonded_of, solid_of, lith_of = g.data, g.bonded_of, g.solid_of, g.lith_of
@@ -194,11 +196,13 @@ function overhang.find_failing_local(g, p, starts)
 	end
 	local scale = p.scale or 1
 	local max_voxels = p.max_voxels or 2000
-	local stats = {cells = 0, groups = 0, failing_groups = 0}
+	local ctx = {x1 = x1, x2 = x2, y1 = y1, y2 = y2, z1 = z1, z2 = z2, sy = sy, sz = sz}
 
-	-- run 快取：以底部格索引為鍵 → {bot=ly, top=ly, lx, lz, supported, edge, lmax}
-	local run_of = {}      -- 格索引 → run
-	local function get_run(lx, ly, lz)
+	-- run 快取：格索引 → {bot, top, lx, lz, supported, edge, t, lmax, crit}
+	--   t：厚度（接到上下邊界時視為很厚）；lmax：run 內最小 L_max；
+	--   crit：決定 lmax 的那一格的 {tensile (MPa, 已乘 scale), gamma}
+	local run_of = {}
+	function ctx.get_run(lx, ly, lz)
 		local i = 1 + lx + ly * sy + lz * sz
 		local r = run_of[i]
 		if r then return r end
@@ -211,9 +215,9 @@ function overhang.find_failing_local(g, p, starts)
 		local below = data[ib - sy]
 		r.supported = edge or (solid_of[below] and not bonded_of[below]) or false
 		r.edge = edge
-		-- 極限長度：厚度 t = run 長度（接到上下邊界時視為很厚），取 run 內最小值
 		local thick = (b == y1 or t == y2) and THICK or (t - b + 1)
-		local lm = math.huge
+		r.t = thick
+		local lm, crit = math.huge, nil
 		for yy = b, t do
 			local c = ib + (yy - b) * sy
 			local key = lith_of[data[c]]
@@ -221,76 +225,98 @@ function overhang.find_failing_local(g, p, starts)
 			local st = (lith and lith.tensile or p.tensile_other or 2) * 1000 * scale
 			local gam = lith and lith.gamma or p.gamma_other or 20
 			local v = sqrt(st * thick / (3 * gam))
-			if v < lm then lm = v end
+			if v < lm then lm = v; crit = {tensile = st / 1000, gamma = gam} end
 			run_of[c] = r
 		end
 		r.lmax = lm
+		r.crit = crit
 		return r
 	end
 
-	local done = {}        -- 已處理過的 run（跨起點共用）
-	local groups = {}
+	ctx.done = {}          -- 已處理過的 run（跨起點共用）
 	local H = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 
-	for _, s in ipairs(starts) do
-		local lx, ly, lz = s.x - g.ox, s.y - g.oy, s.z - g.oz
-		if lx >= x1 and lx <= x2 and ly >= y1 and ly <= y2 and lz >= z1 and lz <= z2
-				and bonded_of[data[1 + lx + ly * sy + lz * sz]] then
-			local r0 = get_run(lx, ly, lz)
-			if not r0.supported and not done[r0] then
-				-- 探索這一群懸空的 run
-				stats.groups = stats.groups + 1
-				local comp, queue, inq = {}, {r0}, {[r0] = true}
-				local n_cells, aborted = 0, false
-				local d = {}
-				local frontier = {}   -- 與有支撐 run 相鄰者 → d = 1
-				local adj = {}        -- run → 相鄰的懸空 run 清單
-				local qi = 1
-				while qi <= #queue do
-					local r = queue[qi]; qi = qi + 1
-					done[r] = true
-					comp[#comp + 1] = r
-					n_cells = n_cells + (r.top - r.bot + 1)
-					if n_cells > max_voxels then aborted = true; break end
-					adj[r] = {}
-					local touches_support = false
-					for yy = r.bot, r.top do
-						for _, h in ipairs(H) do
-							local ax, az = r.lx + h[1], r.lz + h[2]
-							if ax >= x1 and ax <= x2 and az >= z1 and az <= z2 then
-								local j = 1 + ax + yy * sy + az * sz
-								if bonded_of[data[j]] then
-									local rn = get_run(ax, yy, az)
-									if rn.supported then
-										touches_support = true
-									elseif rn ~= r then
-										adj[r][#adj[r] + 1] = rn
-										if not inq[rn] then inq[rn] = true; queue[#queue + 1] = rn end
-									end
-								end
+	-- 回傳 {comp = run 陣列, d = {[run] = 支撐距離}, n_cells, aborted}
+	-- d[run] 為 nil：整群都碰不到有支撐的 run（完全懸空，交給支撐判定）
+	function ctx.explore(r0)
+		local comp, queue, inq = {}, {r0}, {[r0] = true}
+		local n_cells, aborted = 0, false
+		local d = {}
+		local frontier = {}   -- 與有支撐 run 相鄰者 → d = 1
+		local adj = {}        -- run → 相鄰的懸空 run 清單
+		local qi = 1
+		while qi <= #queue do
+			local r = queue[qi]; qi = qi + 1
+			ctx.done[r] = true
+			comp[#comp + 1] = r
+			n_cells = n_cells + (r.top - r.bot + 1)
+			if n_cells > max_voxels then aborted = true; break end
+			adj[r] = {}
+			local touches_support = false
+			for yy = r.bot, r.top do
+				for _, h in ipairs(H) do
+					local ax, az = r.lx + h[1], r.lz + h[2]
+					if ax >= x1 and ax <= x2 and az >= z1 and az <= z2 then
+						local j = 1 + ax + yy * sy + az * sz
+						if bonded_of[data[j]] then
+							local rn = ctx.get_run(ax, yy, az)
+							if rn.supported then
+								touches_support = true
+							elseif rn ~= r then
+								adj[r][#adj[r] + 1] = rn
+								if not inq[rn] then inq[rn] = true; queue[#queue + 1] = rn end
 							end
 						end
 					end
-					if touches_support then frontier[#frontier + 1] = r end
 				end
-				stats.cells = stats.cells + n_cells
-				if not aborted then
-					-- 多源 BFS：與有支撐 run 相鄰者 d = 1
-					local bq, bh = {}, 1
-					for _, r in ipairs(frontier) do d[r] = 1; bq[#bq + 1] = r end
-					while bh <= #bq do
-						local r = bq[bh]; bh = bh + 1
-						for _, rn in ipairs(adj[r]) do
-							if not d[rn] then d[rn] = d[r] + 1; bq[#bq + 1] = rn end
-						end
-					end
+			end
+			if touches_support then frontier[#frontier + 1] = r end
+		end
+		if not aborted then
+			local bq, bh = {}, 1
+			for _, r in ipairs(frontier) do d[r] = 1; bq[#bq + 1] = r end
+			while bh <= #bq do
+				local r = bq[bh]; bh = bh + 1
+				for _, rn in ipairs(adj[r]) do
+					if not d[rn] then d[rn] = d[r] + 1; bq[#bq + 1] = rn end
+				end
+			end
+		end
+		return {comp = comp, d = d, n_cells = n_cells, aborted = aborted}
+	end
+	return ctx
+end
+
+-- run 的懸臂安全係數：FS = σt·scale / (3γd²/t) = (L_max / d)²
+local function run_fs(r, d)
+	if not d then return 0 end
+	return (r.lmax / d) ^ 2
+end
+overhang.run_fs = run_fs
+
+function overhang.find_failing_local(g, p, starts)
+	local ctx = local_ctx(g, p)
+	local data, bonded_of = g.data, g.bonded_of
+	local sy, sz = ctx.sy, ctx.sz
+	local stats = {cells = 0, groups = 0, failing_groups = 0}
+	local groups = {}
+	for _, s in ipairs(starts) do
+		local lx, ly, lz = s.x - g.ox, s.y - g.oy, s.z - g.oz
+		if lx >= ctx.x1 and lx <= ctx.x2 and ly >= ctx.y1 and ly <= ctx.y2 and lz >= ctx.z1 and lz <= ctx.z2
+				and bonded_of[data[1 + lx + ly * sy + lz * sz]] then
+			local r0 = ctx.get_run(lx, ly, lz)
+			if not r0.supported and not ctx.done[r0] then
+				stats.groups = stats.groups + 1
+				local res = ctx.explore(r0)
+				stats.cells = stats.cells + res.n_cells
+				if not res.aborted then
 					local fails = false
-					for _, r in ipairs(comp) do
-						if (d[r] or math.huge) > r.lmax then fails = true; break end
+					for _, r in ipairs(res.comp) do
+						if (res.d[r] or math.huge) > r.lmax then fails = true; break end
 					end
 					if fails then
 						local cells = {}
-						for _, r in ipairs(comp) do
+						for _, r in ipairs(res.comp) do
 							for yy = r.bot, r.top do
 								cells[#cells + 1] = {x = g.ox + r.lx, y = g.oy + yy, z = g.oz + r.lz}
 							end
@@ -304,6 +330,43 @@ function overhang.find_failing_local(g, p, starts)
 		end
 	end
 	return groups, stats
+end
+
+-- 單格（世界座標）的懸臂狀態，供 HUD／資訊頁顯示。回傳 nil（非鍵結格或在範圍外）或
+--   {supported = true}                         該欄坐在支撐上（d = 0）
+--   {aborted = true, n_cells}                   懸空群太大，判定時保守地不處理
+--   {d, t, lmax, tensile, gamma, sigma_b, fs,    此格所在欄：支撐距離、厚度、L_max、
+--    group_fs, crit = {x, z, ybot, ytop, d, t, lmax}, n_cells}
+--                                               σ_b = 3γd²/t (MPa)、FS；整群最小 FS 與臨界欄
+-- d 為 nil 表示整群碰不到有支撐的岩柱（fs = 0）。
+function overhang.cell_state(g, p, x, y, z)
+	local ctx = local_ctx(g, p)
+	local lx, ly, lz = x - g.ox, y - g.oy, z - g.oz
+	if lx < ctx.x1 or lx > ctx.x2 or ly < ctx.y1 or ly > ctx.y2 or lz < ctx.z1 or lz > ctx.z2 then
+		return nil
+	end
+	if not g.bonded_of[g.data[1 + lx + ly * ctx.sy + lz * ctx.sz]] then return nil end
+	local r0 = ctx.get_run(lx, ly, lz)
+	if r0.supported then return {supported = true} end
+	local res = ctx.explore(r0)
+	if res.aborted then return {aborted = true, n_cells = res.n_cells} end
+	local d0 = res.d[r0]
+	local out = {
+		d = d0, t = r0.t, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
+		sigma_b = d0 and 3 * r0.crit.gamma * d0 * d0 / r0.t / 1000 or math.huge,
+		fs = run_fs(r0, d0), n_cells = res.n_cells,
+	}
+	local gfs, crit = math.huge, nil
+	for _, r in ipairs(res.comp) do
+		local f = run_fs(r, res.d[r])
+		if f < gfs then
+			gfs = f
+			crit = {x = g.ox + r.lx, z = g.oz + r.lz, ybot = g.oy + r.bot, ytop = g.oy + r.top,
+				d = res.d[r], t = r.t, lmax = r.lmax}
+		end
+	end
+	out.group_fs, out.crit = gfs, crit
+	return out
 end
 
 -- 給定岩性與厚度的極限懸臂長度 (m)

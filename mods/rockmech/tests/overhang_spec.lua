@@ -195,3 +195,44 @@ describe("overhang 局部版本與全範圍版本一致", function()
 		assert.are.equal(0, #r)
 	end)
 end)
+
+describe("overhang 懸臂安全係數", function()
+	it("FS = σt/(3γd²/t) = (L_max/d)²；整段取最小（尖端）", function()
+		local g = cantilever("h", 4, 1)
+		local lm = overhang.lmax(2, 25, 1)
+		local tip = overhang.cell_state(g, P, 4, 8, 0)
+		assert.are.equal(4, tip.d)
+		assert.are.equal(1, tip.t)
+		assert.near((lm / 4) ^ 2, tip.fs, 1e-9)
+		assert.near(3 * 25 * 16 / 1 / 1000, tip.sigma_b, 1e-12)
+		assert.near(2 / tip.sigma_b, tip.fs, 1e-9)
+		local root = overhang.cell_state(g, P, 1, 8, 0)
+		assert.are.equal(1, root.d)
+		assert.near(lm ^ 2, root.fs, 1e-9)
+		assert.near(tip.fs, root.group_fs, 1e-12)
+		assert.are.equal(4, root.crit.x)
+	end)
+
+	it("岩柱本身（坐在地面上）：有支撐", function()
+		local st = overhang.cell_state(cantilever("h", 4, 1), P, 0, 5, 0)
+		assert.is_true(st.supported)
+	end)
+
+	it("非岩石格：nil", function()
+		assert.is_nil(overhang.cell_state(cantilever("h", 4, 1), P, 2, 3, 0))
+	end)
+
+	it("整段 FS < 1 ⇔ 局部判定會斷（各岩性、長度、厚度）", function()
+		for _, lith in ipairs({"s", "h", "g"}) do
+			for _, t in ipairs({1, 2}) do
+				for L = 2, 14 do
+					local g = cantilever(lith, L, t)
+					local st = overhang.cell_state(g, P, 1, 8, 0)
+					local groups = overhang.find_failing_local(g, P, {{x = 1, y = 8, z = 0}})
+					assert.are.equal(#groups > 0, st.group_fs < 1,
+						("lith=%s t=%d L=%d fs=%.3f"):format(lith, t, L, st.group_fs))
+				end
+			end
+		end
+	end)
+end)

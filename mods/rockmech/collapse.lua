@@ -691,6 +691,21 @@ local scfg = cfg.support
 local pending_starts, support_scheduled = {}, false
 local NB6 = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}}
 
+function collapse.overhang_params()
+    local ocfg = cfg.overhang
+    return {
+        lithologies = cfg.lithologies, scale = ocfg.scale, tensile_other = ocfg.tensile_other,
+        gamma_other = cfg.failure.gamma_other, max_voxels = ocfg.max_voxels,
+    }
+end
+
+-- 單格的懸臂狀態（HUD／資訊頁／羅盤用；與懸臂斷裂同一個模型與範圍）
+function collapse.overhang_state(pos)
+    local r = cfg.overhang.radius
+    local grid = collapse.read_grid(vector.subtract(pos, r), vector.add(pos, r), true)
+    return rockmech.overhang.cell_state(grid, collapse.overhang_params(), pos.x, pos.y, pos.z)
+end
+
 local function run_support_check()
     support_scheduled = false
     local starts = pending_starts
@@ -725,10 +740,7 @@ local function run_support_check()
 
     local comps, stats = {}, {visited = 0}
     local n_overhang = 0
-    local oparams = {
-        lithologies = cfg.lithologies, scale = ocfg.scale, tensile_other = ocfg.tensile_other,
-        gamma_other = cfg.failure.gamma_other, max_voxels = ocfg.max_voxels,
-    }
+    local oparams = collapse.overhang_params()
     for _, g in ipairs(groups) do
         local grid = collapse.read_grid(
             {x = g.a.x - r, y = g.a.y - r, z = g.a.z - r},

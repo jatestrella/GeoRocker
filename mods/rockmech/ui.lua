@@ -39,6 +39,7 @@ function rockmech.stress_report(pos)
 		local grid = rockmech.collapse.read_grid(vector.subtract(pos, w), vector.add(pos, w))
 		r.local_state = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
 			rockmech.collapse.failure_params(true))
+		r.overhang = rockmech.collapse.overhang_state(pos)
 	end
 	return r
 end
@@ -53,6 +54,21 @@ function rockmech.slip_line(s)
 	return ("節理滑動 %s（%.0f°/%.0f°）：σn %.3f  τ %.3f MPa  FS %.2f%s"):format(
 		js.name, js.dip_eff, js.dipdir_eff, s.slip_sn, s.slip_tau, s.fs_joint,
 		s.fails_slip and "  滑動" or "")
+end
+
+-- 懸臂斷裂的一行說明（HUD、資訊頁、羅盤共用）。o = collapse.overhang_state 的結果
+local function fs_str(f)
+	return f == math.huge and "∞" or ("%.2f"):format(f)
+end
+function rockmech.overhang_line(o)
+	if not cfg.overhang.enabled then return "懸臂斷裂：關閉" end
+	if not o then return "懸臂：—" end
+	if o.supported then return "懸臂：此欄下方有支撐（FS ∞）" end
+	if o.aborted then return ("懸臂：懸空群超過 %d 格，不判定"):format(cfg.overhang.max_voxels) end
+	if not o.d then return "懸臂：整段碰不到支撐（由支撐判定處理）" end
+	local c = o.crit
+	return ("懸臂 d %d m、t %d m：σb=3γd²/t %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)"):format(
+		o.d, o.t, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax, fs_str(o.group_fs), c.x, c.z)
 end
 
 local function fmt_report_lines(r)
@@ -71,6 +87,7 @@ local function fmt_report_lines(r)
 		lines[#lines + 1] = ("σ1 %.3f  σ3 %.3f  q %.3f / 強度 %.2f MPa  FS %.2f  %s%s"):format(
 			s.s1, s.s3, s.q, s.strength, s.fs_axial, verdict, s.exposed and "（臨空）" or "")
 		lines[#lines + 1] = rockmech.slip_line(s)
+		lines[#lines + 1] = rockmech.overhang_line(r.overhang)
 	end
 	return lines
 end
@@ -268,6 +285,7 @@ local function tab_stress(name)
 			{"q = σ1 − σ3 / 強度", ("%.3f / %.2f MPa"):format(s.q, s.strength)},
 			{"軸差 FS", ("%.2f"):format(s.fs_axial)},
 			{"節理弱面", rockmech.slip_line(s)},
+			{"懸臂", rockmech.overhang_line(r.overhang)},
 			{"臨空面", (s.exposed_x and "東西 " or "") .. (s.exposed_z and "南北 " or "") ..
 				(s.exposed_up and "上 " or "") .. (s.exposed_down and "下" or "")},
 			{"判定", s.fails_axial and "軸差破壞" or s.fails_slip and "沿節理滑動"

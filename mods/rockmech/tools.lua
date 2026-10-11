@@ -72,6 +72,7 @@ local function compass_report(pos, nodename)
 			lines[#lines + 1] = ("  q=σ1−σ3=%.2f MPa  強度=%.2f MPa  FS=%.2f  → %s"):format(
 				fs.q, fs.strength, fs.fs_axial, verdict)
 			lines[#lines + 1] = "  " .. rockmech.slip_line(fs)
+			lines[#lines + 1] = "  " .. rockmech.overhang_line(rockmech.collapse.overhang_state(pos))
 		end
 	end
 
