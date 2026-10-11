@@ -856,26 +856,21 @@ local function run_support_check()
         if ocfg.enabled then
             og = rockmech.overhang.find_failing_local(grid, oparams, g.starts)
         end
-        -- 只有開挖造成的才掉落（穩定 → 不穩定）：開挖前就懸空、或開挖前就會斷（FS < 1）的群不處理
+        -- 只有開挖造成的才掉落（穩定 → 不穩定）：開挖前就會斷（0 < FS < 1）的群不處理。
+        -- 完全懸空、或 FS = 0 的一律掉落
         if icfg.enabled and (#c > 0 or #og > 0) then
             local fs_after = {}
-            for k, comp in ipairs(og) do
-                local o = rockmech.overhang.cell_state(grid, oparams, comp.cells[1].x, comp.cells[1].y, comp.cells[1].z)
-                fs_after[k] = o and o.group_fs or 0
-            end
+            for k, comp in ipairs(og) do fs_after[k] = comp.fs or 0 end
             local undo = restore_grid(grid, changes.list)
-            local keep_c = {}
-            for _, comp in ipairs(c) do
-                local before = rockmech.support.find_unsupported(grid, {comp.cells[1]}, scfg.max_voxels)
-                if #before > 0 then n_existing = n_existing + 1 else keep_c[#keep_c + 1] = comp end
-            end
+            -- 完全懸空的群一律掉落（不可能平衡，例如洞穴生成留下的懸空岩塊）
+            local keep_c = c
             local keep_og = {}
+            local query = rockmech.overhang.make_query(grid, oparams)
             for k, comp in ipairs(og) do
                 local p = comp.cells[1]
-                local o = rockmech.overhang.cell_state(grid, oparams, p.x, p.y, p.z)
-                local before = math.huge
-                if o and o.group_fs then before = o.group_fs end
-                if before >= 1 then
+                local before = query(p.x, p.y, p.z)
+                -- FS = 0（被節理切離、碰不到支撐）一律掉落：強度再高也不可能平衡
+                if before >= 1 or fs_after[k] <= 0 then
                     keep_og[#keep_og + 1] = comp
                     core.log("action", ("[rockmech] 懸臂斷裂（開挖造成）：%d 格，整群 FS %.3f → %.3f")
                         :format(#comp.cells, before, fs_after[k]))
@@ -909,7 +904,7 @@ local function run_support_check()
             :format(ms, scfg.budget_ms, #starts, stats.visited))
     end
     if n_existing > 0 then
-        core.log("action", ("[rockmech] 支撐判定：%d 群開挖前就懸空或會斷，視為既有狀態不處理")
+        core.log("action", ("[rockmech] 支撐判定：%d 群開挖前就會斷（0 < FS < 1），視為既有狀態不處理")
             :format(n_existing))
     end
     if #comps == 0 then return end
@@ -917,11 +912,17 @@ local function run_support_check()
     local n, n_rigid = 0, 0
     local rfe = rockmech.rigidfall_entity
     physics_updating = true
+    local n_stuck = 0
     for _, c in ipairs(comps) do
         local done = false
+        -- 完全動不了（正下方被群外的實心格擋住）：不移除，避免移除後馬上落回原位又再觸發判定
+        local dd = rfe and rockmech.rigidfall.drop_distance(c.cells, rfe.is_solid, 256)
+        if dd == 0 then
+            done = true
+            n_stuck = n_stuck + 1
         -- 剛體整塊落下
-        if scfg.rigid and rfe and #c.cells <= scfg.rigid_max then
-            local d = rockmech.rigidfall.drop_distance(c.cells, rfe.is_solid, 256)
+        elseif scfg.rigid and rfe and #c.cells <= scfg.rigid_max then
+            local d = dd
             if d and d >= 1 then
                 local cells = {}
                 for _, p in ipairs(c.cells) do
@@ -937,11 +938,16 @@ local function run_support_check()
         end
         -- 否則逐格（原版 falling node）
         if not done then
+            n = n + #c.cells
             for _, p in ipairs(c.cells) do   -- 由低到高
                 core.spawn_falling_node(p)
             end
+        elseif dd ~= 0 then
+            n = n + #c.cells
         end
-        n = n + #c.cells
+    end
+    if n_stuck > 0 then
+        core.log("action", ("[rockmech] 支撐判定：%d 群判定會掉但正下方被擋住、動不了，保留原位"):format(n_stuck))
     end
     -- 群上方若有碎石等，可能因此懸空
     for _, c in ipairs(comps) do

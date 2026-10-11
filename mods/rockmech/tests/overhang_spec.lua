@@ -329,3 +329,65 @@ describe("overhang 被節理切離的相鄰塊", function()
 		assert.is_false(st.edge)
 	end)
 end)
+
+describe("overhang 水平節理面（不傳張力）", function()
+	local function with_faces(keys)
+		local set = {}
+		for _, k in ipairs(keys) do set[k] = true end
+		local p = {}
+		for k, v in pairs(P) do p[k] = v end
+		p.face_jointed = function(x, y, z, axis) return set[x .. "," .. y .. "," .. z .. "," .. axis] or false end
+		return p
+	end
+	local function fell(groups, x, y, z)
+		for _, gr in ipairs(groups) do
+			for _, c in ipairs(gr.cells) do
+				if c.x == x and c.y == y and c.z == z then return true end
+			end
+		end
+		return false
+	end
+
+	it("只靠上方吊著、上方的面被節理切過 → 掉落（梁本身不受影響）", function()
+		-- 花崗岩短梁 x=1..3、y=8，x=2 下方吊一格 (2,7,0)
+		local g = grid(-3, 6, -2, 12, -2, 2, function(x, y, z)
+			if y <= 0 then return "G" end
+			if z == 0 and x == 0 and y <= 8 then return "g" end
+			if z == 0 and x >= 1 and x <= 3 and y == 8 then return "g" end
+			if z == 0 and x == 2 and y == 7 then return "g" end
+		end)
+		assert.are.equal(0, #overhang.find_failing_local(g, P, {{x = 2, y = 7, z = 0}}))
+		local pj = with_faces({"2,7,0,2"})   -- (2,7) 與 (2,8) 之間
+		local groups = overhang.find_failing_local(g, pj, {{x = 2, y = 7, z = 0}})
+		assert.is_true(fell(groups, 2, 7, 0))
+		assert.is_false(fell(groups, 2, 8, 0))
+		assert.are.equal(0, overhang.cell_state(g, pj, 2, 7, 0).group_fs)
+	end)
+
+	it("頂板沿層面剝落：層面下的薄層跨距太大會掉，上層較厚撐得住", function()
+		-- 頁岩：兩根岩柱 x=0、x=13（y 1..8），中間 y=6..8 的頂板；y=6 與 y=7 之間是層面
+		local g = grid(-3, 16, -2, 12, -2, 2, function(x, y, z)
+			if y <= 0 then return "G" end
+			if z == 0 and (x == 0 or x == 13) and y <= 8 then return "h" end
+			if z == 0 and x >= 1 and x <= 12 and y >= 6 and y <= 8 then return "h" end
+		end)
+		local keys = {}
+		for x = 1, 12 do keys[#keys + 1] = x .. ",6,0,2" end
+		local pj = with_faces(keys)
+		local starts = {{x = 6, y = 6, z = 0}, {x = 6, y = 7, z = 0}}
+		assert.are.equal(0, #overhang.find_failing_local(g, P, starts))   -- 沒有層面：t=3 撐得住
+		local groups = overhang.find_failing_local(g, pj, starts)
+		-- 下層 t=1：L_max 5.16 < 6 → 掉；上層 t=2：L_max 7.30 > 6 → 留
+		assert.is_true(fell(groups, 6, 6, 0))
+		assert.is_true(fell(groups, 1, 6, 0))
+		assert.is_false(fell(groups, 6, 7, 0))
+		assert.is_false(fell(groups, 6, 8, 0))
+	end)
+
+	it("坐在節理面上的岩柱（下段有支撐）仍算有支撐", function()
+		local g = cantilever("h", 3, 1)
+		local pj = with_faces({"0,4,0,2"})   -- 岩柱中間 y=4/5 之間被切
+		assert.is_true(overhang.cell_state(g, pj, 0, 6, 0).supported)
+		assert.are.equal(0, #overhang.find_failing_local(g, pj, {{x = 1, y = 8, z = 0}}))
+	end)
+end)

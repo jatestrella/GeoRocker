@@ -24,6 +24,8 @@
 --   * 根部斷面（懸空欄與有支撐欄之間）完好面數 t_eff：σb = 3γ·t·d²/t_eff²，
 --     即 L_max 變成 L_max·(t_eff/t)；t_eff = 0 → 張力為 0。
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
+--   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
+--     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
 --
 -- ## 網格格式
 -- grid = {data, ox, oy, oz, nx, ny, nz, bonded_of, solid_of, lith_of,
@@ -204,7 +206,28 @@ local function local_ctx(g, p)
 	local max_voxels = p.max_voxels or 2000
 	local ctx = {x1 = x1, x2 = x2, y1 = y1, y2 = y2, z1 = z1, z2 = z2, sy = sy, sz = sz}
 
+	-- 面是否被節理切過（p.face_jointed(fx, fy, fz, axis)，世界座標；axis 1 = x、2 = y、3 = z）
+	local face_jointed = p.face_jointed
+	local ox, oy, oz = g.ox, g.oy, g.oz
+	-- 格 (lx, ly, lz) 與其 +axis 方向鄰格之間的面（快取：同一次搜尋中常被重複查詢）
+	local fj_cache = {}
+	local function fjl(lx, ly, lz, axis)
+		local k = (((lz + 1) * (ny + 2) + (ly + 1)) * (nx + 2) + (lx + 1)) * 4 + axis
+		local v = fj_cache[k]
+		if v == nil then
+			v = face_jointed(ox + lx, oy + ly, oz + lz, axis) and true or false
+			fj_cache[k] = v
+		end
+		return v
+	end
+	-- (lx, ly, lz) 與其正上方之間的水平面
+	local function hjoint(lx, ly, lz)
+		return face_jointed and fjl(lx, ly, lz, 2) or false
+	end
+
 	-- run 快取：格索引 → {bot, top, lx, lz, supported, edge, t, lmax, crit}
+	--   run = 垂直連續、且中間沒有被節理切過的鍵結格（水平節理面不傳張力：
+	--   上段坐在下段上只傳壓力，下段不能吊在上段下面）
 	--   t：厚度（接到上下邊界時視為很厚）；lmax：run 內最小 L_max；
 	--   crit：決定 lmax 的那一格的 {tensile (MPa, 已乘 scale), gamma}
 	local run_of = {}
@@ -213,13 +236,25 @@ local function local_ctx(g, p)
 		local r = run_of[i]
 		if r then return r end
 		local b, t = ly, ly
-		while b - 1 >= y1 and bonded_of[data[i - (ly - b + 1) * sy]] do b = b - 1 end
-		while t + 1 <= y2 and bonded_of[data[i + (t - ly + 1) * sy]] do t = t + 1 end
+		while b - 1 >= y1 and bonded_of[data[i - (ly - b + 1) * sy]] and not hjoint(lx, b - 1, lz) do b = b - 1 end
+		while t + 1 <= y2 and bonded_of[data[i + (t - ly + 1) * sy]] and not hjoint(lx, t, lz) do t = t + 1 end
 		local ib = 1 + lx + b * sy + lz * sz
 		r = {bot = b, top = t, lx = lx, lz = lz}
 		local edge = lx == x1 or lx == x2 or lz == z1 or lz == z2 or b == y1 or t == y2
 		local below = data[ib - sy]
 		r.supported = edge or (solid_of[below] and not bonded_of[below]) or false
+		for yy = b, t do run_of[ib + (yy - b) * sy] = r end
+		if not r.supported and bonded_of[below] then
+			-- 隔著節理面坐在下方的岩石上：壓力可以傳過節理面。
+			-- 往下找連續鍵結格的底部：坐在群外實心格上或接到範圍底部 → 有支撐
+			local k = b - 1
+			while k >= y1 and bonded_of[data[1 + lx + k * sy + lz * sz]] do k = k - 1 end
+			if k < y1 then
+				r.supported = true
+			else
+				r.supported = solid_of[data[1 + lx + k * sy + lz * sz]] or false
+			end
+		end
 		r.edge = edge
 		r.edge_lat = lx == x1 or lx == x2 or lz == z1 or lz == z2   -- 水平方向碰到範圍邊界
 		local thick = (b == y1 or t == y2) and THICK or (t - b + 1)
@@ -242,32 +277,42 @@ local function local_ctx(g, p)
 
 	ctx.done = {}          -- 已處理過的 run（跨起點共用）
 	local H = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
-	-- 水平面是否被節理切過（p.face_jointed(fx, fy, fz, axis)，世界座標；axis 1 = x、3 = z）
-	local face_jointed = p.face_jointed
-	local ox, oy, oz = g.ox, g.oy, g.oz
+	-- (lx, ly, lz) 往 (hx, hz) 方向的側面是否被節理切過
 	local function jointed(lx, ly, lz, hx, hz)
 		if not face_jointed then return false end
-		local x, y, z = ox + lx, oy + ly, oz + lz
-		if hx == 1 then return face_jointed(x, y, z, 1) end
-		if hx == -1 then return face_jointed(x - 1, y, z, 1) end
-		if hz == 1 then return face_jointed(x, y, z, 3) end
-		return face_jointed(x, y, z - 1, 3)
+		if hx == 1 then return fjl(lx, ly, lz, 1) end
+		if hx == -1 then return fjl(lx - 1, ly, lz, 1) end
+		if hz == 1 then return fjl(lx, ly, lz, 3) end
+		return fjl(lx, ly, lz - 1, 3)
 	end
 
-	-- 從懸空 run r0 探索一群（只沿「至少有一個完好面」的介面相連）。回傳
-	--   {comp, d = {[run] = 支撐距離}, rho = {[run] = 根部斷面比 t_eff/t}, n_cells, aborted, edge,
-	--    cut = 只隔著被節理完全切開的介面相鄰的懸空 run（另外當成起點處理）}
-	-- 介面完好面數 t_eff：兩欄共有高度上，未被節理切過的面數。
-	-- 根部斷面：與有支撐 run 之間完好面最多的介面；rho = t_eff / t（上限 1），
-	--   子 run 沿用其根部的 rho。整群沒有任何完好的根部 → d 為 nil（被節理切離，整群掉落）。
+	-- 從懸空 run r0 探索一群。相連方式：
+	--   * 側向：介面至少有一個完好面（未被節理切過）→ 雙向，d + 1
+	--   * 垂直（只發生在水平節理面兩側）：上方的 run 坐在下方的 run 上 →
+	--     支撐只能由下往上傳（d 相同）；吊在上方 run 下面的不能從上面得到支撐
+	-- 回傳 {comp, d = {[run] = 支撐距離}, rho = {[run] = 根部斷面比 t_eff/t}, n_cells, aborted, edge,
+	--       cut = 只隔著被節理完全切開的介面相鄰的懸空 run（另外當成起點處理）}
+	-- 根部斷面：與有支撐 run 之間完好面最多的介面；rho = t_eff / t（上限 1），子 run 沿用。
+	-- d 為 nil：碰不到任何支撐（被節理切離，或吊在節理面下）。
 	function ctx.explore(r0)
 		local comp, queue, inq = {}, {r0}, {[r0] = true}
 		local n_cells, aborted, edge = 0, false, false
 		local d, rho = {}, {}
-		local frontier = {}   -- 與有支撐 run 之間有完好介面者 → d = 1
-		local root_teff = {}  -- frontier run → 根部介面的完好面數
-		local adj = {}        -- run → 相連的懸空 run 清單
+		local frontier, root_teff = {}, {}
+		local lat = {}        -- run → 側向相連的懸空 run
+		local up, up_set = {}, {} -- run → 坐在它上面的懸空 run（支撐由下往上）
 		local cut, cut_seen = {}, {}
+		local function visit(rn)
+			if not inq[rn] then inq[rn] = true; queue[#queue + 1] = rn end
+		end
+		local function add_up(lower, upper)
+			up_set[lower] = up_set[lower] or {}
+			if not up_set[lower][upper] then
+				up_set[lower][upper] = true
+				up[lower] = up[lower] or {}
+				up[lower][#up[lower] + 1] = upper
+			end
+		end
 		local qi = 1
 		while qi <= #queue do
 			local r = queue[qi]; qi = qi + 1
@@ -275,9 +320,8 @@ local function local_ctx(g, p)
 			comp[#comp + 1] = r
 			n_cells = n_cells + (r.top - r.bot + 1)
 			if n_cells > max_voxels then aborted = true; break end
-			adj[r] = {}
-			local intact = {}   -- 相鄰 run → 完好面數
-			local nbs = {}
+			lat[r] = {}
+			local intact, nbs = {}, {}
 			for yy = r.bot, r.top do
 				for _, h in ipairs(H) do
 					local ax, az = r.lx + h[1], r.lz + h[2]
@@ -302,8 +346,8 @@ local function local_ctx(g, p)
 					if n > 0 and rn.edge_lat then edge = true end
 					if n > best then best = n end
 				elseif n > 0 then
-					adj[r][#adj[r] + 1] = rn
-					if not inq[rn] then inq[rn] = true; queue[#queue + 1] = rn end
+					lat[r][#lat[r] + 1] = rn
+					visit(rn)
 				elseif not cut_seen[rn] then
 					cut_seen[rn] = true
 					cut[#cut + 1] = rn
@@ -313,18 +357,34 @@ local function local_ctx(g, p)
 				frontier[#frontier + 1] = r
 				root_teff[r] = best
 			end
+			-- 垂直：上下相鄰的另一個 run（中間是水平節理面）
+			if r.top + 1 <= y2 and bonded_of[data[1 + r.lx + (r.top + 1) * sy + r.lz * sz]] then
+				local ra = ctx.get_run(r.lx, r.top + 1, r.lz)
+				if not ra.supported then add_up(r, ra); visit(ra) end
+			end
+			if r.bot - 1 >= y1 and bonded_of[data[1 + r.lx + (r.bot - 1) * sy + r.lz * sz]] then
+				local rb = ctx.get_run(r.lx, r.bot - 1, r.lz)
+				if not rb.supported then add_up(rb, r); visit(rb) end
+			end
 		end
 		if not aborted then
-			local bq, bh = {}, 1
+			-- 0-1 BFS：側向 d + 1（排後面）、往上 d 不變（排前面）
+			local front, back, bh = {}, {}, 1
 			for _, r in ipairs(frontier) do
 				d[r] = 1
 				rho[r] = math.min(1, root_teff[r] / (r.t >= THICK and root_teff[r] or r.t))
-				bq[#bq + 1] = r
+				back[#back + 1] = r
 			end
-			while bh <= #bq do
-				local r = bq[bh]; bh = bh + 1
-				for _, rn in ipairs(adj[r]) do
-					if not d[rn] then d[rn] = d[r] + 1; rho[rn] = rho[r]; bq[#bq + 1] = rn end
+			while #front > 0 or bh <= #back do
+				local r
+				if #front > 0 then r = front[#front]; front[#front] = nil
+				else r = back[bh]; bh = bh + 1 end
+				local dr = d[r]
+				for _, rn in ipairs(up[r] or {}) do
+					if not d[rn] or dr < d[rn] then d[rn] = dr; rho[rn] = rho[r]; front[#front + 1] = rn end
+				end
+				for _, rn in ipairs(lat[r] or {}) do
+					if not d[rn] or dr + 1 < d[rn] then d[rn] = dr + 1; rho[rn] = rho[r]; back[#back + 1] = rn end
 				end
 			end
 		end
@@ -333,22 +393,67 @@ local function local_ctx(g, p)
 			if not inq[rn] then real_cut[#real_cut + 1] = rn end
 		end
 		return {comp = comp, d = d, rho = rho, n_cells = n_cells, aborted = aborted, edge = edge,
-			cut = real_cut}
+			cut = real_cut, lat = lat}
 	end
 	return ctx
 end
 
 -- run 的懸臂安全係數。根部斷面完好面數 t_eff、run 厚度 t：
 --   σb = M/Z = (γ·t·d²/2) / (t_eff²/6) = 3γ·t·d²/t_eff² → FS = σt/σb = (L_max·rho / d)²，rho = t_eff/t
--- d 為 nil（被節理切離、碰不到支撐）時 FS = 0。
+-- d 為 nil（碰不到支撐）時 FS = 0。
 local function run_fs(r, d, rho)
 	if not d then return 0 end
 	return (r.lmax * (rho or 1) / d) ^ 2
 end
 overhang.run_fs = run_fs
 
+-- 把一群分成「側向相連的段」（上下之間只傳支撐，不併成同一段）。回傳 段陣列, run → 段
+local function segments(res)
+	local seg_of, list = {}, {}
+	for _, r in ipairs(res.comp) do
+		if not seg_of[r] then
+			local sg = {}
+			list[#list + 1] = sg
+			seg_of[r] = sg
+			local st = {r}
+			while #st > 0 do
+				local x = st[#st]; st[#st] = nil
+				sg[#sg + 1] = x
+				for _, y in ipairs(res.lat[x] or {}) do
+					if not seg_of[y] then seg_of[y] = sg; st[#st + 1] = y end
+				end
+			end
+		end
+	end
+	return list, seg_of
+end
+
+-- 一段的判定：碰不到支撐（d = nil）→ 掉、FS 0；有任一 run FS < 1 → 整段從根部斷。
+-- 回傳 falls, fs（段內最小 FS）, crit（最小 FS 的 run）
+local function judge_segment(res, sg)
+	local minf, crit, fail = math.huge, nil, false
+	for _, r in ipairs(sg) do
+		local f = run_fs(r, res.d[r], res.rho[r])
+		if f < minf then minf, crit = f, r end
+		if f < 1 then fail = true end
+	end
+	return fail, minf, crit
+end
+
+local function run_cells(g, runs)
+	local cells = {}
+	for _, r in ipairs(runs) do
+		for yy = r.bot, r.top do
+			cells[#cells + 1] = {x = g.ox + r.lx, y = g.oy + yy, z = g.oz + r.lz}
+		end
+	end
+	table.sort(cells, function(a, b) return a.y < b.y end)
+	return cells
+end
+
 -- 遊戲中使用的局部判定。params 另可有 face_jointed(fx, fy, fz, axis)：
--- 水平相鄰兩格之間的面是否被節理切過（見 local_ctx.explore）。
+-- 相鄰兩格之間的面是否被節理切過（見 local_ctx）。
+-- 回傳 groups = {{cells, fs}...}（每個會掉的側向相連段；fs：段內最小 FS，碰不到支撐為 0）, stats
 function overhang.find_failing_local(g, p, starts)
 	local ctx = local_ctx(g, p)
 	local data, bonded_of = g.data, g.bonded_of
@@ -361,20 +466,12 @@ function overhang.find_failing_local(g, p, starts)
 		local res = ctx.explore(r0)
 		stats.cells = stats.cells + res.n_cells
 		if not res.aborted then
-			local fails = false
-			for _, r in ipairs(res.comp) do
-				if run_fs(r, res.d[r], res.rho[r]) < 1 then fails = true; break end
-			end
-			if fails then
-				local cells = {}
-				for _, r in ipairs(res.comp) do
-					for yy = r.bot, r.top do
-						cells[#cells + 1] = {x = g.ox + r.lx, y = g.oy + yy, z = g.oz + r.lz}
-					end
+			for _, sg in ipairs((segments(res))) do
+				local falls, fs = judge_segment(res, sg)
+				if falls then
+					groups[#groups + 1] = {cells = run_cells(g, sg), fs = fs}
+					stats.failing_groups = stats.failing_groups + 1
 				end
-				table.sort(cells, function(a, b) return a.y < b.y end)
-				groups[#groups + 1] = {cells = cells}
-				stats.failing_groups = stats.failing_groups + 1
 			end
 		end
 		-- 只隔著節理相鄰的懸空塊：也要判定（可能是被節理切離的塊）
@@ -393,12 +490,13 @@ end
 -- 單格（世界座標）的懸臂狀態，供 HUD／資訊頁顯示。回傳 nil（非鍵結格或在範圍外）或
 --   {supported = true}                         該欄坐在支撐上（d = 0）
 --   {aborted = true, n_cells}                   懸空群太大，判定時保守地不處理
---   {d, t, rho, lmax, tensile, gamma, sigma_b, fs, group_fs, crit, n_cells, edge}
+--   {d, t, rho, lmax, tensile, gamma, sigma_b, fs, group_fs, crit, n_cells, edge, cut_cells}
 --     d：支撐距離；t：此欄厚度；rho：根部斷面完好比 t_eff/t；σb = 3γ·t·d²/t_eff² (MPa)；
---     crit = 整群最小 FS 的欄 {x, z, ybot, ytop, d, t, rho, lmax}；
+--     group_fs：此欄所在「側向相連段」的最小 FS（碰不到支撐時為 0）；
+--     crit = 最小 FS 的欄 {x, z, ybot, ytop, d, t, rho, lmax}；
 --     edge = 群在水平方向碰到範圍邊界（FS 可能高估）；
---     cut_cells = 只隔著節理相鄰、會掉落的懸空格數
--- d 為 nil 表示被節理切離、碰不到有支撐的岩柱（fs = 0）。
+--     cut_cells = 其他會掉落的段（上下相鄰、或只隔著節理相鄰）的格數
+-- d 為 nil 表示此欄碰不到有支撐的岩柱（被節理切離或吊在節理面下，fs = 0）。
 function overhang.cell_state(g, p, x, y, z)
 	local ctx = local_ctx(g, p)
 	local lx, ly, lz = x - g.ox, y - g.oy, z - g.oz
@@ -419,35 +517,60 @@ function overhang.cell_state(g, p, x, y, z)
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
 		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0), n_cells = res.n_cells, edge = res.edge,
 	}
-	local gfs, crit = math.huge, nil
-	for _, r in ipairs(res.comp) do
-		local f = run_fs(r, res.d[r], res.rho[r])
-		if f < gfs then
-			gfs = f
-			crit = {x = g.ox + r.lx, z = g.oz + r.lz, ybot = g.oy + r.bot, ytop = g.oy + r.top,
-				d = res.d[r], t = r.t, rho = res.rho[r], lmax = r.lmax}
+	local segs, seg_of = segments(res)
+	local cut_cells = 0
+	local _, gfs, cr = judge_segment(res, seg_of[r0])
+	for _, sg in ipairs(segs) do
+		if sg ~= seg_of[r0] and judge_segment(res, sg) then
+			for _, r in ipairs(sg) do cut_cells = cut_cells + (r.top - r.bot + 1) end
 		end
 	end
-	out.group_fs, out.crit = gfs, crit
+	out.group_fs = gfs
+	out.crit = {x = g.ox + cr.lx, z = g.oz + cr.lz, ybot = g.oy + cr.bot, ytop = g.oy + cr.top,
+		d = res.d[cr], t = cr.t, rho = res.rho[cr], lmax = cr.lmax}
 	-- 只隔著節理相鄰的懸空塊中，會掉落的格數（例如梁外側被節理切離的那一段）
-	local cut_cells, stack = 0, {}
+	local stack = {}
 	for _, rn in ipairs(res.cut) do stack[#stack + 1] = rn end
 	while #stack > 0 do
 		local rn = stack[#stack]; stack[#stack] = nil
 		if not rn.supported and not ctx.done[rn] then
 			local r2 = ctx.explore(rn)
 			if not r2.aborted then
-				local fails = false
-				for _, r in ipairs(r2.comp) do
-					if run_fs(r, r2.d[r], r2.rho[r]) < 1 then fails = true; break end
+				for _, sg in ipairs((segments(r2))) do
+					if judge_segment(r2, sg) then
+						for _, r in ipairs(sg) do cut_cells = cut_cells + (r.top - r.bot + 1) end
+					end
 				end
-				if fails then cut_cells = cut_cells + r2.n_cells end
 			end
 			for _, rc in ipairs(r2.cut) do stack[#stack + 1] = rc end
 		end
 	end
 	out.cut_cells = cut_cells
 	return out
+end
+
+-- 對同一個網格查詢多個格所在「側向相連段」的最小 FS（共用一次搜尋的快取）。
+-- 回傳 query(x, y, z) → FS（非鍵結格、有支撐、或群太大時為 math.huge）
+function overhang.make_query(g, p)
+	local ctx = local_ctx(g, p)
+	local fs_of = {}       -- run → 所在段的最小 FS
+	return function(x, y, z)
+		local lx, ly, lz = x - g.ox, y - g.oy, z - g.oz
+		if lx < ctx.x1 or lx > ctx.x2 or ly < ctx.y1 or ly > ctx.y2 or lz < ctx.z1 or lz > ctx.z2 then
+			return math.huge
+		end
+		if not g.bonded_of[g.data[1 + lx + ly * ctx.sy + lz * ctx.sz]] then return math.huge end
+		local r0 = ctx.get_run(lx, ly, lz)
+		if r0.supported then return math.huge end
+		if fs_of[r0] then return fs_of[r0] end
+		local res = ctx.explore(r0)
+		if res.aborted then fs_of[r0] = math.huge; return math.huge end
+		for _, sg in ipairs((segments(res))) do
+			local _, fs = judge_segment(res, sg)
+			for _, r in ipairs(sg) do fs_of[r] = fs end
+		end
+		return fs_of[r0] or math.huge
+	end
 end
 
 -- 給定岩性與厚度的極限懸臂長度 (m)
