@@ -262,6 +262,13 @@ function config.load(get)
 		warnings[#warnings + 1] = "rockmech_k0 < 0，改為 0"
 		cfg.k0 = 0
 	end
+	-- 水平主應力：σH = K_H·σv + σH0、σh = K_h·σv + σh0，σH 方位由北順時針（度）。
+	-- 未設定時 K_H = K_h = K0、σH0 = σh0 = 0（與只有 K0 時相同）
+	cfg.KH = math.max(0, tonumber(get("rockmech_k_hmax")) or cfg.k0)
+	cfg.Kh = math.max(0, tonumber(get("rockmech_k_hmin")) or cfg.k0)
+	cfg.sH0 = math.max(0, tonumber(get("rockmech_sigma_hmax0")) or 0)
+	cfg.sh0 = math.max(0, tonumber(get("rockmech_sigma_hmin0")) or 0)
+	cfg.sH_azimuth = (tonumber(get("rockmech_sigma_hmax_azimuth")) or 0) % 360
 	local rs = parse_bool(get("rockmech_replace_stone"))
 	if rs == nil then rs = config.defaults.replace_stone end
 	cfg.replace_stone = rs

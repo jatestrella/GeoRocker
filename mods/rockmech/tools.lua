@@ -44,19 +44,22 @@ local function compass_report(pos, nodename)
 		"  " .. lith.description .. lith_note
 	lines[#lines + 1] = ("  γ=%.1f kN/m³  UCS=%g MPa  σt=%g MPa"):format(
 		lith.gamma, lith.ucs, lith.tensile)
-	lines[#lines + 1] = ("  深度 h=%.1f m (y0=%d)  σv=%.3f MPa  σh=%.3f MPa (K0=%.2f)"):format(
-		st.h, cfg.surface_y, st.sv, st.sh, cfg.k0)
+	lines[#lines + 1] = ("  深度 h=%.1f m (y0=%d)  σv=γh=%.3f MPa"):format(st.h, cfg.surface_y, st.sv)
+	lines[#lines + 1] = ("  初始水平主應力：σH=%.3f（K_H=%.2f%s）σh=%.3f（K_h=%.2f%s）MPa，σH 方位 %g°"):format(
+		st.sH, cfg.KH, cfg.sH0 > 0 and ("+" .. cfg.sH0) or "",
+		st.shmin, cfg.Kh, cfg.sh0 > 0 and ("+" .. cfg.sh0) or "", cfg.sH_azimuth)
 
 	-- 開挖後的局部應力與軸差破壞判定（只對本 mod 岩性）
 	if rockmech.lith_of_node[nodename] then
-		local w = cfg.failure.window + 1
+		local w = 2 * cfg.failure.window + 1
 		local grid = rockmech.collapse.read_grid(vector.subtract(pos, w), vector.add(pos, w))
 		local fs = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
 			rockmech.collapse.failure_params())
 		if fs then
-			lines[#lines + 1] = ("  柱狀荷重 %.3f → 擴散後 %.3f MPa（×%.2f）  σx=%.3f σy=%.3f σz=%.3f MPa%s"):format(
-				fs.sv0, fs.sv, fs.factor, fs.sx, fs.sy, fs.sz,
-				fs.exposed and "（臨空）" or "")
+			lines[#lines + 1] = ("  柱狀荷重 %.3f → 擴散後 %.3f MPa（×%.2f）%s"):format(
+				fs.sv0, fs.sv, fs.factor, fs.exposed and "（臨空）" or "")
+			lines[#lines + 1] = ("  σxx=%.3f（×%.2f）σyy=%.3f σzz=%.3f（×%.2f）σxz=%.3f → σ1=%.3f σ3=%.3f MPa"):format(
+				fs.sx, fs.fx, fs.sy, fs.sz, fs.fz, fs.sxz, fs.s1, fs.s3)
 			local verdict
 			if fs.fails then
 				verdict = core.colorize("#ff6060", "破壞")

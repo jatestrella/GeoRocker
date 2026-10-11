@@ -129,3 +129,55 @@ describe("failure 邊坡：越陡越容易破壞", function()
 		end
 	end)
 end)
+
+describe("failure 水平主應力與集中", function()
+	local function hp(KH, Kh, az, scale)
+		local p = params(scale)
+		p.KH, p.Kh, p.sH_azimuth = KH, Kh, az
+		return p
+	end
+
+	it("完整岩體：σxx、σzz 依方位等於 K_H·σv、K_h·σv", function()
+		local g = make_grid(-6, 6, -30, -1, -6, 6, function() return true end)
+		local st = failure.cell_state(g, 0, -15, 0, hp(2, 1, 90))
+		assert.near(2 * st.sv0, st.sx, 1e-9)
+		assert.near(1 * st.sv0, st.sz, 1e-9)
+		st = failure.cell_state(g, 0, -15, 0, hp(2, 1, 0))
+		assert.near(1 * st.sv0, st.sx, 1e-9)
+		assert.near(2 * st.sv0, st.sz, 1e-9)
+	end)
+
+	-- 沿 z 方向的隧道（3×3 斷面），頂板格 (0, -17, 0)
+	local function tunnel()
+		return make_grid(-8, 8, -40, -1, -8, 8, function(x, y)
+			return not (math.abs(x) <= 1 and y >= -20 and y <= -18)
+		end)
+	end
+
+	it("隧道頂板：σxx 受開口截斷而集中，σzz 幾乎不變", function()
+		local st = failure.cell_state(tunnel(), 0, -17, 0, hp(1, 1, 0))
+		assert.is_true(st.exposed_down)
+		assert.truthy(st.fx > 1.2, "fx = " .. st.fx)
+		assert.truthy(st.fx > st.fz, ("fx %.2f fz %.2f"):format(st.fx, st.fz))
+		assert.are.equal(0, st.sy)
+	end)
+
+	it("σH 垂直隧道軸（東西向）時頂板比平行時危險", function()
+		local across = failure.cell_state(tunnel(), 0, -17, 0, hp(2, 0.5, 90))
+		local along = failure.cell_state(tunnel(), 0, -17, 0, hp(2, 0.5, 0))
+		assert.truthy(across.q > along.q, ("%.3f vs %.3f"):format(across.q, along.q))
+	end)
+
+	it("側壁：法向（x）正應力與剪應力為 0", function()
+		local st = failure.cell_state(tunnel(), 2, -19, 0, hp(2, 0.5, 45))
+		assert.is_true(st.exposed_x)
+		assert.are.equal(0, st.sx)
+		assert.are.equal(0, st.sxz)
+	end)
+
+	it("地表附近的露天空氣不會被當成開口（不集中）", function()
+		local g = make_grid(-6, 6, -20, 10, -6, 6, function(_, y) return y < 0 end)
+		local st = failure.cell_state(g, 0, -2, 0, hp(1, 1, 0))
+		assert.truthy(st.fx < 1.01 and st.fz < 1.01, ("fx %.3f fz %.3f"):format(st.fx, st.fz))
+	end)
+end)

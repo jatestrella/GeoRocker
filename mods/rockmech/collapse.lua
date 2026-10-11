@@ -464,6 +464,7 @@ function collapse.failure_params()
         surface_y = cfg.surface_y, k0 = cfg.k0, lithologies = cfg.lithologies,
         window = fcfg.window,
         strength_scale = fcfg.strength_scale,
+        KH = cfg.KH, Kh = cfg.Kh, sH0 = cfg.sH0, sh0 = cfg.sh0, sH_azimuth = cfg.sH_azimuth,
     }
 end
 
@@ -505,8 +506,8 @@ function collapse.evaluate_failure_boxes(boxes)
     for _, grp in ipairs(groups) do
         local a, b = union(grp)
         local grid = collapse.read_grid(
-            {x = a.x - margin, y = a.y - 1, z = a.z - margin},
-            {x = b.x + margin, y = b.y + 1, z = b.z + margin})
+            {x = a.x - margin, y = a.y - margin, z = a.z - margin},
+            {x = b.x + margin, y = b.y + margin, z = b.z + margin})
         local failed, st = failure.evaluate_boxes(grid, params, grp)
         stats.evaluated = stats.evaluated + st.evaluated
         if st.min_fs < stats.min_fs then

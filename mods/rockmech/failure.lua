@@ -163,6 +163,73 @@ function failure.spread_load(g, x, y, z, w)
 	return total / n / 1000, total, n
 end
 
+-- 截面窗格加總（水平應力集中用）：
+-- plane = "yz"（σxx 沿 x 傳遞，截面為 y-z 平面）或 "xy"（σzz，截面為 x-y 平面）。
+-- 回傳 開口部分的 Σv（MPa，開口取頂板荷重 R）與其中 v > 0 的格數，
+--      實心部分的 Σv（岩石取柱狀荷重 L）與其中 v > 0 的格數。
+-- 露天空氣 R = 0，不計入開口（不會在地表附近造成假的集中）。
+local function plane_sums(g, x, y, z, w, plane)
+	local L, R, weight_of, data = g.L, g.R, g.weight_of, g.data
+	local So, No, Ss, Ns = 0, 0, 0, 0
+	local cx, cy, cz = x - g.cx, y - g.cy, z - g.cz
+	local nx, gs = g.nx, g.nx * g.ny
+	local cW, cs = g.cW, g.cW * g.cH
+	local inside
+	if plane == "yz" then
+		inside = cz - w >= 0 and cz + w < g.cD and cy - w >= 0 and cy + w < g.cH and cx >= 0 and cx < g.cW
+	else
+		inside = cx - w >= 0 and cx + w < g.cW and cy - w >= 0 and cy + w < g.cH and cz >= 0 and cz < g.cD
+	end
+	if inside then
+		-- 外層 y、內層 z（yz）或 x（xy）
+		local gi_step, ci_step, go, co
+		if plane == "yz" then
+			gi_step, ci_step = gs, cs
+			go = 1 + (x - g.ox) + (y - w - g.oy) * nx + (z - w - g.oz) * gs
+			co = 1 + cx + (cy - w) * cW + (cz - w) * cs
+		else
+			gi_step, ci_step = 1, 1
+			go = 1 + (x - w - g.ox) + (y - w - g.oy) * nx + (z - g.oz) * gs
+			co = 1 + (cx - w) + (cy - w) * cW + cz * cs
+		end
+		local span = 2 * w
+		for _ = 0, span do
+			local i, c = go, co
+			for _ = 0, span do
+				if weight_of[data[i]] then
+					local v = L[c]
+					if v > 0 then Ss = Ss + v; Ns = Ns + 1 end
+				else
+					local v = R[c]
+					if v > 0 then So = So + v; No = No + 1 end
+				end
+				i, c = i + gi_step, c + ci_step
+			end
+			go, co = go + nx, co + cW
+		end
+	else
+		for dy = -w, w do
+			for da = -w, w do
+				local xx, zz = x, z
+				if plane == "yz" then zz = z + da else xx = x + da end
+				local i = index(g, xx, y + dy, zz)
+				local c = failure.cindex(g, xx, y + dy, zz)
+				if i and c then
+					if weight_of[data[i]] then
+						local v = L[c]
+						if v > 0 then Ss = Ss + v; Ns = Ns + 1 end
+					else
+						local v = R[c]
+						if v > 0 then So = So + v; No = No + 1 end
+					end
+				end
+			end
+		end
+	end
+	return So / 1000, No, Ss / 1000, Ns
+end
+failure.plane_sums = plane_sums
+
 -- 單格應力狀態。非本 mod 岩性回傳 nil。
 function failure.cell_state(g, x, y, z, p)
 	local i = index(g, x, y, z)
@@ -174,22 +241,44 @@ function failure.cell_state(g, x, y, z, p)
 
 	local ci = cindex(g, x, y, z)
 	local sv0 = (ci and g.L[ci] or 0) / 1000   -- 自身柱狀荷重 (MPa)
-	local sh = stress.sigma_h(sv0, p.k0)
+	local sh = stress.sigma_h(sv0, p.k0)        -- 舊欄位（K0·σv），供顯示
 	local sv = failure.spread_load(g, x, y, z, p.window)
+
+	-- 水平應力：遠場 σH、σh（依自身柱狀荷重）換到 x、z。
+	-- 集中係數 = 截面上「全部應承受的遠場力」/「實心格承受的遠場力」
+	--          = 1 + F_開口 / F_實心（開口的遠場力以頂板荷重換算）
+	local th = math.rad(p.sH_azimuth or 0)
+	local s2, c2, sc = math.sin(th) ^ 2, math.cos(th) ^ 2, math.sin(th) * math.cos(th)
+	local KH, Kh = p.KH or p.k0, p.Kh or p.k0
+	local sH0, sh0 = p.sH0 or 0, p.sh0 or 0
+	local kx = s2 * KH + c2 * Kh          -- σxx 的 K
+	local kz = c2 * KH + s2 * Kh          -- σzz 的 K
+	local tx = s2 * sH0 + c2 * sh0        -- σxx 的構造項
+	local tz = c2 * sH0 + s2 * sh0
+	local Sox, Nox, Ssx, Nsx = plane_sums(g, x, y, z, p.window, "yz")
+	local Soz, Noz, Ssz, Nsz = plane_sums(g, x, y, z, p.window, "xy")
+	local Fsx, Fsz = kx * Ssx + tx * Nsx, kz * Ssz + tz * Nsz
+	local fx = Fsx > 0 and (1 + (kx * Sox + tx * Nox) / Fsx) or 1
+	local fz = Fsz > 0 and (1 + (kz * Soz + tz * Noz) / Fsz) or 1
+	local sH_own, sh_own = stress.horizontal({KH = KH, Kh = Kh, sH0 = sH0, sh0 = sh0}, sv0)
+	local sxx_c = (s2 * sH_own + c2 * sh_own) * fx
+	local szz_c = (c2 * sH_own + s2 * sh_own) * fz
+	local sxz = (sH_own - sh_own) * sc
 
 	local ex = not is_solid(g, x + 1, y, z) or not is_solid(g, x - 1, y, z)
 	local ez = not is_solid(g, x, y, z + 1) or not is_solid(g, x, y, z - 1)
 	local e_up = not is_solid(g, x, y + 1, z)
 	local e_down = not is_solid(g, x, y - 1, z)
 
-	-- 下方臨空（頂板／懸垂）：水平自由面上的垂直正應力 = 0。
-	-- 上方臨空（地表／階梯狀坡面）不歸零：擴散荷重代表沿坡面方向的壓應力。
-	local sx = ex and 0 or sh
+	-- 自由面：法向正應力與剪應力為 0。
+	-- 下方臨空（頂板／懸垂）：σy = 0。上方臨空（地表／階梯狀坡面）不歸零：
+	-- 擴散荷重代表沿坡面方向的壓應力。
+	local sx = ex and 0 or sxx_c
 	local sy = e_down and 0 or sv
-	local sz = ez and 0 or sh
+	local sz = ez and 0 or szz_c
+	if ex or ez then sxz = 0 end
 
-	local s1 = math.max(sx, sy, sz)
-	local s3 = math.min(sx, sy, sz)
+	local s1, s3 = stress.principal(sx, sy, sz, sxz)
 	local q = s1 - s3
 	local strength = lith.ucs * p.strength_scale
 	local exposed = ex or ez or e_up or e_down
@@ -198,7 +287,8 @@ function failure.cell_state(g, x, y, z, p)
 		lith = key, h = stress.depth(y, p.surface_y),
 		sv0 = sv0, sv = sv, sh = sh,
 		factor = sv0 > 0 and sv / sv0 or 1,
-		sx = sx, sy = sy, sz = sz, s1 = s1, s3 = s3, q = q,
+		sx = sx, sy = sy, sz = sz, sxz = sxz, s1 = s1, s3 = s3, q = q,
+		sH_far = sH_own, sh_far = sh_own, fx = fx, fz = fz,
 		strength = strength, fs = q > 0 and strength / q or math.huge,
 		exposed_x = ex, exposed_z = ez, exposed_up = e_up, exposed_down = e_down,
 		exposed = exposed,

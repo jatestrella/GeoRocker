@@ -7,6 +7,21 @@ rockmech_surface_y (Surface elevation y0) int 0 -31000 31000
 # Lateral earth pressure coefficient K0: sigma_h = K0 * sigma_v.
 rockmech_k0 (K0 = sigma_h / sigma_v) float 0.5 0.0 10.0
 
+# Major horizontal principal stress: sigma_H = K_H * sigma_v + sigma_H0. Empty = use K0.
+rockmech_k_hmax (K_H for sigma_H) string
+
+# Minor horizontal principal stress: sigma_h = K_h * sigma_v + sigma_h0. Empty = use K0.
+rockmech_k_hmin (K_h for sigma_h) string
+
+# Tectonic (depth-independent) part of sigma_H (MPa).
+rockmech_sigma_hmax0 (sigma_H0 tectonic term) float 0 0 1000
+
+# Tectonic (depth-independent) part of sigma_h (MPa).
+rockmech_sigma_hmin0 (sigma_h0 tectonic term) float 0 0 1000
+
+# Azimuth of sigma_H (degrees clockwise from north). 90 = east-west.
+rockmech_sigma_hmax_azimuth (sigma_H azimuth) float 0 0 360
+
 # Replace mapgen stone with rockmech lithologies by depth layer (new chunks only).
 rockmech_replace_stone (Replace mapgen stone) bool true
 
