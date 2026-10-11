@@ -349,6 +349,50 @@ function rockmech.convert_area(p1, p2)
 		return n_stone, n_rock, n_changed, (core.get_us_time() - t0) / 1000
 end
 
+-- 移除 [p1, p2] 內的土壤（config.is_soil），露出岩盤。回傳移除格數, ms
+function rockmech.strip_soil_area(p1, p2)
+	local t0 = core.get_us_time()
+	local strip = {}
+	for name, def in pairs(core.registered_nodes) do
+		if rockmech.config.is_soil(name, def.groups, def.is_ground_content) then
+			strip[core.get_content_id(name)] = true
+		end
+	end
+	local c_air = core.get_content_id("air")
+	local vm = core.get_voxel_manip()
+	local e1, e2 = vm:read_from_map(p1, p2)
+	local area = VoxelArea(e1, e2)
+	local data = vm:get_data()
+	local n = 0
+	for i in area:iterp(p1, p2) do
+		if strip[data[i]] then
+			data[i] = c_air
+			n = n + 1
+		end
+	end
+	if n > 0 then
+		vm:set_data(data)
+		vm:write_to_map(true)   -- 重算光照
+		vm:update_liquids()     -- 讓水流進移除後的空間
+	end
+	vm:close()
+	return n, (core.get_us_time() - t0) / 1000
+end
+
+core.register_chatcommand("rockmech_strip_soil", {
+	params = "[半徑，預設 20，上限 64]",
+	description = "移除附近的土壤（泥土、沙、礫石、黏土、雪），露出岩盤",
+	privs = {rockmech = true},
+	func = function(name, param)
+		local player = core.get_player_by_name(name)
+		if not player then return false, "找不到玩家" end
+		local R = math.max(1, math.min(64, math.floor(tonumber(param) or 20)))
+		local c = vector.round(player:get_pos())
+		local n, ms = rockmech.strip_soil_area(vector.subtract(c, R), vector.add(c, R))
+		return true, ("半徑 %d：移除土壤 %d 格（%.0f ms）"):format(R, n, ms)
+	end,
+})
+
 core.register_chatcommand("convert_rocks", {
 	params = "[半徑，預設 20，上限 48]",
 	description = "把附近的 default:stone 依深度換成 rockmech 岩性，並把既有岩性方塊依目前的節理設定重新上節理材質",

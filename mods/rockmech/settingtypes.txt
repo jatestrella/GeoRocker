@@ -10,6 +10,10 @@ rockmech_k0 (K0 = sigma_h / sigma_v) float 0.5 0.0 10.0
 # Replace mapgen stone with rockmech lithologies by depth layer (new chunks only).
 rockmech_replace_stone (Replace mapgen stone) bool true
 
+# Remove soil (dirt, sand, gravel, clay, snow) during map generation to expose bedrock.
+# Usually set per world in <world>/rockmech.conf rather than globally.
+rockmech_strip_soil (Strip soil) bool false
+
 [Joint sets]
 
 # Joint plane normals are snapped to an integer lattice of this density so that joint

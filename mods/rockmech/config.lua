@@ -82,7 +82,17 @@ config.defaults = {
 	joint_lattice = 8,    -- 節理法向量對齊的整數格點密度 D（越大越接近輸入位態、材質變體越多）
 	k0 = 0.5,             -- σh / σv
 	replace_stone = true, -- 地圖生成時把 stone 換成本 mod 岩性
+	strip_soil = false,   -- 地圖生成時移除土壤（露出岩盤）；建議只在個別世界的 rockmech.conf 開啟
 }
+
+-- 「土壤」判定：天然地層（is_ground_content）中 crumbly 群組的方塊，
+-- 碎石（rockmech_rubble）除外。涵蓋泥土、帶草泥土、凍土、沙、礫石、黏土、雪。
+function config.is_soil(name, groups, is_ground_content)
+	groups = groups or {}
+	if is_ground_content == false then return false end
+	if (groups.rockmech_rubble or 0) > 0 then return false end
+	return (groups.crumbly or 0) > 0
+end
 
 -- 軸差破壞（failure.lua）的預設值；設定鍵為 rockmech_failure_<key>
 config.failure_defaults = {
@@ -238,6 +248,9 @@ function config.load(get)
 	local rs = parse_bool(get("rockmech_replace_stone"))
 	if rs == nil then rs = config.defaults.replace_stone end
 	cfg.replace_stone = rs
+	local ss = parse_bool(get("rockmech_strip_soil"))
+	if ss == nil then ss = config.defaults.strip_soil end
+	cfg.strip_soil = ss
 
 	-- 讀取一組 rockmech_<prefix>_<key> 設定
 	local function load_section(prefix, defaults)

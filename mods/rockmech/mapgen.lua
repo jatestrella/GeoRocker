@@ -64,6 +64,17 @@ if plane then
 end
 local cell_traces, suffix = jointtex.cell_traces, jointtex.suffix
 
+-- 剝除土壤（世界設定 rockmech_strip_soil）：土壤改成空氣，露出岩盤
+local strip = {}
+local c_air = core.get_content_id("air")
+if cfg.strip_soil then
+	for name, def in pairs(core.registered_nodes) do
+		if config.is_soil(name, def.groups, def.is_ground_content) then
+			strip[core.get_content_id(name)] = true
+		end
+	end
+end
+
 local data = {}
 
 core.register_on_generated(function(vm, minp, maxp, blockseed)
@@ -80,7 +91,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 	end
 
 	local t0 = os.clock()
-	local changed, n = false, 0
+	local changed, n, stripped = false, 0, 0
 	for z = minp.z, maxp.z do
 		for y = minp.y, maxp.y do
 			local cv = var_y[y]
@@ -99,14 +110,31 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 			end
 		end
 	end
+	-- 剝除土壤：處理整個 VoxelManip 範圍（含 chunk 外圍一圈 mapblock）。
+	-- 相鄰 chunk 生成時，引擎會把地表的土壤也寫進已生成 chunk 的邊緣，
+	-- 只處理 minp..maxp 會留下邊緣的土壤。
+	if next(strip) then
+		for i = 1, #data do
+			if strip[data[i]] then
+				data[i] = c_air
+				stripped = stripped + 1
+			end
+		end
+		if stripped > 0 then changed = true end
+	end
+
 	if logged < 3 and n > 0 then
 		logged = logged + 1
-		core.log("action", ("[rockmech] mapgen 岩性＋節理遮罩：%d 格，%.0f ms"):format(
-			n, (os.clock() - t0) * 1000))
+		core.log("action", ("[rockmech] mapgen 岩性＋節理遮罩：%d 格、剝除土壤 %d 格，%.0f ms"):format(
+			n, stripped, (os.clock() - t0) * 1000))
 	end
 
 	if changed then
-		-- stone → 岩性 皆為不透光實心方塊，光照不變，不需重算
 		vm:set_data(data)
+		-- stone → 岩性 光照不變；剝除土壤會改變光照與水的流動
+		if stripped > 0 then
+			vm:calc_lighting()
+			vm:update_liquids()
+		end
 	end
 end)
