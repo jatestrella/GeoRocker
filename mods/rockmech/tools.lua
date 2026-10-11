@@ -34,7 +34,7 @@ local function compass_report(pos, nodename)
 	local lith = rockmech.lith_of_node[nodename]
 	local lith_note = ""
 	if not lith then
-		lith = rockmech.lith_at_y(pos.y)
+		lith = rockmech.lith_at(pos.x, pos.y, pos.z)
 		lith_note = core.colorize("#aaaaaa",
 			(" [%s 非本 mod 岩性，應力以該深度分層 %s 計]"):format(nodename, lith.name))
 	end
@@ -325,7 +325,7 @@ function rockmech.convert_area(p1, p2)
 					local cid = data[vi]
 					local key = lith_of_cid[cid]
 					if cid == c_stone then
-						data[vi] = variant_cid(rockmech.lith_at_y(y).name, x, y, z)
+						data[vi] = variant_cid(rockmech.lith_at(x, y, z).name, x, y, z)
 						n_stone = n_stone + 1
 					elseif key then
 						local new = variant_cid(key, x, y, z)

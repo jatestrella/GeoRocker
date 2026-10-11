@@ -43,6 +43,22 @@ function stress.initial(cfg, lith, y)
 	return {h = h, sv = sv, sh = stress.sigma_h(sv, cfg.k0)}
 end
 
+-- 區帶模式：x 所在區帶的岩性名稱
+function stress.zone_at_x(cfg, x)
+	local W = cfg.zone_width
+	local k = math.floor((x + W / 2) / W)
+	local order = cfg.zone_order
+	return order[k % #order + 1]
+end
+
+-- 某位置的岩性名稱（依 cfg.lith_mode）
+function stress.lith_key_at(cfg, x, y)
+	if cfg.lith_mode == "zones" then
+		return stress.zone_at_x(cfg, x)
+	end
+	return stress.layer_at_depth(cfg.layers, stress.depth(y, cfg.surface_y))
+end
+
 -- 建立 y → 岩性名稱 的查表，供地圖生成在 [ymin, ymax] 內使用
 function stress.layer_table(cfg, ymin, ymax)
 	local t = {}

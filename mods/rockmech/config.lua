@@ -54,6 +54,11 @@ config.layers = {
 	{lith = "granite",   bottom = math.huge},
 }
 
+-- 區帶模式（rockmech_lith_mode = zones）：沿 x 方向每 zone_width 公尺換一種岩性，
+-- 第 k 區（k = ⌊(x + W/2) / W⌋）用 zone_order[k mod 3 + 1]。
+-- 預設：出生點附近（x −40..40）頁岩、東側花崗岩、西側砂岩，往外循環。
+config.zone_order = {"shale", "granite", "sandstone"}
+
 ---------------------------------------------------------------------------
 -- 節理組表
 ---------------------------------------------------------------------------
@@ -83,6 +88,8 @@ config.defaults = {
 	k0 = 0.5,             -- σh / σv
 	replace_stone = true, -- 地圖生成時把 stone 換成本 mod 岩性
 	strip_soil = false,   -- 地圖生成時移除土壤（露出岩盤）；建議只在個別世界的 rockmech.conf 開啟
+	lith_mode = "layers", -- 岩性分布：layers（依深度分層）或 zones（沿 x 方向的區帶）
+	zone_width = 80,      -- zones 模式的區帶寬度 (m)
 }
 
 -- 「土壤」判定：天然地層（is_ground_content）中 crumbly 群組的方塊，
@@ -260,6 +267,10 @@ function config.load(get)
 	local ss = parse_bool(get("rockmech_strip_soil"))
 	if ss == nil then ss = config.defaults.strip_soil end
 	cfg.strip_soil = ss
+	local lm = get("rockmech_lith_mode")
+	cfg.lith_mode = (lm == "zones" or lm == "layers") and lm or config.defaults.lith_mode
+	cfg.zone_width = math.max(4, math.floor(tonumber(get("rockmech_zone_width")) or config.defaults.zone_width))
+	cfg.zone_order = copy(config.zone_order)
 
 	-- 讀取一組 rockmech_<prefix>_<key> 設定
 	local function load_section(prefix, defaults)

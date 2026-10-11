@@ -63,6 +63,7 @@ if plane then
 	end
 end
 local cell_traces, suffix = jointtex.cell_traces, jointtex.suffix
+local zones = cfg.lith_mode == "zones"
 
 -- 剝除土壤（世界設定 rockmech_strip_soil）：土壤改成空氣，露出岩盤
 local strip = {}
@@ -89,17 +90,30 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 		var_y[y] = c_var[layer[y]]
 		plane_y[y] = c_plane[layer[y]]
 	end
+	-- 區帶模式：岩性依 x 而定
+	local var_x, plane_x = {}, {}
+	if zones then
+		for x = minp.x, maxp.x do
+			local key = stress.zone_at_x(cfg, x)
+			var_x[x] = c_var[key]
+			plane_x[x] = c_plane[key]
+		end
+	end
 
 	local t0 = os.clock()
 	local changed, n, stripped = false, 0, 0
 	for z = minp.z, maxp.z do
 		for y = minp.y, maxp.y do
 			local cv = var_y[y]
+			local pv = plane_y[y]
 			local vi = area:index(minp.x, y, z)
 			for x = minp.x, maxp.x do
 				if data[vi] == c_stone then
+					if zones then
+						cv, pv = var_x[x], plane_x[x]
+					end
 					if plane then
-						data[vi] = plane_y[y][suffix(cell_traces(joints, sets, x, y, z, MAXL))]
+						data[vi] = pv[suffix(cell_traces(joints, sets, x, y, z, MAXL))]
 					else
 						data[vi] = cv[use_joints and cell_mask(sets, x, y, z) or 0]
 					end

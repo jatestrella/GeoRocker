@@ -204,6 +204,10 @@ function rockmech.joint_variant_for(key, pos)
 end
 
 -- 依 y 取該深度分層的岩性條目
+function rockmech.lith_at(x, y, z)
+	return cfg.lithologies[rockmech.stress.lith_key_at(cfg, x, y)]
+end
+
 function rockmech.lith_at_y(y)
 	local h = rockmech.stress.depth(y, cfg.surface_y)
 	return cfg.lithologies[rockmech.stress.layer_at_depth(cfg.layers, h)]

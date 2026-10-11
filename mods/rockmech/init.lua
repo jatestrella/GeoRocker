@@ -37,6 +37,12 @@ end
 if not world_conf:has("rockmech_joint_lattice") then
 	world_conf:set("rockmech_surface_y", tostring(cfg.surface_y))
 	world_conf:set("rockmech_joint_lattice", tostring(cfg.joint_lattice))
+	if not world_conf:has("rockmech_lith_mode") then
+		world_conf:set("rockmech_lith_mode", cfg.lith_mode)
+	end
+	if not world_conf:has("rockmech_zone_width") then
+		world_conf:set("rockmech_zone_width", tostring(cfg.zone_width))
+	end
 	for i, js in ipairs(cfg.joint_sets) do
 		if i <= rockmech.config.MAX_SET_OVERRIDES then
 			world_conf:set("rockmech_joint_set_" .. i, ("%g,%g,%g,%g,%g"):format(
