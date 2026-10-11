@@ -935,7 +935,7 @@ local function run_support_check()
                 if not taken[pos_key(p)] then cells[#cells + 1] = p; taken[pos_key(p)] = true end
             end
             if #cells > 0 then
-                comps[#comps + 1] = {cells = cells}
+                comps[#comps + 1] = {cells = cells, grid = grid}
                 n_overhang = n_overhang + 1
             end
         end
@@ -979,7 +979,7 @@ local function run_support_check()
                 core.log("action", ("[rockmech] 關鍵塊體：%d 格（W %.0f kN）%s，FS %.2f")
                     :format(#b.cells, b.W, MODE_NAME[b.mode] or "?", b.fs))
                 if b.mode == "fall" then
-                    comps[#comps + 1] = {cells = b.cells}
+                    comps[#comps + 1] = {cells = b.cells, grid = grid}
                 else
                     slides[#slides + 1] = b
                 end
@@ -1009,10 +1009,46 @@ local function run_support_check()
     end
     for _, c in ipairs(comps) do c.min_y = min_y(c) end
     table.sort(comps, function(a, b) return a.min_y < b.min_y end)
+    local oparams_m = collapse.overhang_params()
+    local n_merged = 0
     for _, c in ipairs(comps) do
         local done = false
-        -- 完全動不了（正下方被群外的實心格擋住）：不移除，避免移除後馬上落回原位又再觸發判定
         local dd = rfe and rockmech.rigidfall.drop_distance(c.cells, rfe.is_solid, 256)
+        -- 被下方擋住：擋住它的若是懸空的岩體（不是坐在地面上），上面這段斷了以後重量壓在它身上。
+        -- 下方那段承受的荷重由 t_l 變成 t_l + t_u：σb = 3γ(t_l + t_u)d²/t_l²，
+        -- 即 FS_加載 = FS × t_l / (t_l + t_u)。FS_加載 < 1 → 它也撐不住，併進來一起掉（最多往下併 4 層）；
+        -- 否則上面這段只是坐在穩固的下層上，保留原位
+        local tries = 0
+        while dd == 0 and c.grid and tries < 4 do
+            tries = tries + 1
+            local own = {}
+            for _, p in ipairs(c.cells) do own[pos_key(p)] = true end
+            local added = false
+            for _, p in ipairs(c.cells) do
+                local q = {x = p.x, y = p.y - 1, z = p.z}
+                if not own[pos_key(q)] and rfe.is_solid(q.x, q.y, q.z) then
+                    local seg, seg_fs, t_l = rockmech.overhang.segment_at(c.grid, oparams_m, q.x, q.y, q.z)
+                    -- 壓在它上面的厚度：這一欄中屬於本群、連續疊在 q 上方的格數
+                    local t_u = 0
+                    while own[pos_key({x = q.x, y = q.y + 1 + t_u, z = q.z})] do t_u = t_u + 1 end
+                    if seg and seg_fs * t_l / (t_l + t_u) < 1 then
+                        for _, s in ipairs(seg) do
+                            local k = pos_key(s)
+                            if not own[k] and rockmech.lith_of_node[core.get_node(s).name] then
+                                own[k] = true
+                                c.cells[#c.cells + 1] = s
+                                added = true
+                            end
+                        end
+                    end
+                end
+            end
+            if not added then break end
+            n_merged = n_merged + 1
+            table.sort(c.cells, function(u, v) return u.y < v.y end)
+            dd = rockmech.rigidfall.drop_distance(c.cells, rfe.is_solid, 256)
+        end
+        -- 完全動不了（正下方被群外、坐在地面上的實心格擋住）：不移除，避免移除後馬上落回原位又再觸發判定
         if dd == 0 then
             done = true
             n_stuck = n_stuck + 1
@@ -1075,6 +1111,9 @@ local function run_support_check()
             core.log("action", ("[rockmech] 關鍵塊體滑出：%d 格（翻滾落石已達上限），原地變成碎石"):format(#cells))
         end
         n = n + #cells
+    end
+    if n_merged > 0 then
+        core.log("action", ("[rockmech] 支撐判定：%d 次把下方懸空、撐不住的岩體一併帶下"):format(n_merged))
     end
     if n_stuck > 0 then
         core.log("action", ("[rockmech] 支撐判定：%d 群判定會掉但正下方被擋住、動不了，保留原位"):format(n_stuck))

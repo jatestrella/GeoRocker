@@ -551,6 +551,25 @@ end
 
 -- 對同一個網格查詢多個格所在「側向相連段」的最小 FS（共用一次搜尋的快取）。
 -- 回傳 query(x, y, z) → FS（非鍵結格、有支撐、或群太大時為 math.huge）
+-- (x, y, z) 所在「側向相連段」的所有格（世界座標）、段內最小 FS、該欄的厚度 t；
+-- 該欄坐在支撐上（不是懸空）、非鍵結格、範圍外或群太大時回傳 nil。
+-- 用於：會掉的群被下方懸空的岩體擋住時，判斷下方承受額外重量後是否也撐不住。
+function overhang.segment_at(g, p, x, y, z)
+	local ctx = local_ctx(g, p)
+	local lx, ly, lz = x - g.ox, y - g.oy, z - g.oz
+	if lx < ctx.x1 or lx > ctx.x2 or ly < ctx.y1 or ly > ctx.y2 or lz < ctx.z1 or lz > ctx.z2 then
+		return nil
+	end
+	if not g.bonded_of[g.data[1 + lx + ly * ctx.sy + lz * ctx.sz]] then return nil end
+	local r0 = ctx.get_run(lx, ly, lz)
+	if r0.supported then return nil end
+	local res = ctx.explore(r0)
+	if res.aborted then return nil end
+	local _, seg_of = segments(res)
+	local _, fs = judge_segment(res, seg_of[r0])
+	return run_cells(g, seg_of[r0]), fs, r0.t
+end
+
 function overhang.make_query(g, p)
 	local ctx = local_ctx(g, p)
 	local fs_of = {}       -- run → 所在段的最小 FS
