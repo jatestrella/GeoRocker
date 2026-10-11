@@ -925,24 +925,20 @@ local function run_support_check()
         -- 關鍵塊體：被節理與臨空面圍住的岩塊，以重力判斷落下／滑動
         if kcfg.enabled then
             local kp = collapse.keyblock_params()
-            local blocks = rockmech.keyblock.find_blocks(grid, kp, g.starts)
+            -- 起點：支撐判定的起點，加上每個改變格周圍 3×3×3（斜角相鄰的岩塊也要檢查）
+            local kstarts = {}
+            for _, s in ipairs(g.starts) do kstarts[#kstarts + 1] = s end
+            for _, c in ipairs(changes.list) do
+                for dx = -1, 1 do for dy = -1, 1 do for dz = -1, 1 do
+                    kstarts[#kstarts + 1] = {x = c.x + dx, y = c.y + dy, z = c.z + dz}
+                end end end
+            end
+            local blocks = rockmech.keyblock.find_blocks(grid, kp, kstarts)
+            -- 關鍵塊體不套用「只算開挖造成」：已被節理切開、可自由滑出且 FS < 1 的岩塊
+            -- 不可能靠強度低估來解釋成平衡，被判定碰到就滑出
             local failing = {}
             for _, b in ipairs(blocks) do
                 if b.fs < 1 and not taken[pos_key(b.cells[1])] then failing[#failing + 1] = b end
-            end
-            -- 只算開挖造成的：開挖前就是獨立岩塊且 FS < 1 的不處理（FS = 0 一律處理）
-            if icfg.enabled and #failing > 0 then
-                local undo = restore_grid(grid, changes.list)
-                local keep = {}
-                for _, b in ipairs(failing) do
-                    local c1 = b.cells[1]
-                    local before = rockmech.keyblock.block_at(grid, kp, c1.x, c1.y, c1.z)
-                    local bfs = before and before.fs or math.huge
-                    if b.fs <= 0 or bfs >= 1 then keep[#keep + 1] = b
-                    else n_existing = n_existing + 1 end
-                end
-                undo()
-                failing = keep
             end
             for _, b in ipairs(failing) do
                 for _, p in ipairs(b.cells) do taken[pos_key(p)] = true end

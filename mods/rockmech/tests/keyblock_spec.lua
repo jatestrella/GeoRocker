@@ -158,3 +158,25 @@ describe("keyblock 關鍵塊體", function()
 		assert.are.equal(0, stuck.x); assert.are.equal(0, stuck.y)
 	end)
 end)
+
+describe("keyblock 滑動路徑", function()
+	it("斜向滑動：沿階梯一格一格移出（不會因為一步跨太大而被擋住）", function()
+		-- 坡面：x + z ≤ 2·y 以下是岩石的階梯；方塊在 (0,1,0)，往 (+x,−y,+z) 滑
+		local cells = {{x = 0, y = 1, z = 0}}
+		local function is_free(x, y, z) return x + z > 2 * (y - 1) or y > 1 end
+		local d = math.sqrt(0.35 ^ 2 * 2 + 0.87 ^ 2)
+		local off = keyblock.slide_offset(cells, {x = 0.35 / d, y = -0.87 / d, z = 0.35 / d}, is_free, 6)
+		assert.is_true(off.x + off.z >= 2)
+		assert.is_true(off.y < 0)
+	end)
+end)
+
+describe("keyblock 滑到平地就停", function()
+	it("離開坡面落到平地後不會繼續水平滑動", function()
+		-- y ≤ 0 是平地；方塊從 (0,5,0) 往北下方滑
+		local cells = {{x = 0, y = 5, z = 0}}
+		local off = keyblock.slide_offset(cells, {x = 0, y = -0.78, z = 0.62}, function(_, y) return y >= 1 end, 16)
+		assert.are.equal(-4, off.y)
+		assert.is_true(off.z <= 2)
+	end)
+end)

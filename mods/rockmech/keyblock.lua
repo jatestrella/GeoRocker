@@ -276,9 +276,10 @@ function keyblock.block_at(g, p, x, y, z)
 	return false
 end
 
--- 滑動後的位移：沿 m 的水平方向（8 方位）一步一步移、每步下降 slope；
--- 被擋住就停，最後再往下落到底。is_free(x, y, z)：群外的格是否可進入。
--- 回傳 {x, y, z} 位移（可能為 0,0,0 → 動不了）
+-- 滑動後的位移：沿滑動方向 m 一格一格移動（貪婪）。每一步從「橫向一格、往下一格、
+-- 或兩者組合」中，挑與 m 夾角最小（< 66°）、且放得下的一步；都放不下、或平移一步後
+-- 落不下去（已離開節理面、在平地上）就停，最後再往下落到底。
+-- is_free(x, y, z)：群外的格是否可進入。回傳 {x, y, z} 位移（0,0,0 → 動不了）
 function keyblock.slide_offset(cells, m, is_free, max_steps)
 	max_steps = max_steps or 16
 	local own = {}
@@ -290,26 +291,35 @@ function keyblock.slide_offset(cells, m, is_free, max_steps)
 		end
 		return true
 	end
-	local mh = sqrt(m.x * m.x + m.z * m.z)
-	local off = {x = 0, y = 0, z = 0}
-	if mh > 1e-3 then
-		local sx = (m.x > 0.38 * mh) and 1 or ((m.x < -0.38 * mh) and -1 or 0)
-		local sz = (m.z > 0.38 * mh) and 1 or ((m.z < -0.38 * mh) and -1 or 0)
-		local step_len = sqrt(sx * sx + sz * sz)
-		local slope = -m.y / mh
-		for s = 1, max_steps do
-			local dy = -math.floor(s * step_len * slope + 0.5)
-			local ok = false
-			-- 階梯：該步的落差或少一格
-			for _, ddy in ipairs({dy, dy + 1, dy - 1}) do
-				if ddy <= off.y and fits(s * sx, ddy, s * sz) then
-					off = {x = s * sx, y = ddy, z = s * sz}
-					ok = true
-					break
-				end
-			end
-			if not ok then break end
+	-- 候選步：與 m 同向（夾角 < 66°）者，依夾角排序
+	local cand = {}
+	for dx = -1, 1 do for dy = -1, 0 do for dz = -1, 1 do
+		if dx ~= 0 or dy ~= 0 or dz ~= 0 then
+			local l = sqrt(dx * dx + dy * dy + dz * dz)
+			local c = (dx * m.x + dy * m.y + dz * m.z) / l
+			if c > 0.4 then cand[#cand + 1] = {dx, dy, dz, c} end
 		end
+	end end end
+	table.sort(cand, function(u, v) return u[4] > v[4] end)
+	local off = {x = 0, y = 0, z = 0}
+	local horiz, flat = 0, 0
+	for _ = 1, max_steps * 3 do
+		local moved = false
+		for _, st in ipairs(cand) do
+			local nx_, ny_, nz_ = off.x + st[1], off.y + st[2], off.z + st[3]
+			if fits(nx_, ny_, nz_) then
+				off = {x = nx_, y = ny_, z = nz_}
+				if st[1] ~= 0 or st[3] ~= 0 then horiz = horiz + 1 end
+				if st[2] == 0 then flat = flat + 1 else flat = 0 end
+				moved = true
+				break
+			end
+		end
+		-- 往下落得了就先落（離開節理面後是自由落下）
+		local fall = 0
+		while fall < 256 and fits(off.x, off.y - 1, off.z) do off.y = off.y - 1; flat = 0; fall = fall + 1 end
+		if fall >= 256 then break end
+		if not moved or horiz >= max_steps or flat >= 1 then break end
 	end
 	-- 往下落到底
 	for _ = 1, 256 do
