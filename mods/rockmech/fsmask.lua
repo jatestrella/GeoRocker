@@ -21,8 +21,11 @@ local DEFAULT_R, MAX_R = 12, 32
 local DEFAULT_T, MAX_T = 60, 600
 
 local function cube_textures(color)
-	-- 外框較深、內部較淡：疊在一起時仍看得出格子邊界
-	local t = ("[fill:16x16:%s50^[fill:14x14:1,1:%s28"):format(color, color)
+	-- 外框不透明、內部半透明：疊在一起時仍看得出格子邊界
+	-- （^ 疊加是 alpha 混合，挖不出洞；所以從透明底開始，分別畫四條邊與內部）
+	local c = color
+	local t = ("[fill:16x16:#00000000^[fill:16x2:0,0:%s^[fill:16x2:0,14:%s^[fill:2x12:0,2:%s^[fill:2x12:14,2:%s"
+		.. "^[fill:12x12:2,2:%s70"):format(c, c, c, c, c)
 	return {t, t, t, t, t, t}
 end
 
@@ -30,7 +33,7 @@ for kind, k in pairs(KINDS) do
 	core.register_entity("rockmech:fsmask_" .. kind, {
 		initial_properties = {
 			visual = "cube",
-			visual_size = {x = 1.04, y = 1.04, z = 1.04},
+			visual_size = {x = 1.06, y = 1.06, z = 1.06},
 			textures = cube_textures(k.color),
 			use_texture_alpha = true,
 			backface_culling = false,
@@ -140,7 +143,7 @@ local function show(name, r, seconds)
 			a.huds[#a.huds + 1] = player:hud_add({
 				type = "image_waypoint",
 				world_pos = c.pos,
-				text = ("[fill:6x6:%s"):format(KINDS[c.kind].color),
+				text = ("[fill:10x10:#000000^[fill:8x8:1,1:%s"):format(KINDS[c.kind].color),
 				scale = {x = 1, y = 1},
 				alignment = {x = 0, y = 0},
 				offset = {x = 0, y = 0},
