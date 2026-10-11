@@ -659,6 +659,9 @@ if core.get_modpath("sfinv") and sfinv then
 				parts[#parts + 1] = ("checkbox[0,%g;rm_fsmask;%s;%s]"):format(y,
 					F("標出周圍 FS ≤ 1 的岩格（個人顯示）"), tostring(rockmech.fsmask_live(player)))
 				y = y + 0.75
+				parts[#parts + 1] = ("checkbox[0,%g;rm_fswarn;%s;%s]"):format(y,
+					F(("警戒裂紋：1 < FS < %g（個人顯示）"):format(cfg.fswarn.max)), tostring(rockmech.fswarn_enabled(player)))
+				y = y + 0.75
 			end
 			parts[#parts + 1] = ("button[0,%g;5,0.8;rm_open;%s]"):format(y + 0.2, F("完整資訊頁（/rockmech）"))
 			return sfinv.make_formspec(player, context, table.concat(parts), false)
@@ -672,6 +675,10 @@ if core.get_modpath("sfinv") and sfinv then
 			local handled = false
 			if fields.rm_fsmask and rockmech.set_fsmask_live then
 				rockmech.set_fsmask_live(player, fields.rm_fsmask == "true")
+				handled = true
+			end
+			if fields.rm_fswarn and rockmech.set_fswarn then
+				rockmech.set_fswarn(player, fields.rm_fswarn == "true")
 				handled = true
 			end
 			for _, t in ipairs(TOGGLES) do

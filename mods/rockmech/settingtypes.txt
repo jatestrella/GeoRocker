@@ -98,6 +98,11 @@ rockmech_failure_cascade_delay (Cascade delay) float 0.6 0 10
 # Log a warning when one check takes longer than this (ms).
 rockmech_failure_budget_ms (Time budget per check) float 5 0.1 1000
 
+[Warning cracks]
+
+# Rock nodes with 1 < FS < this value get a crack overlay (per-player display, toggle with /rockmech_fswarn).
+rockmech_fswarn_max (Crack warning FS threshold) float 1.5 1.01 5
+
 [Key blocks]
 
 # Blocks completely bounded by joints and free faces are checked under gravity:

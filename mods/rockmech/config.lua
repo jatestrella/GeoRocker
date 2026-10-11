@@ -155,6 +155,11 @@ config.blast_defaults = {
 	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
 }
 
+-- 警戒裂紋（fsmask.lua）：1 < FS < max 的岩格加上裂紋；設定鍵為 rockmech_fswarn_<key>
+config.fswarn_defaults = {
+	max = 1.5,                -- FS 低於此值（且 > 1）就顯示裂紋
+}
+
 -- 關鍵塊體（keyblock.lua）；設定鍵為 rockmech_keyblock_<key>
 -- 被節理面與臨空面完全圍住的岩塊，以重力判斷落下／平面滑動／楔形滑動（φj 同節理弱面，凝聚力另設）
 config.keyblock_defaults = {
@@ -389,6 +394,10 @@ function config.load(get)
 	cfg.blast = load_section("blast", config.blast_defaults)
 	cfg.blast.ucs_ref = math.max(0.1, cfg.blast.ucs_ref)
 	cfg.blast.inner = math.max(0, math.min(1, cfg.blast.inner))
+
+	-- 警戒裂紋
+	cfg.fswarn = load_section("fswarn", config.fswarn_defaults)
+	cfg.fswarn.max = math.max(1.01, math.min(5, cfg.fswarn.max))
 
 	-- 關鍵塊體
 	cfg.keyblock = load_section("keyblock", config.keyblock_defaults)

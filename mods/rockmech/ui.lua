@@ -364,7 +364,7 @@ local function tab_toggles(name)
 	for _, t in ipairs(rockmech.toggles or {}) do
 		out[#out + 1] = ("checkbox[0.3,%g;rm_%s;%s;%s]"):format(y, t.id, F(t.label), tostring(t.tbl.enabled))
 		out[#out + 1] = ("label[0.8,%g;%s]"):format(y + 0.45, F(t.off_note))
-		y = y + 0.95
+		y = y + 0.88
 	end
 	out[#out + 1] = ("checkbox[0.3,%g;rm_hud;%s;%s]"):format(y, F("畫面上顯示現地應力（HUD）"),
 		tostring(player and hud_enabled(player) or false))
@@ -372,7 +372,11 @@ local function tab_toggles(name)
 	out[#out + 1] = ("checkbox[0.3,%g;rm_fsmask;%s;%s]"):format(y,
 		F("標出周圍 FS ≤ 1 的岩格（紅 = 節理滑動、橙 = 軸差、紫 = 懸臂／被節理切離）"),
 		tostring(player and rockmech.fsmask_live and rockmech.fsmask_live(player) or false))
-	out[#out + 1] = ("label[0.3,%g;%s]"):format(y + 1.0, F("修改力學開關需要 rockmech 權限；HUD 與 FS 遮罩每個玩家各自設定。"))
+	y = y + 0.6
+	out[#out + 1] = ("checkbox[0.3,%g;rm_fswarn;%s;%s]"):format(y,
+		F(("警戒裂紋：1 < FS < %g 的岩格加上裂紋（越接近 1 裂得越嚴重）"):format(cfg.fswarn.max)),
+		tostring(player and rockmech.fswarn_enabled and rockmech.fswarn_enabled(player) or false))
+	out[#out + 1] = ("label[0.3,%g;%s]"):format(y + 0.6, F("修改力學開關需要 rockmech 權限；HUD、FS 遮罩、警戒裂紋每個玩家各自設定。"))
 	return table.concat(out)
 end
 
@@ -429,6 +433,10 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	end
 	if fields.rm_fsmask and rockmech.set_fsmask_live then
 		rockmech.set_fsmask_live(player, fields.rm_fsmask == "true")
+		redraw = true
+	end
+	if fields.rm_fswarn and rockmech.set_fswarn then
+		rockmech.set_fswarn(player, fields.rm_fswarn == "true")
 		redraw = true
 	end
 	for _, t in ipairs(rockmech.toggles or {}) do

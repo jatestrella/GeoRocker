@@ -570,6 +570,30 @@ function overhang.segment_at(g, p, x, y, z)
 	return run_cells(g, seg_of[r0]), fs, r0.t
 end
 
+-- 以 starts 為起點，列出碰到的所有懸空「側向相連段」與其最小 FS（顯示用）。
+-- 回傳 {{cells = {{x,y,z}...}, fs}...}；群太大（不判定）者不列出
+function overhang.scan_segments(g, p, starts)
+	local ctx = local_ctx(g, p)
+	local out = {}
+	for _, s in ipairs(starts) do
+		local lx, ly, lz = s.x - g.ox, s.y - g.oy, s.z - g.oz
+		if lx >= ctx.x1 and lx <= ctx.x2 and ly >= ctx.y1 and ly <= ctx.y2 and lz >= ctx.z1 and lz <= ctx.z2
+				and g.bonded_of[g.data[1 + lx + ly * ctx.sy + lz * ctx.sz]] then
+			local r0 = ctx.get_run(lx, ly, lz)
+			if not r0.supported and not ctx.done[r0] then
+				local res = ctx.explore(r0)
+				if not res.aborted then
+					for _, sg in ipairs((segments(res))) do
+						local _, fs = judge_segment(res, sg)
+						out[#out + 1] = {cells = run_cells(g, sg), fs = fs}
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+
 function overhang.make_query(g, p)
 	local ctx = local_ctx(g, p)
 	local fs_of = {}       -- run → 所在段的最小 FS

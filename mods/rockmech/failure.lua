@@ -297,9 +297,9 @@ function failure.cell_state(g, x, y, z, p)
 	local n_joints
 	local wk = p.weakness
 	-- 前置篩選（p.detail 時不篩，供顯示用）：
-	--   τ ≤ (σ1 − σ3)/2，所以 2cj > q 時任何面都不可能滑；未臨空也不可能滑
+	--   τ ≤ (σ1 − σ3)/2，所以 FS ≥ 2cj/q：2cj > q·fs_cut（預設 1）時不可能低於 fs_cut；未臨空也不可能滑
 	--   運動學不成立的組不必判斷平面是否穿過此格
-	if wk and p.joints_at and (p.detail or (exposed and 2 * wk.c <= q)) then
+	if wk and p.joints_at and (p.detail or (exposed and 2 * wk.c <= q * (p.fs_cut or 1))) then
 		local cands = p.joint_sets
 		if wk.daylight and not p.detail then
 			cands = {}

@@ -2,6 +2,7 @@
 -- FS < 1 遮罩（除錯／檢視用，不修改地圖）：
 --   /rockmech_fsmask [半徑] [秒數]   在玩家周圍標出「若被觸發就會破壞」的岩格
 --   /rockmech_fsmask on | off        即時模式（每個玩家各自設定、會記住；也可在資訊頁／物品欄勾選）
+--   /rockmech_fswarn on | off        警戒裂紋：1 < FS < 1.5 的岩格加上裂紋（預設開啟）
 -- 標示方式：
 --   * 半透明發光方塊（實體）套在格子外：紅 = 節理滑動、橙 = 軸差破壞、紫 = 懸臂斷裂／被節理切離、
 --     黃 = 關鍵塊體（被節理圍住、會因重力滑出或落下）
@@ -51,26 +52,86 @@ end
 
 local function pkey(p) return p.x .. "," .. p.y .. "," .. p.z end
 
--- 找出 center ±r 內 FS < 1 的格子。回傳 cells = {{pos, kind}...}, counts, ms
-function rockmech.fsmask_scan(center, r)
-	local t0 = core.get_us_time()
-	local a, b = vector.subtract(center, r), vector.add(center, r)
-	local cells, seen = {}, {}
-	local counts = {slip = 0, axial = 0, overhang = 0, keyblock = 0}
 
-	-- 1. 軸差破壞與節理滑動（同遊戲中的破壞檢查）
+-- 警戒裂紋：1 < FS < max 的岩格套上一層裂紋（textures/rockmech_fswarn_0..4.png，
+-- 橙色鋸齒裂縫加深色描邊；FS 越接近 1 裂縫越多越長）
+local WARN_STAGES = 5
+local function crack_textures(stage)
+	local t = ("rockmech_fswarn_%d.png"):format(stage)
+	return {t, t, t, t, t, t}
+end
+core.register_entity("rockmech:fswarn", {
+	initial_properties = {
+		visual = "cube",
+		visual_size = {x = 1.02, y = 1.02, z = 1.02},
+		textures = crack_textures(0),
+		use_texture_alpha = true,
+		backface_culling = false,
+		glow = 10,
+		physical = false,
+		collide_with_objects = false,
+		pointable = false,
+		static_save = false,
+	},
+})
+local function warn_stage(fs)
+	local frac = (fs - 1) / (cfg.fswarn.max - 1)
+	return math.max(0, math.min(WARN_STAGES - 1, WARN_STAGES - 1 - math.floor(frac * WARN_STAGES)))
+end
+
+-- 掃描狀態：center ±r 內每個岩格在各機制中的最小 FS（只保留 FS < fs_max 者）
+local function scan_state(center, r, fs_max)
+	local st = {a = vector.subtract(center, r), b = vector.add(center, r), best = {}, fs_max = fs_max}
+	local a, b, best = st.a, st.b, st.best
+	function st.put(p, fs, kind)
+		if fs >= fs_max then return end
+		if p.x < a.x or p.x > b.x or p.y < a.y or p.y > b.y or p.z < a.z or p.z > b.z then return end
+		local k = pkey(p)
+		local e = best[k]
+		if not e or fs < e.fs then best[k] = {pos = {x = p.x, y = p.y, z = p.z}, fs = fs, kind = kind} end
+	end
+	function st.result()
+		local out = {}
+		for _, e in pairs(best) do out[#out + 1] = e end
+		return out
+	end
+	return st
+end
+
+local scan_parts = {}
+
+-- 1. 軸差破壞與節理滑動（臨空的岩格）
+scan_parts[1] = function(st)
+	local a, b, put, fs_max = st.a, st.b, st.put, st.fs_max
 	if cfg.failure.enabled or cfg.weakness.enabled then
-		local failed = collapse.evaluate_failure_boxes({{a, b}})
-		for _, f in ipairs(failed) do
-			local kind = f.state.fails_axial and "axial" or "slip"
-			local p = {x = f.x, y = f.y, z = f.z}
-			seen[pkey(p)] = true
-			cells[#cells + 1] = {pos = p, kind = kind}
-			counts[kind] = counts[kind] + 1
+		local f = rockmech.failure
+		local m = cfg.failure.window + 1
+		local grid = collapse.read_grid(vector.subtract(a, m), vector.add(b, m))
+		-- 前置篩選：FS ≥ 2c/q，2c/q ≥ fs_max 的格不可能落在顯示範圍內
+		local prm = collapse.failure_params(false)
+		prm.fs_cut = fs_max
+		f.compute_loads(grid, prm)
+		for z = a.z, b.z do
+			for y = a.y, b.y do
+				for x = a.x, b.x do
+					local i = f.index(grid, x, y, z)
+					if i and grid.lith_of[grid.data[i]] and f.is_exposed(grid, x, y, z) then
+						local st = f.cell_state(grid, x, y, z, prm)
+						local fa = prm.axial ~= false and st.fs_axial or math.huge
+						local fj = st.fs_joint
+						if fa <= fj then put({x = x, y = y, z = z}, fa, "axial")
+						else put({x = x, y = y, z = z}, fj, "slip") end
+					end
+				end
+			end
 		end
 	end
 
-	-- 2. 懸臂斷裂／被節理切離：以範圍內所有「下方懸空的鍵結格」為起點
+end
+
+-- 2. 懸臂：以範圍內所有「下方懸空的鍵結格」為起點，每個懸空段取段內最小 FS
+scan_parts[2] = function(st)
+	local a, b, put = st.a, st.b, st.put
 	if cfg.overhang.enabled then
 		local orad = cfg.overhang.radius
 		local grid = collapse.read_grid(vector.subtract(a, orad), vector.add(b, orad), true)
@@ -87,20 +148,16 @@ function rockmech.fsmask_scan(center, r)
 				end
 			end
 		end
-		local groups = rockmech.overhang.find_failing_local(grid, collapse.overhang_params(), starts)
-		for _, g in ipairs(groups) do
-			for _, p in ipairs(g.cells) do
-				local k = pkey(p)
-				if not seen[k] then
-					seen[k] = true
-					cells[#cells + 1] = {pos = p, kind = "overhang"}
-					counts.overhang = counts.overhang + 1
-				end
-			end
+		for _, sg in ipairs(rockmech.overhang.scan_segments(grid, collapse.overhang_params(), starts)) do
+			for _, p in ipairs(sg.cells) do put(p, sg.fs, "overhang") end
 		end
 	end
 
-	-- 3. 關鍵塊體：以範圍內所有臨空的鍵結格為起點（同一岩塊只算一次）
+end
+
+-- 3. 關鍵塊體：以範圍內所有臨空的鍵結格為起點（同一岩塊只算一次）
+scan_parts[3] = function(st)
+	local a, b, put = st.a, st.b, st.put
 	if cfg.keyblock.enabled then
 		local kr = math.min(24, math.ceil(cfg.keyblock.max_cells ^ (1 / 3)) + 6)
 		local grid = collapse.read_grid(vector.subtract(a, kr), vector.add(b, kr), true)
@@ -121,27 +178,48 @@ function rockmech.fsmask_scan(center, r)
 			end
 		end
 		for _, blk in ipairs(rockmech.keyblock.find_blocks(grid, collapse.keyblock_params(), starts)) do
-			if blk.fs < 1 then
-				for _, p in ipairs(blk.cells) do
-					local k = pkey(p)
-					if not seen[k] then
-						seen[k] = true
-						cells[#cells + 1] = {pos = p, kind = "keyblock"}
-						counts.keyblock = counts.keyblock + 1
-					end
-				end
-			end
+			for _, p in ipairs(blk.cells) do put(p, blk.fs, "keyblock") end
 		end
 	end
-	return cells, counts, (core.get_us_time() - t0) / 1000
 end
 
--- 玩家名稱 → {marks = {[座標] = {kind, obj, hud}}, live, center, t, dirty, hold, job}
+-- 一次算完。回傳 {{pos, fs, kind = "slip"|"axial"|"overhang"|"keyblock"}...}, ms
+function rockmech.fs_scan(center, r, fs_max)
+	local t0 = core.get_us_time()
+	local st = scan_state(center, r, fs_max)
+	for _, part in ipairs(scan_parts) do part(st) end
+	return st.result(), (core.get_us_time() - t0) / 1000
+end
+
+-- 分三個伺服器步執行（每步一種機制，避免單次卡頓太久），完成後呼叫 cb(cells)
+function rockmech.fs_scan_async(center, r, fs_max, cb)
+	local st = scan_state(center, r, fs_max)
+	local i = 0
+	local function step()
+		i = i + 1
+		local part = scan_parts[i]
+		if not part then return cb(st.result()) end
+		part(st)
+		core.after(0, step)
+	end
+	step()
+end
+
+-- center ±r 內 FS ≤ 1 的格子（FS 遮罩用）。回傳 cells = {{pos, kind, fs}...}, counts, ms
+function rockmech.fsmask_scan(center, r)
+	local all, ms = rockmech.fs_scan(center, r, 1 + 1e-9)
+	local counts = {slip = 0, axial = 0, overhang = 0, keyblock = 0}
+	for _, c in ipairs(all) do counts[c.kind] = counts[c.kind] + 1 end
+	return all, counts, ms
+end
+
+-- 玩家名稱 → {marks（FS 遮罩）, wmarks（警戒裂紋）, mask, warn, center, t, dirty, hold, job}
 local active = {}
 local META = "rockmech:fsmask"
+local META_W = "rockmech:fswarn"
 local LIVE_R = 10          -- 即時模式的範圍 (m)
 local LIVE_MOVE = 3        -- 玩家移動超過此距離就重新掃描 (m)
-local LIVE_PERIOD = 10     -- 保底重新掃描間隔 (s)
+local LIVE_PERIOD = 30     -- 保底重新掃描間隔 (s)
 local LIVE_TICK = 1        -- 檢查間隔 (s)
 
 local function now() return core.get_us_time() / 1e6 end
@@ -151,11 +229,16 @@ local function remove_mark(player, m)
 	if m.hud and player then player:hud_remove(m.hud) end
 end
 
+local function clear_marks(player, marks)
+	for k, m in pairs(marks) do remove_mark(player, m); marks[k] = nil end
+end
+
 local function clear(name)
 	local a = active[name]
 	if not a then return end
 	local player = core.get_player_by_name(name)
-	for _, m in pairs(a.marks) do remove_mark(player, m) end
+	clear_marks(player, a.marks)
+	clear_marks(player, a.wmarks)
 	if a.job then a.job:cancel() end
 	active[name] = nil
 end
@@ -164,11 +247,15 @@ core.register_on_leaveplayer(function(player)
 	clear(player:get_player_name())
 end)
 
--- 依 cells 更新標記：只增減有變化的（不閃爍、少送封包）
-local function apply(player, a, center, cells)
+local function by_distance(cells, center)
 	table.sort(cells, function(u, v)
 		return vector.distance(u.pos, center) < vector.distance(v.pos, center)
 	end)
+end
+
+-- FS 遮罩標記：只增減有變化的（不閃爍、少送封包）
+local function apply(player, a, center, cells)
+	by_distance(cells, center)
 	local want = {}
 	for _, c in ipairs(cells) do want[pkey(c.pos)] = c end
 	for k, m in pairs(a.marks) do
@@ -206,6 +293,32 @@ local function apply(player, a, center, cells)
 	end
 end
 
+-- 警戒裂紋標記（1 < FS < max）：裂紋級數變了就換貼圖
+local function apply_warn(player, a, center, cells)
+	by_distance(cells, center)
+	local want = {}
+	for i, c in ipairs(cells) do
+		if i <= MAX_ENTITIES then want[pkey(c.pos)] = c end
+	end
+	for k, m in pairs(a.wmarks) do
+		if not want[k] then remove_mark(player, m); a.wmarks[k] = nil end
+	end
+	for k, c in pairs(want) do
+		local stage = warn_stage(c.fs)
+		local m = a.wmarks[k]
+		if m and m.obj and not m.obj:get_pos() then m.obj = nil end
+		if not m then m = {}; a.wmarks[k] = m end
+		if not m.obj then
+			m.obj = core.add_entity(c.pos, "rockmech:fswarn")
+			m.stage = nil
+		end
+		if m.obj and m.stage ~= stage then
+			m.obj:set_properties({textures = crack_textures(stage)})
+			m.stage = stage
+		end
+	end
+end
+
 local function summary(cells, counts)
 	local parts = {}
 	for _, kind in ipairs({"slip", "axial", "overhang", "keyblock"}) do
@@ -217,19 +330,61 @@ local function summary(cells, counts)
 	return table.concat(parts, "  "), note
 end
 
--- 單次顯示 seconds 秒（即時模式開啟時，期間暫停即時更新）
+---------------------------------------------------------------------------
+-- 個人設定（存在玩家資料裡）
+---------------------------------------------------------------------------
+
+function rockmech.fsmask_live(player)
+	return player:get_meta():get_string(META) == "1"
+end
+
+-- 警戒裂紋：預設開啟
+function rockmech.fswarn_enabled(player)
+	return player:get_meta():get_string(META_W) ~= "0"
+end
+
+local function ensure(name)
+	local a = active[name]
+	if not a then a = {marks = {}, wmarks = {}, dirty = true}; active[name] = a end
+	return a
+end
+
+function rockmech.set_fsmask_live(player, on)
+	local name = player:get_player_name()
+	player:get_meta():set_string(META, on and "1" or "0")
+	local a = ensure(name)
+	if a.job then a.job:cancel(); a.job = nil end
+	a.hold = nil
+	if not on then clear_marks(player, a.marks) end
+	a.dirty = true
+end
+
+function rockmech.set_fswarn(player, on)
+	local name = player:get_player_name()
+	player:get_meta():set_string(META_W, on and "1" or "0")
+	local a = ensure(name)
+	if not on then clear_marks(player, a.wmarks) end
+	a.dirty = true
+end
+
+-- 單次顯示 FS 遮罩 seconds 秒（即時模式開啟時，期間暫停即時更新）
 local function show(name, r, seconds)
 	local player = core.get_player_by_name(name)
 	if not player then return false, "找不到玩家" end
 	local live = rockmech.fsmask_live(player)
-	clear(name)
-	local a = {marks = {}, live = live, hold = now() + seconds}
-	active[name] = a
+	local a = ensure(name)
+	if a.job then a.job:cancel(); a.job = nil end
+	a.hold = now() + seconds
 	local center = vector.round(player:get_pos())
 	local cells, counts, ms = rockmech.fsmask_scan(center, r)
 	apply(player, a, center, cells)
-	a.center, a.t = center, now()
-	if not live then a.job = core.after(seconds, clear, name) end
+	if not live then
+		a.job = core.after(seconds, function()
+			local p = core.get_player_by_name(name)
+			local aa = active[name]
+			if aa then clear_marks(p, aa.marks); aa.hold = nil; aa.job = nil end
+		end)
+	end
 	local parts, note = summary(cells, counts)
 	return true, ("[rockmech FS 遮罩] 以 %s 為中心 ±%d m，FS ≤ 1 共 %d 格：%s（%.0f ms；%d 秒%s%s）"):format(
 		core.pos_to_string(center), r, #cells, parts, ms, seconds,
@@ -237,26 +392,15 @@ local function show(name, r, seconds)
 end
 
 ---------------------------------------------------------------------------
--- 即時模式（每個玩家各自設定，存在玩家資料裡）
+-- 即時更新（FS 遮罩即時模式、警戒裂紋共用一次掃描）
 ---------------------------------------------------------------------------
 
-function rockmech.fsmask_live(player)
-	return player:get_meta():get_string(META) == "1"
-end
-
-function rockmech.set_fsmask_live(player, on)
-	local name = player:get_player_name()
-	player:get_meta():set_string(META, on and "1" or "0")
-	clear(name)
-	if on then active[name] = {marks = {}, live = true, dirty = true} end
-end
-
--- 地形改變（挖掘、放置、坍塌、爆破都會經過 queue_support_check）：附近的即時遮罩標記為需更新
+-- 地形改變（挖掘、放置、坍塌、爆破都會經過 queue_support_check）：附近的即時顯示標記為需更新
 local orig_queue = collapse.queue_support_check
 collapse.queue_support_check = function(pos, prev)
 	orig_queue(pos, prev)
 	for _, a in pairs(active) do
-		if a.live and a.center and vector.distance(pos, a.center) <= LIVE_R + 2 * cfg.failure.window + 2 then
+		if a.center and vector.distance(pos, a.center) <= LIVE_R + 2 * cfg.failure.window + 2 then
 			a.dirty = true
 		end
 	end
@@ -269,18 +413,27 @@ core.register_globalstep(function(dtime)
 	tick = 0
 	local t = now()
 	for _, player in ipairs(core.get_connected_players()) do
-		if rockmech.fsmask_live(player) then
+		local mask, warn = rockmech.fsmask_live(player), rockmech.fswarn_enabled(player)
+		if mask or warn then
 			local name = player:get_player_name()
-			local a = active[name]
-			if not a then a = {marks = {}, live = true, dirty = true}; active[name] = a end
-			if not (a.hold and t < a.hold) then
-				local pos = vector.round(player:get_pos())
-				if a.dirty or not a.center or vector.distance(pos, a.center) > LIVE_MOVE
-						or t - (a.t or 0) > LIVE_PERIOD then
-					local cells = rockmech.fsmask_scan(pos, LIVE_R)
-					apply(player, a, pos, cells)
-					a.center, a.t, a.dirty, a.hold = pos, t, false, nil
-				end
+			local a = ensure(name)
+			local pos = vector.round(player:get_pos())
+			if not a.busy and (a.dirty or not a.center or vector.distance(pos, a.center) > LIVE_MOVE
+					or t - (a.t or 0) > LIVE_PERIOD) then
+				a.busy = true
+				a.center, a.t, a.dirty = pos, t, false
+				rockmech.fs_scan_async(pos, LIVE_R, warn and cfg.fswarn.max or (1 + 1e-9), function(cells)
+					a.busy = false
+					local pl = core.get_player_by_name(name)
+					if not pl or active[name] ~= a then return end
+					local masked, warned = {}, {}
+					for _, c in ipairs(cells) do
+						if c.fs <= 1 then masked[#masked + 1] = c else warned[#warned + 1] = c end
+					end
+					local m2, w2 = rockmech.fsmask_live(pl), rockmech.fswarn_enabled(pl)
+					if m2 and not (a.hold and now() < a.hold) then apply(pl, a, pos, masked) end
+					if w2 then apply_warn(pl, a, pos, warned) end
+				end)
 			end
 		end
 	end
@@ -288,7 +441,7 @@ end)
 
 core.register_chatcommand("rockmech_fsmask", {
 	params = "on | off | [半徑 1-32，預設 12] [秒數，預設 60]",
-	description = "標出周圍若被觸發就會破壞（FS ≤ 1）的岩格（紅 = 節理滑動、橙 = 軸差、紫 = 懸臂／被節理切離）。"
+	description = "標出周圍若被觸發就會破壞（FS ≤ 1）的岩格（紅 = 節理滑動、橙 = 軸差、紫 = 懸臂／被節理切離、黃 = 關鍵塊體）。"
 		.. "on/off：即時模式（跟著玩家與地形變化自動更新）",
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
@@ -303,5 +456,20 @@ core.register_chatcommand("rockmech_fsmask", {
 		local r = math.max(1, math.min(MAX_R, math.floor(tonumber(args[1]) or DEFAULT_R)))
 		local t = math.max(1, math.min(MAX_T, math.floor(tonumber(args[2]) or DEFAULT_T)))
 		return show(name, r, t)
+	end,
+})
+
+core.register_chatcommand("rockmech_fswarn", {
+	params = "on | off",
+	description = "警戒裂紋：周圍 1 < FS < 門檻（預設 1.5）的岩格加上裂紋，FS 越接近 1 裂得越嚴重（預設開啟）",
+	func = function(name, param)
+		local player = core.get_player_by_name(name)
+		if not player then return false, "找不到玩家" end
+		local on
+		if param == "on" then on = true elseif param == "off" then on = false
+		else on = not rockmech.fswarn_enabled(player) end
+		rockmech.set_fswarn(player, on)
+		return true, on and ("[rockmech] 警戒裂紋開啟（1 < FS < %g，±%d m）"):format(cfg.fswarn.max, LIVE_R)
+			or "[rockmech] 警戒裂紋關閉"
 	end,
 })
