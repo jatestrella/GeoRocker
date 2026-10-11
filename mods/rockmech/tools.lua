@@ -502,6 +502,15 @@ local TOGGLES = {
 		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
 	},
 	{
+		id = "overhang", tbl = cfg.overhang,
+		label = "懸臂／頂板斷裂（依張力強度與厚度）",
+		short = "懸臂斷裂",
+		info = function()
+			return ("L_max = √(σt·t/(3γ))；強度縮放 %g"):format(cfg.overhang.scale)
+		end,
+		off_note = "關閉：連著岩體的懸空岩石不會因為伸太長而斷",
+	},
+	{
 		id = "fallbreak", tbl = cfg.fallbreak,
 		label = "完整岩石掉落時有機率變成碎石",
 		short = "掉落破碎",

@@ -626,7 +626,10 @@ local function run_support_check()
     if #starts == 0 or not scfg.enabled then return end
 
     local t0 = core.get_us_time()
+    local ocfg = cfg.overhang
+    -- 讀取半徑：支撐判定與懸臂斷裂共用同一份網格，取兩者較大者
     local r = scfg.radius
+    if ocfg.enabled and ocfg.radius > r then r = ocfg.radius end
     -- 起點分群：相距不超過 r 的歸同一群，各群分別讀取（避免遠處的觸發合併成巨大區域）
     local groups = {}
     for _, s in ipairs(starts) do
@@ -649,13 +652,36 @@ local function run_support_check()
     end
 
     local comps, stats = {}, {visited = 0}
+    local n_overhang = 0
+    local oparams = {
+        lithologies = cfg.lithologies, scale = ocfg.scale, tensile_other = ocfg.tensile_other,
+        gamma_other = cfg.failure.gamma_other, max_voxels = ocfg.max_voxels,
+    }
     for _, g in ipairs(groups) do
         local grid = collapse.read_grid(
             {x = g.a.x - r, y = g.a.y - r, z = g.a.z - r},
             {x = g.b.x + r, y = g.b.y + r, z = g.b.z + r}, true)
         local c, st = rockmech.support.find_unsupported(grid, g.starts, scfg.max_voxels)
-        for _, comp in ipairs(c) do comps[#comps + 1] = comp end
+        local taken = {}
+        for _, comp in ipairs(c) do
+            comps[#comps + 1] = comp
+            for _, p in ipairs(comp.cells) do taken[pos_key(p)] = true end
+        end
         stats.visited = stats.visited + st.visited
+        -- 懸臂／頂板彎曲斷裂：從根部整段斷開（與上面的懸空群不重複）
+        if ocfg.enabled then
+            local og = rockmech.overhang.find_failing_local(grid, oparams, g.starts)
+            for _, comp in ipairs(og) do
+                local cells = {}
+                for _, p in ipairs(comp.cells) do
+                    if not taken[pos_key(p)] then cells[#cells + 1] = p end
+                end
+                if #cells > 0 then
+                    comps[#comps + 1] = {cells = cells}
+                    n_overhang = n_overhang + 1
+                end
+            end
+        end
     end
     local ms = (core.get_us_time() - t0) / 1000
     if ms > scfg.budget_ms then
@@ -700,8 +726,8 @@ local function run_support_check()
         end
     end
     physics_updating = false
-    core.log("action", ("[rockmech] 支撐判定：%d 群懸空（%d 群整塊落下）、共 %d 格（%.1f ms，展開 %d 格）")
-        :format(#comps, n_rigid, n, ms, stats.visited))
+    core.log("action", ("[rockmech] 支撐判定：%d 群落下（懸臂斷裂 %d 群；整塊落下 %d 群）、共 %d 格（%.1f ms，展開 %d 格）")
+        :format(#comps, n_overhang, n_rigid, n, ms, stats.visited))
 end
 
 -- 剛體落地後：碎石依安息角判定

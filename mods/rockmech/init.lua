@@ -16,6 +16,7 @@ rockmech.failure = assert(loadfile(modpath .. "/failure.lua"))(rockmech.stress)
 rockmech.rockfall = dofile(modpath .. "/rockfall.lua")
 rockmech.support = dofile(modpath .. "/support.lua")
 rockmech.rigidfall = dofile(modpath .. "/rigidfall.lua")
+rockmech.overhang = dofile(modpath .. "/overhang.lua")
 
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
 local world_conf_path = core.get_worldpath() .. "/rockmech.conf"

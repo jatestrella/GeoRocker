@@ -138,6 +138,15 @@ config.support_defaults = {
 	budget_ms = 5,            -- 單次判定超過此時間就記 log
 }
 
+-- 懸臂／頂板彎曲斷裂（overhang.lua）；設定鍵為 rockmech_overhang_<key>
+config.overhang_defaults = {
+	enabled = true,
+	scale = 1.0,              -- 張力強度縮放：L_max = √(σt·scale·t/(3γ))；1 = 真實強度
+	tensile_other = 2.0,      -- 非岩性鍵結格（土、礦石…）的張力強度 (MPa)
+	radius = 16,              -- 檢查範圍半徑 (m)；懸空群碰到範圍邊界時保守地不處理
+	max_voxels = 2000,        -- 懸空群超過此格數保守地不處理
+}
+
 -- 安息角滑動（collapse.lua）；設定鍵為 rockmech_slope_<key>
 config.slope_defaults = {
 	enabled = true,           -- 碎石超過安息角會移動（完整岩石不受安息角影響）
@@ -316,6 +325,12 @@ function config.load(get)
 	cfg.support.radius = math.max(2, math.floor(cfg.support.radius))
 	cfg.support.max_voxels = math.max(1, math.floor(cfg.support.max_voxels))
 	cfg.support.rigid_max = math.max(1, math.floor(cfg.support.rigid_max))
+
+	-- 懸臂／頂板斷裂
+	cfg.overhang = load_section("overhang", config.overhang_defaults)
+	cfg.overhang.scale = math.max(0.001, cfg.overhang.scale)
+	cfg.overhang.radius = math.max(4, math.floor(cfg.overhang.radius))
+	cfg.overhang.max_voxels = math.max(1, math.floor(cfg.overhang.max_voxels))
 
 	-- 安息角滑動
 	cfg.slope = load_section("slope", config.slope_defaults)

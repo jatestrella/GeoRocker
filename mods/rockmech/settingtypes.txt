@@ -120,6 +120,25 @@ rockmech_support_rigid_max (Max rigid block size) int 128 1 2000
 # Log a warning when one support check takes longer than this (ms).
 rockmech_support_budget_ms (Support check time budget) float 5 0.1 1000
 
+[Overhang]
+
+# Overhanging rock (cantilevers, thin roofs) breaks at its root and falls when its distance from
+# a supported rock column exceeds L_max = sqrt(sigma_t * scale * t / (3 * gamma)),
+# where t is the local rock thickness. Can also be toggled in game.
+rockmech_overhang_enabled (Enable overhang breaking) bool true
+
+# Tensile strength scale (1 = real strength from config.lua).
+rockmech_overhang_scale (Overhang tensile strength scale) float 1.0 0.001 100
+
+# Tensile strength (MPa) of non-lithology bonded nodes (dirt, ores, ...).
+rockmech_overhang_tensile_other (Tensile strength of other nodes) float 2.0 0 100
+
+# Check radius (m). Overhangs reaching the edge of this region are left alone (conservative).
+rockmech_overhang_radius (Overhang check radius) int 16 4 48
+
+# Overhangs larger than this many nodes are left alone (conservative).
+rockmech_overhang_max_voxels (Max overhang size) int 2000 1 100000
+
 [Fall breakage]
 
 # Intact rock that falls may break into rubble on landing: p = 1 - exp(-h / h_ref).
