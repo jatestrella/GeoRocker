@@ -154,6 +154,15 @@ config.blast_defaults = {
 	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
 }
 
+-- 節理弱面滑動（failure.lua，Jaeger single plane of weakness）；設定鍵為 rockmech_weakness_<key>
+-- 目前三組節理共用同一組 cj、φj
+config.weakness_defaults = {
+	enabled = true,
+	c = 0.05,                 -- 節理凝聚力 cj (MPa)
+	phi = 30,                 -- 節理摩擦角 φj (deg)
+	daylight = true,          -- 運動學條件：節理須傾向臨空面（或下方臨空）才會滑出
+}
+
 -- 懸臂／頂板彎曲斷裂（overhang.lua）；設定鍵為 rockmech_overhang_<key>
 config.overhang_defaults = {
 	enabled = true,
@@ -361,6 +370,11 @@ function config.load(get)
 	cfg.blast = load_section("blast", config.blast_defaults)
 	cfg.blast.ucs_ref = math.max(0.1, cfg.blast.ucs_ref)
 	cfg.blast.inner = math.max(0, math.min(1, cfg.blast.inner))
+
+	-- 節理弱面滑動
+	cfg.weakness = load_section("weakness", config.weakness_defaults)
+	cfg.weakness.c = math.max(0, cfg.weakness.c)
+	cfg.weakness.phi = math.max(0, math.min(89, cfg.weakness.phi))
 
 	-- 懸臂／頂板斷裂
 	cfg.overhang = load_section("overhang", config.overhang_defaults)

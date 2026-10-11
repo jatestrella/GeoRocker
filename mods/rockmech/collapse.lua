@@ -506,8 +506,27 @@ function collapse.initial_stress(pos, lith)
     return st
 end
 
-function collapse.failure_params()
+local wcfg = cfg.weakness
+
+-- 穿過格 (x,y,z) 的節理組（與貼圖跡線相同的平面與延續性判定，不受貼圖 2 條上限限制）
+local function joints_at(x, y, z, sets)
+    sets = sets or rockmech.get_joint_sets()
+    local tr = rockmech.jointtex.cell_traces(rockmech.joints, sets, x, y, z, #sets)
+    local out = {}
+    for k = 1, #tr do out[k] = sets[tr[k].set] end
+    return out
+end
+collapse.joints_at = joints_at
+
+-- detail = true：不做前置篩選（HUD／資訊頁／羅盤顯示完整的弱面資訊）
+function collapse.failure_params(detail)
     return {
+        detail = detail,
+        joint_sets = rockmech.get_joint_sets(),
+        axial = fcfg.enabled,
+        weakness = wcfg.enabled and {c = wcfg.c, tanphi = math.tan(math.rad(wcfg.phi)),
+            daylight = wcfg.daylight} or nil,
+        joints_at = joints_at,
         surface_y = cfg.surface_y, k0 = cfg.k0, lithologies = cfg.lithologies,
         window = fcfg.window,
         strength_scale = fcfg.strength_scale,
@@ -616,8 +635,8 @@ process_queue = function()
     queue_scheduled = false
     local boxes, round = queue_boxes, queue_round
     queue_boxes, queue_round = {}, 0
-    -- 遊戲中關閉破壞準則時，進行中的連鎖也一併停止
-    if #boxes == 0 or not fcfg.enabled then return end
+    -- 遊戲中關閉破壞準則（軸差與弱面皆關）時，進行中的連鎖也一併停止
+    if #boxes == 0 or not (fcfg.enabled or wcfg.enabled) then return end
 
     local failed, stats, ms = collapse.evaluate_failure_boxes(boxes)
     if ms > fcfg.budget_ms then
@@ -626,7 +645,12 @@ process_queue = function()
     end
     if #failed == 0 then return end
 
-    core.log("action", ("[rockmech] 軸差破壞 第 %d 輪：%d 格（%.1f ms）"):format(round, #failed, ms))
+    local n_slip = 0
+    for _, f in ipairs(failed) do
+        if f.state.fails_slip and not f.state.fails_axial then n_slip = n_slip + 1 end
+    end
+    core.log("action", ("[rockmech] 破壞 第 %d 輪：%d 格（其中節理滑動 %d）（%.1f ms）"):format(
+        round, #failed, n_slip, ms))
     collapse.apply_failure(failed)
 
     if round >= fcfg.max_cascade then
@@ -656,7 +680,7 @@ end
 
 -- 開挖觸發：同一 tick 內的多次觸發合併成一次檢查
 function collapse.queue_failure_check(pos)
-    if not fcfg.enabled then return end
+    if not (fcfg.enabled or wcfg.enabled) then return end
     enqueue(cube(vector.round(pos), fcfg.radius), 1)
 end
 

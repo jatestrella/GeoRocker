@@ -95,6 +95,20 @@ rockmech_failure_cascade_delay (Cascade delay) float 0.6 0 10
 # Log a warning when one check takes longer than this (ms).
 rockmech_failure_budget_ms (Time budget per check) float 5 0.1 1000
 
+[Joint plane of weakness]
+
+# Slip along joints crossing an exposed cell (Jaeger single plane of weakness): tau >= c + sigma_n * tan(phi).
+rockmech_weakness_enabled (Enable joint slip) bool true
+
+# Joint cohesion c (MPa), shared by all joint sets.
+rockmech_weakness_c (Joint cohesion) float 0.05 0 100
+
+# Joint friction angle phi (degrees), shared by all joint sets.
+rockmech_weakness_phi (Joint friction angle) float 30 0 89
+
+# Kinematic check: a joint must dip toward an exposed side face (or the cell must be exposed below) to slip out.
+rockmech_weakness_daylight (Require daylighting) bool true
+
 [Rockfall]
 
 # Falling rock becomes a tumbling entity (bounce, roll, stop) instead of dropping straight down.

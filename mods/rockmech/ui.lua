@@ -38,9 +38,21 @@ function rockmech.stress_report(pos)
 		local w = 2 * cfg.failure.window + 1
 		local grid = rockmech.collapse.read_grid(vector.subtract(pos, w), vector.add(pos, w))
 		r.local_state = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
-			rockmech.collapse.failure_params())
+			rockmech.collapse.failure_params(true))
 	end
 	return r
+end
+
+-- 弱面滑動的一行說明（HUD、資訊頁、羅盤共用）
+function rockmech.slip_line(s)
+	if not cfg.weakness.enabled then return "節理滑動：關閉" end
+	local js = s.slip_set
+	if not js then
+		return "節理滑動：" .. (s.n_joints == 0 and "完整岩塊（無節理面穿過）" or "無可滑出的節理（未傾向臨空面）")
+	end
+	return ("節理滑動 %s（%.0f°/%.0f°）：σn %.3f  τ %.3f MPa  FS %.2f%s"):format(
+		js.name, js.dip_eff, js.dipdir_eff, s.slip_sn, s.slip_tau, s.fs_joint,
+		s.fails_slip and "  滑動" or "")
 end
 
 local function fmt_report_lines(r)
@@ -55,9 +67,10 @@ local function fmt_report_lines(r)
 	if s then
 		lines[#lines + 1] = ("局部：σxx %.3f(×%.2f)  σyy %.3f  σzz %.3f(×%.2f)  σxz %.3f"):format(
 			s.sx, s.fx, s.sy, s.sz, s.fz, s.sxz)
-		local verdict = s.fails and "破壞" or (s.q >= s.strength and "超過強度但未臨空" or "穩定")
+		local verdict = s.fails_axial and "破壞" or (s.q >= s.strength and "超過強度但未臨空" or "穩定")
 		lines[#lines + 1] = ("σ1 %.3f  σ3 %.3f  q %.3f / 強度 %.2f MPa  FS %.2f  %s%s"):format(
-			s.s1, s.s3, s.q, s.strength, s.fs, verdict, s.exposed and "（臨空）" or "")
+			s.s1, s.s3, s.q, s.strength, s.fs_axial, verdict, s.exposed and "（臨空）" or "")
+		lines[#lines + 1] = rockmech.slip_line(s)
 	end
 	return lines
 end
@@ -253,10 +266,12 @@ local function tab_stress(name)
 			{"局部 σxz", ("%.3f MPa"):format(s.sxz)},
 			{"主應力 σ1 / σ3", ("%.3f / %.3f MPa"):format(s.s1, s.s3)},
 			{"q = σ1 − σ3 / 強度", ("%.3f / %.2f MPa"):format(s.q, s.strength)},
-			{"安全係數 FS", ("%.2f"):format(s.fs)},
+			{"軸差 FS", ("%.2f"):format(s.fs_axial)},
+			{"節理弱面", rockmech.slip_line(s)},
 			{"臨空面", (s.exposed_x and "東西 " or "") .. (s.exposed_z and "南北 " or "") ..
 				(s.exposed_up and "上 " or "") .. (s.exposed_down and "下" or "")},
-			{"判定", s.fails and "破壞" or (s.q >= s.strength and "超過強度但未臨空" or "穩定")},
+			{"判定", s.fails_axial and "軸差破壞" or s.fails_slip and "沿節理滑動"
+				or (s.q >= s.strength and "超過強度但未臨空" or "穩定")},
 		}) do rows[#rows + 1] = {kv[1], kv[2]} end
 	end
 	-- 六個面的節理

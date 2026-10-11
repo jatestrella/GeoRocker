@@ -55,14 +55,14 @@ local function compass_report(pos, nodename)
 		local w = 2 * cfg.failure.window + 1
 		local grid = rockmech.collapse.read_grid(vector.subtract(pos, w), vector.add(pos, w))
 		local fs = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
-			rockmech.collapse.failure_params())
+			rockmech.collapse.failure_params(true))
 		if fs then
 			lines[#lines + 1] = ("  柱狀荷重 %.3f → 擴散後 %.3f MPa（×%.2f）%s"):format(
 				fs.sv0, fs.sv, fs.factor, fs.exposed and "（臨空）" or "")
 			lines[#lines + 1] = ("  σxx=%.3f（×%.2f）σyy=%.3f σzz=%.3f（×%.2f）σxz=%.3f → σ1=%.3f σ3=%.3f MPa"):format(
 				fs.sx, fs.fx, fs.sy, fs.sz, fs.fz, fs.sxz, fs.s1, fs.s3)
 			local verdict
-			if fs.fails then
+			if fs.fails_axial then
 				verdict = core.colorize("#ff6060", "破壞")
 			elseif fs.q >= fs.strength then
 				verdict = core.colorize("#ffb060", "超過強度但未臨空")
@@ -70,7 +70,8 @@ local function compass_report(pos, nodename)
 				verdict = core.colorize("#80ff80", "穩定")
 			end
 			lines[#lines + 1] = ("  q=σ1−σ3=%.2f MPa  強度=%.2f MPa  FS=%.2f  → %s"):format(
-				fs.q, fs.strength, fs.fs, verdict)
+				fs.q, fs.strength, fs.fs_axial, verdict)
+			lines[#lines + 1] = "  " .. rockmech.slip_line(fs)
 		end
 	end
 
@@ -504,6 +505,17 @@ local TOGGLES = {
 				f.strength_scale, f.radius, f.max_cascade)
 		end,
 		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
+	},
+	{
+		id = "weakness", tbl = cfg.weakness,
+		label = "節理弱面滑動  τ ≥ cj + σn·tan φj",
+		short = "節理弱面滑動",
+		info = function()
+			local w = cfg.weakness
+			return ("cj %g MPa，φj %g°（三組相同）；%s"):format(w.c, w.phi,
+				w.daylight and "需傾向臨空面" or "不檢查運動學")
+		end,
+		off_note = "關閉：節理不影響強度（只有軸差破壞）",
 	},
 	{
 		id = "blast", tbl = cfg.blast,

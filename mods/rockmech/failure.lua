@@ -17,6 +17,14 @@
 --    σy 代表沿坡面方向的壓應力）。
 --    → 陡坡：臨空格後方的柱很高，擴散後 σy 大；緩坡：後方柱逐階變矮，σy 小。
 -- 5. 判定：q = σ1 − σ3 ≥ UCS × strength_scale → 破壞（只對臨空岩格）。
+-- 6. 弱面（Jaeger single plane of weakness）：穿過此格的每組節理面（法向 n）
+--      σn = n·σ·n、τ = |σ·n − σn·n|，τ ≥ cj + σn·tan φj → 沿節理滑動。
+--    運動學（daylight）：節理須傾向某個側向臨空面（向上法向的水平分量指向
+--    該面外側），或下方臨空（頂板／懸垂，任何節理都可釋放）。只有上方臨空不算。
+--    params.weakness = {c (MPa), tanphi, daylight}；params.joint_sets = 節理組陣列
+--    （每組需有 n_eff = 向上單位法向，與 name）；params.joints_at(x,y,z, sets) 回傳
+--    sets 中穿過此格的組。params.detail = true 時不做前置篩選（顯示用）。
+--    params.axial == false 時不做軸差判定（只做弱面）。
 --
 -- ## 網格格式（與 VoxelManip / VoxelArea 相同的扁平陣列）
 -- grid = {
@@ -265,8 +273,9 @@ function failure.cell_state(g, x, y, z, p)
 	local szz_c = (c2 * sH_own + s2 * sh_own) * fz
 	local sxz = (sH_own - sh_own) * sc
 
-	local ex = not is_solid(g, x + 1, y, z) or not is_solid(g, x - 1, y, z)
-	local ez = not is_solid(g, x, y, z + 1) or not is_solid(g, x, y, z - 1)
+	local ex_p, ex_n = not is_solid(g, x + 1, y, z), not is_solid(g, x - 1, y, z)
+	local ez_p, ez_n = not is_solid(g, x, y, z + 1), not is_solid(g, x, y, z - 1)
+	local ex, ez = ex_p or ex_n, ez_p or ez_n
 	local e_up = not is_solid(g, x, y + 1, z)
 	local e_down = not is_solid(g, x, y - 1, z)
 
@@ -283,17 +292,80 @@ function failure.cell_state(g, x, y, z, p)
 	local strength = lith.ucs * p.strength_scale
 	local exposed = ex or ez or e_up or e_down
 
+	-- 弱面滑動
+	local fs_joint, slip_set, slip_sn, slip_tau = math.huge, nil, nil, nil
+	local n_joints
+	local wk = p.weakness
+	-- 前置篩選（p.detail 時不篩，供顯示用）：
+	--   τ ≤ (σ1 − σ3)/2，所以 2cj > q 時任何面都不可能滑；未臨空也不可能滑
+	--   運動學不成立的組不必判斷平面是否穿過此格
+	if wk and p.joints_at and (p.detail or (exposed and 2 * wk.c <= q)) then
+		local cands = p.joint_sets
+		if wk.daylight and not p.detail then
+			cands = {}
+			for k = 1, #p.joint_sets do
+				local js = p.joint_sets[k]
+				if failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down) then cands[#cands + 1] = js end
+			end
+		end
+		local list = #cands > 0 and p.joints_at(x, y, z, cands) or {}
+		if p.detail then n_joints = #list end
+		for k = 1, #list do
+			local js = list[k]
+			if not wk.daylight or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down) then
+				local sn, tau = failure.plane_stress(sx, sy, sz, sxz, js.n_eff)
+				local f = failure.plane_fs(sn, tau, wk.c, wk.tanphi)
+				if f < fs_joint then
+					fs_joint, slip_set, slip_sn, slip_tau = f, js, sn, tau
+				end
+			end
+		end
+	end
+	local axial = p.axial ~= false
+	local fs_axial = q > 0 and strength / q or math.huge
+	local fails_axial = axial and exposed and q >= strength
+	local fails_slip = exposed and fs_joint <= 1
+	local fs = axial and fs_axial or math.huge
+	if fs_joint < fs then fs = fs_joint end
+
 	return {
 		lith = key, h = stress.depth(y, p.surface_y),
 		sv0 = sv0, sv = sv, sh = sh,
 		factor = sv0 > 0 and sv / sv0 or 1,
 		sx = sx, sy = sy, sz = sz, sxz = sxz, s1 = s1, s3 = s3, q = q,
 		sH_far = sH_own, sh_far = sh_own, fx = fx, fz = fz,
-		strength = strength, fs = q > 0 and strength / q or math.huge,
+		strength = strength, fs = fs, fs_axial = fs_axial, fs_joint = fs_joint,
+		slip_set = slip_set, slip_sn = slip_sn, slip_tau = slip_tau, n_joints = n_joints,
+		fails_axial = fails_axial, fails_slip = fails_slip,
 		exposed_x = ex, exposed_z = ez, exposed_up = e_up, exposed_down = e_down,
 		exposed = exposed,
-		fails = exposed and q >= strength,
+		fails = fails_axial or fails_slip,
 	}
+end
+
+-- 節理面上的正應力與剪應力（壓為正）。應力張量只有 σxx、σyy、σzz、σxz。
+function failure.plane_stress(sx, sy, sz, sxz, n)
+	local tx = sx * n.x + sxz * n.z
+	local ty = sy * n.y
+	local tz = sxz * n.x + sz * n.z
+	local sn = tx * n.x + ty * n.y + tz * n.z
+	local t2 = tx * tx + ty * ty + tz * tz - sn * sn
+	return sn, t2 > 0 and math.sqrt(t2) or 0
+end
+
+-- 弱面安全係數 (cj + σn·tanφj) / τ（τ = 0 時為 ∞；σn < 0 時摩擦項取 0）
+function failure.plane_fs(sn, tau, c, tanphi)
+	if tau <= 0 then return math.huge end
+	return (c + math.max(0, sn) * tanphi) / tau
+end
+
+-- 運動學：節理（向上法向 n）能否往臨空面釋放
+-- ex_p/ex_n：+x/−x 側臨空；ez_p/ez_n：+z/−z 側臨空；e_down：下方臨空
+function failure.daylights(n, ex_p, ex_n, ez_p, ez_n, e_down)
+	if e_down then return true end
+	local eps = 1e-9
+	return (ex_p and n.x > eps) or (ex_n and n.x < -eps)
+		or (ez_p and n.z > eps) or (ez_n and n.z < -eps) or false
 end
 
 -- 是否有任一面臨空（便宜的前置篩選）

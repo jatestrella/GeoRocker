@@ -181,3 +181,134 @@ describe("failure 水平主應力與集中", function()
 		assert.truthy(st.fx < 1.01 and st.fz < 1.01, ("fx %.3f fz %.3f"):format(st.fx, st.fz))
 	end)
 end)
+
+describe("failure 節理弱面（Jaeger）", function()
+	local function nvec(dip, dipdir)
+		local d, a = math.rad(dip), math.rad(dipdir)
+		return {x = math.sin(a) * math.sin(d), y = math.cos(d), z = math.cos(a) * math.sin(d)}
+	end
+
+	it("單軸垂直應力：σn = σv·cos²ψ、τ = σv·sinψ·cosψ", function()
+		local n = nvec(60, 90)
+		local sn, tau = failure.plane_stress(0, 1, 0, 0, n)
+		assert.near(math.cos(math.rad(60)) ^ 2, sn, 1e-12)
+		assert.near(math.sin(math.rad(60)) * math.cos(math.rad(60)), tau, 1e-12)
+	end)
+
+	it("等向應力：τ = 0，FS = ∞", function()
+		local sn, tau = failure.plane_stress(2, 2, 2, 0, nvec(45, 30))
+		assert.near(2, sn, 1e-12)
+		assert.near(0, tau, 1e-9)
+		assert.are.equal(math.huge, failure.plane_fs(sn, tau, 0, 0.5))
+	end)
+
+	it("cj = 0 時：傾角 > φj 才滑（tanψ 與 tanφ 比較）", function()
+		local tanphi = math.tan(math.rad(30))
+		local sn, tau = failure.plane_stress(0, 1, 0, 0, nvec(35, 0))
+		assert.is_true(failure.plane_fs(sn, tau, 0, tanphi) < 1)
+		sn, tau = failure.plane_stress(0, 1, 0, 0, nvec(25, 0))
+		assert.is_true(failure.plane_fs(sn, tau, 0, tanphi) > 1)
+		-- FS = tanφ / tanψ
+		sn, tau = failure.plane_stress(0, 1, 0, 0, nvec(50, 0))
+		assert.near(tanphi / math.tan(math.rad(50)), failure.plane_fs(sn, tau, 0, tanphi), 1e-12)
+	end)
+
+	it("剪應力 σxz 也計入", function()
+		local n = {x = math.sqrt(0.5), y = 0, z = math.sqrt(0.5)}
+		local sn, tau = failure.plane_stress(1, 0, 1, 0.5, n)
+		assert.near(1.5, sn, 1e-12)
+		assert.near(0, tau, 1e-12)
+	end)
+
+	it("運動學：傾向臨空面才能滑出；下方臨空任何方向都可", function()
+		local east = nvec(60, 90)   -- 傾向東 → 向上法向指向 +x
+		assert.is_true(failure.daylights(east, true, false, false, false, false))
+		assert.is_false(failure.daylights(east, false, true, false, false, false))
+		assert.is_false(failure.daylights(east, false, false, true, true, false))
+		assert.is_true(failure.daylights(east, false, false, false, false, true))
+		assert.is_false(failure.daylights(nvec(0, 0), true, true, true, true, false))
+	end)
+
+	-- 東側是 8 m 高的直立坡面（x ≥ 1 為空氣），坡頂 y = 0
+	local function cliff()
+		return make_grid(-12, 6, -20, 6, -4, 4, function(x, y) return x <= 0 and y < 0 end)
+	end
+	local function wparams(js_list, c, phi)
+		local p = params()
+		p.weakness = {c = c, tanphi = math.tan(math.rad(phi)), daylight = true}
+		p.joint_sets = js_list
+		p.detail = true
+		p.joints_at = function(_, _, _, sets) return sets end
+		return p
+	end
+
+	it("坡面格：傾向坡外的陡節理滑動，傾向坡內的不滑", function()
+		local g = cliff()
+		local out = {name = "J", n_eff = nvec(60, 90)}
+		local into = {name = "K", n_eff = nvec(60, 270)}
+		local st = failure.cell_state(g, 0, -6, 0, wparams({out}, 0, 30))
+		assert.is_true(st.fails_slip)
+		assert.are.equal(out, st.slip_set)
+		assert.is_true(st.fails)
+		st = failure.cell_state(g, 0, -6, 0, wparams({into}, 0, 30))
+		assert.is_false(st.fails_slip)
+		assert.is_nil(st.slip_set)
+	end)
+
+	it("凝聚力足夠時不滑；完整岩塊（無節理）不做弱面判定", function()
+		local g = cliff()
+		local out = {name = "J", n_eff = nvec(60, 90)}
+		local st = failure.cell_state(g, 0, -6, 0, wparams({out}, 10, 30))
+		assert.is_false(st.fails_slip)
+		assert.is_true(st.fs_joint > 1)
+		st = failure.cell_state(g, 0, -6, 0, wparams({}, 0, 30))
+		assert.are.equal(0, st.n_joints)
+		assert.are.equal(math.huge, st.fs_joint)
+		assert.is_false(st.fails)
+	end)
+
+	it("未臨空的格子不會沿節理滑", function()
+		local g = cliff()
+		local st = failure.cell_state(g, -5, -6, 0, wparams({{name = "J", n_eff = nvec(60, 90)}}, 0, 30))
+		assert.is_false(st.exposed)
+		assert.is_false(st.fails_slip)
+	end)
+
+	it("axial = false：只做弱面判定", function()
+		local g = cliff()
+		local p = wparams({}, 0, 30)
+		p.axial = false
+		p.strength_scale = 1e-6
+		local st = failure.cell_state(g, 0, -6, 0, p)
+		assert.is_false(st.fails_axial)
+		assert.is_false(st.fails)
+	end)
+end)
+
+describe("failure 節理弱面前置篩選", function()
+	it("篩選與不篩選的結果相同（坡面各高度、各方位節理）", function()
+		local g = make_grid(-12, 6, -20, 6, -4, 4, function(x, y) return x <= 0 and y < 0 end)
+		local sets = {}
+		for _, dd in ipairs({0, 90, 180, 270, 45}) do
+			for _, dip in ipairs({40, 60, 80}) do
+				local d, a = math.rad(dip), math.rad(dd)
+				sets[#sets + 1] = {name = dip .. "/" .. dd,
+					n_eff = {x = math.sin(a) * math.sin(d), y = math.cos(d), z = math.cos(a) * math.sin(d)}}
+			end
+		end
+		for _, c in ipairs({0, 0.05, 0.2}) do
+			local base = params()
+			base.weakness = {c = c, tanphi = math.tan(math.rad(30)), daylight = true}
+			base.joint_sets = sets
+			base.joints_at = function(_, _, _, s) return s end
+			for y = -19, -1 do
+				local a = failure.cell_state(g, 0, y, 0, base)
+				base.detail = true
+				local b = failure.cell_state(g, 0, y, 0, base)
+				base.detail = nil
+				assert.are.equal(b.fails_slip, a.fails_slip)
+				if a.fails_slip then assert.near(b.fs_joint, a.fs_joint, 1e-12) end
+			end
+		end
+	end)
+end)
