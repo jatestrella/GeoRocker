@@ -17,6 +17,7 @@ rockmech.rockfall = dofile(modpath .. "/rockfall.lua")
 rockmech.support = dofile(modpath .. "/support.lua")
 rockmech.rigidfall = dofile(modpath .. "/rigidfall.lua")
 rockmech.overhang = dofile(modpath .. "/overhang.lua")
+rockmech.keyblock = dofile(modpath .. "/keyblock.lua")
 rockmech.blast = dofile(modpath .. "/blast.lua")
 
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
@@ -37,6 +38,7 @@ end
 -- 不會讓這個世界已生成的節理對不上。要改這個世界的節理，請編輯 rockmech.conf。
 if not world_conf:has("rockmech_joint_lattice") then
 	world_conf:set("rockmech_surface_y", tostring(cfg.surface_y))
+	world_conf:set("rockmech_joint_persistence", cfg.joint_persistence)
 	world_conf:set("rockmech_joint_lattice", tostring(cfg.joint_lattice))
 	if not world_conf:has("rockmech_lith_mode") then
 		world_conf:set("rockmech_lith_mode", cfg.lith_mode)
@@ -54,6 +56,12 @@ if not world_conf:has("rockmech_joint_lattice") then
 		core.log("action", "[rockmech] 已建立世界設定 " .. world_conf_path)
 	end
 end
+-- 片狀延續性加入之前建立的世界：維持舊的逐面延續性（已生成的節理貼圖才對得上）
+if not world_conf:has("rockmech_joint_persistence") then
+	world_conf:set("rockmech_joint_persistence", "face")
+	cfg.joint_persistence = "face"
+	world_conf:write()
+end
 -- mapgen 執行緒無法讀主環境的變數，以 IPC 傳遞世界設定
 core.ipc_set("rockmech:world_settings", world_conf:to_table())
 
@@ -66,7 +74,8 @@ function rockmech.get_joint_sets()
 			core.log("warning", "[rockmech] 讀不到世界種子，節理延續性改用種子 0")
 		end
 		rockmech.seed = rockmech.joints.seed_from_string(seed_str or "0")
-		prepared_sets = rockmech.joints.prepare(cfg.joint_sets, rockmech.seed, cfg.joint_lattice)
+		prepared_sets = rockmech.joints.prepare(cfg.joint_sets, rockmech.seed, cfg.joint_lattice,
+			cfg.joint_persistence)
 	end
 	return prepared_sets
 end

@@ -95,6 +95,18 @@ rockmech_failure_cascade_delay (Cascade delay) float 0.6 0 10
 # Log a warning when one check takes longer than this (ms).
 rockmech_failure_budget_ms (Time budget per check) float 5 0.1 1000
 
+[Key blocks]
+
+# Blocks completely bounded by joints and free faces are checked under gravity:
+# fall, planar sliding or wedge sliding (joint c and phi from the joint plane of weakness settings).
+rockmech_keyblock_enabled (Enable key blocks) bool true
+
+# Blocks larger than this many nodes are treated as part of the rock mass (not checked).
+rockmech_keyblock_max_cells (Max key block size) int 500 1 5000
+
+# Cohesion (MPa) of the joints bounding a key block (open, persistent joints: usually 0). Friction angle is rockmech_weakness_phi.
+rockmech_keyblock_c (Key block joint cohesion) float 0 0 10
+
 [Induced failure only]
 
 # Only failures caused by excavation: the generated terrain is taken as in equilibrium.

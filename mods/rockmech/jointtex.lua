@@ -96,7 +96,7 @@ local function plane_present(joints, js, k, x, y, z)
 		if hash(js, k, x, y, z - 1, 3) < P then return true end
 	end
 	if touched then return false end
-	return joints.hash01(js.seed, js.id, k, x, y, z, 7) < P
+	return joints.face_hash01(js, k, x, y, z, 7) < P
 end
 
 -- 回傳此格的跡線清單 {{set=i, level=j}, ...}（依組號排序，最多 max_lines 條）

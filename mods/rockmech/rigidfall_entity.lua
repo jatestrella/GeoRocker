@@ -42,11 +42,13 @@ core.register_entity(PART, {
 })
 
 -- 放回 node；依落下高度套用掉落破碎。回傳放置的位置清單
-local function place_cells(self, drop)
+-- off：水平位移（關鍵塊體滑動用，省略為 0）
+local function place_cells(self, drop, off)
 	local fb = cfg.fallbreak
 	local placed = {}
+	local ox, oz = off and off.x or 0, off and off.z or 0
 	for _, c in ipairs(self.cells) do
-		local p = {x = self.origin.x + c.dx, y = self.origin.y + c.dy - drop, z = self.origin.z + c.dz}
+		local p = {x = self.origin.x + c.dx + ox, y = self.origin.y + c.dy - drop, z = self.origin.z + c.dz + oz}
 		local name = c.name
 		if fb.enabled and not rockmech.is_rubble(name) then
 			local lith = rockmech.lith_of_node[name]
@@ -65,7 +67,17 @@ local function place_cells(self, drop)
 	return placed
 end
 
+local function land_move(self)
+	for _, child in ipairs(self.object:get_children()) do child:remove() end
+	self.object:remove()
+	local placed = place_cells(self, -self.move.y, self.move)
+	if rockmech.collapse and rockmech.collapse.after_rigid_land then
+		rockmech.collapse.after_rigid_land(placed)
+	end
+end
+
 local function land(self)
+	if self.move then return land_move(self) end
 	-- 落點仍可用嗎？地形若改變就重新計算
 	local cells_now = {}
 	for _, c in ipairs(self.cells) do
@@ -102,7 +114,7 @@ core.register_entity(PARENT, {
 		if staticdata and staticdata ~= "" then
 			local d = core.deserialize(staticdata)
 			if d and d.cells then
-				self.cells, self.origin, self.drop = d.cells, d.origin, d.drop
+				self.cells, self.origin, self.drop, self.move = d.cells, d.origin, d.drop, d.move
 				self.restored = true -- 重新載入：下一步直接落地
 			end
 		end
@@ -110,7 +122,7 @@ core.register_entity(PARENT, {
 
 	get_staticdata = function(self)
 		if not self.cells then return "" end
-		return core.serialize({cells = self.cells, origin = self.origin, drop = self.drop})
+		return core.serialize({cells = self.cells, origin = self.origin, drop = self.drop, move = self.move})
 	end,
 
 	on_step = function(self)
@@ -123,11 +135,27 @@ core.register_entity(PARENT, {
 			return
 		end
 		local pos = self.object:get_pos()
-		if self.origin.y - pos.y >= self.drop then
+		if self.move then
+			-- 沿位移向量移動：走完全程就放回
+			if vector.distance(pos, self.origin) >= self.move_len then land(self) end
+		elseif self.origin.y - pos.y >= self.drop then
 			land(self)
 		end
 	end,
 })
+
+-- 讓 cells 以剛體沿位移 off = {x, y, z} 移動（關鍵塊體滑動）：先以滑動速度沿直線移動，
+-- 走完全程後放回 node。位移由 keyblock.slide_offset 事先算好。
+function api.spawn_move(cells, off)
+	local ok, parent = api.spawn(cells, 0)
+	if not ok then return false end
+	local le = parent:get_luaentity()
+	le.move = {x = off.x, y = off.y, z = off.z}
+	le.move_len = vector.length(le.move)
+	parent:set_acceleration({x = 0, y = 0, z = 0})
+	parent:set_velocity(vector.multiply(vector.normalize(le.move), 4))   -- 4 m/s
+	return true
+end
 
 -- 讓 cells（{{x,y,z,name}, ...}，node 已被移除）以剛體落下 drop 格
 function api.spawn(cells, drop)
@@ -151,5 +179,5 @@ function api.spawn(cells, drop)
 		end
 	end
 	parent:set_acceleration({x = 0, y = -rf.G, z = 0})
-	return true
+	return true, parent
 end

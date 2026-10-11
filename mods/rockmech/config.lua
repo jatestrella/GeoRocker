@@ -154,6 +154,14 @@ config.blast_defaults = {
 	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
 }
 
+-- 關鍵塊體（keyblock.lua）；設定鍵為 rockmech_keyblock_<key>
+-- 被節理面與臨空面完全圍住的岩塊，以重力判斷落下／平面滑動／楔形滑動（φj 同節理弱面，凝聚力另設）
+config.keyblock_defaults = {
+	enabled = true,
+	max_cells = 500,          -- 岩塊超過此格數視為與岩體相連（不判定）
+	c = 0,                    -- 岩塊邊界節理的凝聚力 (MPa)：圍出岩塊的是連續、張開的節理，通常取 0
+}
+
 -- 只有開挖造成的惡化才破壞（collapse.lua）；設定鍵為 rockmech_induced_<key>
 -- 生成的地形視為已平衡：比較開挖前後，只有「開挖前穩定、開挖後不穩定」才破壞
 config.induced_defaults = {
@@ -279,6 +287,8 @@ function config.load(get)
 	}
 
 	cfg.surface_y = tonumber(get("rockmech_surface_y")) or config.defaults.surface_y
+	-- 節理延續性：patch = 一片一片（片的大小 ≈ 間距，會切出完整的岩塊）；face = 舊版（每個格面各自判定）
+	cfg.joint_persistence = get("rockmech_joint_persistence") == "face" and "face" or "patch"
 	cfg.joint_lattice = math.max(2, math.min(16, math.floor(
 		tonumber(get("rockmech_joint_lattice")) or config.defaults.joint_lattice)))
 	cfg.k0 = tonumber(get("rockmech_k0")) or config.defaults.k0
@@ -377,6 +387,11 @@ function config.load(get)
 	cfg.blast = load_section("blast", config.blast_defaults)
 	cfg.blast.ucs_ref = math.max(0.1, cfg.blast.ucs_ref)
 	cfg.blast.inner = math.max(0, math.min(1, cfg.blast.inner))
+
+	-- 關鍵塊體
+	cfg.keyblock = load_section("keyblock", config.keyblock_defaults)
+	cfg.keyblock.max_cells = math.max(1, math.floor(cfg.keyblock.max_cells))
+	cfg.keyblock.c = math.max(0, cfg.keyblock.c)
 
 	-- 只有開挖造成的惡化才破壞
 	cfg.induced = load_section("induced", config.induced_defaults)

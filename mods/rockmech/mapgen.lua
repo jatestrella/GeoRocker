@@ -42,7 +42,7 @@ end
 -- 節理組（與主環境相同的種子與前處理，結果一致）
 local use_joints = cfg.jointtex.enabled
 local sets = joints.prepare(cfg.joint_sets,
-	joints.seed_from_string(core.get_mapgen_setting("seed") or "0"), cfg.joint_lattice)
+	joints.seed_from_string(core.get_mapgen_setting("seed") or "0"), cfg.joint_lattice, cfg.joint_persistence)
 local cell_mask = joints.cell_mask
 local logged = 0
 

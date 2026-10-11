@@ -298,3 +298,23 @@ describe("joints 節理遮罩", function()
 		end
 	end)
 end)
+
+describe("joints 片狀延續性", function()
+	local base = {{id = 1, dip = 60, dipdir = 45, spacing = 4, persistence = 0.9, phi = 30, name = "J"}}
+	it("同一平面在同一片（P×P×P 粗格）內共用一個值，與面的方向無關", function()
+		local js = joints.prepare(base, 777, 8, "patch")[1]
+		assert.are.equal(4, js.patch)
+		local v = joints.face_hash01(js, 3, 0, 0, 0, 1)
+		for x = 0, 3 do for y = 0, 3 do for z = 0, 3 do for axis = 1, 3 do
+			assert.are.equal(v, joints.face_hash01(js, 3, x, y, z, axis))
+		end end end end
+		-- 負座標也正確分片（-4..-1 是同一片）
+		assert.are.equal(joints.face_hash01(js, 3, -4, 0, 0, 1), joints.face_hash01(js, 3, -1, 2, 3, 2))
+		assert.is_true(joints.face_hash01(js, 3, -1, 0, 0, 1) ~= joints.face_hash01(js, 3, 0, 0, 0, 1))
+	end)
+	it("舊模式（face）每個格面各自判定", function()
+		local js = joints.prepare(base, 777, 8, "face")[1]
+		assert.is_nil(js.patch)
+		assert.is_true(joints.face_hash01(js, 3, 0, 0, 0, 1) ~= joints.face_hash01(js, 3, 1, 0, 0, 1))
+	end)
+end)

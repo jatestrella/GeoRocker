@@ -19,6 +19,7 @@ local SPECS = {
 	"rigidfall_spec.lua",
 	"jointtex_spec.lua",
 	"overhang_spec.lua",
+	"keyblock_spec.lua",
 	"blast_spec.lua",
 }
 

@@ -82,8 +82,14 @@ function joints.hash_prefix(...)
 end
 
 -- 面的延續性雜湊（熱路徑）：等同 hash01(js.seed, js.id, k, x, y, z, axis)，
--- 但 (seed, id) 已預先混入 js.hp，且不用可變參數
+-- 但 (seed, id) 已預先混入 js.hp，且不用可變參數。
+-- 片狀延續性（js.patch = P）：同一個平面 k 在同一個 P×P×P 粗格內共用一個值
+-- （一整片要嘛是節理、要嘛是岩橋），與面的方向無關。
 local function face_hash01(js, k, x, y, z, axis)
+	local P = js.patch
+	if P then
+		x, y, z, axis = (x - x % P) / P, (y - y % P) / P, (z - z % P) / P, 0
+	end
 	local h = js.hp
 	h = mix((h + k % TWO32) % TWO32)
 	h = mix((h + x % TWO32) % TWO32)
@@ -138,10 +144,11 @@ end
 -- 有效位態（dip_eff / dipdir_eff）由 m 反算，與輸入值差約 1°（D=8）。
 --
 -- sets: config 的節理組陣列；seed: 32-bit 整數；lattice: D（預設 8）。
+-- persistence_mode: "patch"（片狀延續性，片的大小 ≈ 間距）或 "face"（舊：每個格面各自判定）。
 -- 回傳前處理後的陣列（原表不修改），每組多出：
 --   n（輸入位態的單位法向）、mx,my,mz、m_axis、L、o、
 --   n_eff、dip_eff、dipdir_eff、spacing_eff、dvec（有效位態的順傾向向量）
-function joints.prepare(sets, seed, lattice)
+function joints.prepare(sets, seed, lattice, persistence_mode)
 	local D = lattice or 8
 	local out = {}
 	for i, js in ipairs(sets) do
@@ -172,6 +179,9 @@ function joints.prepare(sets, seed, lattice)
 		p.dvec = joints.dip_vector(p.dip_eff, p.dipdir_eff)
 		p.seed = seed
 		p.hp = joints.hash_prefix(seed, js.id)
+		if persistence_mode == "patch" then
+			p.patch = math.max(2, floor(p.spacing_eff + 0.5))
+		end
 		out[i] = p
 	end
 	return out

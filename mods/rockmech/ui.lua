@@ -43,6 +43,7 @@ function rockmech.stress_report(pos)
 			rockmech.collapse.failure_params(true))
 		r.overhang = rockmech.collapse.overhang_state(pos)
 		r.nearby = rockmech.collapse.nearby_min_fs(pos, NEARBY_R)
+		if cfg.keyblock.enabled then r.keyblock = rockmech.collapse.keyblock_state(pos) end
 	end
 	return r
 end
@@ -80,6 +81,25 @@ function rockmech.overhang_line(o)
 		.. ((o.cut_cells or 0) > 0 and ("；相鄰有 %d 格被節理切離、會掉落"):format(o.cut_cells) or "")
 end
 
+-- 關鍵塊體的一行說明。kb = collapse.keyblock_state 的結果
+function rockmech.keyblock_line(kb)
+	if not cfg.keyblock.enabled then return "關鍵塊體：關閉" end
+	if kb == nil then return "關鍵塊體：—" end
+	if kb == false then return "關鍵塊體：與岩體相連（有岩橋，或超過 " .. cfg.keyblock.max_cells .. " 格）" end
+	local mode = rockmech.collapse.keyblock_mode_name[kb.mode]
+	local sets = {}
+	for _, pl in ipairs(kb.planes or {}) do
+		local js = pl.set and rockmech.get_joint_sets()[pl.set]
+		sets[#sets + 1] = js and js.name or "接觸面"
+	end
+	if not mode then
+		return ("關鍵塊體 %d 格（W %.0f kN）：卡住，沒有可行的運動方向"):format(#kb.cells, kb.W)
+	end
+	return ("關鍵塊體 %d 格（W %.0f kN）：%s%s FS %s%s"):format(#kb.cells, kb.W, mode,
+		#sets > 0 and ("（" .. table.concat(sets, "＋") .. "）") or "", fs_str(kb.fs),
+		kb.fs < 1 and "  會滑出" or "")
+end
+
 -- 周圍臨空格的最小 FS 一行說明
 function rockmech.nearby_line(nb)
 	if not nb then return "" end
@@ -115,6 +135,7 @@ local function fmt_report_lines(r)
 		lines[#lines + 1] = rockmech.slip_line(s)
 		lines[#lines + 1] = rockmech.overhang_line(r.overhang)
 		lines[#lines + 1] = rockmech.nearby_line(r.nearby)
+		if cfg.keyblock.enabled then lines[#lines + 1] = rockmech.keyblock_line(r.keyblock) end
 	end
 	return lines
 end
@@ -314,6 +335,7 @@ local function tab_stress(name)
 			{"節理弱面", rockmech.slip_line(s)},
 			{"懸臂", rockmech.overhang_line(r.overhang)},
 			{"周圍臨空格", rockmech.nearby_line(r.nearby)},
+			{"關鍵塊體", rockmech.keyblock_line(r.keyblock)},
 			{"臨空面", (s.exposed_x and "東西 " or "") .. (s.exposed_z and "南北 " or "") ..
 				(s.exposed_up and "上 " or "") .. (s.exposed_down and "下" or "")},
 			{"判定", s.fails_axial and "軸差破壞" or s.fails_slip and "沿節理滑動"

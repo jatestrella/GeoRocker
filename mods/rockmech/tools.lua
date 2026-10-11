@@ -73,6 +73,9 @@ local function compass_report(pos, nodename)
 				fs.q, fs.strength, fs.fs_axial, verdict)
 			lines[#lines + 1] = "  " .. rockmech.slip_line(fs)
 			lines[#lines + 1] = "  " .. rockmech.overhang_line(rockmech.collapse.overhang_state(pos))
+			if cfg.keyblock.enabled then
+				lines[#lines + 1] = "  " .. rockmech.keyblock_line(rockmech.collapse.keyblock_state(pos))
+			end
 		end
 	end
 
@@ -506,6 +509,16 @@ local TOGGLES = {
 				f.strength_scale, f.radius, f.max_cascade)
 		end,
 		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
+	},
+	{
+		id = "keyblock", tbl = cfg.keyblock,
+		label = "關鍵塊體（被節理圍住的岩塊依重力落下／平面滑動／楔形滑動）",
+		short = "關鍵塊體",
+		info = function()
+			return ("岩塊上限 %d 格；岩塊邊界節理 c %g MPa、φj %g°"):format(
+				cfg.keyblock.max_cells, cfg.keyblock.c, cfg.weakness.phi)
+		end,
+		off_note = "關閉：被節理圍住的岩塊不會因重力滑出",
 	},
 	{
 		id = "induced", tbl = cfg.induced,

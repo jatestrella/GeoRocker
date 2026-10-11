@@ -801,6 +801,30 @@ function collapse.nearby_min_fs(pos, r)
         {vector.subtract(pos, r), vector.add(pos, r)})
 end
 
+-- 關鍵塊體參數
+local kcfg = cfg.keyblock
+local function face_set(x, y, z, axis)
+    return rockmech.joints.face_joint(rockmech.get_joint_sets(), x, y, z, axis)
+end
+function collapse.keyblock_params()
+    return {
+        face_set = face_set, joint_sets = rockmech.get_joint_sets(),
+        c = kcfg.c * 1000, tanphi = math.tan(math.rad(cfg.weakness.phi)),
+        lithologies = cfg.lithologies, gamma_other = cfg.failure.gamma_other,
+        max_cells = kcfg.max_cells,
+    }
+end
+
+-- 單格所在的關鍵塊體（HUD／資訊頁用）：nil（非岩石）、false（與岩體相連）或岩塊
+function collapse.keyblock_state(pos)
+    local r = math.min(24, math.ceil(kcfg.max_cells ^ (1 / 3)) + 6)
+    local grid = collapse.read_grid(vector.subtract(pos, r), vector.add(pos, r), true)
+    return rockmech.keyblock.block_at(grid, collapse.keyblock_params(), pos.x, pos.y, pos.z)
+end
+
+local MODE_NAME = {fall = "落下", plane = "平面滑動", wedge = "楔形滑動"}
+collapse.keyblock_mode_name = MODE_NAME
+
 -- 單格的懸臂狀態（HUD／資訊頁／羅盤用；與懸臂斷裂同一個模型與範圍）
 function collapse.overhang_state(pos)
     local r = cfg.overhang.radius
@@ -844,6 +868,7 @@ local function run_support_check()
     end
 
     local comps, stats = {}, {visited = 0}
+    local slides = {}      -- 關鍵塊體滑動（沿滑動方向移出）
     local n_overhang = 0
     local oparams = collapse.overhang_params()
     for _, g in ipairs(groups) do
@@ -890,11 +915,44 @@ local function run_support_check()
         for _, comp in ipairs(og) do
             local cells = {}
             for _, p in ipairs(comp.cells) do
-                if not taken[pos_key(p)] then cells[#cells + 1] = p end
+                if not taken[pos_key(p)] then cells[#cells + 1] = p; taken[pos_key(p)] = true end
             end
             if #cells > 0 then
                 comps[#comps + 1] = {cells = cells}
                 n_overhang = n_overhang + 1
+            end
+        end
+        -- 關鍵塊體：被節理與臨空面圍住的岩塊，以重力判斷落下／滑動
+        if kcfg.enabled then
+            local kp = collapse.keyblock_params()
+            local blocks = rockmech.keyblock.find_blocks(grid, kp, g.starts)
+            local failing = {}
+            for _, b in ipairs(blocks) do
+                if b.fs < 1 and not taken[pos_key(b.cells[1])] then failing[#failing + 1] = b end
+            end
+            -- 只算開挖造成的：開挖前就是獨立岩塊且 FS < 1 的不處理（FS = 0 一律處理）
+            if icfg.enabled and #failing > 0 then
+                local undo = restore_grid(grid, changes.list)
+                local keep = {}
+                for _, b in ipairs(failing) do
+                    local c1 = b.cells[1]
+                    local before = rockmech.keyblock.block_at(grid, kp, c1.x, c1.y, c1.z)
+                    local bfs = before and before.fs or math.huge
+                    if b.fs <= 0 or bfs >= 1 then keep[#keep + 1] = b
+                    else n_existing = n_existing + 1 end
+                end
+                undo()
+                failing = keep
+            end
+            for _, b in ipairs(failing) do
+                for _, p in ipairs(b.cells) do taken[pos_key(p)] = true end
+                core.log("action", ("[rockmech] 關鍵塊體：%d 格（W %.0f kN）%s，FS %.2f")
+                    :format(#b.cells, b.W, MODE_NAME[b.mode] or "?", b.fs))
+                if b.mode == "fall" then
+                    comps[#comps + 1] = {cells = b.cells}
+                else
+                    slides[#slides + 1] = b
+                end
             end
         end
     end
@@ -907,12 +965,20 @@ local function run_support_check()
         core.log("action", ("[rockmech] 支撐判定：%d 群開挖前就會斷（0 < FS < 1），視為既有狀態不處理")
             :format(n_existing))
     end
-    if #comps == 0 then return end
+    if #comps == 0 and #slides == 0 then return end
 
     local n, n_rigid = 0, 0
     local rfe = rockmech.rigidfall_entity
     physics_updating = true
     local n_stuck = 0
+    -- 由下往上處理：下面的群先移走，疊在上面的群才算得出落下距離
+    local function min_y(c)
+        local m = math.huge
+        for _, p in ipairs(c.cells) do if p.y < m then m = p.y end end
+        return m
+    end
+    for _, c in ipairs(comps) do c.min_y = min_y(c) end
+    table.sort(comps, function(a, b) return a.min_y < b.min_y end)
     for _, c in ipairs(comps) do
         local done = false
         -- 完全動不了（正下方被群外的實心格擋住）：不移除，避免移除後馬上落回原位又再觸發判定
@@ -944,6 +1010,27 @@ local function run_support_check()
             end
         elseif dd ~= 0 then
             n = n + #c.cells
+        end
+    end
+    -- 關鍵塊體滑動：沿滑動方向一步步移出，再落到底；整塊以剛體移動
+    for _, b in ipairs(slides) do
+        local off = rfe and rockmech.keyblock.slide_offset(b.cells, b.dir,
+            function(x, y, z) return not rfe.is_solid(x, y, z) end, 16)
+        if off and (off.x ~= 0 or off.y ~= 0 or off.z ~= 0) then
+            local cells = {}
+            for _, p in ipairs(b.cells) do
+                cells[#cells + 1] = {x = p.x, y = p.y, z = p.z, name = core.get_node(p).name}
+            end
+            for _, p in ipairs(b.cells) do core.remove_node(p) end
+            if rfe.spawn_move(cells, off) then
+                n = n + #cells
+                core.log("action", ("[rockmech] 關鍵塊體滑出：%d 格，位移 (%d,%d,%d)"):format(#cells, off.x, off.y, off.z))
+            else
+                for _, p in ipairs(cells) do core.set_node(p, {name = p.name}) end
+            end
+        else
+            n_stuck = n_stuck + 1
+            core.log("action", ("[rockmech] 關鍵塊體 %d 格判定會滑，但滑動方向被擋住，保留原位"):format(#b.cells))
         end
     end
     if n_stuck > 0 then

@@ -3,7 +3,8 @@
 --   /rockmech_fsmask [半徑] [秒數]   在玩家周圍標出「若被觸發就會破壞」的岩格
 --   /rockmech_fsmask on | off        即時模式（每個玩家各自設定、會記住；也可在資訊頁／物品欄勾選）
 -- 標示方式：
---   * 半透明發光方塊（實體）套在格子外：紅 = 節理滑動、橙 = 軸差破壞、紫 = 懸臂斷裂／被節理切離
+--   * 半透明發光方塊（實體）套在格子外：紅 = 節理滑動、橙 = 軸差破壞、紫 = 懸臂斷裂／被節理切離、
+--     黃 = 關鍵塊體（被節理圍住、會因重力滑出或落下）
 --   * HUD 小方點（image_waypoint）：不受遮擋，洞穴裡、岩石後面的格子也看得到
 -- 判定與遊戲中的破壞檢查、懸臂判定相同（同一組純函式與參數）。
 
@@ -14,6 +15,7 @@ local KINDS = {
 	slip = {color = "#ff2020", label = "節理滑動"},
 	axial = {color = "#ff9900", label = "軸差破壞"},
 	overhang = {color = "#b040ff", label = "懸臂斷裂／被節理切離"},
+	keyblock = {color = "#ffe000", label = "關鍵塊體"},
 }
 local MAX_ENTITIES = 2000
 local MAX_WAYPOINTS = 300
@@ -54,7 +56,7 @@ function rockmech.fsmask_scan(center, r)
 	local t0 = core.get_us_time()
 	local a, b = vector.subtract(center, r), vector.add(center, r)
 	local cells, seen = {}, {}
-	local counts = {slip = 0, axial = 0, overhang = 0}
+	local counts = {slip = 0, axial = 0, overhang = 0, keyblock = 0}
 
 	-- 1. 軸差破壞與節理滑動（同遊戲中的破壞檢查）
 	if cfg.failure.enabled or cfg.weakness.enabled then
@@ -93,6 +95,40 @@ function rockmech.fsmask_scan(center, r)
 					seen[k] = true
 					cells[#cells + 1] = {pos = p, kind = "overhang"}
 					counts.overhang = counts.overhang + 1
+				end
+			end
+		end
+	end
+
+	-- 3. 關鍵塊體：以範圍內所有臨空的鍵結格為起點（同一岩塊只算一次）
+	if cfg.keyblock.enabled then
+		local kr = math.min(24, math.ceil(cfg.keyblock.max_cells ^ (1 / 3)) + 6)
+		local grid = collapse.read_grid(vector.subtract(a, kr), vector.add(b, kr), true)
+		local nx, ny = grid.nx, grid.ny
+		local data, bonded_of, solid_of = grid.data, grid.bonded_of, grid.solid_of
+		local function idx(x, y, z) return 1 + (x - grid.ox) + (y - grid.oy) * nx + (z - grid.oz) * nx * ny end
+		local starts = {}
+		for z = a.z, b.z do
+			for y = a.y, b.y do
+				for x = a.x, b.x do
+					if bonded_of[data[idx(x, y, z)]] and (not solid_of[data[idx(x + 1, y, z)]]
+							or not solid_of[data[idx(x - 1, y, z)]] or not solid_of[data[idx(x, y + 1, z)]]
+							or not solid_of[data[idx(x, y - 1, z)]] or not solid_of[data[idx(x, y, z + 1)]]
+							or not solid_of[data[idx(x, y, z - 1)]]) then
+						starts[#starts + 1] = {x = x, y = y, z = z}
+					end
+				end
+			end
+		end
+		for _, blk in ipairs(rockmech.keyblock.find_blocks(grid, collapse.keyblock_params(), starts)) do
+			if blk.fs < 1 then
+				for _, p in ipairs(blk.cells) do
+					local k = pkey(p)
+					if not seen[k] then
+						seen[k] = true
+						cells[#cells + 1] = {pos = p, kind = "keyblock"}
+						counts.keyblock = counts.keyblock + 1
+					end
 				end
 			end
 		end
@@ -172,7 +208,7 @@ end
 
 local function summary(cells, counts)
 	local parts = {}
-	for _, kind in ipairs({"slip", "axial", "overhang"}) do
+	for _, kind in ipairs({"slip", "axial", "overhang", "keyblock"}) do
 		parts[#parts + 1] = core.colorize(KINDS[kind].color, ("■ %s %d"):format(KINDS[kind].label, counts[kind]))
 	end
 	local note = ""
