@@ -148,6 +148,19 @@ rockmech_support_rigid_max (Max rigid block size) int 128 1 2000
 # Log a warning when one support check takes longer than this (ms).
 rockmech_support_budget_ms (Support check time budget) float 5 0.1 1000
 
+[Blasting]
+
+# TNT explosions fragment rock: within r_out = R * (ucs_ref / UCS)^(1/3) of the blast centre rock
+# turns into rubble; within inner * r_out it is thrown out as rubble items.
+# Requires the tnt mod. Can also be toggled in game.
+rockmech_blast_enabled (Enable blast fragmentation) bool true
+
+# Reference UCS (MPa) whose fragmentation radius equals the blast radius.
+rockmech_blast_ucs_ref (Blast reference UCS) float 60 0.1 1000
+
+# Fraction of the fragmentation radius inside which rock is thrown out.
+rockmech_blast_inner (Blast ejection fraction) float 0.5 0 1
+
 [Overhang]
 
 # Overhanging rock (cantilevers, thin roofs) breaks at its root and falls when its distance from

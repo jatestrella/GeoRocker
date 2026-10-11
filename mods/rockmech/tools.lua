@@ -505,6 +505,15 @@ local TOGGLES = {
 		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
 	},
 	{
+		id = "blast", tbl = cfg.blast,
+		label = "TNT 爆破破碎（依岩石強度）",
+		short = "爆破破碎",
+		info = function()
+			return ("破碎半徑 = 爆炸半徑 × (%g/UCS)^(1/3)；內 %d%% 炸飛"):format(cfg.blast.ucs_ref, cfg.blast.inner * 100)
+		end,
+		off_note = "關閉：岩石不受 TNT 影響（只炸掉其他方塊）",
+	},
+	{
 		id = "overhang", tbl = cfg.overhang,
 		label = "懸臂／頂板斷裂（依張力強度與厚度）",
 		short = "懸臂斷裂",

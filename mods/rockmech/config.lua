@@ -146,6 +146,13 @@ config.support_defaults = {
 	budget_ms = 5,            -- 單次判定超過此時間就記 log
 }
 
+-- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
+config.blast_defaults = {
+	enabled = true,
+	ucs_ref = 60,             -- 破碎半徑 = 爆炸半徑 × (ucs_ref / UCS)^(1/3)
+	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
+}
+
 -- 懸臂／頂板彎曲斷裂（overhang.lua）；設定鍵為 rockmech_overhang_<key>
 config.overhang_defaults = {
 	enabled = true,
@@ -347,6 +354,11 @@ function config.load(get)
 	cfg.support.radius = math.max(2, math.floor(cfg.support.radius))
 	cfg.support.max_voxels = math.max(1, math.floor(cfg.support.max_voxels))
 	cfg.support.rigid_max = math.max(1, math.floor(cfg.support.rigid_max))
+
+	-- 爆破破碎
+	cfg.blast = load_section("blast", config.blast_defaults)
+	cfg.blast.ucs_ref = math.max(0.1, cfg.blast.ucs_ref)
+	cfg.blast.inner = math.max(0, math.min(1, cfg.blast.inner))
 
 	-- 懸臂／頂板斷裂
 	cfg.overhang = load_section("overhang", config.overhang_defaults)

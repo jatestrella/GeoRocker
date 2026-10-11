@@ -17,6 +17,7 @@ rockmech.rockfall = dofile(modpath .. "/rockfall.lua")
 rockmech.support = dofile(modpath .. "/support.lua")
 rockmech.rigidfall = dofile(modpath .. "/rigidfall.lua")
 rockmech.overhang = dofile(modpath .. "/overhang.lua")
+rockmech.blast = dofile(modpath .. "/blast.lua")
 
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
 local world_conf_path = core.get_worldpath() .. "/rockmech.conf"
@@ -77,6 +78,7 @@ dofile(modpath .. "/rigidfall_entity.lua")
 dofile(modpath .. "/collapse.lua") -- 沿用 physics_core 的坍塌機制，階段 3 由 keyblock.lua 取代
 dofile(modpath .. "/tools.lua")
 dofile(modpath .. "/ui.lua")
+dofile(modpath .. "/blasting.lua")
 
 -- 地圖生成在 mapgen 執行緒中執行（另一個 Lua 環境），以 IPC 傳遞 modpath
 core.ipc_set("rockmech:modpath", modpath)

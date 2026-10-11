@@ -742,6 +742,14 @@ function collapse.after_rigid_land(placed)
     physics_updating = false
 end
 
+-- 單格判定（碎石掉落／安息角滑動），供爆破等外部使用
+function collapse.check_cell(pos)
+    local prev = physics_updating
+    physics_updating = true
+    check_stability_and_move(pos)
+    physics_updating = prev
+end
+
 -- 某格被移除後：以其 6 個鄰格為起點排入支撐判定
 function collapse.queue_support_check(pos)
     if not scfg.enabled then return end
