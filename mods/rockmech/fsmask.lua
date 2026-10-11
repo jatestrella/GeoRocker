@@ -2,7 +2,7 @@
 -- FS < 1 遮罩（除錯／檢視用，不修改地圖）：
 --   /rockmech_fsmask [半徑] [秒數]   在玩家周圍標出「若被觸發就會破壞」的岩格
 --   /rockmech_fsmask on | off        即時模式（每個玩家各自設定、會記住；也可在資訊頁／物品欄勾選）
---   /rockmech_fswarn on | off        警戒裂紋：1 < FS < 1.5 的岩格加上裂紋（預設開啟）
+--   /rockmech_fswarn on | off        警戒裂紋：受開挖影響、FS 下降到 1 < FS < 1.5 的岩格加上裂紋（預設開啟）
 -- 標示方式：
 --   * 半透明發光方塊（實體）套在格子外：紅 = 節理滑動、橙 = 軸差破壞、紫 = 懸臂斷裂／被節理切離、
 --     黃 = 關鍵塊體（被節理圍住、會因重力滑出或落下）
@@ -396,14 +396,77 @@ end
 ---------------------------------------------------------------------------
 
 -- 地形改變（挖掘、放置、坍塌、爆破都會經過 queue_support_check）：附近的即時顯示標記為需更新
+-- 改變紀錄（警戒裂紋判斷「受影響」用）：{pos, n}，n 為流水號
+local change_log, change_n = {}, 0
+local CHANGE_LOG_MAX = 4000
+
 local orig_queue = collapse.queue_support_check
 collapse.queue_support_check = function(pos, prev)
 	orig_queue(pos, prev)
+	change_n = change_n + 1
+	change_log[#change_log + 1] = {pos = vector.round(pos), n = change_n}
+	if #change_log > CHANGE_LOG_MAX then table.remove(change_log, 1) end
 	for _, a in pairs(active) do
 		if a.center and vector.distance(pos, a.center) <= LIVE_R + 2 * cfg.failure.window + 2 then
 			a.dirty = true
 		end
 	end
+end
+
+-- 受影響的格子（全世界共用）：座標 → true。被影響 = 附近（開挖影響範圍內）有改變、
+-- 且 FS 從門檻以上降到門檻以下，或原本就在 1～門檻之間但下降至少 5%
+local affected = {}
+
+-- 從 cells（這次掃描，FS < 門檻者）挑出要顯示裂紋的：受影響、且 1 < FS < 門檻。
+-- a.prev：上次掃描的 FS（座標 → FS）；a.prev_box：上次掃描範圍；a.seen_n：已處理到的改變流水號
+local function select_warned(a, box, cells)
+	local r = cfg.failure.radius
+	local recent = {}
+	for i = #change_log, 1, -1 do
+		local c = change_log[i]
+		if c.n <= (a.seen_n or 0) then break end
+		recent[#recent + 1] = c.pos
+	end
+	a.seen_n = change_n
+	local function near_change(p)
+		for _, q in ipairs(recent) do
+			if math.abs(p.x - q.x) <= r and math.abs(p.y - q.y) <= r and math.abs(p.z - q.z) <= r then return true end
+		end
+		return false
+	end
+	local pb = a.prev_box
+	local function in_prev(p)
+		return pb and p.x >= pb[1].x and p.x <= pb[2].x and p.y >= pb[1].y and p.y <= pb[2].y
+			and p.z >= pb[1].z and p.z <= pb[2].z
+	end
+	local now_fs, out = {}, {}
+	for _, c in ipairs(cells) do
+		local k = pkey(c.pos)
+		now_fs[k] = c.fs
+		if c.fs > 1 then
+			if not affected[k] and #recent > 0 and in_prev(c.pos) and near_change(c.pos) then
+				local before = a.prev and a.prev[k]
+				-- 新進入警戒範圍（上次 ≥ 門檻），或原本就在範圍內但明顯下降（≥ 5%）
+				if before == nil or c.fs < before * 0.95 then affected[k] = true end
+			end
+			if affected[k] then out[#out + 1] = c end
+		else
+			affected[k] = nil   -- FS ≤ 1：改由 FS 遮罩顯示
+		end
+	end
+	-- 這次掃描範圍內、FS 已回到 ≥ 門檻或已被移除的格子：取消受影響
+	for k in pairs(affected) do
+		if not now_fs[k] then
+			local x, y, z = k:match("^(-?%d+),(-?%d+),(-?%d+)$")
+			x, y, z = tonumber(x), tonumber(y), tonumber(z)
+			if x >= box[1].x and x <= box[2].x and y >= box[1].y and y <= box[2].y
+					and z >= box[1].z and z <= box[2].z then
+				affected[k] = nil
+			end
+		end
+	end
+	a.prev, a.prev_box = now_fs, box
+	return out
 end
 
 local tick = 0
@@ -426,13 +489,16 @@ core.register_globalstep(function(dtime)
 					a.busy = false
 					local pl = core.get_player_by_name(name)
 					if not pl or active[name] ~= a then return end
-					local masked, warned = {}, {}
+					local masked = {}
 					for _, c in ipairs(cells) do
-						if c.fs <= 1 then masked[#masked + 1] = c else warned[#warned + 1] = c end
+						if c.fs <= 1 then masked[#masked + 1] = c end
 					end
 					local m2, w2 = rockmech.fsmask_live(pl), rockmech.fswarn_enabled(pl)
 					if m2 and not (a.hold and now() < a.hold) then apply(pl, a, pos, masked) end
-					if w2 then apply_warn(pl, a, pos, warned) end
+					if w2 then
+						local box = {vector.subtract(pos, LIVE_R), vector.add(pos, LIVE_R)}
+						apply_warn(pl, a, pos, select_warned(a, box, cells))
+					end
 				end)
 			end
 		end
@@ -461,7 +527,8 @@ core.register_chatcommand("rockmech_fsmask", {
 
 core.register_chatcommand("rockmech_fswarn", {
 	params = "on | off",
-	description = "警戒裂紋：周圍 1 < FS < 門檻（預設 1.5）的岩格加上裂紋，FS 越接近 1 裂得越嚴重（預設開啟）",
+	description = "警戒裂紋：受開挖影響、FS 下降到 1 < FS < 門檻（預設 1.5）的岩格加上裂紋，"
+		.. "FS 越接近 1 裂得越嚴重（預設開啟）",
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
 		if not player then return false, "找不到玩家" end

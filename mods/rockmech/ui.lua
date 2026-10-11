@@ -374,7 +374,7 @@ local function tab_toggles(name)
 		tostring(player and rockmech.fsmask_live and rockmech.fsmask_live(player) or false))
 	y = y + 0.6
 	out[#out + 1] = ("checkbox[0.3,%g;rm_fswarn;%s;%s]"):format(y,
-		F(("警戒裂紋：1 < FS < %g 的岩格加上裂紋（越接近 1 裂得越嚴重）"):format(cfg.fswarn.max)),
+		F(("警戒裂紋：受開挖影響、FS 降到 1 < FS < %g 的岩格加上裂紋（越接近 1 裂得越嚴重）"):format(cfg.fswarn.max)),
 		tostring(player and rockmech.fswarn_enabled and rockmech.fswarn_enabled(player) or false))
 	out[#out + 1] = ("label[0.3,%g;%s]"):format(y + 0.6, F("修改力學開關需要 rockmech 權限；HUD、FS 遮罩、警戒裂紋每個玩家各自設定。"))
 	return table.concat(out)

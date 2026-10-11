@@ -660,7 +660,7 @@ if core.get_modpath("sfinv") and sfinv then
 					F("標出周圍 FS ≤ 1 的岩格（個人顯示）"), tostring(rockmech.fsmask_live(player)))
 				y = y + 0.75
 				parts[#parts + 1] = ("checkbox[0,%g;rm_fswarn;%s;%s]"):format(y,
-					F(("警戒裂紋：1 < FS < %g（個人顯示）"):format(cfg.fswarn.max)), tostring(rockmech.fswarn_enabled(player)))
+					F(("警戒裂紋：受影響後 1 < FS < %g（個人顯示）"):format(cfg.fswarn.max)), tostring(rockmech.fswarn_enabled(player)))
 				y = y + 0.75
 			end
 			parts[#parts + 1] = ("button[0,%g;5,0.8;rm_open;%s]"):format(y + 0.2, F("完整資訊頁（/rockmech）"))
