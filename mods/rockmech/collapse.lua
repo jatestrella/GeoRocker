@@ -675,8 +675,44 @@ function collapse.apply_failure(failed, round)
     fail_gen = prev_gen
 end
 
--- 只保留開挖造成的破壞（穩定 → 不穩定）：開挖前就會破壞的格視為既有狀態。
+-- 只保留開挖造成的破壞（穩定 → 不穩定）：開挖前就會破壞、且對著天然空氣露出來的格視為既有狀態。
 -- 回傳 保留的 failed, 略過的格數
+-- 開挖過的位置（岩石或碎石被移除過；存在世界的 mod storage，鍵為 "ex:x,y,z"）。
+-- 用來分辨一格岩石是對著天然空氣、還是對著開挖出來的空間露出來
+local ex_storage = core.get_mod_storage()
+local EX_PREFIX = "ex:"
+local excavated = {}
+for k in pairs(ex_storage:to_table().fields) do
+    if k:sub(1, #EX_PREFIX) == EX_PREFIX then excavated[k:sub(#EX_PREFIX + 1)] = true end
+end
+function collapse.mark_excavated(p)
+    local k = pos_key(vector.round(p))
+    if not excavated[k] then
+        excavated[k] = true
+        ex_storage:set_string(EX_PREFIX .. k, "1")
+    end
+end
+function collapse.unmark_excavated(p)
+    local k = pos_key(vector.round(p))
+    if excavated[k] then
+        excavated[k] = nil
+        ex_storage:set_string(EX_PREFIX .. k, "")
+    end
+end
+-- 這一格是否對著開挖出來的空間露出來（相鄰的開挖過位置現在是非實心）
+local EX_NB = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}}
+local function exposed_to_excavation(p)
+    for _, d in ipairs(EX_NB) do
+        local q = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
+        if excavated[pos_key(q)] then
+            local def = core.registered_nodes[core.get_node(q).name]
+            if not def or def.walkable == false then return true end
+        end
+    end
+    return false
+end
+collapse.exposed_to_excavation = exposed_to_excavation
+
 local function filter_induced_failures(failed, changes)
     if #failed == 0 then return failed, 0 end
     local t = {}
@@ -689,7 +725,9 @@ local function filter_induced_failures(failed, changes)
     local out, skipped = {}, 0
     for _, f in ipairs(failed) do
         local before = failure.cell_state(grid, f.x, f.y, f.z, params)
-        if before and before.fails then
+        -- 開挖前就會破壞，而且是對著天然空氣露出來 → 既有狀態。
+        -- 對著開挖出來的空間露出來的不算（例如碎石滑走後露出、當時沒被檢查到的岩壁）
+        if before and before.fails and not exposed_to_excavation(f) then
             skipped = skipped + 1
         else
             out[#out + 1] = f
@@ -800,6 +838,7 @@ local support_changes = new_changes()
 function collapse.record_changes(list)
     for _, c in ipairs(list) do
         local p = vector.round(c.pos)
+        collapse.mark_excavated(p)
         add_change(support_changes, p, c.name, nil, primary_radius())
         add_change(queue_changes, p, c.name, nil, primary_radius())
     end
@@ -1293,6 +1332,7 @@ local function register_physics_events(name, intact)
     local overrides = {
         groups = new_groups,
         after_place_node = function(pos)
+            collapse.unmark_excavated(pos)
             -- 玩家放置的完整岩石：換成該位置應有的節理材質變體（swap 不觸發 callback）
             local lith = rockmech.lith_of_node[core.get_node(pos).name]
             if lith then
@@ -1305,6 +1345,7 @@ local function register_physics_events(name, intact)
             collapse.queue_support_check(pos, "air")
         end,
         on_destruct = function(pos)
+            collapse.mark_excavated(pos)
             -- 支撐判定不受防護限制：任何移除（包括物理系統把碎石移走、
             -- 落石離開原位）都可能讓上方岩石懸空。判定很便宜，且只會讓
             -- 懸空群落下，不會無限連鎖。
