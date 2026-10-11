@@ -401,3 +401,48 @@ describe("overhang 懸空段列表（顯示用）", function()
 		assert.near(overhang.cell_state(g, P, 1, 8, 0).group_fs, segs[1].fs, 1e-12)
 	end)
 end)
+
+describe("overhang 層疊荷重（坐在下層上的由下層承擔）", function()
+	local function layered(t_low, t_up)
+		-- 頁岩：岩柱 x=0（y 1..8）；下層 y 從 8−t_up−t_low+1 起、厚 t_low；上層在其上、厚 t_up；都伸出 x=1..4
+		local top = 8
+		local up_bot = top - t_up + 1
+		local low_bot = up_bot - t_low
+		local g = grid(-3, 8, -2, 12, -2, 2, function(x, y, z)
+			if y <= 0 then return "G" end
+			if z == 0 and x == 0 and y <= top then return "h" end
+			if z == 0 and x >= 1 and x <= 4 and y >= low_bot and y <= top then return "h" end
+		end)
+		local set = {}
+		for x = 1, 4 do set[x .. "," .. (up_bot - 1) .. ",0,2"] = true end   -- 上下層之間的層面
+		local p = {}
+		for k, v in pairs(P) do p[k] = v end
+		p.face_jointed = function(x, y, z, axis) return set[x .. "," .. y .. "," .. z .. "," .. axis] or false end
+		return g, p, low_bot, up_bot
+	end
+	local function fell(groups, x, y)
+		for _, gr in ipairs(groups) do
+			for _, c in ipairs(gr.cells) do if c.x == x and c.y == y and c.z == 0 then return true end end
+		end
+		return false
+	end
+
+	it("薄下層（t=1）承擔厚上層（t=2）：下層 FS × 1/3 < 1 → 下層斷，上層由下層承擔", function()
+		local g, p, low_bot, up_bot = layered(1, 2)
+		local low = overhang.cell_state(g, p, 4, low_bot, 0)
+		assert.near((overhang.lmax(2, 25, 1) / 4) ^ 2 * 1 / 3, low.group_fs, 1e-9)
+		local upc = overhang.cell_state(g, p, 4, up_bot, 0)
+		assert.are.equal(0, upc.d)
+		assert.are.equal(math.huge, upc.fs)
+		local groups = overhang.find_failing_local(g, p, {{x = 4, y = low_bot, z = 0}, {x = 4, y = up_bot, z = 0}})
+		assert.is_true(fell(groups, 4, low_bot))
+		assert.is_false(fell(groups, 4, up_bot))
+	end)
+
+	it("厚下層（t=3）承擔薄上層（t=1）：下層 FS × 3/4 ≥ 1 → 都不斷", function()
+		local g, p, low_bot, up_bot = layered(3, 1)
+		local low = overhang.cell_state(g, p, 4, low_bot, 0)
+		assert.near((overhang.lmax(2, 25, 3) / 4) ^ 2 * 3 / 4, low.group_fs, 1e-9)
+		assert.are.equal(0, #overhang.find_failing_local(g, p, {{x = 4, y = low_bot, z = 0}, {x = 4, y = up_bot, z = 0}}))
+	end)
+end)

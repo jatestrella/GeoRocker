@@ -908,6 +908,24 @@ local function run_support_check()
             local keep_c = c
             local keep_og = {}
             local query = rockmech.overhang.make_query(grid, oparams)
+            -- 玩家直接造成的改變（挖掘、放置、爆破）的位置
+            local player_changes = {}
+            for _, ch in ipairs(changes.list) do
+                if ch.r == primary_radius() then player_changes[#player_changes + 1] = ch end
+            end
+            -- 群是否被玩家直接挖到：改變的格就在群裡，或與群的格面相鄰
+            local function touched(comp)
+                if #player_changes == 0 then return false end
+                local set = {}
+                for _, p in ipairs(comp.cells) do set[pos_key(p)] = true end
+                for _, ch in ipairs(player_changes) do
+                    if set[pos_key(ch)] then return true end
+                    for _, d in ipairs(NB6) do
+                        if set[pos_key({x = ch.x + d[1], y = ch.y + d[2], z = ch.z + d[3]})] then return true end
+                    end
+                end
+                return false
+            end
             for k, comp in ipairs(og) do
                 local p = comp.cells[1]
                 local before = query(p.x, p.y, p.z)
@@ -915,6 +933,11 @@ local function run_support_check()
                 if before >= 1 or fs_after[k] <= 0 then
                     keep_og[#keep_og + 1] = comp
                     core.log("action", ("[rockmech] 懸臂斷裂（開挖造成）：%d 格，整群 FS %.3f → %.3f")
+                        :format(#comp.cells, before, fs_after[k]))
+                elseif #comp.cells <= icfg.touch_max and touched(comp) then
+                    -- 既有的不穩定，但被玩家直接挖到、而且不大：一樣掉落
+                    keep_og[#keep_og + 1] = comp
+                    core.log("action", ("[rockmech] 懸臂斷裂（既有不穩定、被直接挖到）：%d 格，整群 FS %.3f → %.3f")
                         :format(#comp.cells, before, fs_after[k]))
                 else
                     n_existing = n_existing + 1
@@ -1016,10 +1039,10 @@ local function run_support_check()
         local dd = rfe and rockmech.rigidfall.drop_distance(c.cells, rfe.is_solid, 256)
         -- 被下方擋住：擋住它的若是懸空的岩體（不是坐在地面上），上面這段斷了以後重量壓在它身上。
         -- 下方那段承受的荷重由 t_l 變成 t_l + t_u：σb = 3γ(t_l + t_u)d²/t_l²，
-        -- 即 FS_加載 = FS × t_l / (t_l + t_u)。FS_加載 < 1 → 它也撐不住，併進來一起掉（最多往下併 4 層）；
+        -- 即 FS_加載 = FS × t_l / (t_l + t_u)。FS_加載 < 1 → 它也撐不住，併進來一起掉（最多往下併 8 層）；
         -- 否則上面這段只是坐在穩固的下層上，保留原位
         local tries = 0
-        while dd == 0 and c.grid and tries < 4 do
+        while dd == 0 and c.grid and tries < 8 do
             tries = tries + 1
             local own = {}
             for _, p in ipairs(c.cells) do own[pos_key(p)] = true end
@@ -1031,7 +1054,8 @@ local function run_support_check()
                     -- 壓在它上面的厚度：這一欄中屬於本群、連續疊在 q 上方的格數
                     local t_u = 0
                     while own[pos_key({x = q.x, y = q.y + 1 + t_u, z = q.z})] do t_u = t_u + 1 end
-                    if seg and seg_fs * t_l / (t_l + t_u) < 1 then
+                    -- FS = ∞：它只是坐在更下層上的中間塊（由下層承擔）→ 一併帶下、繼續往下找
+                    if seg and (seg_fs == math.huge or seg_fs * t_l / (t_l + t_u) < 1) then
                         for _, s in ipairs(seg) do
                             local k = pos_key(s)
                             if not own[k] and rockmech.lith_of_node[core.get_node(s).name] then
@@ -1047,6 +1071,33 @@ local function run_support_check()
             n_merged = n_merged + 1
             table.sort(c.cells, function(u, v) return u.y < v.y end)
             dd = rockmech.rigidfall.drop_distance(c.cells, rfe.is_solid, 256)
+        end
+        -- 還是被擋住：擋住它的是撐得住的岩體（或地面、碎石）。坐在上面的那幾欄留下，
+        -- 其餘懸空的部分從交界處斷開，照樣掉（剩下的若又被留下的欄擋住，再剔除，最多 6 次）
+        if dd == 0 and #c.cells > 1 then
+            local rest = c.cells
+            for _ = 1, 6 do
+                local own = {}
+                for _, p in ipairs(rest) do own[pos_key(p)] = true end
+                local blocked = {}
+                for _, p in ipairs(rest) do
+                    local q = {x = p.x, y = p.y - 1, z = p.z}
+                    if not own[pos_key(q)] and rfe.is_solid(q.x, q.y, q.z) then blocked[p.x .. "," .. p.z] = true end
+                end
+                local nxt = {}
+                for _, p in ipairs(rest) do
+                    if not blocked[p.x .. "," .. p.z] then nxt[#nxt + 1] = p end
+                end
+                if #nxt == 0 or #nxt == #rest then break end
+                rest = nxt
+                local d2 = rockmech.rigidfall.drop_distance(rest, rfe.is_solid, 256)
+                if d2 and d2 >= 1 then
+                    core.log("action", ("[rockmech] 支撐判定：%d 格中有 %d 格坐在撐得住的岩體上而留下，其餘 %d 格斷開落下")
+                        :format(#c.cells, #c.cells - #rest, #rest))
+                    c.cells, dd = rest, d2
+                    break
+                end
+            end
         end
         -- 完全動不了（正下方被群外、坐在地面上的實心格擋住）：不移除，避免移除後馬上落回原位又再觸發判定
         if dd == 0 then

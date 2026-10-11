@@ -70,6 +70,9 @@ function rockmech.overhang_line(o)
 	if o.supported then return "懸臂：此欄下方有支撐（FS ∞）" end
 	if o.aborted then return ("懸臂：懸空群超過 %d 格，不判定"):format(cfg.overhang.max_voxels) end
 	if not o.d then return "懸臂：被節理切離、碰不到有支撐的岩柱（FS 0，會掉落）" end
+	if o.d == 0 then
+		return ("懸臂：坐在下層懸空岩體上，由下層承擔；整段最小 FS %s"):format(fs_str(o.group_fs))
+	end
 	local c = o.crit
 	local root = ""
 	if o.rho and o.rho < 1 then

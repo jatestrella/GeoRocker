@@ -122,6 +122,10 @@ rockmech_keyblock_c (Key block joint cohesion) float 0 0 10
 # (a pre-existing unstable overhang still falls once it is completely unsupported).
 rockmech_induced_enabled (Only excavation-induced failure) bool true
 
+# A pre-existing unstable overhang (FS < 1 before) still falls when the player digs it or right next to it,
+# if it has at most this many nodes (larger ones are left alone to avoid huge collapses).
+rockmech_induced_touch_max (Max size of a touched pre-existing overhang that falls) int 200 0 100000
+
 [Joint plane of weakness]
 
 # Slip along joints crossing an exposed cell (Jaeger single plane of weakness): tau >= c + sigma_n * tan(phi).

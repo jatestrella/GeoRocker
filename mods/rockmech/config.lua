@@ -172,6 +172,7 @@ config.keyblock_defaults = {
 -- 生成的地形視為已平衡：比較開挖前後，只有「開挖前穩定、開挖後不穩定」才破壞
 config.induced_defaults = {
 	enabled = true,
+	touch_max = 200,          -- 既有的不穩定懸空岩體被玩家直接挖到時，不超過此格數就掉落
 }
 
 -- 節理弱面滑動（failure.lua，Jaeger single plane of weakness）；設定鍵為 rockmech_weakness_<key>
