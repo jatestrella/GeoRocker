@@ -103,3 +103,47 @@ describe("stress 水平主應力", function()
 		assert.are.equal(d.k0, d.KH); assert.are.equal(d.k0, d.Kh)
 	end)
 end)
+
+describe("stress 開挖前上覆荷重", function()
+	it("連續岩層：σv = Σγ、h = 厚度", function()
+		local col = {}
+		for k = 1, 10 do col[k] = 25 end
+		local sv, h = stress.overburden(col, 20, 25)
+		assert.near(0.25, sv, 1e-12)
+		assert.are.equal(10, h)
+	end)
+	it("中間的隧道視為原本是岩石（以 gamma_fill 補）", function()
+		local col = {}
+		for k = 1, 10 do col[k] = 25 end
+		col[3], col[4], col[5] = nil, nil, nil
+		local sv, h = stress.overburden(col, 10, 24)
+		assert.near((7 * 25 + 3 * 24) / 1000, sv, 1e-12)
+		assert.are.equal(10, h)
+	end)
+	it("上方全是空氣：0", function()
+		local sv, h = stress.overburden({}, 30, 25)
+		assert.are.equal(0, sv); assert.are.equal(0, h)
+	end)
+	it("不同岩層的單位重分別計入", function()
+		local col = {26.5, 26.5, 25, 25, 24}
+		local sv = stress.overburden(col, 5, 25)
+		assert.near((2 * 26.5 + 2 * 25 + 24) / 1000, sv, 1e-12)
+	end)
+end)
+
+describe("stress 上覆荷重外插", function()
+	it("掃描範圍外仍是岩石：加上 extra 公尺（以 gamma_fill 計）", function()
+		local col = {25, nil, 25}
+		local sv, h = stress.overburden(col, 4, 24, 10)
+		assert.near((25 + 24 + 25 + 24 + 10 * 24) / 1000, sv, 1e-12)
+		assert.are.equal(14, h)
+	end)
+	it("initial_from 與 initial 對同一 σv 給出相同的水平應力", function()
+		local cfg = {surface_y = 0, k0 = 0.5, KH = 1.5, Kh = 0.8, sH0 = 0, sh0 = 0, sH_azimuth = 90}
+		local a = stress.initial(cfg, {gamma = 25}, -40)
+		local b = stress.initial_from(cfg, a.sv, a.h)
+		for _, k in ipairs({"sv", "sh", "sH", "shmin", "sxx", "szz", "sxz"}) do
+			assert.near(a[k], b[k], 1e-12)
+		end
+	end)
+end)

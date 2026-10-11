@@ -39,12 +39,13 @@ local function compass_report(pos, nodename)
 			(" [%s 非本 mod 岩性，應力以該深度分層 %s 計]"):format(nodename, lith.name))
 	end
 
-	local st = stress.initial(cfg, lith, pos.y)
+	local st = rockmech.collapse.initial_stress(pos, lith)
 	lines[#lines + 1] = core.colorize("#ffd080", "[rockmech 羅盤] ") .. fmt_pos(pos) ..
 		"  " .. lith.description .. lith_note
 	lines[#lines + 1] = ("  γ=%.1f kN/m³  UCS=%g MPa  σt=%g MPa"):format(
 		lith.gamma, lith.ucs, lith.tensile)
-	lines[#lines + 1] = ("  深度 h=%.1f m (y0=%d)  σv=γh=%.3f MPa"):format(st.h, cfg.surface_y, st.sv)
+	lines[#lines + 1] = ("  上覆岩層 h=%d m（地表 y=%d%s）  初始 σv=Σγ·Δh=%.3f MPa"):format(
+		st.h, st.top_y, st.extrapolated and "，外插至 y0" or "", st.sv)
 	lines[#lines + 1] = ("  初始水平主應力：σH=%.3f（K_H=%.2f%s）σh=%.3f（K_h=%.2f%s）MPa，σH 方位 %g°"):format(
 		st.sH, cfg.KH, cfg.sH0 > 0 and ("+" .. cfg.sH0) or "",
 		st.shmin, cfg.Kh, cfg.sh0 > 0 and ("+" .. cfg.sh0) or "", cfg.sH_azimuth)

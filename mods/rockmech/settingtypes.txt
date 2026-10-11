@@ -79,6 +79,10 @@ rockmech_failure_gamma_other (Unit weight of other solids) float 20 0 50
 # Height (m) scanned upward for the column load; rock beyond is assumed continuous up to y0.
 rockmech_failure_overburden_scan (Overburden scan height) int 64 0 512
 
+# Initial in-situ stress (HUD / info page / compass): maximum height scanned upward to find the ground surface (m).
+# Voids below the surface are counted as rock (pre-excavation state); beyond this height rock is assumed to continue to surface_y.
+rockmech_failure_initial_scan_max (Initial stress scan height) int 512 16 4096
+
 # Failure threshold = UCS * scale. 1 = real strength; smaller values make failure visible at shallow depth.
 rockmech_failure_strength_scale (Strength scale) float 1.0 0.001 10
 

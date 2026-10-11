@@ -109,6 +109,7 @@ config.failure_defaults = {
 	window = 4,               -- 荷重擴散窗格半寬 w，窗格 (2w+1)² (m)
 	gamma_other = 20,         -- 非岩性實心格（土、礦石等）的單位重 (kN/m³)
 	overburden_scan = 64,     -- 柱狀荷重往上讀取的高度 (m)，超出部分假設連續到 y0
+	initial_scan_max = 512,   -- 初始應力往上找地表的最大高度 (m)，超出部分假設連續到 y0
 	strength_scale = 1.0,     -- 強度縮放：破壞門檻 = UCS × scale
 	max_cascade = 5,          -- 連鎖重算輪數上限
 	cascade_delay = 0.6,      -- 每輪間隔 (s)，讓剝落的岩塊先就位
@@ -318,6 +319,7 @@ function config.load(get)
 	f.radius = math.max(1, math.floor(f.radius))
 	f.window = math.max(1, math.floor(f.window))
 	f.overburden_scan = math.max(0, math.floor(f.overburden_scan))
+	f.initial_scan_max = math.max(16, math.floor(f.initial_scan_max))
 	f.gamma_other = math.max(0, f.gamma_other)
 	f.max_cascade = math.max(0, math.floor(f.max_cascade))
 	if f.strength_scale <= 0 then

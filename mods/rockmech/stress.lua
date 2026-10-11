@@ -60,6 +60,35 @@ function stress.principal(sxx, syy, szz, sxz)
 	return math.max(syy, a, b), math.min(syy, a, b), a, b
 end
 
+-- 開挖前的上覆荷重：column[k] 為該格正上方第 k 格的單位重（kN/m³；非實心為 nil），
+-- k = 1..n 由下往上。最高的實心格視為地表；其下的空隙（隧道、洞穴）視為原本是岩石，
+-- 以 gamma_fill 補上。extra > 0 表示第 n 格之上仍是岩石（掃描範圍外），再加 extra 公尺。
+-- 回傳 σv (MPa), h（地表高程 − 該格高程，m）
+function stress.overburden(column, n, gamma_fill, extra)
+	local top = 0
+	extra = extra or 0
+	if extra > 0 then
+		top = n
+	else
+		for k = n, 1, -1 do
+			if column[k] then top = k; break end
+		end
+	end
+	local sum = 0
+	for k = 1, top do
+		sum = sum + (column[k] or gamma_fill)
+	end
+	return (sum + extra * gamma_fill) / 1000, top + extra
+end
+
+-- 由給定的 σv 與 h 組出初始應力表（水平主應力、方塊座標分量）
+function stress.initial_from(cfg, sv, h)
+	local sH, shmin = stress.horizontal(cfg, sv)
+	local sxx, szz, sxz = stress.h_tensor(sH, shmin, cfg.sH_azimuth)
+	return {h = h, sv = sv, sh = stress.sigma_h(sv, cfg.k0), sH = sH, shmin = shmin,
+		sxx = sxx, szz = szz, sxz = sxz}
+end
+
 -- 位置的初始應力。lith 為岩性表條目（需有 gamma）。
 -- 回傳 {h=, sv=, sh=, sH=, shmin=, sxx=, szz=, sxz=}（MPa）；sh 為舊欄位（= K0·σv）
 function stress.initial(cfg, lith, y)

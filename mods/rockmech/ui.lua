@@ -33,7 +33,7 @@ function rockmech.stress_report(pos)
 	local is_rock = lith ~= nil
 	if not lith then lith = rockmech.lith_at(pos.x, pos.y, pos.z) end
 	local r = {pos = pos, name = node.name, lith = lith, is_rock = is_rock,
-		init = stress.initial(cfg, lith, pos.y)}
+		init = rockmech.collapse.initial_stress(pos, lith)}
 	if is_rock then
 		local w = 2 * cfg.failure.window + 1
 		local grid = rockmech.collapse.read_grid(vector.subtract(pos, w), vector.add(pos, w))
@@ -46,8 +46,9 @@ end
 local function fmt_report_lines(r)
 	local p, i = r.pos, r.init
 	local lines = {}
-	lines[#lines + 1] = ("(%d,%d,%d) %s%s  深度 h=%.1f m"):format(p.x, p.y, p.z,
-		r.lith.description:gsub("\n.*", ""), r.is_rock and "" or "（非岩石，以該處岩性計）", i.h)
+	lines[#lines + 1] = ("(%d,%d,%d) %s%s  上覆 h=%d m%s"):format(p.x, p.y, p.z,
+		r.lith.description:gsub("\n.*", ""), r.is_rock and "" or "（非岩石，以該處岩性計）", i.h,
+		i.extrapolated and "（外插至 y0）" or "")
 	lines[#lines + 1] = ("初始：σv %.3f  σH %.3f  σh %.3f MPa（σH %g°）"):format(
 		i.sv, i.sH, i.shmin, cfg.sH_azimuth)
 	local s = r.local_state
@@ -237,8 +238,9 @@ local function tab_stress(name)
 		{"位置", core.pos_to_string(r.pos)},
 		{"方塊", r.name},
 		{"岩性", r.lith.description:gsub("\n.*", "") .. (r.is_rock and "" or "（非岩石，以該處岩性計）")},
-		{"深度 h", ("%.1f m"):format(i.h)},
-		{"初始 σv = γh", ("%.3f MPa"):format(i.sv)},
+		{"上覆岩層厚度 h", ("%d m（地表 y=%d%s）"):format(i.h, i.top_y,
+			i.extrapolated and "，超出掃描範圍、外插至 y0" or "")},
+		{"初始 σv = Σγ·Δh", ("%.3f MPa（開挖前，空洞視為岩石）"):format(i.sv)},
 		{"初始 σH / σh", ("%.3f / %.3f MPa（σH %g°）"):format(i.sH, i.shmin, cfg.sH_azimuth)},
 		{"初始 σxx / σzz / σxz", ("%.3f / %.3f / %.3f MPa"):format(i.sxx, i.szz, i.sxz)},
 	})

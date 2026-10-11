@@ -408,6 +408,7 @@ collapse.update_affected_area = update_affected_area
 -- 破壞的臨空格以 try_escape_or_destroy 剝落 → 有限輪數連鎖重算
 local cfg = rockmech.cfg
 local fcfg = cfg.failure
+local stress = rockmech.stress
 local failure = rockmech.failure
 
 local solid_of, weight_of, lith_of, bonded_of
@@ -457,6 +458,52 @@ function collapse.read_grid(minp, maxp, no_overburden)
         -- 實際需要的範圍（failure.compute_loads 只算這些欄）
         req = {x1 = minp.x, x2 = maxp.x, z1 = minp.z, z2 = maxp.z, y1 = minp.y, y2 = maxp.y},
     }
+end
+
+-- 開挖前的初始應力：往上掃描 pos 正上方的柱子，最高的天然實心格（鍵結：岩石、土、礦）
+-- 視為地表，其間的空隙與碎石視為原本是岩石。每段讀 overburden_scan 公尺，
+-- 直到一整段都沒有天然實心格或到達 initial_scan_max；仍未到頂（或碰到未載入區塊）時
+-- 假設岩層連續到 y0（同 failure.compute_loads）。
+-- 回傳 stress.initial_from 的表，另加 top_y（地表高程）、extrapolated（是否外插）
+function collapse.initial_stress(pos, lith)
+    build_cid_maps()
+    local c_ignore = core.get_content_id("ignore")
+    local step = math.max(16, fcfg.overburden_scan)
+    local column, n = {}, 0
+    local cont = false
+    local vm = core.get_voxel_manip()
+    while n < fcfg.initial_scan_max do
+        local y1 = pos.y + n + 1
+        local y2 = pos.y + math.min(n + step, fcfg.initial_scan_max)
+        local emin, emax = vm:read_from_map({x = pos.x, y = y1, z = pos.z}, {x = pos.x, y = y2, z = pos.z})
+        local area = VoxelArea(emin, emax)
+        local data = vm:get_data()
+        local any = false
+        cont = false
+        for y = y1, y2 do
+            local cid = data[area:index(pos.x, y, pos.z)]
+            n = n + 1
+            if cid == c_ignore then
+                cont = true
+                break
+            end
+            if bonded_of[cid] then
+                column[n] = weight_of[cid] or fcfg.gamma_other
+                any = true
+            end
+        end
+        if cont then break end
+        if not any then break end
+        cont = column[n] ~= nil and n >= fcfg.initial_scan_max
+    end
+    vm:close()
+    local extra = 0
+    if cont then extra = math.max(0, cfg.surface_y - (pos.y + n)) end
+    local sv, h = stress.overburden(column, n, lith.gamma, extra)
+    local st = stress.initial_from(cfg, sv, h)
+    st.top_y = pos.y + h
+    st.extrapolated = extra > 0
+    return st
 end
 
 function collapse.failure_params()
@@ -839,6 +886,8 @@ local function register_physics_events(name, intact)
             physics_updating = true
             update_affected_area(pos)
             physics_updating = false
+            -- 放上去的岩石增加懸臂自重、也可能懸空：同樣做支撐判定與懸臂斷裂
+            collapse.queue_support_check(pos)
         end,
         on_destruct = function(pos)
             -- 支撐判定不受防護限制：任何移除（包括物理系統把碎石移走、
