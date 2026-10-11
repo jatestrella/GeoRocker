@@ -1025,7 +1025,7 @@ local function run_support_check()
             n = n + #c.cells
         end
     end
-    -- 關鍵塊體滑動：沿滑動方向一步步移出，再落到底；整塊以剛體移動
+    -- 關鍵塊體滑動：沿滑動方向一步步移出，再落到底；整塊以剛體移動，落地時變成碎石
     for _, b in ipairs(slides) do
         local off = rfe and rockmech.keyblock.slide_offset(b.cells, b.dir,
             function(x, y, z) return not rfe.is_solid(x, y, z) end, 16)
@@ -1035,7 +1035,7 @@ local function run_support_check()
                 cells[#cells + 1] = {x = p.x, y = p.y, z = p.z, name = core.get_node(p).name}
             end
             for _, p in ipairs(b.cells) do core.remove_node(p) end
-            if rfe.spawn_move(cells, off) then
+            if rfe.spawn_move(cells, off, true) then
                 n = n + #cells
                 core.log("action", ("[rockmech] 關鍵塊體滑出：%d 格，位移 (%d,%d,%d)"):format(#cells, off.x, off.y, off.z))
             else

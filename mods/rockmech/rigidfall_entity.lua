@@ -50,7 +50,10 @@ local function place_cells(self, drop, off)
 	for _, c in ipairs(self.cells) do
 		local p = {x = self.origin.x + c.dx + ox, y = self.origin.y + c.dy - drop, z = self.origin.z + c.dz + oz}
 		local name = c.name
-		if fb.enabled and not rockmech.is_rubble(name) then
+		if self.to_rubble and rockmech.lith_of_node[name] then
+			-- 沿節理滑動的岩塊：落地時整塊變成碎石
+			name = rockmech.rubble_for(name)
+		elseif fb.enabled and not rockmech.is_rubble(name) then
 			local lith = rockmech.lith_of_node[name]
 			local h_ref = lith and lith.break_height or fb.break_height
 			if math.random() < rf.break_probability(drop, h_ref) then
@@ -115,6 +118,7 @@ core.register_entity(PARENT, {
 			local d = core.deserialize(staticdata)
 			if d and d.cells then
 				self.cells, self.origin, self.drop, self.move = d.cells, d.origin, d.drop, d.move
+				self.to_rubble = d.to_rubble
 				self.restored = true -- 重新載入：下一步直接落地
 			end
 		end
@@ -122,7 +126,8 @@ core.register_entity(PARENT, {
 
 	get_staticdata = function(self)
 		if not self.cells then return "" end
-		return core.serialize({cells = self.cells, origin = self.origin, drop = self.drop, move = self.move})
+		return core.serialize({cells = self.cells, origin = self.origin, drop = self.drop, move = self.move,
+			to_rubble = self.to_rubble})
 	end,
 
 	on_step = function(self)
@@ -146,12 +151,14 @@ core.register_entity(PARENT, {
 
 -- 讓 cells 以剛體沿位移 off = {x, y, z} 移動（關鍵塊體滑動）：先以滑動速度沿直線移動，
 -- 走完全程後放回 node。位移由 keyblock.slide_offset 事先算好。
-function api.spawn_move(cells, off)
+-- to_rubble：落地時整塊變成碎石（沿節理滑動的岩塊）
+function api.spawn_move(cells, off, to_rubble)
 	local ok, parent = api.spawn(cells, 0)
 	if not ok then return false end
 	local le = parent:get_luaentity()
 	le.move = {x = off.x, y = off.y, z = off.z}
 	le.move_len = vector.length(le.move)
+	le.to_rubble = to_rubble or nil
 	parent:set_acceleration({x = 0, y = 0, z = 0})
 	parent:set_velocity(vector.multiply(vector.normalize(le.move), 4))   -- 4 m/s
 	return true
