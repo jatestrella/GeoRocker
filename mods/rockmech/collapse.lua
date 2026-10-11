@@ -925,12 +925,29 @@ local function run_support_check()
         -- 關鍵塊體：被節理與臨空面圍住的岩塊，以重力判斷落下／滑動
         if kcfg.enabled then
             local kp = collapse.keyblock_params()
-            -- 起點：支撐判定的起點，加上每個改變格周圍 3×3×3（斜角相鄰的岩塊也要檢查）
+            -- 起點：支撐判定的起點，加上每個改變格周圍開挖影響範圍（rockmech_failure_radius）內
+            -- 有臨空面的岩格（完全被包在岩體裡的岩塊不可能滑出）
             local kstarts = {}
             for _, s in ipairs(g.starts) do kstarts[#kstarts + 1] = s end
+            local rr = fcfg.radius
+            local gnx, gny, gnz = grid.nx, grid.ny, grid.nz
+            local gsy, gsz = gnx, gnx * gny
+            local gdata, gbond, gsolid = grid.data, grid.bonded_of, grid.solid_of
+            local kseen = {}
             for _, c in ipairs(changes.list) do
-                for dx = -1, 1 do for dy = -1, 1 do for dz = -1, 1 do
-                    kstarts[#kstarts + 1] = {x = c.x + dx, y = c.y + dy, z = c.z + dz}
+                for z = c.z - rr, c.z + rr do for y = c.y - rr, c.y + rr do for x = c.x - rr, c.x + rr do
+                    local lx, ly, lz = x - grid.ox, y - grid.oy, z - grid.oz
+                    if lx >= 1 and ly >= 1 and lz >= 1 and lx <= gnx - 2 and ly <= gny - 2 and lz <= gnz - 2 then
+                        local i = 1 + lx + ly * gsy + lz * gsz
+                        if not kseen[i] and gbond[gdata[i]] then
+                            kseen[i] = true
+                            if not gsolid[gdata[i + 1]] or not gsolid[gdata[i - 1]]
+                                    or not gsolid[gdata[i + gsy]] or not gsolid[gdata[i - gsy]]
+                                    or not gsolid[gdata[i + gsz]] or not gsolid[gdata[i - gsz]] then
+                                kstarts[#kstarts + 1] = {x = x, y = y, z = z}
+                            end
+                        end
+                    end
                 end end end
             end
             local blocks = rockmech.keyblock.find_blocks(grid, kp, kstarts)
