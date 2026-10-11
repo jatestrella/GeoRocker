@@ -105,7 +105,8 @@ end
 -- 軸差破壞（failure.lua）的預設值；設定鍵為 rockmech_failure_<key>
 config.failure_defaults = {
 	enabled = true,
-	radius = 6,               -- 開挖影響範圍：開挖後檢查半徑 (m)（破壞檢查與關鍵塊體）
+	radius = 6,               -- 開挖影響範圍：玩家造成的改變（挖掘、放置、爆破）周圍的檢查半徑 (m)
+	secondary_factor = 0.5,   -- 延伸影響範圍 = radius × 此值：崩落、滑出等物理造成的移除周圍再檢查的半徑
 	window = 4,               -- 荷重擴散窗格半寬 w，窗格 (2w+1)² (m)
 	gamma_other = 20,         -- 非岩性實心格（土、礦石等）的單位重 (kN/m³)
 	overburden_scan = 64,     -- 柱狀荷重往上讀取的高度 (m)，超出部分假設連續到 y0
@@ -345,6 +346,7 @@ function config.load(get)
 	f.radius = math.max(1, math.floor(f.radius))
 	f.window = math.max(1, math.floor(f.window))
 	f.overburden_scan = math.max(0, math.floor(f.overburden_scan))
+	f.secondary_factor = math.max(0, math.min(1, f.secondary_factor))
 	f.initial_scan_max = math.max(16, math.floor(f.initial_scan_max))
 	f.gamma_other = math.max(0, f.gamma_other)
 	f.max_cascade = math.max(0, math.floor(f.max_cascade))

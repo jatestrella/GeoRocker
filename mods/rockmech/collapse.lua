@@ -543,15 +543,28 @@ local function new_changes() return {map = {}, list = {}} end
 local function name_cid(name)
     if name and core.registered_nodes[name] then return core.get_content_id(name) end
 end
-local function add_change(chg, p, name, cid)
+-- r：這個改變的影響範圍（玩家造成 = rockmech_failure_radius；物理造成 = 延伸範圍）
+local function add_change(chg, p, name, cid, r)
     local k = pos_key(p)
-    if chg.map[k] then return end
-    chg.map[k] = true
-    chg.list[#chg.list + 1] = {x = p.x, y = p.y, z = p.z, cid = cid or name_cid(name)}
+    local e = chg.map[k]
+    if e then
+        if r and (not e.r or r > e.r) then e.r = r end
+        return
+    end
+    e = {x = p.x, y = p.y, z = p.z, cid = cid or name_cid(name), r = r}
+    chg.map[k] = e
+    chg.list[#chg.list + 1] = e
 end
 local function merge_changes(dst, src)
-    for _, c in ipairs(src.list) do add_change(dst, c, nil, c.cid) end
+    for _, c in ipairs(src.list) do add_change(dst, c, nil, c.cid, c.r) end
 end
+
+-- 影響範圍：玩家造成的改變 / 物理造成的移除（延伸）
+local function primary_radius() return fcfg.radius end
+local function secondary_radius()
+    return math.max(1, math.floor(fcfg.radius * fcfg.secondary_factor + 0.5))
+end
+collapse.secondary_radius = secondary_radius
 -- 把網格還原成開挖前（就地修改）。回傳復原函式
 local function restore_grid(grid, list)
     local nx, ny, nz = grid.nx, grid.ny, grid.nz
@@ -724,24 +737,25 @@ process_queue = function()
     end
     core.log("action", ("[rockmech] 破壞 第 %d 輪：%d 格（其中節理滑動 %d）（%.1f ms）"):format(
         round, #failed, n_slip, ms))
-    -- 下一輪的「開挖」= 這一輪剝落的格（記下剝落前的方塊）
+    -- 下一輪的「開挖」= 這一輪剝落的格（記下剝落前的方塊；物理造成 → 延伸範圍）
     local next_changes = new_changes()
-    for _, f in ipairs(failed) do add_change(next_changes, f, core.get_node(f).name) end
+    for _, f in ipairs(failed) do add_change(next_changes, f, core.get_node(f).name, nil, secondary_radius()) end
     collapse.apply_failure(failed)
 
     if round >= fcfg.max_cascade then
         core.log("action", ("[rockmech] 軸差破壞連鎖達上限 %d 輪，停止"):format(fcfg.max_cascade))
         return
     end
-    -- 下一輪只檢查破壞格附近（外包盒 ±2）
+    -- 下一輪只檢查破壞格附近（外包盒 ± 延伸範圍）
     local a, b = union((function()
         local t = {}
         for _, f in ipairs(failed) do t[#t + 1] = cube(f, 0) end
         return t
     end)())
+    local r2 = secondary_radius()
     local next_box = {
-        {x = a.x - 2, y = a.y - 2, z = a.z - 2},
-        {x = b.x + 2, y = b.y + 2, z = b.z + 2},
+        {x = a.x - r2, y = a.y - r2, z = a.z - r2},
+        {x = b.x + r2, y = b.y + r2, z = b.z + r2},
     }
     core.after(fcfg.cascade_delay, function()
         physics_updating = true
@@ -756,11 +770,14 @@ end
 
 -- 開挖觸發：同一 tick 內的多次觸發合併成一次檢查。
 -- prev：該格改變前的方塊名稱（省略時取目前的方塊；在 on_destruct 中即為被移除的方塊）
-function collapse.queue_failure_check(pos, prev)
+-- r：檢查半徑（省略為玩家造成的範圍）；round：連鎖輪數（物理造成的觸發從較後面的輪數開始，
+-- 讓連鎖總長度有上限）
+function collapse.queue_failure_check(pos, prev, r, round)
     if not (fcfg.enabled or wcfg.enabled) then return end
     local p = vector.round(pos)
-    add_change(queue_changes, p, prev or core.get_node(p).name)
-    enqueue(cube(p, fcfg.radius), 1)
+    r = r or primary_radius()
+    add_change(queue_changes, p, prev or core.get_node(p).name, nil, r)
+    enqueue(cube(p, r), round or 1)
 end
 
 -- 8. 支撐判定（模型見 support.lua）
@@ -774,8 +791,8 @@ local support_changes = new_changes()
 function collapse.record_changes(list)
     for _, c in ipairs(list) do
         local p = vector.round(c.pos)
-        add_change(support_changes, p, c.name)
-        add_change(queue_changes, p, c.name)
+        add_change(support_changes, p, c.name, nil, primary_radius())
+        add_change(queue_changes, p, c.name, nil, primary_radius())
     end
 end
 local NB6 = {{1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1}}
@@ -925,16 +942,16 @@ local function run_support_check()
         -- 關鍵塊體：被節理與臨空面圍住的岩塊，以重力判斷落下／滑動
         if kcfg.enabled then
             local kp = collapse.keyblock_params()
-            -- 起點：支撐判定的起點，加上每個改變格周圍開挖影響範圍（rockmech_failure_radius）內
+            -- 起點：支撐判定的起點，加上每個改變格周圍其影響範圍（玩家 6 m／物理延伸 3 m）內
             -- 有臨空面的岩格（完全被包在岩體裡的岩塊不可能滑出）
             local kstarts = {}
             for _, s in ipairs(g.starts) do kstarts[#kstarts + 1] = s end
-            local rr = fcfg.radius
             local gnx, gny, gnz = grid.nx, grid.ny, grid.nz
             local gsy, gsz = gnx, gnx * gny
             local gdata, gbond, gsolid = grid.data, grid.bonded_of, grid.solid_of
             local kseen = {}
             for _, c in ipairs(changes.list) do
+                local rr = c.r or primary_radius()
                 for z = c.z - rr, c.z + rr do for y = c.y - rr, c.y + rr do for x = c.x - rr, c.x + rr do
                     local lx, ly, lz = x - grid.ox, y - grid.oy, z - grid.oz
                     if lx >= 1 and ly >= 1 and lz >= 1 and lx <= gnx - 2 and ly <= gny - 2 and lz <= gnz - 2 then
@@ -1094,10 +1111,12 @@ end
 
 -- 某格改變後：以其 6 個鄰格為起點排入支撐判定。
 -- prev：該格改變前的方塊名稱（省略時取目前的方塊；在 on_destruct 中即為被移除的方塊）
+-- 物理系統內部的移除（崩落、滑出、碎石移動）用延伸範圍，其餘（玩家）用玩家範圍
 function collapse.queue_support_check(pos, prev)
     if not scfg.enabled then return end
     local p = vector.round(pos)
-    add_change(support_changes, p, prev or core.get_node(p).name)
+    add_change(support_changes, p, prev or core.get_node(p).name, nil,
+        physics_updating and secondary_radius() or primary_radius())
     for _, d in ipairs(NB6) do
         pending_starts[#pending_starts + 1] = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
     end
@@ -1201,7 +1220,9 @@ local function register_physics_events(name, intact)
                     physics_updating = prev
                 end
             end)
-            if physics_updating then return end  -- 物理系統內部操作，不重複觸發
+            -- 物理系統內部操作（崩落、滑出、碎石移動）不觸發破壞檢查：碎石被移走會露出新岩面、
+            -- 再剝落、再產生碎石，形成漸進崩解。破壞檢查的延伸只走連鎖（剝落格 ± 延伸範圍，最多 5 輪）
+            if physics_updating then return end
             core.after(0.05, function()
                 physics_updating = true
                 update_affected_area(pos)

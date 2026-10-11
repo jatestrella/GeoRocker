@@ -66,8 +66,11 @@ rockmech_joint_set_3 (Joint set 3 override) string
 # Check exposed rock for deviatoric failure (sigma1 - sigma3 >= UCS * scale) after excavation.
 rockmech_failure_enabled (Enable deviatoric failure) bool true
 
-# Radius (m) of the region checked around each excavation (failure check and key blocks).
+# Radius (m) checked around each change made by the player (dig, place, blast): joint slip, deviatoric failure, key blocks.
 rockmech_failure_radius (Check radius) int 6 1 32
+
+# Cells removed by the physics (spalling, falls, sliding blocks) are checked again within radius * this factor.
+rockmech_failure_secondary_factor (Secondary radius factor) float 0.5 0 1
 
 # Half-width w of the horizontal load-spreading window (2w+1)^2.
 # sigma_y = (sum of column loads in the window, incl. roof loads over openings) / (solid cells in window).
