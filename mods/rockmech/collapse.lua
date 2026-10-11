@@ -1025,26 +1025,39 @@ local function run_support_check()
             n = n + #c.cells
         end
     end
-    -- 關鍵塊體滑動：沿滑動方向一步步移出，再落到底；整塊以剛體移動，落地時變成碎石
+   -- 關鍵塊體沿節理滑動：每一格變成碎石外觀的翻滾落石，初速度沿滑動方向，
+    -- 之後由落石的物理（碰撞、反彈、滾動）帶下坡，停下時放成碎石。
+    -- 翻滾落石已達上限或被關閉時：原地變成碎石，再依安息角往下滑
+    local rfx = rockmech.rockfall_entity
     for _, b in ipairs(slides) do
-        local off = rfe and rockmech.keyblock.slide_offset(b.cells, b.dir,
-            function(x, y, z) return not rfe.is_solid(x, y, z) end, 16)
-        if off and (off.x ~= 0 or off.y ~= 0 or off.z ~= 0) then
-            local cells = {}
-            for _, p in ipairs(b.cells) do
-                cells[#cells + 1] = {x = p.x, y = p.y, z = p.z, name = core.get_node(p).name}
-            end
-            for _, p in ipairs(b.cells) do core.remove_node(p) end
-            if rfe.spawn_move(cells, off, true) then
-                n = n + #cells
-                core.log("action", ("[rockmech] 關鍵塊體滑出：%d 格，位移 (%d,%d,%d)"):format(#cells, off.x, off.y, off.z))
-            else
-                for _, p in ipairs(cells) do core.set_node(p, {name = p.name}) end
-            end
-        else
-            n_stuck = n_stuck + 1
-            core.log("action", ("[rockmech] 關鍵塊體 %d 格判定會滑，但滑動方向被擋住，保留原位"):format(#b.cells))
+        local cells = {}
+        for _, p in ipairs(b.cells) do
+            local name = core.get_node(p).name
+            cells[#cells + 1] = {x = p.x, y = p.y, z = p.z,
+                rubble = rockmech.lith_of_node[name] and rockmech.rubble_for(name) or name}
         end
+        local cap = 0
+        if rfx and rfx.can_spawn() then cap = cfg.rockfall.max_active - rfx.active_count() end
+        if #cells <= cap then
+            for _, p in ipairs(cells) do core.remove_node(p) end
+            local m = b.dir
+            for _, p in ipairs(cells) do
+                local speed = 2 + math.random()
+                rfx.spawn({x = p.x, y = p.y, z = p.z}, p.rubble, {
+                    x = m.x * speed + (math.random() - 0.5) * 0.4,
+                    y = m.y * speed,
+                    z = m.z * speed + (math.random() - 0.5) * 0.4,
+                })
+            end
+            core.log("action", ("[rockmech] 關鍵塊體滑出：%d 格，以翻滾落石沿 (%.2f,%.2f,%.2f) 滾落")
+                :format(#cells, m.x, m.y, m.z))
+        else
+            for _, p in ipairs(cells) do core.swap_node(p, {name = p.rubble}) end
+            table.sort(cells, function(u, v) return u.y < v.y end)
+            for _, p in ipairs(cells) do check_stability_and_move(p) end
+            core.log("action", ("[rockmech] 關鍵塊體滑出：%d 格（翻滾落石已達上限），原地變成碎石"):format(#cells))
+        end
+        n = n + #cells
     end
     if n_stuck > 0 then
         core.log("action", ("[rockmech] 支撐判定：%d 群判定會掉但正下方被擋住、動不了，保留原位"):format(n_stuck))
