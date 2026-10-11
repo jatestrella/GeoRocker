@@ -312,3 +312,28 @@ describe("failure 節理弱面前置篩選", function()
 		end
 	end)
 end)
+
+describe("failure 範圍內最小 FS", function()
+	it("找到坡面上最小的節理 FS 與軸差 FS", function()
+		local g = make_grid(-12, 6, -20, 6, -4, 4, function(x, y) return x <= 0 and y < 0 end)
+		local d, a = math.rad(60), math.rad(90)
+		local js = {name = "J", n_eff = {x = math.sin(a) * math.sin(d), y = math.cos(d), z = math.cos(a) * math.sin(d)}}
+		local p = params()
+		p.weakness = {c = 0, tanphi = math.tan(math.rad(30)), daylight = true}
+		p.joint_sets = {js}
+		p.detail = true
+		p.joints_at = function(_, _, _, s) return s end
+		local box = {{x = -3, y = -10, z = -2}, {x = 0, y = -1, z = 2}}
+		local m = failure.min_fs_in_box(g, p, box)
+		assert.is_true(m.exposed > 0)
+		assert.are.equal(js, m.joint.set)
+		assert.are.equal(0, m.joint.x)
+		-- 逐格確認是最小值
+		for z = -2, 2 do for y = -10, -1 do
+			local st = failure.cell_state(g, 0, y, z, p)
+			assert.is_true(st.fs_joint >= m.joint.fs - 1e-12)
+			assert.is_true(st.fs_axial >= m.axial.fs - 1e-12)
+		end end
+		assert.near(math.tan(math.rad(30)) / math.tan(math.rad(60)), m.joint.fs, 1e-9)
+	end)
+end)

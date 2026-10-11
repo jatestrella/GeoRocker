@@ -27,6 +27,8 @@ rockmech.pointed_node_pos = pointed_node_pos
 
 -- pos 的應力報告。岩石格回傳初始應力＋局部應力；非岩石只回傳該處岩性的初始應力。
 -- 回傳 {pos, name, lith, is_rock, init = stress.initial(...), local_state = failure.cell_state 或 nil}
+local NEARBY_R = 4   -- 周圍最小 FS 的範圍 (m)
+
 function rockmech.stress_report(pos)
 	local node = core.get_node(pos)
 	local lith = rockmech.lith_of_node[node.name]
@@ -40,6 +42,7 @@ function rockmech.stress_report(pos)
 		r.local_state = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
 			rockmech.collapse.failure_params(true))
 		r.overhang = rockmech.collapse.overhang_state(pos)
+		r.nearby = rockmech.collapse.nearby_min_fs(pos, NEARBY_R)
 	end
 	return r
 end
@@ -67,8 +70,26 @@ function rockmech.overhang_line(o)
 	if o.aborted then return ("懸臂：懸空群超過 %d 格，不判定"):format(cfg.overhang.max_voxels) end
 	if not o.d then return "懸臂：整段碰不到支撐（由支撐判定處理）" end
 	local c = o.crit
-	return ("懸臂 d %d m、t %d m：σb=3γd²/t %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)"):format(
-		o.d, o.t, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax, fs_str(o.group_fs), c.x, c.z)
+	return ("懸臂 d %d m、t %d m：σb=3γd²/t %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
+		o.d, o.t, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax, fs_str(o.group_fs), c.x, c.z,
+		o.edge and ("（懸空群超出 ±%d m 檢查範圍，FS 可能高估）"):format(cfg.overhang.radius) or "")
+end
+
+-- 周圍臨空格的最小 FS 一行說明
+function rockmech.nearby_line(nb)
+	if not nb then return "" end
+	local parts = {}
+	if nb.joint then
+		local j = nb.joint
+		parts[#parts + 1] = ("節理 %s @ (%d,%d,%d) %s%s"):format(fs_str(j.fs), j.x, j.y, j.z, j.set.name,
+			j.fs <= 1 and " 會滑" or "")
+	elseif cfg.weakness.enabled then
+		parts[#parts + 1] = "節理：無可滑出的面"
+	end
+	if nb.axial then
+		parts[#parts + 1] = ("軸差 %s @ (%d,%d,%d)"):format(fs_str(nb.axial.fs), nb.axial.x, nb.axial.y, nb.axial.z)
+	end
+	return ("周圍 ±%d m 臨空格（%d 格）最小 FS：%s"):format(NEARBY_R, nb.exposed, table.concat(parts, "；"))
 end
 
 local function fmt_report_lines(r)
@@ -88,6 +109,7 @@ local function fmt_report_lines(r)
 			s.s1, s.s3, s.q, s.strength, s.fs_axial, verdict, s.exposed and "（臨空）" or "")
 		lines[#lines + 1] = rockmech.slip_line(s)
 		lines[#lines + 1] = rockmech.overhang_line(r.overhang)
+		lines[#lines + 1] = rockmech.nearby_line(r.nearby)
 	end
 	return lines
 end
@@ -286,6 +308,7 @@ local function tab_stress(name)
 			{"軸差 FS", ("%.2f"):format(s.fs_axial)},
 			{"節理弱面", rockmech.slip_line(s)},
 			{"懸臂", rockmech.overhang_line(r.overhang)},
+			{"周圍臨空格", rockmech.nearby_line(r.nearby)},
 			{"臨空面", (s.exposed_x and "東西 " or "") .. (s.exposed_z and "南北 " or "") ..
 				(s.exposed_up and "上 " or "") .. (s.exposed_down and "下" or "")},
 			{"判定", s.fails_axial and "軸差破壞" or s.fails_slip and "沿節理滑動"

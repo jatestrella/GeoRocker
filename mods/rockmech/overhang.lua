@@ -240,7 +240,7 @@ local function local_ctx(g, p)
 	-- d[run] 為 nil：整群都碰不到有支撐的 run（完全懸空，交給支撐判定）
 	function ctx.explore(r0)
 		local comp, queue, inq = {}, {r0}, {[r0] = true}
-		local n_cells, aborted = 0, false
+		local n_cells, aborted, edge = 0, false, false
 		local d = {}
 		local frontier = {}   -- 與有支撐 run 相鄰者 → d = 1
 		local adj = {}        -- run → 相鄰的懸空 run 清單
@@ -262,6 +262,7 @@ local function local_ctx(g, p)
 							local rn = ctx.get_run(ax, yy, az)
 							if rn.supported then
 								touches_support = true
+								if rn.edge then edge = true end
 							elseif rn ~= r then
 								adj[r][#adj[r] + 1] = rn
 								if not inq[rn] then inq[rn] = true; queue[#queue + 1] = rn end
@@ -282,7 +283,7 @@ local function local_ctx(g, p)
 				end
 			end
 		end
-		return {comp = comp, d = d, n_cells = n_cells, aborted = aborted}
+		return {comp = comp, d = d, n_cells = n_cells, aborted = aborted, edge = edge}
 	end
 	return ctx
 end
@@ -337,7 +338,8 @@ end
 --   {aborted = true, n_cells}                   懸空群太大，判定時保守地不處理
 --   {d, t, lmax, tensile, gamma, sigma_b, fs,    此格所在欄：支撐距離、厚度、L_max、
 --    group_fs, crit = {x, z, ybot, ytop, d, t, lmax}, n_cells}
---                                               σ_b = 3γd²/t (MPa)、FS；整群最小 FS 與臨界欄
+--                                               σ_b = 3γd²/t (MPa)、FS；整群最小 FS 與臨界欄；
+--                                               edge = 群碰到範圍邊界（FS 可能高估）
 -- d 為 nil 表示整群碰不到有支撐的岩柱（fs = 0）。
 function overhang.cell_state(g, p, x, y, z)
 	local ctx = local_ctx(g, p)
@@ -355,6 +357,7 @@ function overhang.cell_state(g, p, x, y, z)
 		d = d0, t = r0.t, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
 		sigma_b = d0 and 3 * r0.crit.gamma * d0 * d0 / r0.t / 1000 or math.huge,
 		fs = run_fs(r0, d0), n_cells = res.n_cells,
+		edge = res.edge,   -- 群碰到範圍邊界（邊界外視為有支撐）→ FS 可能高估
 	}
 	local gfs, crit = math.huge, nil
 	for _, r in ipairs(res.comp) do

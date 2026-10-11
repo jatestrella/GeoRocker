@@ -420,6 +420,33 @@ function failure.evaluate_boxes(g, p, boxes)
 	return failed, stats
 end
 
+-- box = {minp, maxp} 內臨空岩格的最小安全係數（顯示用，p 建議 detail = true）。
+-- 回傳 {joint = {fs, x, y, z, set} 或 nil, axial = {fs, x, y, z} 或 nil, exposed = 臨空格數}
+function failure.min_fs_in_box(g, p, box)
+	if not g.L then failure.compute_loads(g, p) end
+	local out = {exposed = 0}
+	local lith_of, data = g.lith_of, g.data
+	local a, c = box[1], box[2]
+	for z = a.z, c.z do
+		for y = a.y, c.y do
+			for x = a.x, c.x do
+				local i = index(g, x, y, z)
+				if i and lith_of[data[i]] and is_exposed(g, x, y, z) then
+					out.exposed = out.exposed + 1
+					local st = failure.cell_state(g, x, y, z, p)
+					if st.slip_set and (not out.joint or st.fs_joint < out.joint.fs) then
+						out.joint = {fs = st.fs_joint, x = x, y = y, z = z, set = st.slip_set}
+					end
+					if p.axial ~= false and (not out.axial or st.fs_axial < out.axial.fs) then
+						out.axial = {fs = st.fs_axial, x = x, y = y, z = z}
+					end
+				end
+			end
+		end
+	end
+	return out
+end
+
 -- 以 (cx,cy,cz) 為中心、半邊長 r 的立方體評估
 function failure.evaluate(g, p, cx, cy, cz, r)
 	return failure.evaluate_boxes(g, p, {{

@@ -236,3 +236,16 @@ describe("overhang 懸臂安全係數", function()
 		end
 	end)
 end)
+
+describe("overhang 懸空群碰到範圍邊界", function()
+	it("梁伸出範圍外：標示 edge（FS 可能高估）；完整在範圍內：不標示", function()
+		local inside = overhang.cell_state(cantilever("g", 6, 1), P, 3, 8, 0)
+		assert.is_false(inside.edge)
+		-- 同一根梁，但網格只讀到 x = 5（req 內縮一格 → x ≤ 4），梁在範圍邊界被截斷
+		local g = cantilever("g", 6, 1)
+		g.req.x2 = 4
+		local cut = overhang.cell_state(g, P, 3, 8, 0)
+		assert.is_true(cut.edge)
+		assert.is_true(cut.group_fs > inside.group_fs)
+	end)
+end)

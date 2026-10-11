@@ -699,6 +699,14 @@ function collapse.overhang_params()
     }
 end
 
+-- pos 周圍 ±r 臨空岩格的最小 FS（節理滑動、軸差），顯示用
+function collapse.nearby_min_fs(pos, r)
+    local w = 2 * fcfg.window + 1
+    local grid = collapse.read_grid(vector.subtract(pos, r + w), vector.add(pos, r + w))
+    return rockmech.failure.min_fs_in_box(grid, collapse.failure_params(true),
+        {vector.subtract(pos, r), vector.add(pos, r)})
+end
+
 -- 單格的懸臂狀態（HUD／資訊頁／羅盤用；與懸臂斷裂同一個模型與範圍）
 function collapse.overhang_state(pos)
     local r = cfg.overhang.radius
