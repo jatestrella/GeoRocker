@@ -78,7 +78,8 @@ for _, key in ipairs(cfg.lithology_order) do
 		if mask ~= 0 then groups.not_in_creative_inventory = 1 end
 		core.register_node(name, {
 			description = lith.description .. "\n" ..
-				("γ=%.1f kN/m³  UCS=%g MPa  σt=%g MPa"):format(lith.gamma, lith.ucs, lith.tensile),
+				("γ=%.1f kN/m³  UCS=%g MPa  σt=%g MPa"):format(lith.gamma, lith.ucs, lith.tensile) ..
+				"\n放置後依所在位置顯示節理",
 			tiles = mask == 0 and {base_tile} or joint_tiles(base_tile, mask),
 			is_ground_content = true,
 			groups = groups,
@@ -190,6 +191,16 @@ do
 		local tr = jtx.cell_traces(joints, world_sets, x, y, z, MAXL)
 		return rockmech.lith_plane_variant[key][jtx.suffix(tr)]
 	end
+end
+
+-- 依目前的節理材質設定，取得某岩性在某位置應顯示的 node 名稱
+function rockmech.joint_variant_for(key, pos)
+	if not jt.enabled then return rockmech.node_of_lith[key] end
+	local sets = rockmech.get_joint_sets()
+	if jt.style == "plane" then
+		return rockmech.plane_variant_name(key, sets, pos.x, pos.y, pos.z)
+	end
+	return rockmech.lith_variant[key][joints.cell_mask(sets, pos.x, pos.y, pos.z)]
 end
 
 -- 依 y 取該深度分層的岩性條目

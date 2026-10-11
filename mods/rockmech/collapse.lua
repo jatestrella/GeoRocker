@@ -822,6 +822,11 @@ local function register_physics_events(name, intact)
     local overrides = {
         groups = new_groups,
         after_place_node = function(pos)
+            -- 玩家放置的完整岩石：換成該位置應有的節理材質變體（swap 不觸發 callback）
+            local lith = rockmech.lith_of_node[core.get_node(pos).name]
+            if lith then
+                core.swap_node(pos, {name = rockmech.joint_variant_for(lith.name, pos)})
+            end
             physics_updating = true
             update_affected_area(pos)
             physics_updating = false
