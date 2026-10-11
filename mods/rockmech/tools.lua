@@ -3,7 +3,7 @@
 --   rockmech:compass     地質羅盤，右鍵一格顯示岩性、深度、應力與六個面的節理
 --   /rockmech_traces [r] 以 particle 標示附近臨空面上的節理跡線
 --   /rockmech_failure    軸差破壞檢查（回報／apply）
---   /convert_rocks       把附近的 stone 依深度換成岩性（舊世界測試用）
+--   /convert_rocks       stone 依深度換成岩性；既有岩性依目前節理設定重新上材質（舊世界用）
 --   方位 HUD             畫面上方顯示面向（沿用 physics_core）
 --   物品欄「rockmech」分頁 / /rockmech_toggle   遊戲中開關（破壞準則、安息角滑動、翻滾）
 
@@ -285,51 +285,55 @@ core.register_chatcommand("rockmech_jointtex_demo", {
 	end,
 })
 
-core.register_chatcommand("convert_rocks", {
-	params = "[半徑，預設 20，上限 48]",
-	description = "把玩家附近的 default:stone（含舊的 physics_core:large_rock）依深度換成 rockmech 岩性",
-	privs = {rockmech = true},
-	func = function(name, param)
-		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
-		if not core.registered_nodes["default:stone"] then
-			return false, "沒有 default:stone，無需轉換"
-		end
-		local R = math.max(1, math.min(48, math.floor(tonumber(param) or 20)))
-		local c = vector.round(player:get_pos())
-		local p1, p2 = vector.subtract(c, R), vector.add(c, R)
+-- 轉換 [p1, p2]：default:stone 依深度換成岩性；既有岩性（任何材質變體）保留岩性、
+-- 依目前節理設定重新選材質變體。回傳 n_stone, n_rock, n_changed, ms
+function rockmech.convert_area(p1, p2)
+		local t0 = core.get_us_time()
 
 		local vm = core.get_voxel_manip()
 		local emin, emax = vm:read_from_map(p1, p2)
 		local area = VoxelArea(emin, emax)
 		local data = vm:get_data()
 
-		local c_stone = core.get_content_id("default:stone")
-		local var_y = {}
-		for y = p1.y, p2.y do
-			local key = rockmech.lith_at_y(y).name
-			var_y[y] = {}
-			for mask = 0, 63 do
-				var_y[y][mask] = core.get_content_id(rockmech.lith_variant[key][mask])
-			end
+		local c_stone = core.registered_nodes["default:stone"] and core.get_content_id("default:stone")
+		-- content id → 岩性名稱（含所有材質變體）
+		local lith_of_cid = {}
+		for _, n in ipairs(rockmech.lith_nodes) do
+			lith_of_cid[core.get_content_id(n)] = rockmech.lith_of_node[n].name
 		end
 		local sets = rockmech.get_joint_sets()
 		local use_joints = cfg.jointtex.enabled
 		local plane = use_joints and cfg.jointtex.style == "plane"
+		local cid_cache = {}
+		local function variant_cid(key, x, y, z)
+			local n
+			if plane then
+				n = rockmech.plane_variant_name(key, sets, x, y, z)
+			else
+				n = rockmech.lith_variant[key][use_joints and joints.cell_mask(sets, x, y, z) or 0]
+			end
+			local cid = cid_cache[n]
+			if not cid then cid = core.get_content_id(n); cid_cache[n] = cid end
+			return cid
+		end
 
-		local replaced = 0
+		local n_stone, n_rock, n_changed = 0, 0, 0
 		for z = p1.z, p2.z do
 			for y = p1.y, p2.y do
 				local vi = area:index(p1.x, y, z)
 				for x = p1.x, p2.x do
-					if data[vi] == c_stone then
-						if plane then
-							data[vi] = core.get_content_id(rockmech.plane_variant_name(
-								rockmech.lith_at_y(y).name, sets, x, y, z))
-						else
-							data[vi] = var_y[y][use_joints and joints.cell_mask(sets, x, y, z) or 0]
+					local cid = data[vi]
+					local key = lith_of_cid[cid]
+					if cid == c_stone then
+						data[vi] = variant_cid(rockmech.lith_at_y(y).name, x, y, z)
+						n_stone = n_stone + 1
+					elseif key then
+						local new = variant_cid(key, x, y, z)
+						n_rock = n_rock + 1
+						if new ~= cid then
+							data[vi] = new
+							n_changed = n_changed + 1
 						end
-						replaced = replaced + 1
 					end
 					vi = vi + 1
 				end
@@ -337,10 +341,26 @@ core.register_chatcommand("convert_rocks", {
 		end
 
 		-- VoxelManip 寫入不會呼叫 on_destruct，不會觸發坍塌
-		vm:set_data(data)
-		vm:write_to_map(false)
+		if n_stone + n_changed > 0 then
+			vm:set_data(data)
+			vm:write_to_map(false)
+		end
 		vm:close()
-		return true, ("替換了 %d 格 stone（半徑 %d）"):format(replaced, R)
+		return n_stone, n_rock, n_changed, (core.get_us_time() - t0) / 1000
+end
+
+core.register_chatcommand("convert_rocks", {
+	params = "[半徑，預設 20，上限 48]",
+	description = "把附近的 default:stone 依深度換成 rockmech 岩性，並把既有岩性方塊依目前的節理設定重新上節理材質",
+	privs = {rockmech = true},
+	func = function(name, param)
+		local player = core.get_player_by_name(name)
+		if not player then return false, "找不到玩家" end
+		local R = math.max(1, math.min(48, math.floor(tonumber(param) or 20)))
+		local c = vector.round(player:get_pos())
+		local n_stone, n_rock, n_changed, ms = rockmech.convert_area(vector.subtract(c, R), vector.add(c, R))
+		return true, ("半徑 %d：stone → 岩性 %d 格；既有岩性 %d 格，其中 %d 格更新節理材質（%.0f ms）"):format(
+			R, n_stone, n_rock, n_changed, ms)
 	end,
 })
 
