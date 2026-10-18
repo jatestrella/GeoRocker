@@ -270,10 +270,10 @@ core.register_tool("rockmech:blast_wand", {
 	end,
 })
 
--- 挖洞魔杖：左鍵直接移除面前 3×3×3（任何可挖的方塊，算玩家開挖：記錄開挖、觸發破壞與支撐判定），
+-- 挖洞魔杖：左鍵直接移除以指到的格為中心的 3×3×3（任何可挖的方塊，算玩家開挖：記錄開挖、觸發破壞與支撐判定），
 -- 右鍵一鍵清碴（同爆破魔杖）
 core.register_tool("rockmech:dig_wand", {
-	description = "Dig wand (挖洞魔杖)\n左鍵：直接移除面前 3×3×3（岩石、碎石等）\n右鍵：一鍵清碴（附近與相連的碎石）\n" ..
+	description = "Dig wand (挖洞魔杖)\n左鍵：移除以指到的格為中心的 3×3×3（岩石、碎石等）\n右鍵：一鍵清碴（附近與相連的碎石）\n" ..
 		"按住 Shift 右鍵：清掉的碎石收進物品欄",
 	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#e0fff0" ..
 		"^[fill:4x4:11,1:#20c070^[fill:2x2:12,2:#e0fff0" ..
@@ -283,7 +283,8 @@ core.register_tool("rockmech:dig_wand", {
 	on_use = function(itemstack, user, pointed_thing)
 		if not user or not user:is_player() or pointed_thing.type ~= "node" then return nil end
 		local under = pointed_thing.under
-		local cells, p1, p2 = cube_cells(under, vector.subtract(under, pointed_thing.above))
+		-- 以指到的那一格為中心的 3×3×3（cube_cells 的中心 = under + 0）
+		local cells, p1, p2 = cube_cells(under, {x = 0, y = 0, z = 0})
 		local t0 = core.get_us_time()
 		local count = clear(cells, p1, p2, user:get_player_name(), true)
 		if count > 0 then
