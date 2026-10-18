@@ -70,6 +70,7 @@ local function compass_report(pos, nodename)
 				verdict = core.colorize("#80ff80", "穩定")
 			end
 			if fs.rm then lines[#lines + 1] = "  " .. rockmech.rockmass_line(fs.rm) end
+			if fs.roof then lines[#lines + 1] = "  " .. rockmech.roof_line(fs) end
 			lines[#lines + 1] = ("  q=σ1−σ3=%.3f MPa  岩體強度 q_f(σ3)=%.3f MPa  FS=%.2f  → %s"):format(
 				fs.q, fs.strength, fs.fs_axial, verdict)
 			lines[#lines + 1] = "  " .. rockmech.slip_line(fs)

@@ -364,7 +364,7 @@ describe("overhang 水平節理面（不傳張力）", function()
 		assert.are.equal(0, overhang.cell_state(g, pj, 2, 7, 0).group_fs)
 	end)
 
-	it("頂板沿層面剝落（兩端固定梁）：層面下的薄層跨距太大會掉，上層較厚撐得住", function()
+	it("頂板（兩側都連著岩體）不用懸臂判定：被層面切開的薄層也不會因懸臂斷", function()
 		-- 頁岩：兩根岩柱 x=0、x=16（y 1..8），中間 y=6..8 的頂板（跨度 15 m）；y=6 與 y=7 之間是層面
 		local g = grid(-3, 19, -2, 12, -2, 2, function(x, y, z)
 			if y <= 0 then return "G" end
@@ -377,24 +377,34 @@ describe("overhang 水平節理面（不傳張力）", function()
 		local starts = {{x = 8, y = 6, z = 0}, {x = 8, y = 7, z = 0}}
 		assert.are.equal(0, #overhang.find_failing_local(g, P, starts))   -- 沒有層面：t=3 撐得住
 		local groups = overhang.find_failing_local(g, pj, starts)
-		-- 兩端固定梁的極限跨度 √6·L_max：下層 t=1：12.6 m < 15 → 掉；上層 t=2：17.9 m > 15 → 留
-		assert.is_true(fell(groups, 8, 6, 0))
-		assert.is_true(fell(groups, 1, 6, 0))
+		assert.is_false(fell(groups, 8, 6, 0))
 		assert.is_false(fell(groups, 8, 7, 0))
-		assert.is_false(fell(groups, 8, 8, 0))
+		local st = overhang.cell_state(g, pj, 8, 6, 0)
+		assert.is_true(st.beam and st.beam.roof)
+		assert.are.equal(15, st.beam.span)
 	end)
 
-	it("兩端固定梁比懸臂有利：12 m 跨度的 1 m 薄層，懸臂會斷、梁撐得住", function()
+	it("只有一側連著岩體的仍是懸臂", function()
+		local g = grid(-3, 19, -2, 12, -2, 2, function(x, y, z)
+			if y <= 0 then return "G" end
+			if z == 0 and x == 0 and y <= 8 then return "h" end
+			if z == 0 and x >= 1 and x <= 9 and y == 8 then return "h" end
+		end)
+		local st = overhang.cell_state(g, P, 9, 8, 0)
+		assert.is_nil(st.beam)
+		assert.near((overhang.lmax(2, 25, 1) / 9) ^ 2, st.fs, 1e-9)
+	end)
+
+	it("12 m 跨度的 1 m 薄層頂板：不當懸臂（FS ∞）", function()
 		local g = grid(-3, 16, -2, 12, -2, 2, function(x, y, z)
 			if y <= 0 then return "G" end
 			if z == 0 and (x == 0 or x == 13) and y <= 8 then return "h" end
 			if z == 0 and x >= 1 and x <= 12 and y == 8 then return "h" end
 		end)
 		local st = overhang.cell_state(g, P, 6, 8, 0)
-		assert.is_true(st.beam ~= nil)
+		assert.is_true(st.beam ~= nil and st.beam.roof)
 		assert.are.equal(12, st.beam.span)
-		assert.near((math.sqrt(6) * overhang.lmax(2, 25, 1) / 12) ^ 2, st.fs, 1e-9)
-		assert.is_true(st.fs > 1)
+		assert.are.equal(math.huge, st.fs)
 		assert.are.equal(0, #overhang.find_failing_local(g, P, {{x = 6, y = 8, z = 0}}))
 	end)
 

@@ -26,9 +26,9 @@
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
 --     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
---   * 兩端支撐（頂板）：沿 x、z 直線、在 run 自己的厚度帶內往兩側找有支撐的欄；兩側都有時當成
---     兩端固定梁，跨度 L = 兩側之間的懸空欄數，支承處 σ = γ·t·L²/(2·t_eff²) → FS = (√6·L_max·ρ / L)²
---     （ρ 取兩端支承面較差者；中途被節理完全切開則不算梁）。每一欄取懸臂、x 向梁、z 向梁中最有利者。
+--   * 頂板（兩側都連著岩體）：沿 x、z 直線、在 run 自己的厚度帶內往兩側找有支撐的欄；某一方向兩側
+--     都有，就是開挖的頂板，不用懸臂判定（FS = ∞），改由開挖周邊的應力判定（failure.lua 的 Inglis
+--     解：頂板受拉張裂、受壓剝落），被節理切開的岩塊由關鍵塊體判定。只有一側連著岩體的才是懸臂。
 --   * 層疊（Obert & Duvall 疊層梁）：上段坐在懸空的下段上時（上段 d = 0），下段承受的荷重
 --     q₁ = γ·t₁³·Σt / Σt³（同材料；依序往上加入各層，加入後 q₁ 沒有變大的層自己分離、不加載）。
 --     FS ÷ (q₁ / γt₁)。較厚、較勁的上層自己撐得住，不壓在較薄的下層上。
@@ -429,7 +429,7 @@ local function local_ctx(g, p)
 			if not inq[rn] then real_cut[#real_cut + 1] = rn end
 		end
 		-- 兩端支撐梁：沿 (hx, hz) 直線在 r 的厚度帶內找有支撐的欄。回傳 距離 k、支承面完好比；
-		-- 碰到空氣（梁斷開）、中途介面被節理完全切開、或找不到 → nil
+		-- 碰到空氣（斷開）或找不到 → nil
 		local function scan(r, hx, hz)
 			local tt = r.t >= THICK and nil or r.t
 			for k = 1, 96 do
@@ -445,7 +445,7 @@ local function local_ctx(g, p)
 						if not jointed(cx - hx, yy, cz - hz, hx, hz) then intact = intact + 1 end
 					end
 				end
-				if not any or intact == 0 then return nil end
+				if not any then return nil end   -- 碰到空氣才算斷開；被節理切開的仍是頂板（岩塊交給關鍵塊體）
 				if sup then return k, math.min(1, intact / (tt or n)) end
 			end
 			return nil
@@ -463,10 +463,9 @@ local function local_ctx(g, p)
 						if kp then
 							local kn, rn_ = scan(r, -ax[1], -ax[2])
 							if kn then
+								-- 兩側都連著岩體：頂板，由應力判定
 								local span = kp + kn - 1
-								local rb = math.min(rp, rn_)
-								local f = (S6 * r.lmax * rb / span) ^ 2
-								if not best or f > best.fs then best = {fs = f, span = span, rho = rb} end
+								if not best or span < best.span then best = {fs = math.huge, span = span, roof = true} end
 							end
 						end
 					end

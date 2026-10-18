@@ -20,6 +20,10 @@
 --      params.rock（rockmass.new 的查詢器）：Hoek-Brown 岩體強度 q ≥ q_f(σ3) = σci·(mb·σ3/σci + s)^a
 --      （GSI 取該格 param2，或依岩性的深度剖面；強度已除以相似比 N）
 --      沒有 params.rock：q = σ1 − σ3 ≥ UCS × strength_scale
+-- 5b. 頂板（只有下方臨空）：開挖周邊的切向應力用 Inglis 橢圓開口解（圓形時即 Kirsch）。
+--      開口高 H（頂板往下到地板）、寬 W（頂板正下方那一排沿 x、z 量到兩側岩壁）：
+--      σθ,x = σxx,遠場·(1 + 2H/Wx) − σv，σθ,z 同理；σv 取上覆荷重，σyy = 0。
+--      寬而扁的開口 → σθ → σh − σv：K < 1 時頂板受拉（Hoek-Brown 的張力截斷 → 張裂），K 大時受壓。
 -- 6. 弱面（Jaeger single plane of weakness）：穿過此格的每組節理面（法向 n）
 --      σn = n·σ·n、τ = |σ·n − σn·n|，τ ≥ cj + σn·tan φj → 沿節理滑動。
 --    運動學（daylight）：只有上方臨空不算。下方臨空（頂板／懸垂）：沒有側向限制時任何節理都可釋放；
@@ -73,6 +77,29 @@ local function is_solid(g, x, y, z)
 	return g.solid_of[g.data[i]] == true
 end
 failure.is_solid = is_solid
+
+-- 頂板格 (x, y, z) 下方開口的尺寸：H（往下到第一個實心格）、Wx、Wz（頂板正下方那一排沿 x、z
+-- 兩側到實心格的寬度）。往外最多量 cap 格（量不到邊視為 cap）；下方不是開口回傳 nil
+function failure.opening_dims(g, x, y, z, cap)
+	cap = cap or 64
+	if is_solid(g, x, y - 1, z) then return nil end
+	local H = 0
+	for k = 1, cap do
+		if is_solid(g, x, y - k, z) then break end
+		H = k
+	end
+	local function width(hx, hz)
+		local n = 1
+		for _, sgn in ipairs({1, -1}) do
+			for k = 1, cap do
+				if is_solid(g, x + hx * k * sgn, y - 1, z + hz * k * sgn) then break end
+				n = n + 1
+			end
+		end
+		return n
+	end
+	return H, width(1, 0), width(0, 1)
+end
 
 -- 側向是否「開放」：非實心，或是碎石（碎石只給側壓，不是岩體的圍壓）
 local function is_open(g, x, y, z)
@@ -360,6 +387,19 @@ function failure.cell_state(g, x, y, z, p)
 	else
 		sx, sz = sxx_c, szz_c
 	end
+	-- 頂板（只有下方臨空）：Inglis 橢圓開口解的切向應力（可能為拉）
+	local roof
+	if e_down and not ex and not ez and p.roof_inglis ~= false then
+		local H, Wx, Wz = failure.opening_dims(g, x, y, z)
+		if H and H > 0 then
+			local sxf = s2 * sH_own + c2 * sh_own     -- 遠場 σxx、σzz（依自身上覆荷重）
+			local szf = c2 * sH_own + s2 * sh_own
+			sx = sxf * (1 + 2 * H / Wx) - sv0
+			sz = szf * (1 + 2 * H / Wz) - sv0
+			sxz = 0
+			roof = {H = H, Wx = Wx, Wz = Wz, sx = sx, sz = sz}
+		end
+	end
 	local sy = e_down and 0 or sv
 
 	local s1, s3 = stress.principal(sx, sy, sz, sxz)
@@ -448,7 +488,7 @@ function failure.cell_state(g, x, y, z, p)
 		factor = sv0 > 0 and sv / sv0 or 1,
 		sx = sx, sy = sy, sz = sz, sxz = sxz, s1 = s1, s3 = s3, q = q,
 		sH_far = sH_own, sh_far = sh_own, fx = fx, fz = fz,
-		strength = strength, rm = rm, fs = fs, fs_axial = fs_axial, fs_joint = fs_joint,
+		strength = strength, rm = rm, fs = fs, fs_axial = fs_axial, fs_joint = fs_joint, roof = roof,
 		slip_set = slip_set, slip_sn = slip_sn, slip_tau = slip_tau, n_joints = n_joints,
 		slip_set2 = slip_set2, slip_sn2 = slip_sn2, slip_line = slip_line,
 		fails_axial = fails_axial, fails_slip = fails_slip,
