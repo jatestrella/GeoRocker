@@ -312,7 +312,7 @@ function rockmech.convert_area(p1, p2)
 			lith_of_cid[core.get_content_id(n)] = rockmech.lith_of_node[n].name
 		end
 		local sets = rockmech.get_joint_sets()
-		local use_joints = cfg.jointtex.enabled
+		local use_joints = cfg.jointtex.enabled and cfg.jointtex.style ~= "mesh"
 		local plane = use_joints and cfg.jointtex.style == "plane"
 		local cid_cache = {}
 		local function variant_cid(key, x, y, z)

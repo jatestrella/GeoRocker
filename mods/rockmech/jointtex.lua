@@ -99,6 +99,8 @@ local function plane_present(joints, js, k, x, y, z)
 	return joints.face_hash01(js, k, x, y, z, 7) < P
 end
 
+jointtex.plane_present = plane_present
+
 -- 回傳此格的跡線清單 {{set=i, level=j}, ...}（依組號排序，最多 max_lines 條）
 function jointtex.cell_traces(joints, sets, x, y, z, max_lines)
 	local out = {}

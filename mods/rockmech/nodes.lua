@@ -195,7 +195,7 @@ end
 
 -- 依目前的節理材質設定，取得某岩性在某位置應顯示的 node 名稱
 function rockmech.joint_variant_for(key, pos)
-	if not jt.enabled then return rockmech.node_of_lith[key] end
+	if not jt.enabled or jt.style == "mesh" then return rockmech.node_of_lith[key] end
 	local sets = rockmech.get_joint_sets()
 	if jt.style == "plane" then
 		return rockmech.plane_variant_name(key, sets, pos.x, pos.y, pos.z)

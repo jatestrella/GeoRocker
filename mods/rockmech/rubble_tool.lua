@@ -97,6 +97,7 @@ local function clear(cells, p1, p2, pname)
 	if #removed == 0 then vm:close(); return 0, levels end
 	vm:set_data(data)
 	vm:write_to_map(true)
+	if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
 
 	-- 鄰格：緊貼岩石（或其他實心非碎石）的移除點 → 支撐判定與破壞檢查；
 	-- 沒被清掉的鄰近碎石 → 重新判定掉落／顆粒流

@@ -114,6 +114,7 @@ function rockmech.blast_rock(center, R)
 		vm:set_data(data)
 		vm:write_to_map(true)
 		vm:update_liquids()
+		if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
 	end
 	vm:close()
 	eject_items(center, ejected)

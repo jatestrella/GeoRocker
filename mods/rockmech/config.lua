@@ -123,7 +123,11 @@ config.failure_defaults = {
 -- 改動後需重新進入世界（材質在載入時產生）
 config.jointtex_defaults = {
 	enabled = true,           -- 地圖生成／轉換時依節理放置材質變體
-	style = "plane",          -- plane：真實平面跡線（斜線）；edges：沿方塊邊緣＋節理面上色
+	style = "plane",          -- plane：真實平面跡線（斜線）；edges：沿方塊邊緣＋節理面上色；
+	                          -- mesh：不用方塊變體，跡線以區塊網格疊在岩面上（組數不限；jointmesh.lua）
+	mesh_range = 3,           -- mesh：玩家周圍幾個區塊（16 m）內顯示
+	mesh_width = 0.06,        -- mesh：跡線寬度 (m)
+	mesh_overlay = false,     -- plane 模式下另外疊一層紅色網格跡線（檢查用）
 	max_lines = 2,            -- plane：每格最多畫幾組節理
 	plane_res = 32,           -- plane：跡線貼圖解析度（像素）
 	plane_width = 1.5,        -- plane：跡線寬度（像素，以 plane_res 計）
@@ -397,10 +401,12 @@ function config.load(get)
 	local jt = load_section("jointtex", config.jointtex_defaults)
 	jt.line_alpha = math.max(0, math.min(255, math.floor(jt.line_alpha)))
 	jt.face_ratio = math.max(0, math.min(255, math.floor(jt.face_ratio)))
-	if jt.style ~= "plane" and jt.style ~= "edges" then
-		warnings[#warnings + 1] = "rockmech_jointtex_style 只能是 plane 或 edges，改用 plane"
+	if jt.style ~= "plane" and jt.style ~= "edges" and jt.style ~= "mesh" then
+		warnings[#warnings + 1] = "rockmech_jointtex_style 只能是 plane、edges 或 mesh，改用 plane"
 		jt.style = "plane"
 	end
+	jt.mesh_range = math.max(1, math.min(6, math.floor(jt.mesh_range)))
+	jt.mesh_width = math.max(0.01, math.min(0.5, jt.mesh_width))
 	jt.max_lines = math.max(1, math.min(3, math.floor(jt.max_lines)))
 	jt.plane_res = math.max(16, math.min(64, math.floor(jt.plane_res)))
 	jt.plane_width = math.max(0.5, math.min(8, jt.plane_width))

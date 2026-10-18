@@ -92,6 +92,7 @@ dofile(modpath .. "/ui.lua")
 dofile(modpath .. "/blasting.lua")
 dofile(modpath .. "/rubble_tool.lua")
 dofile(modpath .. "/fsmask.lua")
+dofile(modpath .. "/jointmesh.lua")
 
 -- 地圖生成在 mapgen 執行緒中執行（另一個 Lua 環境），以 IPC 傳遞 modpath
 core.ipc_set("rockmech:modpath", modpath)

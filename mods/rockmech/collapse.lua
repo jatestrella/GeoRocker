@@ -1559,6 +1559,7 @@ do
                 vm:set_data(data)
                 vm:write_to_map(true)
                 vm:close()
+                if rockmech.jointmesh then rockmech.jointmesh.dirty_box(ma, mb) end
                 -- 碎屑與顆粒流：每欄的頂格（由下往上），稍後依序判定
                 local tops = {}
                 for _, p in ipairs(m.cells) do

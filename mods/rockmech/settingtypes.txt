@@ -299,7 +299,17 @@ rockmech_jointtex_enabled (Joint textures) bool true
 
 # plane: draw the true trace of each joint plane across block faces (inclined lines).
 # edges: draw lines along block edges where the neighboring face is a joint, and tint joint faces.
-rockmech_jointtex_style (Joint texture style) enum plane plane,edges
+# mesh: no node variants; traces are drawn as a mesh per 16^3 block on exposed rock (any number of joint sets). New worlds only.
+rockmech_jointtex_style (Joint texture style) enum plane plane,edges,mesh
+
+# mesh style: show traces within this many blocks (16 m) of the player.
+rockmech_jointtex_mesh_range (Joint mesh range) int 3 1 6
+
+# mesh style: trace width (m).
+rockmech_jointtex_mesh_width (Joint mesh line width) float 0.06 0.01 0.5
+
+# plane style: also draw the mesh traces in red on top (to check that they match the textures).
+rockmech_jointtex_mesh_overlay (Joint mesh overlay check) bool false
 
 # plane style: maximum number of joint sets drawn in one block.
 rockmech_jointtex_max_lines (Max joint traces per block) int 2 1 3
