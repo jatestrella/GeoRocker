@@ -207,7 +207,7 @@ config.overhang_defaults = {
 	scale = 1.0,              -- （舊設定，改用 rockmech_model_scale）σt 額外乘上此值
 	tensile_other = 2.0,      -- 非岩性鍵結格（土、礦石…）的張力強度 (MPa)
 	radius = 16,              -- 檢查範圍半徑 (m)；懸空群碰到範圍邊界時保守地不處理
-	max_voxels = 2000,        -- 懸空群超過此格數保守地不處理
+	max_voxels = 30000,       -- 懸空群超過此格數保守地不處理（以欄為單位搜尋，大空間的頂板也要能判定）
 	joints = true,            -- 節理切過的介面不傳張力（根部斷面 t_eff；完全切開則分離成獨立的塊）
 }
 

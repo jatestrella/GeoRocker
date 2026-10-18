@@ -300,7 +300,7 @@ rockmech_overhang_tensile_other (Tensile strength of other nodes) float 2.0 0 10
 rockmech_overhang_radius (Overhang check radius) int 16 4 48
 
 # Overhangs larger than this many nodes are left alone (conservative).
-rockmech_overhang_max_voxels (Max overhang size) int 2000 1 100000
+rockmech_overhang_max_voxels (Max overhang size) int 30000 1 200000
 
 # Joints carry no tension across the faces they cut: the root section of a cantilever only counts intact faces
 # (L_max scales with intact/total), and a block cut off completely by joints falls.
