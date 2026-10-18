@@ -12,34 +12,8 @@
 local collapse = {}
 rockmech.collapse = collapse
 
--- 安息角設定
--- SLOPE_THRESHOLD：絕對下限，drop < 此值完全不滑（單位：格）
--- 安息角（度）：設定 rockmech_slope_angle（預設 35°，有稜角岩屑約 34–40°）
--- SLOPE_RANDOMNESS：機率曲線平滑度，小→硬門檻、大→較隨機
-local SLOPE_THRESHOLD = 1
-local SLOPE_RANDOMNESS = 1.0
+-- 碎石安息角（rockmech_slope_angle，預設 35°）：顆粒流（granular.lua）的臨界坡度
 local SLOPE_TAN = math.tan(math.rad(rockmech.cfg.slope.angle))
-
--- 8 方向鄰居（含對角），h 為水平距離
-local SLOPE_NEIGHBORS = {
-    {x=1,  z=0,  h=1},
-    {x=-1, z=0,  h=1},
-    {x=0,  z=1,  h=1},
-    {x=0,  z=-1, h=1},
-    {x=1,  z=1,  h=math.sqrt(2)},
-    {x=1,  z=-1, h=math.sqrt(2)},
-    {x=-1, z=1,  h=math.sqrt(2)},
-    {x=-1, z=-1, h=math.sqrt(2)},
-}
-
--- 計算給定高度差 drop 和水平距離 h 下的滑落機率
-local function slope_slide_probability(drop, h)
-    if drop < SLOPE_THRESHOLD then return 0 end       -- 絕對下限
-    local d_crit = h * SLOPE_TAN                      -- 此方向的臨界高度差
-    local excess = drop - d_crit
-    if excess <= 0 then return 0 end
-    return math.min(1, excess / SLOPE_RANDOMNESS)
-end
 
 local physics_updating = false  -- 防止物理連鎖觸發
 
@@ -154,17 +128,7 @@ local try_escape_or_destroy
 local check_stability_and_move
 local update_affected_area
 
--- 3. 安息角輔助：找出某柱子的頂端 y 座標
-local function find_column_top(x, z, from_y, max_search)
-    max_search = max_search or 32
-    local y = from_y
-    for _ = 1, max_search do
-        local n = core.get_node({x=x, y=y, z=z})
-        if n.name ~= "air" then return y end
-        y = y - 1
-    end
-    return nil
-end
+-- 3. 安息角輔助
 
 -- 預先計算掉落落點 y（第一個非空氣上方）
 local function compute_landing_y(pos)
@@ -197,97 +161,161 @@ local function launch_rockfall(pos, velocity, start)
 end
 collapse.launch_rockfall = launch_rockfall
 
--- 安息角滑落改為翻滾：從格子邊緣（往滑動方向偏移 0.5 m）以此初速推出 (m/s)，
--- 確保能離開原本那一格（滾動阻力下 1.5 m/s 只滑約 0.3 m 就停住）
-local SLIDE_LAUNCH_SPEED = 3.0
-local SLIDE_LAUNCH_OFFSET = 0.5
+-- 碎屑粒子（純視覺）：在 pos 附近噴出 amount 顆，外觀取自 node 的貼圖（同挖方塊時的碎片）
+local function debris(pos, node_name, amount, vel)
+    if not node_name or node_name == "" or node_name == "air" then return end
+    vel = vel or {x = 0, y = 0, z = 0}
+    core.add_particlespawner({
+        amount = amount, time = 0.3,
+        minpos = {x = pos.x - 0.4, y = pos.y - 0.3, z = pos.z - 0.4},
+        maxpos = {x = pos.x + 0.4, y = pos.y + 0.4, z = pos.z + 0.4},
+        minvel = {x = vel.x - 0.8, y = vel.y + 0.3, z = vel.z - 0.8},
+        maxvel = {x = vel.x + 0.8, y = vel.y + 1.6, z = vel.z + 0.8},
+        minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
+        minexptime = 0.6, maxexptime = 1.5,
+        minsize = 0, maxsize = 0,
+        collisiondetection = true,
+        node = {name = node_name},
+    })
+end
+collapse.debris = debris
 
--- 嘗試讓岩石依機率 + 安息角滑落到相鄰 8 方向較低的柱子
-local function try_slope_slide(pos)
-    -- 遊戲中可關閉（物品欄 rockmech 分頁 / /rockmech_toggle slope）
-    if not rockmech.cfg.slope.enabled then return false end
-    local node = core.get_node(pos)
-    -- 只有碎石受安息角控制；完整岩石由軸差破壞準則控制
-    if not rockmech.is_rubble(node.name) then return false end
-    -- 下方無支撐 → 留給正常掉落邏輯處理
-    if core.get_node({x=pos.x, y=pos.y-1, z=pos.z}).name == "air" then return false end
+---------------------------------------------------------------------------
+-- 碎石的顆粒流（模型見 granular.lua）
+-- 碎石每格分 8 級（1/8 m）。一欄碎石的頂格與周圍 8 方向的表面比較，超過安息角就
+-- 分一部分流到最陡的一側；每一步間隔 GRAN_STEP_DELAY 秒，看得到碎石堆慢慢攤成斜坡。
+---------------------------------------------------------------------------
+local granular = rockmech.granular
+local GRAN_STEP_DELAY = 0.12
+local GRAN_MAX_CHAIN = 48
+local NLEV = rockmech.RUBBLE_LEVELS
 
-    -- 複製並打亂 8 方向鄰居順序
-    local dirs = {}
-    for i, n in ipairs(SLOPE_NEIGHBORS) do dirs[i] = n end
-    for i = #dirs, 2, -1 do
-        local j = math.random(i)
-        dirs[i], dirs[j] = dirs[j], dirs[i]
+local function rubble_k(name) return rockmech.rubble_level[name] end
+local function passable(name)
+    local d = core.registered_nodes[name]
+    return d ~= nil and d.walkable == false
+end
+
+-- 碎石欄的頂格：從 p 往上走到最上面一格碎石。回傳位置、名稱；p 不是碎石回傳 nil
+local function rubble_top(p)
+    local q = {x = p.x, y = p.y, z = p.z}
+    local n = core.get_node(q).name
+    if not rubble_k(n) then return nil end
+    for _ = 1, 64 do
+        local up = {x = q.x, y = q.y + 1, z = q.z}
+        local un = core.get_node(up).name
+        if not rubble_k(un) then break end
+        q, n = up, un
     end
+    return q, n
+end
 
-    -- 對每個方向獨立擲骰，第一個成功的就滑落
-    for _, d in ipairs(dirs) do
-        local side = {x=pos.x+d.x, y=pos.y, z=pos.z+d.z}
-        if core.get_node(side).name == "air" and not is_reserved(side) then
-            local top_y = find_column_top(side.x, side.z, pos.y - 1)
-            if top_y then
-                local drop = pos.y - (top_y + 1)
-                local p = slope_slide_probability(drop, d.h)
-                if p > 0 and math.random() < p then
-                    -- 優先改為往該方向翻滾（之後的運動由落石物理處理）
-                    local s = SLIDE_LAUNCH_SPEED / d.h
-                    local o = SLIDE_LAUNCH_OFFSET / d.h
-                    if launch_rockfall(pos, {x = d.x * s, y = 0, z = d.z * s},
-                            {x = pos.x + d.x * o, y = pos.y, z = pos.z + d.z * o}) then
-                        return true
-                    end
-                    local landing = {x=side.x, y=top_y+1, z=side.z}
-                    if not is_reserved(landing) then
-                        local original_name = node.name
-                        reserve_pos(landing)
-                        core.remove_node(pos)
-                        local obj = core.add_entity(
-                            {x=pos.x, y=pos.y, z=pos.z},
-                            "rockmech:sliding_node"
-                        )
-                        if obj then
-                            local le = obj:get_luaentity()
-                            le.reserved_landing = landing
-                            le:set_node(original_name, landing)
-                        else
-                            core.set_node(landing, {name = original_name})
-                            release_pos(landing)
-                        end
-                        return true, landing
-                    end
-                end
+-- 鄰欄（x, z）相對於來源頂格高度 ty 的表面高度與承接位置。
+-- 回傳 e（八分之一公尺）, land = {pos, k}（k = 承接格目前的級數，0 = 空格）；擋住回傳 nil
+local function neighbor_surface(x, z, ty, base)
+    local p = {x = x, y = ty, z = z}
+    local n = core.get_node_or_nil(p)
+    if not n then return nil end
+    local nk = rubble_k(n.name)
+    if nk then
+        if nk < NLEV and rockmech.rubble_base[n.name] == base then
+            return granular.surface(ty, nk), {pos = p, k = nk}
+        end
+        return nil
+    end
+    if not passable(n.name) then return nil end
+    for y = ty - 1, ty - 48, -1 do
+        local q = {x = x, y = y, z = z}
+        local m = core.get_node_or_nil(q)
+        if not m then return nil end
+        if not passable(m.name) then
+            local mk = rubble_k(m.name)
+            if mk and mk < NLEV and rockmech.rubble_base[m.name] == base then
+                return granular.surface(y, mk), {pos = q, k = mk}
             end
+            return granular.surface(y, NLEV), {pos = {x = x, y = y + 1, z = z}, k = 0}
         end
     end
-    return false
+    return nil
 end
 
--- 非同步遞迴：嘗試滑落，等實體動畫完成後再從新位置繼續
-local function iterative_slope_slide(start_pos, depth)
-    depth = depth or 8
-    if depth <= 0 then return end
+-- 把 pos 的碎石設為 k 級（0 = 移除；移除會觸發 on_destruct：支撐判定、露出岩面的破壞檢查）
+local function set_rubble(pos, base, k)
+    local name = rockmech.rubble_with_level(base, k)
+    if name then core.swap_node(pos, {name = name}) else core.remove_node(pos) end
+end
 
-    physics_updating = true
-    local ok, new_pos = try_slope_slide(start_pos)
-    physics_updating = false
-
-    if ok and new_pos then
-        -- 3D 直線距離 / 速度（含可能的對角線水平 √2）
-        local dx = new_pos.x - start_pos.x
-        local dy = new_pos.y - start_pos.y
-        local dz = new_pos.z - start_pos.z
-        local total = math.sqrt(dx*dx + dy*dy + dz*dz)
-        local delay = total / SLIDE_SPEED + 0.15
-        core.after(delay, function()
-            iterative_slope_slide(new_pos, depth - 1)
-        end)
+-- 在承接位置加上 a 級碎石；滿了往上一格堆
+local function add_rubble(land, base, a)
+    local p, k = land.pos, land.k
+    local put = math.min(NLEV - k, a)
+    if k == 0 then core.set_node(p, {name = rockmech.rubble_with_level(base, put)})
+    else core.swap_node(p, {name = rockmech.rubble_with_level(base, k + put)}) end
+    a = a - put
+    local up = {x = p.x, y = p.y + 1, z = p.z}
+    while a > 0 and passable(core.get_node(up).name) do
+        put = math.min(NLEV, a)
+        core.set_node(up, {name = rockmech.rubble_with_level(base, put)})
+        a = a - put
+        up = {x = up.x, y = up.y + 1, z = up.z}
     end
 end
 
--- 結合掉落 + 安息角整理：spawn_falling_node 後排程滑落收尾
--- 垂直落下沿用原版 falling node；落地後若坡度超過安息角，才由
--- iterative_slope_slide → try_slope_slide 改為翻滾落石。
-local function fall_with_slope_settle(pos)
+local fall_with_slope_settle
+
+-- 顆粒流一步：先往下倒（下方是不滿格的同種碎石），否則依安息角流向最陡的一側。
+-- 之後在來源與承接位置排程下一步（最多 chain 步）
+local function granular_settle(pos, chain)
+    if not rockmech.cfg.slope.enabled then return end
+    chain = chain or GRAN_MAX_CHAIN
+    if chain <= 0 then return end
+    local T, tn = rubble_top(pos)
+    if not T then return end
+    local base, k = rockmech.rubble_base[tn], rubble_k(tn)
+    local below = {x = T.x, y = T.y - 1, z = T.z}
+    local bn = core.get_node(below).name
+    if passable(bn) then
+        fall_with_slope_settle(T)
+        return
+    end
+    local prev = physics_updating
+    local next_pos
+    local bk = rubble_k(bn)
+    if bk and bk < NLEV and rockmech.rubble_base[bn] == base then
+        -- 往下倒：先把下面那格填滿
+        local put = math.min(NLEV - bk, k)
+        physics_updating = true
+        core.swap_node(below, {name = rockmech.rubble_with_level(base, bk + put)})
+        set_rubble(T, base, k - put)
+        physics_updating = prev
+        next_pos = {below}
+    else
+        local nbs, lands = {}, {}
+        for i, d in ipairs(granular.DIRS) do
+            local e, land = neighbor_surface(T.x + d[1], T.z + d[2], T.y, base)
+            nbs[i] = {e = e, d = d[3]}
+            lands[i] = land
+        end
+        local i, amount = granular.choose_flow(granular.surface(T.y, k), k, nbs, SLOPE_TAN)
+        if not i then return end
+        local land = lands[i]
+        physics_updating = true
+        set_rubble(T, base, k - amount)
+        add_rubble(land, base, amount)
+        physics_updating = prev
+        local d = granular.DIRS[i]
+        debris({x = T.x + d[1] * 0.4, y = T.y, z = T.z + d[2] * 0.4}, base,
+            math.max(3, amount * 2), {x = d[1] * 1.5, y = 0, z = d[2] * 1.5})
+        next_pos = {k - amount > 0 and T or below, land.pos}
+    end
+    core.after(GRAN_STEP_DELAY, function()
+        for _, p in ipairs(next_pos) do granular_settle(p, chain - 1) end
+    end)
+end
+collapse.granular_settle = granular_settle
+
+-- 碎石懸空：沿用原版 falling node 落下（不滿格的碎石保留級數），落地後接著顆粒流
+fall_with_slope_settle = function(pos)
     local target_y = compute_landing_y(pos)
     if target_y then
         -- 落點若已被其他方塊預約，往上找下一個空位
@@ -303,7 +331,9 @@ local function fall_with_slope_settle(pos)
             core.spawn_falling_node(pos)
             core.after(delay, function()
                 release_pos(landing)
-                iterative_slope_slide(landing, 16)
+                local n = core.get_node(landing).name
+                if fall_dist >= 2 then debris(landing, rockmech.rubble_base[n] or n, 8) end
+                granular_settle(landing, GRAN_MAX_CHAIN)
             end)
             return
         end
@@ -373,14 +403,12 @@ check_stability_and_move = function(pos)
     local node = core.get_node_or_nil(pos)
     if not node or not is_rock(node.name) then return end
 
-    local below = {x=pos.x, y=pos.y-1, z=pos.z}
-    local unsupported = core.get_node(below).name == "air"
-
     if rockmech.is_rubble(node.name) then
-        if unsupported then
+        local below = {x=pos.x, y=pos.y-1, z=pos.z}
+        if passable(core.get_node(below).name) then
             fall_with_slope_settle(pos)
         else
-            try_slope_slide(pos)
+            granular_settle(pos)
         end
     end
 end
@@ -665,6 +693,7 @@ function collapse.apply_failure(failed, round)
         local name = core.get_node(p).name
         if rockmech.lith_of_node[name] then
             core.swap_node(p, {name = rockmech.rubble_for(name)})
+            debris(p, rockmech.rubble_for(name), 10)
         end
     end
     -- 由上往下（failed 已排序）判定掉落／滑動
@@ -1230,6 +1259,14 @@ end
 
 -- 剛體落地後：碎石依安息角判定
 function collapse.after_rigid_land(placed)
+    -- 落地碎屑：只在底部的格子（正下方不是同一群）噴
+    local own = {}
+    for _, it in ipairs(placed) do own[pos_key(it.pos)] = true end
+    for _, it in ipairs(placed) do
+        if not own[pos_key({x = it.pos.x, y = it.pos.y - 1, z = it.pos.z})] then
+            debris(it.pos, rockmech.rubble_for(it.name), 5)
+        end
+    end
     physics_updating = true
     for _, it in ipairs(placed) do
         if rockmech.is_rubble(it.name) then
@@ -1385,6 +1422,7 @@ local function register_physics_events(name, intact)
         -- 真正出現開口時才會觸發。
         overrides.after_dig_node = function(pos, oldnode)
             core.set_node(pos, {name = rockmech.rubble_for(oldnode.name)})
+            debris(pos, rockmech.rubble_for(oldnode.name), 6)
         end
     end
     core.override_item(name, overrides)

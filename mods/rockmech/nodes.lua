@@ -242,6 +242,46 @@ core.register_node(rockmech.RUBBLE_GRANITE, {
 })
 
 rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE}
+
+-- 不滿格的碎石（顆粒流用，granular.lua）：每格分 8 級，<碎石>_l1 … _l7 高度 1/8 … 7/8 m；
+-- 滿格仍是原本的碎石 node。都屬於 rockmech_rubble 群組（實心、可站立）。
+rockmech.RUBBLE_LEVELS = 8
+rockmech.rubble_level = {}    -- node 名稱 → 級數（滿格 = 8）
+rockmech.rubble_base = {}     -- node 名稱 → 滿格碎石的名稱
+local partial_nodes = {}
+for _, base in ipairs(rockmech.rubble_nodes) do
+	local bdef = core.registered_nodes[base]
+	rockmech.rubble_level[base] = rockmech.RUBBLE_LEVELS
+	rockmech.rubble_base[base] = base
+	for k = 1, rockmech.RUBBLE_LEVELS - 1 do
+		local name = base .. "_l" .. k
+		local top = -0.5 + k / rockmech.RUBBLE_LEVELS
+		local groups = table.copy(bdef.groups)
+		groups.not_in_creative_inventory = 1
+		groups.rockmech_rubble_level = k
+		core.register_node(name, {
+			description = bdef.description,
+			tiles = bdef.tiles,
+			drawtype = "nodebox",
+			paramtype = "light",
+			node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, top, 0.5}},
+			groups = groups,
+			sounds = bdef.sounds,
+			drop = k >= rockmech.RUBBLE_LEVELS / 2 and base or "",
+		})
+		rockmech.rubble_level[name] = k
+		rockmech.rubble_base[name] = base
+		partial_nodes[#partial_nodes + 1] = name
+	end
+end
+for _, name in ipairs(partial_nodes) do rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name end
+
+-- 某種碎石（滿格名稱 base）的 k 級 node 名稱（k = 0 → nil，k ≥ 8 → 滿格）
+function rockmech.rubble_with_level(base, k)
+	if k <= 0 then return nil end
+	if k >= rockmech.RUBBLE_LEVELS then return base end
+	return base .. "_l" .. k
+end
 -- 岩性 → 碎石；未列出的岩性用一般碎石
 rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
 
@@ -249,9 +289,9 @@ function rockmech.is_rubble(name)
 	return core.get_item_group(name, "rockmech_rubble") > 0
 end
 
--- 某個岩石 node 破碎後變成哪種碎石（碎石本身不變）
+-- 某個岩石 node 破碎後變成哪種碎石（碎石本身不變；不滿格的碎石回傳其滿格種類）
 function rockmech.rubble_for(nodename)
-	if rockmech.is_rubble(nodename) then return nodename end
+	if rockmech.is_rubble(nodename) then return rockmech.rubble_base[nodename] or nodename end
 	local lith = rockmech.lith_of_node[nodename]
 	return lith and rockmech.rubble_of_lith[lith.name] or rockmech.RUBBLE
 end

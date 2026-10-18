@@ -20,6 +20,7 @@ local SPECS = {
 	"jointtex_spec.lua",
 	"overhang_spec.lua",
 	"keyblock_spec.lua",
+	"granular_spec.lua",
 	"blast_spec.lua",
 }
 

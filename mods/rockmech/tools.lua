@@ -568,21 +568,21 @@ local TOGGLES = {
 	},
 	{
 		id = "slope", tbl = cfg.slope,
-		label = "碎石安息角滑動（完整岩石不受影響）",
-		short = "碎石安息角滑動",
+		label = "碎石顆粒流（每格分 8 級，依安息角攤成斜坡；完整岩石不受影響）",
+		short = "碎石顆粒流",
 		info = function() return ("安息角 %g°；碎石懸空時仍會垂直落下"):format(cfg.slope.angle) end,
 		off_note = "關閉：碎石超過安息角也不移動",
 	},
 	{
 		id = "rockfall", tbl = cfg.rockfall,
-		label = "碎石滑動時以翻滾方式移動",
+		label = "關鍵塊體滑出時以翻滾落石呈現",
 		short = "翻滾落石",
 		info = function()
 			return ("目前翻滾中 %d 顆，上限 %d"):format(
 				rockmech.rockfall_entity and rockmech.rockfall_entity.active_count() or 0,
 				cfg.rockfall.max_active)
 		end,
-		off_note = "關閉：改回原本的平移滑動（安息角滑動關閉時此項無作用）",
+		off_note = "關閉：滑出的關鍵塊體原地變成碎石，再依安息角流動",
 	},
 }
 rockmech.toggles = TOGGLES

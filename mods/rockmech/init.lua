@@ -18,6 +18,7 @@ rockmech.support = dofile(modpath .. "/support.lua")
 rockmech.rigidfall = dofile(modpath .. "/rigidfall.lua")
 rockmech.overhang = dofile(modpath .. "/overhang.lua")
 rockmech.keyblock = dofile(modpath .. "/keyblock.lua")
+rockmech.granular = dofile(modpath .. "/granular.lua")
 rockmech.blast = dofile(modpath .. "/blast.lua")
 
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
