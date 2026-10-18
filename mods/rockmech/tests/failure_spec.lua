@@ -266,6 +266,22 @@ describe("failure 節理弱面（Jaeger）", function()
 		assert.is_false(failure.daylights(nvec(60, 45), true, false, false, false, false, c20, f1))
 	end)
 
+	it("斜向坡面的自由面：沿坡面法向的正應力與剪應力為 0", function()
+		-- 斜向的階梯坡面（x + 2z ≥ 1 為空氣），取只朝 +z 臨空的格
+		local g = make_grid(-10, 10, -20, 2, -10, 10, function(x, y, z) return y < 0 and x + 2 * z <= 0 end)
+		local p = params()
+		p.KH, p.Kh = 1, 1
+		local x, y, z = 1, -10, -1          -- +x (2,-1) 為岩石、+z (1,0) 為空氣 → 只朝 +z
+		local st = failure.cell_state(g, x, y, z, p)
+		assert.is_true(st.exposed_z and not st.exposed_x)
+		local f = failure.face_normal(g, x, y, z)
+		local tnx = st.sx * f.x + st.sxz * f.z      -- 坡面上的曳力
+		local tnz = st.sxz * f.x + st.sz * f.z
+		assert.near(0, tnx, 1e-9)
+		assert.near(0, tnz, 1e-9)
+		assert.is_true(st.sx > 0 and st.sz > 0)     -- 沿坡面切向仍有壓應力
+	end)
+
 	it("運動學側向限制（Markland ±λ）：傾向偏 45° 的平面只在凸角才能滑", function()
 		local c20 = math.cos(math.rad(20))
 		local ne = nvec(60, 45)    -- 傾向東北

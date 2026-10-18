@@ -288,17 +288,34 @@ function failure.cell_state(g, x, y, z, p)
 	local ex_p, ex_n = not is_solid(g, x + 1, y, z), not is_solid(g, x - 1, y, z)
 	local ez_p, ez_n = not is_solid(g, x, y, z + 1), not is_solid(g, x, y, z - 1)
 	local ex, ez = ex_p or ex_n, ez_p or ez_n
-	local fn   -- 平滑後的坡面外法向（只在需要節理運動學時計算）
+	-- 平滑後的坡面外法向（側向臨空時）：自由面條件與節理運動學共用
+	local fn = (ex or ez) and failure.face_normal(g, x, y, z) or nil
 	local e_up = not is_solid(g, x, y + 1, z)
 	local e_down = not is_solid(g, x, y - 1, z)
 
 	-- 自由面：法向正應力與剪應力為 0。
 	-- 下方臨空（頂板／懸垂）：σy = 0。上方臨空（地表／階梯狀坡面）不歸零：
 	-- 擴散荷重代表沿坡面方向的壓應力。
-	local sx = ex and 0 or sxx_c
+	-- 側向只朝一個軸臨空時，自由面取平滑後的坡面法向 f（斜向坡面是階梯狀，單看軸向會把
+	-- 沿坡面法向的壓應力留下）：水平應力只保留沿坡面切向 t 的 σtt。平直的坡面 f 為軸向，
+	-- 結果與逐軸歸零相同。兩個軸都臨空（凸角、突出的岩柱）時兩個方向都歸零。
+	local sx, sz
+	if ex and ez then
+		sx, sz, sxz = 0, 0, 0
+	elseif ex or ez then
+		if fn and math.abs(fn.x) < 0.9999 and math.abs(fn.z) < 0.9999 then
+			local tx, tz = -fn.z, fn.x
+			local stt = sxx_c * tx * tx + 2 * sxz * tx * tz + szz_c * tz * tz
+			sx, sz, sxz = stt * tx * tx, stt * tz * tz, stt * tx * tz
+		else
+			sx = ex and 0 or sxx_c
+			sz = ez and 0 or szz_c
+			sxz = 0
+		end
+	else
+		sx, sz = sxx_c, szz_c
+	end
 	local sy = e_down and 0 or sv
-	local sz = ez and 0 or szz_c
-	if ex or ez then sxz = 0 end
 
 	local s1, s3 = stress.principal(sx, sy, sz, sxz)
 	local q = s1 - s3
@@ -321,7 +338,6 @@ function failure.cell_state(g, x, y, z, p)
 	--   運動學不成立的組不必判斷平面是否穿過此格
 	if wk and p.joints_at and (p.detail or (exposed and 2 * wk.c <= q * (p.fs_cut or 1))) then
 		local cands = p.joint_sets
-		if wk.lat_cos and (ex or ez) then fn = failure.face_normal(g, x, y, z) end
 		-- 楔形：交線朝臨空面露出的組對
 		local wpairs
 		if wk.wedge then
