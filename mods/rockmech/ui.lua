@@ -103,6 +103,10 @@ function rockmech.overhang_line(o)
 	if o.rho and o.rho < 1 then
 		root = ("、根部斷面被節理切過，完好 %.0f%%"):format(o.rho * 100)
 	end
+	if o.beam and o.beam.fs >= ((o.d and (o.lmax * (o.rho or 1) / o.d) ^ 2) or 0) then
+		return ("頂板梁（兩端支撐）跨度 %d m、t %d m、支承面完好 %.0f%%：σ = γ·t·L²/(2t_eff²)，FS %s（極限跨度 %.1f m）；整段最小 FS %s @ (%d,%d)"):format(
+			o.beam.span, o.t, o.beam.rho * 100, fs_str(o.fs), math.sqrt(6) * o.lmax * o.beam.rho, fs_str(o.group_fs), c.x, c.z)
+	end
 	return ("懸臂 d %d m、t %d m%s：σb=3γ·t·d²/t_eff² %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
 		o.d, o.t, root, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax * (o.rho or 1), fs_str(o.group_fs), c.x, c.z,
 		o.edge and ("（懸空群超出 ±%d m 檢查範圍，FS 可能高估）"):format(cfg.overhang.radius) or "")

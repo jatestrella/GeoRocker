@@ -26,6 +26,9 @@
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
 --     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
+--   * 兩端支撐（頂板）：沿 x、z 直線、在 run 自己的厚度帶內往兩側找有支撐的欄；兩側都有時當成
+--     兩端固定梁，跨度 L = 兩側之間的懸空欄數，支承處 σ = γ·t·L²/(2·t_eff²) → FS = (√6·L_max·ρ / L)²
+--     （ρ 取兩端支承面較差者；中途被節理完全切開則不算梁）。每一欄取懸臂、x 向梁、z 向梁中最有利者。
 --   * 層疊（Obert & Duvall 疊層梁）：上段坐在懸空的下段上時（上段 d = 0），下段承受的荷重
 --     q₁ = γ·t₁³·Σt / Σt³（同材料；依序往上加入各層，加入後 q₁ 沒有變大的層自己分離、不加載）。
 --     FS ÷ (q₁ / γt₁)。較厚、較勁的上層自己撐得住，不壓在較薄的下層上。
@@ -425,8 +428,54 @@ local function local_ctx(g, p)
 		for _, rn in ipairs(cut) do
 			if not inq[rn] then real_cut[#real_cut + 1] = rn end
 		end
+		-- 兩端支撐梁：沿 (hx, hz) 直線在 r 的厚度帶內找有支撐的欄。回傳 距離 k、支承面完好比；
+		-- 碰到空氣（梁斷開）、中途介面被節理完全切開、或找不到 → nil
+		local function scan(r, hx, hz)
+			local tt = r.t >= THICK and nil or r.t
+			for k = 1, 96 do
+				local cx, cz = r.lx + hx * k, r.lz + hz * k
+				if cx < x1 or cx > x2 or cz < z1 or cz > z2 then return k, 1 end   -- 範圍外視為連回大岩體
+				local any, sup, intact, n = false, false, 0, 0
+				for yy = r.bot, r.top do
+					local j = 1 + cx + yy * sy + cz * sz
+					if bonded_of[data[j]] then
+						any = true
+						n = n + 1
+						if ctx.get_run(cx, yy, cz).supported then sup = true end
+						if not jointed(cx - hx, yy, cz - hz, hx, hz) then intact = intact + 1 end
+					end
+				end
+				if not any or intact == 0 then return nil end
+				if sup then return k, math.min(1, intact / (tt or n)) end
+			end
+			return nil
+		end
+		local beam = {}
+		if not aborted then
+			local S6 = math.sqrt(6)
+			for _, r in ipairs(comp) do
+				-- 懸臂 FS（含疊層荷重）已經夠高（≥ 2.5，梁只會更好）或岩柱很厚：不必再算梁
+				local cant = (d[r] and (r.lmax * (rho[r] or 1) / d[r]) ^ 2 or 0) / math.max(1, load[r] or 1)
+				if d[r] ~= 0 and r.t < THICK and cant < 2.5 then
+					local best
+					for _, ax in ipairs({{1, 0}, {0, 1}}) do
+						local kp, rp = scan(r, ax[1], ax[2])
+						if kp then
+							local kn, rn_ = scan(r, -ax[1], -ax[2])
+							if kn then
+								local span = kp + kn - 1
+								local rb = math.min(rp, rn_)
+								local f = (S6 * r.lmax * rb / span) ^ 2
+								if not best or f > best.fs then best = {fs = f, span = span, rho = rb} end
+							end
+						end
+					end
+					beam[r] = best
+				end
+			end
+		end
 		return {comp = comp, d = d, rho = rho, n_cells = n_cells, aborted = aborted, edge = edge,
-			cut = real_cut, lat = lat, load = load}
+			cut = real_cut, lat = lat, load = load, beam = beam}
 	end
 	return ctx
 end
@@ -436,10 +485,11 @@ end
 -- d 為 nil（碰不到支撐）時 FS = 0。
 -- load：疊層的荷重倍數 m = q₁/(γt)（Obert & Duvall，≥ 1）：σb × m → FS ÷ m
 -- d = 0：坐在下層岩體上，由下層承擔 → FS = ∞
-local function run_fs(r, d, rho, load)
-	if not d then return 0 end
+-- beam：兩端支撐梁的 FS（未含疊層荷重），有就取兩者較大
+local function run_fs(r, d, rho, load, beam)
 	if d == 0 then return math.huge end
-	local f = (r.lmax * (rho or 1) / d) ^ 2
+	local f = d and (r.lmax * (rho or 1) / d) ^ 2 or 0
+	if beam and beam > f then f = beam end
 	if load and load > 1 then f = f / load end
 	return f
 end
@@ -471,7 +521,7 @@ end
 local function judge_segment(res, sg)
 	local minf, crit, fail = math.huge, sg[1], false
 	for _, r in ipairs(sg) do
-		local f = run_fs(r, res.d[r], res.rho[r], res.load and res.load[r])
+		local f = run_fs(r, res.d[r], res.rho[r], res.load and res.load[r], res.beam and res.beam[r] and res.beam[r].fs)
 		if f < minf then minf, crit = f, r end
 		if f < 1 then fail = true end
 	end
@@ -555,7 +605,9 @@ function overhang.cell_state(g, p, x, y, z)
 	end
 	local out = {
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
-		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0), n_cells = res.n_cells, edge = res.edge,
+		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0, res.beam and res.beam[r0] and res.beam[r0].fs),
+		n_cells = res.n_cells, edge = res.edge,
+		beam = res.beam and res.beam[r0] or nil,
 		load = load0,
 	}
 	local segs, seg_of = segments(res)
