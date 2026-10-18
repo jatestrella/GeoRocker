@@ -229,6 +229,20 @@ describe("failure 節理弱面（Jaeger）", function()
 		assert.is_false(failure.daylights(nvec(0, 0), true, true, true, true, false))
 	end)
 
+	it("運動學側向限制（Markland ±λ）：傾向偏 45° 的平面只在凸角才能滑", function()
+		local c20 = math.cos(math.rad(20))
+		local ne = nvec(60, 45)    -- 傾向東北
+		-- 只有 +x（東）臨空：夾角 45° > 20° → 不滑；舊規則會滑
+		assert.is_false(failure.daylights(ne, true, false, false, false, false, c20))
+		assert.is_true(failure.daylights(ne, true, false, false, false, false))
+		-- 東、北都臨空（凸角）→ 可滑
+		assert.is_true(failure.daylights(ne, true, false, true, false, false, c20))
+		-- 傾向 080°、東側臨空：夾角 10° → 可滑
+		assert.is_true(failure.daylights(nvec(60, 80), true, false, false, false, false, c20))
+		-- 下方臨空不受限
+		assert.is_true(failure.daylights(ne, false, false, false, false, true, c20))
+	end)
+
 	-- 東側是 8 m 高的直立坡面（x ≥ 1 為空氣），坡頂 y = 0
 	local function cliff()
 		return make_grid(-12, 6, -20, 6, -4, 4, function(x, y) return x <= 0 and y < 0 end)

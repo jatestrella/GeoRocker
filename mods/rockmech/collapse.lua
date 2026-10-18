@@ -566,7 +566,7 @@ function collapse.failure_params(detail)
         joint_sets = rockmech.get_joint_sets(),
         axial = fcfg.enabled,
         weakness = wcfg.enabled and {c = wcfg.c / model_n, tanphi = math.tan(math.rad(wcfg.phi)),
-            daylight = wcfg.daylight} or nil,
+            daylight = wcfg.daylight, lat_cos = math.cos(math.rad(wcfg.lateral_limit))} or nil,
         joints_at = joints_at,
         surface_y = cfg.surface_y, k0 = cfg.k0, lithologies = cfg.lithologies,
         window = fcfg.window,

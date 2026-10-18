@@ -184,6 +184,7 @@ config.weakness_defaults = {
 	c = 0.05,                 -- 節理凝聚力 cj (MPa)
 	phi = 30,                 -- 節理摩擦角 φj (deg)
 	daylight = true,          -- 運動學條件：節理須傾向臨空面（或下方臨空）才會滑出
+	lateral_limit = 20,       -- 側向限制 λ (deg)：傾向與臨空面外法向夾角 ≤ λ 才能平面滑動（Markland），凸角除外
 }
 
 -- 懸臂／頂板彎曲斷裂（overhang.lua）；設定鍵為 rockmech_overhang_<key>
@@ -436,6 +437,7 @@ function config.load(get)
 	cfg.weakness = load_section("weakness", config.weakness_defaults)
 	cfg.weakness.c = math.max(0, cfg.weakness.c)
 	cfg.weakness.phi = math.max(0, math.min(89, cfg.weakness.phi))
+	cfg.weakness.lateral_limit = math.max(0, math.min(90, cfg.weakness.lateral_limit))
 
 	-- 懸臂／頂板斷裂
 	cfg.overhang = load_section("overhang", config.overhang_defaults)

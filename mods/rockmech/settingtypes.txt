@@ -166,6 +166,11 @@ rockmech_weakness_phi (Joint friction angle) float 30 0 89
 # Kinematic check: a joint must dip toward an exposed side face (or the cell must be exposed below) to slip out.
 rockmech_weakness_daylight (Require daylighting) bool true
 
+# Lateral limit (deg) for planar sliding (Markland): the joint dip direction must be within this angle
+# of the exposed face's outward normal, unless the cell is exposed on every side the dip direction points to
+# (a convex corner with lateral release). Wedges on joint intersections are handled by key blocks.
+rockmech_weakness_lateral_limit (Lateral limit for planar sliding) float 20 0 90
+
 [Rockfall]
 
 # Falling rock becomes a tumbling entity (bounce, roll, stop) instead of dropping straight down.

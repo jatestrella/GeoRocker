@@ -22,9 +22,12 @@
 --      沒有 params.rock：q = σ1 − σ3 ≥ UCS × strength_scale
 -- 6. 弱面（Jaeger single plane of weakness）：穿過此格的每組節理面（法向 n）
 --      σn = n·σ·n、τ = |σ·n − σn·n|，τ ≥ cj + σn·tan φj → 沿節理滑動。
---    運動學（daylight）：節理須傾向某個側向臨空面（向上法向的水平分量指向
---    該面外側），或下方臨空（頂板／懸垂，任何節理都可釋放）。只有上方臨空不算。
---    params.weakness = {c (MPa), tanphi, daylight}；params.joint_sets = 節理組陣列
+--    運動學（daylight）：下方臨空（頂板／懸垂）任何節理都可釋放；只有上方臨空不算。
+--    側向臨空時（Markland 平面滑動檢核）：節理傾向與臨空面外法向的夾角 ≤ λ（側向限制，
+--    weakness.lat_cos = cos λ），或該格在傾向的每個水平分量方向都臨空（凸角，有側向釋放面）。
+--    沒給 lat_cos 時為舊規則：傾向有朝臨空面的分量即可。
+--    楔形（兩組節理的交線）由關鍵塊體（keyblock.lua）處理。
+--    params.weakness = {c (MPa), tanphi, daylight, lat_cos}；params.joint_sets = 節理組陣列
 --    （每組需有 n_eff = 向上單位法向，與 name）；params.joints_at(x,y,z, sets) 回傳
 --    sets 中穿過此格的組。params.detail = true 時不做前置篩選（顯示用）。
 --    params.axial == false 時不做軸差判定（只做弱面）。
@@ -315,14 +318,14 @@ function failure.cell_state(g, x, y, z, p)
 			cands = {}
 			for k = 1, #p.joint_sets do
 				local js = p.joint_sets[k]
-				if failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down) then cands[#cands + 1] = js end
+				if failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos) then cands[#cands + 1] = js end
 			end
 		end
 		local list = #cands > 0 and p.joints_at(x, y, z, cands) or {}
 		if p.detail then n_joints = #list end
 		for k = 1, #list do
 			local js = list[k]
-			if not wk.daylight or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down) then
+			if not wk.daylight or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos) then
 				local sn, tau = failure.plane_stress(sx, sy, sz, sxz, js.n_eff)
 				local f = failure.plane_fs(sn, tau, wk.c, wk.tanphi)
 				if f < fs_joint then
@@ -369,13 +372,28 @@ function failure.plane_fs(sn, tau, c, tanphi)
 	return (c + math.max(0, sn) * tanphi) / tau
 end
 
--- 運動學：節理（向上法向 n）能否往臨空面釋放
+-- 運動學：節理（向上法向 n，其水平分量 = 傾向）能否往臨空面釋放
 -- ex_p/ex_n：+x/−x 側臨空；ez_p/ez_n：+z/−z 側臨空；e_down：下方臨空
-function failure.daylights(n, ex_p, ex_n, ez_p, ez_n, e_down)
+-- cos_lim：側向限制 cos λ（省略為舊規則：傾向有朝臨空面的分量即可）
+function failure.daylights(n, ex_p, ex_n, ez_p, ez_n, e_down, cos_lim)
 	if e_down then return true end
 	local eps = 1e-9
-	return (ex_p and n.x > eps) or (ex_n and n.x < -eps)
-		or (ez_p and n.z > eps) or (ez_n and n.z < -eps) or false
+	if not cos_lim then
+		return (ex_p and n.x > eps) or (ex_n and n.x < -eps)
+			or (ez_p and n.z > eps) or (ez_n and n.z < -eps) or false
+	end
+	local h = math.sqrt(n.x * n.x + n.z * n.z)
+	if h < eps then return false end
+	local cx, cz = n.x / h, n.z / h
+	-- 傾向與某個臨空面的外法向夾角 ≤ λ
+	if (ex_p and cx >= cos_lim) or (ex_n and -cx >= cos_lim)
+			or (ez_p and cz >= cos_lim) or (ez_n and -cz >= cos_lim) then
+		return true
+	end
+	-- 凸角：傾向的每個水平分量方向都臨空（兩側都有釋放面）
+	local okx = math.abs(cx) <= eps or (cx > 0 and ex_p) or (cx < 0 and ex_n)
+	local okz = math.abs(cz) <= eps or (cz > 0 and ez_p) or (cz < 0 and ez_n)
+	return (okx and okz) and true or false
 end
 
 -- 是否有任一面臨空（便宜的前置篩選）

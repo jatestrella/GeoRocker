@@ -537,7 +537,7 @@ local TOGGLES = {
 		info = function()
 			local w = cfg.weakness
 			return ("cj %g MPa，φj %g°（三組相同）；%s"):format(w.c, w.phi,
-				w.daylight and "需傾向臨空面" or "不檢查運動學")
+				w.daylight and ("需傾向臨空面（側向限制 ±%g°）"):format(w.lateral_limit) or "不檢查運動學")
 		end,
 		off_note = "關閉：節理不影響強度（只有軸差破壞）",
 	},
