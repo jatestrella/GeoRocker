@@ -249,6 +249,23 @@ describe("failure 節理弱面（Jaeger）", function()
 		assert.is_true(failure.wedge_fs(0, 1, 0.3, 0, n1, n2, l, 0.1, 1) > f)
 	end)
 
+	it("平滑坡面方向：平直的東壁 = +x；45° 階梯狀坡面 = 對角", function()
+		-- x ≥ 1 為空氣（平直東壁）
+		local g1 = make_grid(-6, 6, -3, 3, -6, 6, function(x) return x <= 0 end)
+		local f1 = failure.face_normal(g1, 0, 0, 0)
+		assert.near(1, f1.x, 1e-9)
+		assert.near(0, f1.z, 1e-9)
+		-- x + z ≥ 1 為空氣（面向東北的階梯）
+		local g2 = make_grid(-6, 6, -3, 3, -6, 6, function(x, _, z) return x + z <= 0 end)
+		local f2 = failure.face_normal(g2, 0, 0, 0)
+		assert.near(math.sqrt(0.5), f2.x, 1e-9)
+		assert.near(math.sqrt(0.5), f2.z, 1e-9)
+		-- 該格只有 +x 臨空，但坡面朝東北：傾向東北的節理可以滑；傾向北的（偏 45°）不行
+		local c20 = math.cos(math.rad(20))
+		assert.is_true(failure.daylights(nvec(60, 45), true, false, false, false, false, c20, f2))
+		assert.is_false(failure.daylights(nvec(60, 45), true, false, false, false, false, c20, f1))
+	end)
+
 	it("運動學側向限制（Markland ±λ）：傾向偏 45° 的平面只在凸角才能滑", function()
 		local c20 = math.cos(math.rad(20))
 		local ne = nvec(60, 45)    -- 傾向東北

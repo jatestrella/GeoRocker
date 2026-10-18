@@ -23,8 +23,10 @@
 -- 6. 弱面（Jaeger single plane of weakness）：穿過此格的每組節理面（法向 n）
 --      σn = n·σ·n、τ = |σ·n − σn·n|，τ ≥ cj + σn·tan φj → 沿節理滑動。
 --    運動學（daylight）：下方臨空（頂板／懸垂）任何節理都可釋放；只有上方臨空不算。
---    側向臨空時（Markland 平面滑動檢核）：節理傾向與臨空面外法向的夾角 ≤ λ（側向限制，
+--    側向臨空時（Markland 平面滑動檢核）：節理傾向與坡面外法向的夾角 ≤ λ（側向限制，
 --    weakness.lat_cos = cos λ），或該格在傾向的每個水平分量方向都臨空（凸角，有側向釋放面）。
+--    坡面外法向取「平滑後的坡面方向」（failure.face_normal：同高程 ±2 格內空氣格方向的加權和），
+--    方塊世界裡斜向或彎曲的坡面（階梯狀）才會被當成真正的斜向坡面；另外也接受該格本身臨空的軸向面。
 --    沒給 lat_cos 時為舊規則：傾向有朝臨空面的分量即可。
 --    楔形（weakness.wedge）：兩組節理都穿過此格時，沿交線 l（朝下）滑動：
 --      τ∥ = |t1·l| + |t2·l|（t = σ·n，各面上沿交線的剪應力），
@@ -286,6 +288,7 @@ function failure.cell_state(g, x, y, z, p)
 	local ex_p, ex_n = not is_solid(g, x + 1, y, z), not is_solid(g, x - 1, y, z)
 	local ez_p, ez_n = not is_solid(g, x, y, z + 1), not is_solid(g, x, y, z - 1)
 	local ex, ez = ex_p or ex_n, ez_p or ez_n
+	local fn   -- 平滑後的坡面外法向（只在需要節理運動學時計算）
 	local e_up = not is_solid(g, x, y + 1, z)
 	local e_down = not is_solid(g, x, y - 1, z)
 
@@ -318,13 +321,14 @@ function failure.cell_state(g, x, y, z, p)
 	--   運動學不成立的組不必判斷平面是否穿過此格
 	if wk and p.joints_at and (p.detail or (exposed and 2 * wk.c <= q * (p.fs_cut or 1))) then
 		local cands = p.joint_sets
+		if wk.lat_cos and (ex or ez) then fn = failure.face_normal(g, x, y, z) end
 		-- 楔形：交線朝臨空面露出的組對
 		local wpairs
 		if wk.wedge then
 			wpairs = {}
 			for _, pr in ipairs(failure.wedge_pairs(p.joint_sets)) do
 				if pr.l.y < -0.0175 and (not wk.daylight
-						or failure.daylights(pr.l, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos)) then
+						or failure.daylights(pr.l, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos, fn)) then
 					wpairs[#wpairs + 1] = pr
 				end
 			end
@@ -337,7 +341,7 @@ function failure.cell_state(g, x, y, z, p)
 			end
 			for k = 1, #p.joint_sets do
 				local js = p.joint_sets[k]
-				if inw[js] or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos) then
+				if inw[js] or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos, fn) then
 					cands[#cands + 1] = js
 				end
 			end
@@ -346,7 +350,7 @@ function failure.cell_state(g, x, y, z, p)
 		if p.detail then n_joints = #list end
 		for k = 1, #list do
 			local js = list[k]
-			if not wk.daylight or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos) then
+			if not wk.daylight or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos, fn) then
 				local sn, tau = failure.plane_stress(sx, sy, sz, sxz, js.n_eff)
 				local f = failure.plane_fs(sn, tau, wk.c, wk.tanphi)
 				if f < fs_joint then
@@ -455,10 +459,29 @@ function failure.plane_fs(sn, tau, c, tanphi)
 	return (c + math.max(0, sn) * tanphi) / tau
 end
 
+-- 平滑後的坡面外法向（水平單位向量 {x, z}）：同高程 ±r 格（預設 2）內非實心格的方向加權和
+-- （權重 1/距離²）。平直的坡面 = 軸向；45° 的階梯狀坡面 = 對角方向。周圍沒有空氣時回傳 nil
+function failure.face_normal(g, x, y, z, r)
+	r = r or 2
+	local sx, sz = 0, 0
+	for dz = -r, r do
+		for dx = -r, r do
+			if (dx ~= 0 or dz ~= 0) and not is_solid(g, x + dx, y, z + dz) then
+				local d2 = dx * dx + dz * dz
+				sx, sz = sx + dx / d2, sz + dz / d2
+			end
+		end
+	end
+	local m = math.sqrt(sx * sx + sz * sz)
+	if m < 1e-9 then return nil end
+	return {x = sx / m, z = sz / m}
+end
+
 -- 運動學：節理（向上法向 n，其水平分量 = 傾向）能否往臨空面釋放
 -- ex_p/ex_n：+x/−x 側臨空；ez_p/ez_n：+z/−z 側臨空；e_down：下方臨空
 -- cos_lim：側向限制 cos λ（省略為舊規則：傾向有朝臨空面的分量即可）
-function failure.daylights(n, ex_p, ex_n, ez_p, ez_n, e_down, cos_lim)
+-- fn：平滑後的坡面外法向 {x, z}（可省略）
+function failure.daylights(n, ex_p, ex_n, ez_p, ez_n, e_down, cos_lim, fn)
 	if e_down then return true end
 	local eps = 1e-9
 	if not cos_lim then
@@ -468,6 +491,8 @@ function failure.daylights(n, ex_p, ex_n, ez_p, ez_n, e_down, cos_lim)
 	local h = math.sqrt(n.x * n.x + n.z * n.z)
 	if h < eps then return false end
 	local cx, cz = n.x / h, n.z / h
+	-- 傾向與平滑後的坡面方向夾角 ≤ λ（該格須側向臨空）
+	if fn and (ex_p or ex_n or ez_p or ez_n) and cx * fn.x + cz * fn.z >= cos_lim then return true end
 	-- 傾向與某個臨空面的外法向夾角 ≤ λ
 	if (ex_p and cx >= cos_lim) or (ex_n and -cx >= cos_lim)
 			or (ez_p and cz >= cos_lim) or (ez_n and -cz >= cos_lim) then
