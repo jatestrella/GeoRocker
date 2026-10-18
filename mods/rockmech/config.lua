@@ -248,7 +248,7 @@ function config.parse_gsi(s)
 end
 
 -- 節理組可由設定覆寫的槽位數（rockmech_joint_set_1 .. _N）
-config.MAX_SET_OVERRIDES = 3
+config.MAX_SET_OVERRIDES = 6   -- 第 4 組以後是新增的組（須連號）；方塊變體跡線只畫前幾組，mesh 模式全部都畫
 
 ---------------------------------------------------------------------------
 -- 解析與驗證
@@ -358,6 +358,19 @@ function config.load(get)
 	cfg.lith_mode = (lm == "zones" or lm == "layers") and lm or config.defaults.lith_mode
 	cfg.zone_width = math.max(4, math.floor(tonumber(get("rockmech_zone_width")) or config.defaults.zone_width))
 	cfg.zone_order = copy(config.zone_order)
+	-- 區帶順序（rockmech_zone_order = "granite" 或 "granite,shale"）：只有一種時整個世界都是該岩性
+	local zo = get("rockmech_zone_order")
+	if zo and zo ~= "" then
+		local list = {}
+		for tok in zo:gmatch("[^,%s]+") do
+			if config.lithologies[tok] then
+				list[#list + 1] = tok
+			else
+				warnings[#warnings + 1] = "rockmech_zone_order: 沒有岩性 " .. tok .. "（忽略）"
+			end
+		end
+		if #list > 0 then cfg.zone_order = list end
+	end
 
 	-- 讀取一組 rockmech_<prefix>_<key> 設定
 	local function load_section(prefix, defaults)

@@ -42,6 +42,9 @@ rockmech_lith_mode (Lithology distribution) enum layers layers,zones
 # Width (m) of each lithology zone in zones mode.
 rockmech_zone_width (Lithology zone width) int 80 4 10000
 
+# Zone order for zones mode, comma separated (e.g. "granite" for a granite-only world). Empty = shale,granite,sandstone.
+rockmech_zone_order (Lithology zone order) string
+
 [Joint sets]
 
 # Joint plane normals are snapped to an integer lattice of this density so that joint
@@ -60,6 +63,15 @@ rockmech_joint_set_2 (Joint set 2 override) string
 
 # Override joint set 3: "dip,dipdir,spacing,persistence,phi". Empty = default.
 rockmech_joint_set_3 (Joint set 3 override) string
+
+# Additional joint set 4: "dip,dipdir,spacing,persistence,phi". Empty = none. Sets must be consecutive.
+rockmech_joint_set_4 (Joint set 4) string
+
+# Additional joint set 5. Empty = none.
+rockmech_joint_set_5 (Joint set 5) string
+
+# Additional joint set 6. Empty = none.
+rockmech_joint_set_6 (Joint set 6) string
 
 [Rock mass strength]
 

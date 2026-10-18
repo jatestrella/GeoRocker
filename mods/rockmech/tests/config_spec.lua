@@ -5,6 +5,27 @@ local function getter(t)
 	return function(k) return t[k] end
 end
 
+describe("config 區帶順序與第 4 組以後的節理", function()
+	it("rockmech_zone_order 只有花崗岩；第 4、5 組新增", function()
+		local set = {
+			rockmech_zone_order = "granite",
+			rockmech_joint_set_4 = "80,225,6,0.8,30",
+			rockmech_joint_set_5 = "40,200,8,0.6,30",
+		}
+		local cfg, w = config.load(function(k) return set[k] end)
+		assert.are.equal(0, #w)
+		assert.are.equal(1, #cfg.zone_order)
+		assert.are.equal("granite", cfg.zone_order[1])
+		assert.are.equal(5, #cfg.joint_sets)
+		assert.are.equal(225, cfg.joint_sets[4].dipdir)
+		assert.are.equal("J5", cfg.joint_sets[5].name)
+	end)
+	it("不存在的岩性給警告", function()
+		local _, w = config.load(function(k) return k == "rockmech_zone_order" and "basalt" or nil end)
+		assert.are.equal(1, #w)
+	end)
+end)
+
 describe("config.load", function()
 	it("無設定時使用預設值", function()
 		local cfg, warn = config.load(getter({}))
