@@ -73,7 +73,8 @@ local function flood_cells(starts)
 end
 
 -- 移除 cells 中的碎石（p1..p2 需涵蓋 cells 與其鄰格）。回傳移除數與各種碎石的級數
-local function clear(cells, p1, p2, pname)
+-- any = true：碎石以外的方塊也移除（挖洞魔杖；不可挖的方塊除外）
+local function clear(cells, p1, p2, pname, any)
 	build_maps()
 	local vm = core.get_voxel_manip()
 	local e1, e2 = vm:read_from_map(p1, p2)
@@ -85,13 +86,23 @@ local function clear(cells, p1, p2, pname)
 	for _, p in ipairs(cells) do
 		local vi = area:index(p.x, p.y, p.z)
 		local name = rubble_cid[data[vi]]
+		local is_rubble = name ~= nil
+		if not name and any and data[vi] ~= c_air then
+			local nn = core.get_name_from_content_id(data[vi])
+			local def = core.registered_nodes[nn]
+			if def and nn ~= "ignore" and def.diggable ~= false and not (def.groups and def.groups.unbreakable) then
+				name = nn
+			end
+		end
 		if name and not core.is_protected(p, pname) then
 			data[vi] = c_air
 			removed[#removed + 1] = p
 			changes[#changes + 1] = {pos = p, name = name}
 			gone[key(p.x, p.y, p.z)] = true
-			local base = rockmech.rubble_base[name] or name
-			levels[base] = (levels[base] or 0) + (rockmech.rubble_level[name] or NLEV)
+			if is_rubble then
+				local base = rockmech.rubble_base[name] or name
+				levels[base] = (levels[base] or 0) + (rockmech.rubble_level[name] or NLEV)
+			end
 		end
 	end
 	if #removed == 0 then vm:close(); return 0, levels end
@@ -255,6 +266,34 @@ core.register_tool("rockmech:blast_wand", {
 	end,
 	on_place = function(itemstack, placer, pointed_thing)
 		use(placer, pointed_thing, "near", "爆破魔杖")
+		return nil
+	end,
+})
+
+-- 挖洞魔杖：左鍵直接移除面前 3×3×3（任何可挖的方塊，算玩家開挖：記錄開挖、觸發破壞與支撐判定），
+-- 右鍵一鍵清碴（同爆破魔杖）
+core.register_tool("rockmech:dig_wand", {
+	description = "Dig wand (挖洞魔杖)\n左鍵：直接移除面前 3×3×3（岩石、碎石等）\n右鍵：一鍵清碴（附近與相連的碎石）\n" ..
+		"按住 Shift 右鍵：清掉的碎石收進物品欄",
+	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#e0fff0" ..
+		"^[fill:4x4:11,1:#20c070^[fill:2x2:12,2:#e0fff0" ..
+		"^[fill:2x2:9,5:#707070^[fill:2x2:7,7:#707070^[fill:2x2:5,9:#707070" ..
+		"^[fill:2x2:3,11:#707070^[fill:2x2:1,13:#505050",
+	stack_max = 1,
+	on_use = function(itemstack, user, pointed_thing)
+		if not user or not user:is_player() or pointed_thing.type ~= "node" then return nil end
+		local under = pointed_thing.under
+		local cells, p1, p2 = cube_cells(under, vector.subtract(under, pointed_thing.above))
+		local t0 = core.get_us_time()
+		local count = clear(cells, p1, p2, user:get_player_name(), true)
+		if count > 0 then
+			core.log("action", ("[rockmech] %s 挖洞魔杖 %s：移除 %d 格（%.1f ms）"):format(user:get_player_name(),
+				core.pos_to_string(under), count, (core.get_us_time() - t0) / 1000))
+		end
+		return nil
+	end,
+	on_place = function(itemstack, placer, pointed_thing)
+		use(placer, pointed_thing, "near", "挖洞魔杖")
 		return nil
 	end,
 })
