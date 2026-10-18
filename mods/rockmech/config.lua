@@ -184,6 +184,7 @@ config.weakness_defaults = {
 	c = 0.05,                 -- 節理凝聚力 cj (MPa)
 	phi = 30,                 -- 節理摩擦角 φj (deg)
 	daylight = true,          -- 運動學條件：節理須傾向臨空面（或下方臨空）才會滑出
+	wedge = true,             -- 楔形：兩組節理都穿過的格，沿交線滑動（交線須朝臨空面露出）
 	lateral_limit = 20,       -- 側向限制 λ (deg)：傾向與臨空面外法向夾角 ≤ λ 才能平面滑動（Markland），凸角除外
 }
 

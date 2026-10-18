@@ -171,6 +171,10 @@ rockmech_weakness_daylight (Require daylighting) bool true
 # (a convex corner with lateral release). Wedges on joint intersections are handled by key blocks.
 rockmech_weakness_lateral_limit (Lateral limit for planar sliding) float 20 0 90
 
+# Wedge sliding: where two joint sets both cross a cell, the cell may slide along their line of intersection
+# (FS = (2c + (sigma_n1 + sigma_n2) tan phi) / shear along the line). The line must daylight like a plane does.
+rockmech_weakness_wedge (Wedge sliding on joint intersections) bool true
+
 [Rockfall]
 
 # Falling rock becomes a tumbling entity (bounce, roll, stop) instead of dropping straight down.

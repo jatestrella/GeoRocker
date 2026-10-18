@@ -72,6 +72,14 @@ function rockmech.slip_line(s)
 	if not js then
 		return "節理滑動：" .. (s.n_joints == 0 and "完整岩塊（無節理面穿過）" or "無可滑出的節理（未傾向臨空面）")
 	end
+	if s.slip_set2 then
+		local l = s.slip_line
+		local trend = math.deg(math.atan2 and math.atan2(l.x, l.z) or math.atan(l.x, l.z)) % 360
+		local plunge = math.deg(math.asin(-l.y))
+		return ("楔形滑動 %s∩%s（交線 %.0f°/%.0f°）：σn %.3f / %.3f  τ∥ %.3f MPa  FS %.2f%s"):format(
+			js.name, s.slip_set2.name, trend, plunge, s.slip_sn, s.slip_sn2, s.slip_tau, s.fs_joint,
+			s.fails_slip and "  滑動" or "")
+	end
 	return ("節理滑動 %s（%.0f°/%.0f°）：σn %.3f  τ %.3f MPa  FS %.2f%s"):format(
 		js.name, js.dip_eff, js.dipdir_eff, s.slip_sn, s.slip_tau, s.fs_joint,
 		s.fails_slip and "  滑動" or "")
@@ -126,7 +134,8 @@ function rockmech.nearby_line(nb)
 	local parts = {}
 	if nb.joint then
 		local j = nb.joint
-		parts[#parts + 1] = ("節理 %s @ (%d,%d,%d) %s%s"):format(fs_str(j.fs), j.x, j.y, j.z, j.set.name,
+		parts[#parts + 1] = ("節理 %s @ (%d,%d,%d) %s%s"):format(fs_str(j.fs), j.x, j.y, j.z,
+			j.set.name .. (j.set2 and ("∩" .. j.set2.name) or ""),
 			j.fs <= 1 and " 會滑" or "")
 	elseif cfg.weakness.enabled then
 		parts[#parts + 1] = "節理：無可滑出的面"
@@ -161,7 +170,8 @@ local function fmt_report_lines(r, header)
 	-- 四種機制的 FS
 	local parts = {"軸差 " .. fs_short(s.fs_axial)}
 	if cfg.weakness.enabled then
-		parts[#parts + 1] = "節理 " .. (s.slip_set and (fs_short(s.fs_joint) .. " " .. s.slip_set.name) or "—")
+		parts[#parts + 1] = "節理 " .. (s.slip_set and (fs_short(s.fs_joint) .. " " .. s.slip_set.name
+			.. (s.slip_set2 and ("∩" .. s.slip_set2.name) or "")) or "—")
 	end
 	local o = r.overhang
 	if cfg.overhang.enabled then

@@ -229,6 +229,26 @@ describe("failure 節理弱面（Jaeger）", function()
 		assert.is_false(failure.daylights(nvec(0, 0), true, true, true, true, false))
 	end)
 
+	it("楔形交線：60°/045 與 60°/315 → 趨向 000、傾伏 50.8°", function()
+		local l = failure.wedge_line(nvec(60, 45), nvec(60, 315))
+		assert.near(50.77, math.deg(math.asin(-l.y)), 0.05)
+		assert.near(0, l.x, 1e-9)
+		assert.is_true(l.z > 0)
+		-- 只有 +z（北）臨空、側向限制 20°：交線朝北 → 露出；兩個平面各偏 45° → 不露出
+		local c20 = math.cos(math.rad(20))
+		assert.is_true(failure.daylights(l, false, false, true, false, false, c20))
+		assert.is_false(failure.daylights(nvec(60, 45), false, false, true, false, false, c20))
+	end)
+
+	it("楔形 FS：無凝聚力時 = (σn1 + σn2)·tanφ / τ∥；凝聚力讓 FS 增加", function()
+		local n1, n2 = nvec(60, 45), nvec(60, 315)
+		local l = failure.wedge_line(n1, n2)
+		local f, sn1, sn2, tau = failure.wedge_fs(0, 1, 0.3, 0, n1, n2, l, 0, 1)
+		assert.is_true(tau > 0)
+		assert.near((math.max(0, sn1) + math.max(0, sn2)) / tau, f, 1e-12)
+		assert.is_true(failure.wedge_fs(0, 1, 0.3, 0, n1, n2, l, 0.1, 1) > f)
+	end)
+
 	it("運動學側向限制（Markland ±λ）：傾向偏 45° 的平面只在凸角才能滑", function()
 		local c20 = math.cos(math.rad(20))
 		local ne = nvec(60, 45)    -- 傾向東北

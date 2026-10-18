@@ -26,7 +26,10 @@
 --    側向臨空時（Markland 平面滑動檢核）：節理傾向與臨空面外法向的夾角 ≤ λ（側向限制，
 --    weakness.lat_cos = cos λ），或該格在傾向的每個水平分量方向都臨空（凸角，有側向釋放面）。
 --    沒給 lat_cos 時為舊規則：傾向有朝臨空面的分量即可。
---    楔形（兩組節理的交線）由關鍵塊體（keyblock.lua）處理。
+--    楔形（weakness.wedge）：兩組節理都穿過此格時，沿交線 l（朝下）滑動：
+--      τ∥ = |t1·l| + |t2·l|（t = σ·n，各面上沿交線的剪應力），
+--      FS = (2cj + (σn1 + σn2)·tanφj) / τ∥；交線的趨向須朝臨空面露出（同上側向限制／凸角），
+--      且傾伏 > 1°。被節理完整圍住的大岩塊另由關鍵塊體（keyblock.lua）處理。
 --    params.weakness = {c (MPa), tanphi, daylight, lat_cos}；params.joint_sets = 節理組陣列
 --    （每組需有 n_eff = 向上單位法向，與 name）；params.joints_at(x,y,z, sets) 回傳
 --    sets 中穿過此格的組。params.detail = true 時不做前置篩選（顯示用）。
@@ -307,6 +310,7 @@ function failure.cell_state(g, x, y, z, p)
 
 	-- 弱面滑動
 	local fs_joint, slip_set, slip_sn, slip_tau = math.huge, nil, nil, nil
+	local slip_set2, slip_sn2, slip_line   -- 楔形：第二組節理、其正應力、交線
 	local n_joints
 	local wk = p.weakness
 	-- 前置篩選（p.detail 時不篩，供顯示用）：
@@ -314,11 +318,28 @@ function failure.cell_state(g, x, y, z, p)
 	--   運動學不成立的組不必判斷平面是否穿過此格
 	if wk and p.joints_at and (p.detail or (exposed and 2 * wk.c <= q * (p.fs_cut or 1))) then
 		local cands = p.joint_sets
+		-- 楔形：交線朝臨空面露出的組對
+		local wpairs
+		if wk.wedge then
+			wpairs = {}
+			for _, pr in ipairs(failure.wedge_pairs(p.joint_sets)) do
+				if pr.l.y < -0.0175 and (not wk.daylight
+						or failure.daylights(pr.l, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos)) then
+					wpairs[#wpairs + 1] = pr
+				end
+			end
+		end
 		if wk.daylight and not p.detail then
 			cands = {}
+			local inw = {}
+			if wpairs then
+				for _, pr in ipairs(wpairs) do inw[pr.a] = true; inw[pr.b] = true end
+			end
 			for k = 1, #p.joint_sets do
 				local js = p.joint_sets[k]
-				if failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos) then cands[#cands + 1] = js end
+				if inw[js] or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos) then
+					cands[#cands + 1] = js
+				end
 			end
 		end
 		local list = #cands > 0 and p.joints_at(x, y, z, cands) or {}
@@ -330,6 +351,21 @@ function failure.cell_state(g, x, y, z, p)
 				local f = failure.plane_fs(sn, tau, wk.c, wk.tanphi)
 				if f < fs_joint then
 					fs_joint, slip_set, slip_sn, slip_tau = f, js, sn, tau
+				end
+			end
+		end
+		-- 楔形：兩組都穿過此格
+		if wpairs and #wpairs > 0 and #list >= 2 then
+			local here = {}
+			for k = 1, #list do here[list[k]] = true end
+			for _, pr in ipairs(wpairs) do
+				if here[pr.a] and here[pr.b] then
+					local f, sn1, sn2, tau = failure.wedge_fs(sx, sy, sz, sxz, pr.a.n_eff, pr.b.n_eff, pr.l,
+						wk.c, wk.tanphi)
+					if f < fs_joint then
+						fs_joint, slip_set, slip_sn, slip_tau = f, pr.a, sn1, tau
+						slip_set2, slip_sn2, slip_line = pr.b, sn2, pr.l
+					end
 				end
 			end
 		end
@@ -349,6 +385,7 @@ function failure.cell_state(g, x, y, z, p)
 		sH_far = sH_own, sh_far = sh_own, fx = fx, fz = fz,
 		strength = strength, rm = rm, fs = fs, fs_axial = fs_axial, fs_joint = fs_joint,
 		slip_set = slip_set, slip_sn = slip_sn, slip_tau = slip_tau, n_joints = n_joints,
+		slip_set2 = slip_set2, slip_sn2 = slip_sn2, slip_line = slip_line,
 		fails_axial = fails_axial, fails_slip = fails_slip,
 		exposed_x = ex, exposed_z = ez, exposed_up = e_up, exposed_down = e_down,
 		exposed = exposed,
@@ -364,6 +401,52 @@ function failure.plane_stress(sx, sy, sz, sxz, n)
 	local sn = tx * n.x + ty * n.y + tz * n.z
 	local t2 = tx * tx + ty * ty + tz * tz - sn * sn
 	return sn, t2 > 0 and math.sqrt(t2) or 0
+end
+
+-- 兩組節理（向上法向 n1、n2）的交線，單位向量、朝下（y ≤ 0）；平行回傳 nil
+function failure.wedge_line(n1, n2)
+	local lx = n1.y * n2.z - n1.z * n2.y
+	local ly = n1.z * n2.x - n1.x * n2.z
+	local lz = n1.x * n2.y - n1.y * n2.x
+	local m = math.sqrt(lx * lx + ly * ly + lz * lz)
+	if m < 1e-9 then return nil end
+	if ly > 0 then m = -m end
+	return {x = lx / m, y = ly / m, z = lz / m}
+end
+
+-- 所有組對與交線（依 sets 表快取）：{{a = 組, b = 組, l = 交線}...}
+local pair_cache = setmetatable({}, {__mode = "k"})
+function failure.wedge_pairs(sets)
+	local pr = pair_cache[sets]
+	if pr then return pr end
+	pr = {}
+	for i = 1, #sets - 1 do
+		for j = i + 1, #sets do
+			local a, b = sets[i], sets[j]
+			if (a.persistence or 1) > 0 and (b.persistence or 1) > 0 then
+				local l = failure.wedge_line(a.n_eff, b.n_eff)
+				if l then pr[#pr + 1] = {a = a, b = b, l = l} end
+			end
+		end
+	end
+	pair_cache[sets] = pr
+	return pr
+end
+
+-- 楔形沿交線 l 滑動的安全係數：各面上沿 l 的剪應力相加為驅動，兩面的 c + σn·tanφ 為抵抗。
+-- 回傳 FS, σn1, σn2, τ∥
+function failure.wedge_fs(sx, sy, sz, sxz, n1, n2, l, c, tanphi)
+	local function comp(n)
+		local tx = sx * n.x + sxz * n.z
+		local ty = sy * n.y
+		local tz = sxz * n.x + sz * n.z
+		return tx * n.x + ty * n.y + tz * n.z, math.abs(tx * l.x + ty * l.y + tz * l.z)
+	end
+	local sn1, t1 = comp(n1)
+	local sn2, t2 = comp(n2)
+	local tau = t1 + t2
+	if tau <= 0 then return math.huge, sn1, sn2, 0 end
+	return (2 * c + (math.max(0, sn1) + math.max(0, sn2)) * tanphi) / tau, sn1, sn2, tau
 end
 
 -- 弱面安全係數 (cj + σn·tanφj) / τ（τ = 0 時為 ∞；σn < 0 時摩擦項取 0）
@@ -463,7 +546,7 @@ function failure.min_fs_in_box(g, p, box)
 					out.exposed = out.exposed + 1
 					local st = failure.cell_state(g, x, y, z, p)
 					if st.slip_set and (not out.joint or st.fs_joint < out.joint.fs) then
-						out.joint = {fs = st.fs_joint, x = x, y = y, z = z, set = st.slip_set}
+						out.joint = {fs = st.fs_joint, x = x, y = y, z = z, set = st.slip_set, set2 = st.slip_set2}
 					end
 					if p.axial ~= false and (not out.axial or st.fs_axial < out.axial.fs) then
 						out.axial = {fs = st.fs_axial, x = x, y = y, z = z}
