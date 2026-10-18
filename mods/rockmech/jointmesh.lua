@@ -26,7 +26,10 @@ local HW = jt.mesh_width / 2        -- 線寬的一半 (m)
 local OFF = 0.004                   -- 往外偏移 (m)
 local RANGE = jt.mesh_range          -- 玩家周圍幾個區塊（水平）
 local VRANGE = math.max(1, RANGE - 1)
-local PER_STEP = 4                   -- 每次最多重建幾個區塊
+local PER_STEP = 4                   -- 新進入範圍的區塊：每 0.5 s 最多建幾個
+local DIRTY_STEP = 8                 -- 地形改變的區塊：每 0.05 s 最多重建幾個（優先）
+local DEBUG = jt.mesh_debug   -- 記錄改變到送達的延遲（rockmech_jointtex_mesh_debug）
+local MIN_GAP = 0.2                  -- 同一區塊兩次重建的最短間隔 (s)：崩落過程中不一直重做
 local ENT = "rockmech:jointmesh"
 local TEX = overlay and "[fill:2x2:#ff2020" or ("[fill:2x2:" .. jt.line_color)
 
@@ -178,6 +181,8 @@ local function rebuild(bx, by, bz)
 	local b = blocks[key] or {}
 	blocks[key] = b
 	b.dirty = false
+	b.bx, b.by, b.bz = bx, by, bz
+	b.built = core.get_us_time()
 	local obj_text, n = build_mesh(bx, by, bz)
 	if not obj_text then
 		if b.obj then b.obj:remove(); b.obj = nil end
@@ -201,6 +206,11 @@ local function rebuild(bx, by, bz)
 			b.obj:get_luaentity().rm_key = key
 		end
 		b.obj:set_properties({mesh = name, is_visible = true})
+		if DEBUG and b.dirty_at then
+			core.log("action", ("[rockmech] 節理網格 %s：改變 → 送達 %.0f ms"):format(key,
+				(core.get_us_time() - b.dirty_at) / 1000))
+		end
+		b.dirty_at = nil
 	end)
 	if not ok then core.log("warning", "[rockmech] 節理網格無法加入媒體 " .. name) end
 end
@@ -211,7 +221,10 @@ function api.dirty(pos)
 	for dx = -1, 1 do for dy = -1, 1 do for dz = -1, 1 do
 		local q = {x = p.x + dx, y = p.y + dy, z = p.z + dz}
 		local b = blocks[bkey(math.floor(q.x / 16), math.floor(q.y / 16), math.floor(q.z / 16))]
-		if b then b.dirty = true end
+		if b then
+			b.dirty = true
+			if DEBUG and not b.dirty_at then b.dirty_at = core.get_us_time() end
+		end
 	end end end
 end
 function api.dirty_box(a, b)
@@ -235,7 +248,24 @@ for _, fname in ipairs({"set_node", "swap_node", "remove_node", "add_node"}) do
 	end
 end
 
--- 玩家附近的區塊：缺的建、遠的刪、髒的重建（每次最多 PER_STEP 個，由近到遠）
+-- 地形改變的區塊：每 0.05 s 優先重建（舊網格在新網格送達前仍會顯示，所以要快）
+local dirty_timer = 0
+core.register_globalstep(function(dtime)
+	dirty_timer = dirty_timer + dtime
+	if dirty_timer < 0.05 then return end
+	dirty_timer = 0
+	local now = core.get_us_time()
+	local n = 0
+	for _, b in pairs(blocks) do
+		if b.dirty and b.bx and (now - (b.built or 0)) / 1e6 >= MIN_GAP then
+			rebuild(b.bx, b.by, b.bz)
+			n = n + 1
+			if n >= DIRTY_STEP then break end
+		end
+	end
+end)
+
+-- 玩家附近的區塊：缺的建、遠的刪（每 0.5 s 最多 PER_STEP 個，由近到遠）
 local timer = 0
 core.register_globalstep(function(dtime)
 	timer = timer + dtime
@@ -253,7 +283,7 @@ core.register_globalstep(function(dtime)
 					if not want[key] then
 						want[key] = true
 						local b = blocks[key]
-						if not b or b.dirty then
+						if not b then
 							local d = (bx - pb.x) ^ 2 + (by - pb.y) ^ 2 + (bz - pb.z) ^ 2
 							todo[#todo + 1] = {bx, by, bz, d}
 						end

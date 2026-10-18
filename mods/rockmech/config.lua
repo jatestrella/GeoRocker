@@ -128,6 +128,7 @@ config.jointtex_defaults = {
 	mesh_range = 3,           -- mesh：玩家周圍幾個區塊（16 m）內顯示
 	mesh_width = 0.06,        -- mesh：跡線寬度 (m)
 	mesh_overlay = false,     -- plane 模式下另外疊一層紅色網格跡線（檢查用）
+	mesh_debug = false,       -- mesh：記錄地形改變到網格送達的延遲
 	max_lines = 2,            -- plane：每格最多畫幾組節理
 	plane_res = 32,           -- plane：跡線貼圖解析度（像素）
 	plane_width = 1.5,        -- plane：跡線寬度（像素，以 plane_res 計）
