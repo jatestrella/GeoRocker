@@ -32,7 +32,9 @@
 -- ## 網格格式
 -- grid = {data, ox, oy, oz, nx, ny, nz, bonded_of, solid_of, lith_of,
 --         req = {x1, x2, y1, y2, z1, z2}（世界座標；省略時為整個網格）}
--- params = {lithologies, scale, tensile_other (MPa), gamma_other (kN/m³), max_voxels}
+-- params = {lithologies, scale, tensile_other (MPa), gamma_other (kN/m³), max_voxels,
+--           tensile_at(g, i, lith_key)（可選）：格 i 的張力強度 (MPa)，取代 lith.tensile／tensile_other
+--           （岩體強度：GSI、相似比 N）}
 
 local overhang = {}
 
@@ -127,7 +129,8 @@ function overhang.find_failing(g, p)
 	local function lmax(i)
 		local key = lith_of[data[i]]
 		local lith = key and p.lithologies[key]
-		local st = (lith and lith.tensile or p.tensile_other or 2) * 1000 * scale -- kPa
+		local st = (p.tensile_at and p.tensile_at(g, i, key)
+			or lith and lith.tensile or p.tensile_other or 2) * 1000 * scale -- kPa
 		local gam = lith and lith.gamma or p.gamma_other or 20
 		return sqrt(st * thick[i] / (3 * gam))
 	end
@@ -266,7 +269,8 @@ local function local_ctx(g, p)
 			local c = ib + (yy - b) * sy
 			local key = lith_of[data[c]]
 			local lith = key and p.lithologies[key]
-			local st = (lith and lith.tensile or p.tensile_other or 2) * 1000 * scale
+			local st = (p.tensile_at and p.tensile_at(g, c, key)
+				or lith and lith.tensile or p.tensile_other or 2) * 1000 * scale
 			local gam = lith and lith.gamma or p.gamma_other or 20
 			local v = sqrt(st * thick / (3 * gam))
 			if v < lm then lm = v; crit = {tensile = st / 1000, gamma = gam} end

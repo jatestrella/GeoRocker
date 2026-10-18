@@ -61,9 +61,35 @@ rockmech_joint_set_2 (Joint set 2 override) string
 # Override joint set 3: "dip,dipdir,spacing,persistence,phi". Empty = default.
 rockmech_joint_set_3 (Joint set 3 override) string
 
+[Rock mass strength]
+
+# Model scale N (similitude): 1 m in game represents N m in reality.
+# All strengths with stress units (sigma_ci, sigma_t, joint cohesion) are divided by N; friction angles are unchanged.
+# Every failure mode then has the factor of safety of a real excavation N times larger.
+rockmech_model_scale (Model scale N) float 1.0 0.01 1000
+
+# Rock mass quality GSI for all lithologies (Hoek-Brown). "GSI" or "surface GSI,deep GSI,transition depth (m)".
+# Depth is measured below surface_y. Represents only sub-grid fracturing (< 1 m) and size effect:
+# the modelled joint sets are handled by joint slip, do not count them again. Empty = 100 (intact rock).
+# A rock node with param2 = 1..100 uses that value as its GSI instead.
+rockmech_gsi (GSI profile, all lithologies) string
+
+# GSI profile for sandstone (overrides rockmech_gsi). Same format.
+rockmech_gsi_sandstone (GSI profile: sandstone) string
+
+# GSI profile for shale (overrides rockmech_gsi). Same format.
+rockmech_gsi_shale (GSI profile: shale) string
+
+# GSI profile for granite (overrides rockmech_gsi). Same format.
+rockmech_gsi_granite (GSI profile: granite) string
+
+# Hoek-Brown disturbance factor D (0 = undisturbed, 1 = heavy blast damage).
+rockmech_rockmass_d (Disturbance factor D) float 0 0 1
+
 [Deviatoric failure]
 
-# Check exposed rock for deviatoric failure (sigma1 - sigma3 >= UCS * scale) after excavation.
+# Check exposed rock for deviatoric failure after excavation:
+# sigma1 >= sigma3 + sigma_ci * (mb * sigma3 / sigma_ci + s)^a (Hoek-Brown rock mass, see GSI and model scale).
 rockmech_failure_enabled (Enable deviatoric failure) bool true
 
 # Radius (m) checked around each change made by the player (dig, place, blast): joint slip, deviatoric failure, key blocks.
@@ -86,8 +112,8 @@ rockmech_failure_overburden_scan (Overburden scan height) int 64 0 512
 # Voids below the surface are counted as rock (pre-excavation state); beyond this height rock is assumed to continue to surface_y.
 rockmech_failure_initial_scan_max (Initial stress scan height) int 512 16 4096
 
-# Failure threshold = UCS * scale. 1 = real strength; smaller values make failure visible at shallow depth.
-rockmech_failure_strength_scale (Strength scale) float 1.0 0.001 10
+# Legacy: extra factor on sigma_ci. Prefer rockmech_model_scale, which also scales tensile strength and joint cohesion.
+rockmech_failure_strength_scale (Strength scale, legacy) float 1.0 0.001 10
 
 # Maximum number of cascade rounds after a failure.
 rockmech_failure_max_cascade (Max cascade rounds) int 5 0 50
@@ -213,12 +239,13 @@ rockmech_blast_inner (Blast ejection fraction) float 0.5 0 1
 [Overhang]
 
 # Overhanging rock (cantilevers, thin roofs) breaks at its root and falls when its distance from
-# a supported rock column exceeds L_max = sqrt(sigma_t * scale * t / (3 * gamma)),
+# a supported rock column exceeds L_max = sqrt(sigma_t,mass * t / (3 * gamma)),
+# sigma_t,mass = sigma_t * s * mi / mb (Hoek-Brown, see GSI) / model scale N,
 # where t is the local rock thickness. Can also be toggled in game.
 rockmech_overhang_enabled (Enable overhang breaking) bool true
 
-# Tensile strength scale (1 = real strength from config.lua).
-rockmech_overhang_scale (Overhang tensile strength scale) float 1.0 0.001 100
+# Legacy: extra factor on tensile strength. Prefer rockmech_model_scale.
+rockmech_overhang_scale (Overhang tensile strength scale, legacy) float 1.0 0.001 100
 
 # Tensile strength (MPa) of non-lithology bonded nodes (dirt, ores, ...).
 rockmech_overhang_tensile_other (Tensile strength of other nodes) float 2.0 0 100

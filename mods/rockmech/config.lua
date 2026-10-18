@@ -16,6 +16,8 @@ local config = {}
 --   gamma       單位重 γ (kN/m³)
 --   ucs         單軸抗壓強度 UCS (MPa)
 --   tensile     張力強度 σt (MPa)
+--   mi          Hoek-Brown 完整岩石常數 mi（rockmass.lua）
+--   gsi         岩體品質的深度剖面 {top, bottom, depth}（rockmass.gsi_at）；預設 GSI 100（完整岩石）
 --   color       著色（ColorString），用於材質
 --   cracky      Luanti 挖掘群組等級（1 最硬、3 最軟）
 --   rn, rt      落石撞擊此岩面時的法向／切向回彈係數
@@ -25,19 +27,19 @@ local config = {}
 config.lithologies = {
 	sandstone = {
 		name = "sandstone", description = "Sandstone (砂岩)",
-		gamma = 24.0, ucs = 60.0, tensile = 4.0,
+		gamma = 24.0, ucs = 60.0, tensile = 4.0, mi = 17,
 		color = "#c9a46a", cracky = 3,
 		rn = 0.35, rt = 0.85, mu_roll = 0.40, break_height = 4.0,
 	},
 	shale = {
 		name = "shale", description = "Shale (頁岩)",
-		gamma = 25.0, ucs = 30.0, tensile = 2.0,
+		gamma = 25.0, ucs = 30.0, tensile = 2.0, mi = 6,
 		color = "#3c4048", cracky = 3,
 		rn = 0.30, rt = 0.80, mu_roll = 0.50, break_height = 2.5,
 	},
 	granite = {
 		name = "granite", description = "Granite (花崗岩)",
-		gamma = 26.5, ucs = 180.0, tensile = 10.0,
+		gamma = 26.5, ucs = 180.0, tensile = 10.0, mi = 32,
 		color = "#d2b4ac", cracky = 2,
 		rn = 0.45, rt = 0.90, mu_roll = 0.35, break_height = 8.0,
 	},
@@ -111,7 +113,7 @@ config.failure_defaults = {
 	gamma_other = 20,         -- 非岩性實心格（土、礦石等）的單位重 (kN/m³)
 	overburden_scan = 64,     -- 柱狀荷重往上讀取的高度 (m)，超出部分假設連續到 y0
 	initial_scan_max = 512,   -- 初始應力往上找地表的最大高度 (m)，超出部分假設連續到 y0
-	strength_scale = 1.0,     -- 強度縮放：破壞門檻 = UCS × scale
+	strength_scale = 1.0,     -- （舊設定，改用 rockmech_model_scale）σci 額外乘上此值
 	max_cascade = 5,          -- 連鎖重算輪數上限
 	cascade_delay = 0.6,      -- 每輪間隔 (s)，讓剝落的岩塊先就位
 	budget_ms = 5,            -- 單次檢查超過此時間就記 log
@@ -187,7 +189,7 @@ config.weakness_defaults = {
 -- 懸臂／頂板彎曲斷裂（overhang.lua）；設定鍵為 rockmech_overhang_<key>
 config.overhang_defaults = {
 	enabled = true,
-	scale = 1.0,              -- 張力強度縮放：L_max = √(σt·scale·t/(3γ))；1 = 真實強度
+	scale = 1.0,              -- （舊設定，改用 rockmech_model_scale）σt 額外乘上此值
 	tensile_other = 2.0,      -- 非岩性鍵結格（土、礦石…）的張力強度 (MPa)
 	radius = 16,              -- 檢查範圍半徑 (m)；懸空群碰到範圍邊界時保守地不處理
 	max_voxels = 2000,        -- 懸空群超過此格數保守地不處理
@@ -211,6 +213,28 @@ config.rockfall_defaults = {
 	stop_speed = 0.4,         -- 貼地且速度低於此值 (m/s) 持續 0.5 s 即停止
 	max_time = 20,            -- 最長翻滾時間 (s)
 }
+
+-- 岩體強度（rockmass.lua）；設定鍵為 rockmech_rockmass_<key>
+-- 另有：rockmech_model_scale（相似比 N）、rockmech_gsi（所有岩性的 GSI 剖面）、
+-- rockmech_gsi_<岩性>、rockmech_mi_<岩性>
+config.rockmass_defaults = {
+	d = 0,                    -- Hoek-Brown 擾動係數 D（0 = 未擾動，1 = 嚴重爆破損傷）
+}
+
+-- 解析 GSI 剖面 "top" 或 "top,bottom,depth"；空字串回傳 nil
+function config.parse_gsi(s)
+	if s == nil or s == "" then return nil end
+	local v = {}
+	for tok in tostring(s):gmatch("[^,%s]+") do
+		local n = tonumber(tok)
+		if not n then return nil, "不是數字: " .. tok end
+		v[#v + 1] = n
+	end
+	if #v ~= 1 and #v ~= 3 then return nil, "需要 1 個（GSI）或 3 個（地表 GSI,深部 GSI,過渡深度）數字" end
+	local function g(x) return math.max(1, math.min(100, x)) end
+	if #v == 1 then return {top = g(v[1])} end
+	return {top = g(v[1]), bottom = g(v[2]), depth = math.max(0, v[3])}
+end
 
 -- 節理組可由設定覆寫的槽位數（rockmech_joint_set_1 .. _N）
 config.MAX_SET_OVERRIDES = 3
@@ -429,6 +453,24 @@ function config.load(get)
 	for _, k in ipairs({"rn", "rt"}) do rf[k] = math.min(1, math.max(0, rf[k])) end
 	rf.mu_roll = math.max(0, rf.mu_roll)
 	cfg.rockfall = rf
+
+	-- 岩體強度：相似比 N、擾動 D、各岩性的 GSI 剖面與 mi
+	cfg.model_scale = tonumber(get("rockmech_model_scale")) or 1
+	if cfg.model_scale <= 0 then
+		warnings[#warnings + 1] = "rockmech_model_scale ≤ 0，改為 1"
+		cfg.model_scale = 1
+	end
+	cfg.rockmass = load_section("rockmass", config.rockmass_defaults)
+	cfg.rockmass.d = math.max(0, math.min(1, cfg.rockmass.d))
+	local gsi_all, gerr = config.parse_gsi(get("rockmech_gsi"))
+	if gerr then warnings[#warnings + 1] = "rockmech_gsi: " .. gerr .. "（忽略）" end
+	for key, lith in pairs(cfg.lithologies) do
+		local prof, err = config.parse_gsi(get("rockmech_gsi_" .. key))
+		if err then warnings[#warnings + 1] = "rockmech_gsi_" .. key .. ": " .. err .. "（忽略）" end
+		lith.gsi = prof or gsi_all or lith.gsi or {top = 100}
+		local mi = tonumber(get("rockmech_mi_" .. key))
+		if mi and mi > 0 then lith.mi = mi end
+	end
 
 	-- 節理組覆寫
 	for i = 1, config.MAX_SET_OVERRIDES do

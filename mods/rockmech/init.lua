@@ -20,6 +20,7 @@ rockmech.overhang = dofile(modpath .. "/overhang.lua")
 rockmech.keyblock = dofile(modpath .. "/keyblock.lua")
 rockmech.granular = dofile(modpath .. "/granular.lua")
 rockmech.blast = dofile(modpath .. "/blast.lua")
+rockmech.rockmass = dofile(modpath .. "/rockmass.lua")
 
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
 local world_conf_path = core.get_worldpath() .. "/rockmech.conf"

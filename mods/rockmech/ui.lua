@@ -48,6 +48,23 @@ function rockmech.stress_report(pos)
 	return r
 end
 
+-- GSI 剖面的文字（"45" 或 "35→65 @ 40 m"）
+function rockmech.gsi_profile_str(prof)
+	if not prof then return "100" end
+	if prof.depth and prof.depth > 0 and prof.bottom and prof.bottom ~= prof.top then
+		return ("%g→%g @ %g m"):format(prof.top, prof.bottom, prof.depth)
+	end
+	return ("%g"):format(prof.top)
+end
+
+-- 岩體強度的一行說明。rm = rockmass.params 的結果
+function rockmech.rockmass_line(rm)
+	if not rm then return "" end
+	local n = rockmech.collapse.rock.N
+	return ("GSI %d（mb %.3f  s %.2e  a %.3f）σci %.3g → 臨空單軸 %.3g、σt %.3g MPa%s"):format(
+		rm.gsi, rm.mb, rm.s, rm.a, rm.sigci, rm.ucs_m, rm.sigt, n ~= 1 and ("（已 ÷ N=%g）"):format(n) or "")
+end
+
 -- 弱面滑動的一行說明（HUD、資訊頁、羅盤共用）
 function rockmech.slip_line(s)
 	if not cfg.weakness.enabled then return "節理滑動：關閉" end
@@ -131,8 +148,9 @@ end
 local function fmt_report_lines(r, header)
 	local p, i = r.pos, r.init
 	local lines = {}
-	lines[#lines + 1] = ("%s (%d,%d,%d) %s%s　上覆 %d m"):format(header, p.x, p.y, p.z,
-		r.lith.description:gsub("\n.*", ""), r.is_rock and "" or "（非岩石）", i.h)
+	lines[#lines + 1] = ("%s (%d,%d,%d) %s%s　上覆 %d m%s"):format(header, p.x, p.y, p.z,
+		r.lith.description:gsub("\n.*", ""), r.is_rock and "" or "（非岩石）", i.h,
+		r.local_state and r.local_state.rm and ("　GSI %d"):format(r.local_state.rm.gsi) or "")
 	local s = r.local_state
 	if s then
 		lines[#lines + 1] = ("應力 σv %.3f｜σ1 %.3f　σ3 %.3f MPa"):format(i.sv, s.s1, s.s3)
@@ -297,9 +315,20 @@ local function tab_overview()
 		{"σh = K_h·σv + σh0", ("K_h %.2f，σh0 %g MPa"):format(cfg.Kh, cfg.sh0)},
 		{"σH 方位", cfg.sH_azimuth .. "°（由北順時針）"},
 		{"節理格點密度", cfg.joint_lattice},
-		{"軸差破壞", ("%s；強度縮放 %g、半徑 %d、窗格 ±%d、連鎖 %d 輪"):format(
-			f.enabled and "開" or "關", f.strength_scale, f.radius, f.window, f.max_cascade)},
-		{"懸臂斷裂", ("%s；張力強度縮放 %g、半徑 %d"):format(o.enabled and "開" or "關", o.scale, o.radius)},
+		{"相似比 N", ("%g（遊戲 1 m = 實際 %g m；σci、σt、節理 c 都 ÷ N）"):format(cfg.model_scale, cfg.model_scale)},
+		{"岩體 GSI（地表→深部 @ 過渡深度）", (function()
+			local t = {}
+			for _, key in ipairs(cfg.lithology_order) do
+				local l = cfg.lithologies[key]
+				t[#t + 1] = ("%s %s"):format(l.description:gsub(" ?%(.*", ""), rockmech.gsi_profile_str(l.gsi))
+			end
+			return table.concat(t, "，") .. ("；D %g"):format(cfg.rockmass.d)
+		end)()},
+		{"軸差破壞", ("%s；Hoek-Brown 岩體強度、半徑 %d、窗格 ±%d、連鎖 %d 輪%s"):format(
+			f.enabled and "開" or "關", f.radius, f.window, f.max_cascade,
+			f.strength_scale ~= 1 and ("；舊設定 strength_scale %g"):format(f.strength_scale) or "")},
+		{"懸臂斷裂", ("%s；半徑 %d%s"):format(o.enabled and "開" or "關", o.radius,
+			o.scale ~= 1 and ("；舊設定 overhang_scale %g"):format(o.scale) or "")},
 		{"支撐判定", ("%s；半徑 %d、剛體上限 %d 格"):format(sp.enabled and "開" or "關", sp.radius, sp.rigid_max)},
 		{"碎石安息角", ("%s；%g°"):format(sl.enabled and "開" or "關", sl.angle)},
 		{"落石翻滾", ("%s；其他表面 Rn %.2f Rt %.2f μr %.2f"):format(rf.enabled and "開" or "關", rf.rn, rf.rt, rf.mu_roll)},
@@ -310,18 +339,23 @@ local function tab_overview()
 end
 
 local function tab_lith()
-	local rows = {{"岩性", "γ (kN/m³)", "UCS (MPa)", "σt (MPa)", "Rn", "Rt", "μr", "破碎 h_ref (m)",
-		"L_max 1 m 厚", "L_max 4 m 厚"}}
+	local rows = {{"岩性", "γ (kN/m³)", "σci (MPa)", "σt (MPa)", "mi", "GSI", "地表 σc,m / σt,m",
+		"深部 σc,m / σt,m", "L_max 1 / 4 m 厚（地表）", "破碎 h_ref (m)"}}
+	local rock = rockmech.collapse.rock
 	for _, key in ipairs(cfg.lithology_order) do
 		local l = cfg.lithologies[key]
-		local function lm(t) return ("%.1f m"):format(rockmech.overhang.lmax(l.tensile, l.gamma, t, cfg.overhang.scale)) end
-		rows[#rows + 1] = {l.description, l.gamma, l.ucs, l.tensile, l.rn or "-", l.rt or "-",
-			l.mu_roll or "-", l.break_height or "-", lm(1), lm(4)}
+		local top = rock.at(key, cfg.surface_y, nil)
+		local deep = rock.at(key, cfg.surface_y - 1e6, nil)
+		local function lm(t) return ("%.1f"):format(rockmech.overhang.lmax(top.sigt, l.gamma, t, cfg.overhang.scale)) end
+		rows[#rows + 1] = {l.description, l.gamma, l.ucs, l.tensile, l.mi or "-", rockmech.gsi_profile_str(l.gsi),
+			("%.3g / %.3g"):format(top.ucs_m, top.sigt), ("%.3g / %.3g"):format(deep.ucs_m, deep.sigt),
+			lm(1) .. " / " .. lm(4) .. " m", l.break_height or "-"}
 	end
 	local c = "text;text,align=right;text,align=right;text,align=right;text,align=right;text,align=right;" ..
 		"text,align=right;text,align=right;text,align=right;text,align=right"
 	return table_el(0.3, 0.9, 16.4, 4, "rm_t2", c, rows) ..
-		("label[0.3,5.4;%s]"):format(F("L_max = √(σt·縮放·t / (3γ))：懸臂自重彎曲的極限長度；頂板跨度約為其 2 倍。"))
+		("label[0.3,5.4;%s]"):format(F(("σci、σt 為完整岩石（實驗室）值；岩體強度依 Hoek-Brown（GSI、mi、D）並 ÷ 相似比 N=%g。"):format(cfg.model_scale))) ..
+		("label[0.3,5.9;%s]"):format(F("σc,m = σci·s^a（臨空面單軸）；σt,m = σt·s·mi/mb；L_max = √(σt,m·t / (3γ))，頂板跨度約為其 2 倍。"))
 end
 
 local function tab_joints()
@@ -365,7 +399,8 @@ local function tab_stress(name)
 			{"局部 σzz（×集中）", ("%.3f MPa（×%.2f）"):format(s.sz, s.fz)},
 			{"局部 σxz", ("%.3f MPa"):format(s.sxz)},
 			{"主應力 σ1 / σ3", ("%.3f / %.3f MPa"):format(s.s1, s.s3)},
-			{"q = σ1 − σ3 / 強度", ("%.3f / %.2f MPa"):format(s.q, s.strength)},
+			{"岩體強度", rockmech.rockmass_line(s.rm)},
+			{"q = σ1 − σ3 / 岩體強度 q_f(σ3)", ("%.3f / %.3f MPa"):format(s.q, s.strength)},
 			{"軸差 FS", ("%.2f"):format(s.fs_axial)},
 			{"節理弱面", rockmech.slip_line(s)},
 			{"懸臂", rockmech.overhang_line(r.overhang)},

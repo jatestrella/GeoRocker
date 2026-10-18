@@ -42,8 +42,8 @@ local function compass_report(pos, nodename)
 	local st = rockmech.collapse.initial_stress(pos, lith)
 	lines[#lines + 1] = core.colorize("#ffd080", "[rockmech 羅盤] ") .. fmt_pos(pos) ..
 		"  " .. lith.description .. lith_note
-	lines[#lines + 1] = ("  γ=%.1f kN/m³  UCS=%g MPa  σt=%g MPa"):format(
-		lith.gamma, lith.ucs, lith.tensile)
+	lines[#lines + 1] = ("  γ=%.1f kN/m³  σci=%g MPa  σt=%g MPa  mi=%g（完整岩石）"):format(
+		lith.gamma, lith.ucs, lith.tensile, lith.mi or 0)
 	lines[#lines + 1] = ("  上覆岩層 h=%d m（地表 y=%d%s）  初始 σv=Σγ·Δh=%.3f MPa"):format(
 		st.h, st.top_y, st.extrapolated and "，外插至 y0" or "", st.sv)
 	lines[#lines + 1] = ("  初始水平主應力：σH=%.3f（K_H=%.2f%s）σh=%.3f（K_h=%.2f%s）MPa，σH 方位 %g°"):format(
@@ -69,7 +69,8 @@ local function compass_report(pos, nodename)
 			else
 				verdict = core.colorize("#80ff80", "穩定")
 			end
-			lines[#lines + 1] = ("  q=σ1−σ3=%.2f MPa  強度=%.2f MPa  FS=%.2f  → %s"):format(
+			if fs.rm then lines[#lines + 1] = "  " .. rockmech.rockmass_line(fs.rm) end
+			lines[#lines + 1] = ("  q=σ1−σ3=%.3f MPa  岩體強度 q_f(σ3)=%.3f MPa  FS=%.2f  → %s"):format(
 				fs.q, fs.strength, fs.fs_axial, verdict)
 			lines[#lines + 1] = "  " .. rockmech.slip_line(fs)
 			lines[#lines + 1] = "  " .. rockmech.overhang_line(rockmech.collapse.overhang_state(pos))
@@ -471,8 +472,8 @@ core.register_chatcommand("rockmech_failure", {
 		end
 		local c = vector.round(player:get_pos())
 		local failed, stats, ms = rockmech.collapse.evaluate_failure({c}, r)
-		local msg = ("臨空岩格 %d 格，破壞 %d 格，%.1f ms（半徑 %d，強度縮放 %g）"):format(
-			stats.evaluated, stats.failed, ms, r, cfg.failure.strength_scale)
+		local msg = ("臨空岩格 %d 格，破壞 %d 格，%.1f ms（半徑 %d，相似比 N %g）"):format(
+			stats.evaluated, stats.failed, ms, r, cfg.model_scale)
 		local s = stats.min_fs_state
 		if s then
 			local p = stats.min_fs_pos
@@ -501,12 +502,12 @@ local TOGGLE_PRIV = "rockmech"
 local TOGGLES = {
 	{
 		id = "failure", tbl = cfg.failure,
-		label = "軸差破壞準則  q = σ1 − σ3 ≥ UCS × 縮放",
+		label = "軸差破壞準則  Hoek-Brown 岩體強度（GSI）",
 		short = "軸差破壞準則",
 		info = function()
 			local f = cfg.failure
-			return ("強度縮放 %g，檢查半徑 %d m，連鎖上限 %d 輪"):format(
-				f.strength_scale, f.radius, f.max_cascade)
+			return ("相似比 N %g，檢查半徑 %d m，連鎖上限 %d 輪"):format(
+				cfg.model_scale, f.radius, f.max_cascade)
 		end,
 		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
 	},
@@ -554,7 +555,7 @@ local TOGGLES = {
 		label = "懸臂／頂板斷裂（依張力強度與厚度）",
 		short = "懸臂斷裂",
 		info = function()
-			return ("L_max = √(σt·t/(3γ))；強度縮放 %g；%s"):format(cfg.overhang.scale,
+			return ("L_max = √(σt,m·t/(3γ))，σt,m 依 GSI 與 N；%s"):format(
 				cfg.overhang.joints and "節理切過的根部斷面不傳張力" or "不考慮節理")
 		end,
 		off_note = "關閉：連著岩體的懸空岩石不會因為伸太長而斷",

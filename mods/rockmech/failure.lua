@@ -16,7 +16,10 @@
 --    下方臨空（頂板／懸垂）時 σy = 0。上方臨空不歸零（階梯狀坡面上
 --    σy 代表沿坡面方向的壓應力）。
 --    → 陡坡：臨空格後方的柱很高，擴散後 σy 大；緩坡：後方柱逐階變矮，σy 小。
--- 5. 判定：q = σ1 − σ3 ≥ UCS × strength_scale → 破壞（只對臨空岩格）。
+-- 5. 判定（只對臨空岩格）：
+--      params.rock（rockmass.new 的查詢器）：Hoek-Brown 岩體強度 q ≥ q_f(σ3) = σci·(mb·σ3/σci + s)^a
+--      （GSI 取該格 param2，或依岩性的深度剖面；強度已除以相似比 N）
+--      沒有 params.rock：q = σ1 − σ3 ≥ UCS × strength_scale
 -- 6. 弱面（Jaeger single plane of weakness）：穿過此格的每組節理面（法向 n）
 --      σn = n·σ·n、τ = |σ·n − σn·n|，τ ≥ cj + σn·tan φj → 沿節理滑動。
 --    運動學（daylight）：節理須傾向某個側向臨空面（向上法向的水平分量指向
@@ -33,6 +36,7 @@
 --   solid_of  = {[cid] = true},      -- 提供側向圍壓（walkable，含未載入的 ignore）
 --   weight_of = {[cid] = γ},         -- 承載荷重的格與其單位重 (kN/m³)；nil = 不承載
 --   lith_of   = {[cid] = "shale"},   -- 本 mod 岩性（只有這些會被評估）
+--   p2        = {param2...},          -- （可選）與 data 同索引；岩性格的 param2 1..100 = 該格的 GSI
 -- }
 -- 網格外：側向視為實心（保守），荷重窗格不計入。
 --
@@ -289,7 +293,13 @@ function failure.cell_state(g, x, y, z, p)
 
 	local s1, s3 = stress.principal(sx, sy, sz, sxz)
 	local q = s1 - s3
-	local strength = lith.ucs * p.strength_scale
+	local strength, rm
+	if p.rock then
+		rm = p.rock.at(key, y, g.p2 and g.p2[i])
+		strength = p.rock.q_fail(rm, s3)
+	else
+		strength = lith.ucs * (p.strength_scale or 1)
+	end
 	local exposed = ex or ez or e_up or e_down
 
 	-- 弱面滑動
@@ -334,7 +344,7 @@ function failure.cell_state(g, x, y, z, p)
 		factor = sv0 > 0 and sv / sv0 or 1,
 		sx = sx, sy = sy, sz = sz, sxz = sxz, s1 = s1, s3 = s3, q = q,
 		sH_far = sH_own, sh_far = sh_own, fx = fx, fz = fz,
-		strength = strength, fs = fs, fs_axial = fs_axial, fs_joint = fs_joint,
+		strength = strength, rm = rm, fs = fs, fs_axial = fs_axial, fs_joint = fs_joint,
 		slip_set = slip_set, slip_sn = slip_sn, slip_tau = slip_tau, n_joints = n_joints,
 		fails_axial = fails_axial, fails_slip = fails_slip,
 		exposed_x = ex, exposed_z = ez, exposed_up = e_up, exposed_down = e_down,

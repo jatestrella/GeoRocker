@@ -477,9 +477,10 @@ function collapse.read_grid(minp, maxp, no_overburden)
     local top = {x = maxp.x, y = maxp.y + (no_overburden and 0 or fcfg.overburden_scan), z = maxp.z}
     local emin, emax = vm:read_from_map(minp, top)
     local data = vm:get_data()
+    local p2 = vm:get_param2_data()   -- 岩性格的 param2 1..100 = 該格的 GSI（rockmass.lua）
     vm:close()
     return {
-        data = data,
+        data = data, p2 = p2,
         ox = emin.x, oy = emin.y, oz = emin.z,
         nx = emax.x - emin.x + 1, ny = emax.y - emin.y + 1, nz = emax.z - emin.z + 1,
         solid_of = solid_of, weight_of = weight_of, lith_of = lith_of, bonded_of = bonded_of,
@@ -546,18 +547,30 @@ local function joints_at(x, y, z, sets)
 end
 collapse.joints_at = joints_at
 
+-- 岩體強度（Hoek-Brown、GSI、相似比 N）。舊設定 strength_scale 仍乘在 σci 上
+local rock = rockmech.rockmass.new(cfg, {ucs_scale = fcfg.strength_scale})
+local model_n = rock.N
+collapse.rock = rock
+
+-- 懸臂斷裂用：格 i 的岩體張力強度 (MPa)
+local function tensile_at(g, i, key)
+    if not key then return cfg.overhang.tensile_other / model_n end
+    local ly = math.floor((i - 1) / g.nx) % g.ny
+    return rock.at(key, g.oy + ly, g.p2 and g.p2[i]).sigt
+end
+
 -- detail = true：不做前置篩選（HUD／資訊頁／羅盤顯示完整的弱面資訊）
 function collapse.failure_params(detail)
     return {
         detail = detail,
         joint_sets = rockmech.get_joint_sets(),
         axial = fcfg.enabled,
-        weakness = wcfg.enabled and {c = wcfg.c, tanphi = math.tan(math.rad(wcfg.phi)),
+        weakness = wcfg.enabled and {c = wcfg.c / model_n, tanphi = math.tan(math.rad(wcfg.phi)),
             daylight = wcfg.daylight} or nil,
         joints_at = joints_at,
         surface_y = cfg.surface_y, k0 = cfg.k0, lithologies = cfg.lithologies,
         window = fcfg.window,
-        strength_scale = fcfg.strength_scale,
+        rock = rock,
         KH = cfg.KH, Kh = cfg.Kh, sH0 = cfg.sH0, sh0 = cfg.sh0, sH_azimuth = cfg.sH_azimuth,
     }
 end
@@ -881,7 +894,7 @@ end
 function collapse.overhang_params()
     local ocfg = cfg.overhang
     return {
-        lithologies = cfg.lithologies, scale = ocfg.scale, tensile_other = ocfg.tensile_other,
+        lithologies = cfg.lithologies, scale = ocfg.scale, tensile_at = tensile_at,
         gamma_other = cfg.failure.gamma_other, max_voxels = ocfg.max_voxels,
         face_jointed = ocfg.joints and face_jointed or nil,
     }
@@ -903,7 +916,7 @@ end
 function collapse.keyblock_params()
     return {
         face_set = face_set, joint_sets = rockmech.get_joint_sets(),
-        c = kcfg.c * 1000, tanphi = math.tan(math.rad(cfg.weakness.phi)),
+        c = kcfg.c * 1000 / model_n, tanphi = math.tan(math.rad(cfg.weakness.phi)),
         lithologies = cfg.lithologies, gamma_other = cfg.failure.gamma_other,
         max_cells = kcfg.max_cells,
     }
