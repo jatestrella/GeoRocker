@@ -197,6 +197,7 @@ config.weakness_defaults = {
 	phi = 30,                 -- 節理摩擦角 φj (deg)
 	daylight = true,          -- 運動學條件：節理須傾向臨空面（或下方臨空）才會滑出
 	wedge = true,             -- 楔形：兩組節理都穿過的格，沿交線滑動（交線須朝臨空面露出）
+	max_spacing = 100,        -- 只有間距 ≤ 此值 (m) 的組做逐格滑動（遍在節理）；較大的明確節理只由塊體力學處理
 	lateral_limit = 20,       -- 側向限制 λ (deg)：傾向與臨空面外法向夾角 ≤ λ 才能平面滑動（Markland），凸角除外
 }
 
@@ -471,6 +472,7 @@ function config.load(get)
 	cfg.weakness.c = math.max(0, cfg.weakness.c)
 	cfg.weakness.phi = math.max(0, math.min(89, cfg.weakness.phi))
 	cfg.weakness.lateral_limit = math.max(0, math.min(90, cfg.weakness.lateral_limit))
+	cfg.weakness.max_spacing = math.max(0, cfg.weakness.max_spacing)
 
 	-- 懸臂／頂板斷裂
 	cfg.overhang = load_section("overhang", config.overhang_defaults)

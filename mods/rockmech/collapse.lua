@@ -565,10 +565,25 @@ local function tensile_at(g, i, key)
 end
 
 -- detail = true：不做前置篩選（HUD／資訊頁／羅盤顯示完整的弱面資訊）
+-- 逐格節理滑動（Jaeger／楔形）只用間距 ≤ weakness.max_spacing 的組（遍在節理的概念）；
+-- 間距較大的明確節理由塊體力學處理（關鍵塊體、稜柱、懸臂），避免同一組節理被重複計算
+local weak_src, weak_list
+local function weak_sets()
+    local sets = rockmech.get_joint_sets()
+    if weak_src ~= sets then
+        weak_src, weak_list = sets, {}
+        for _, js in ipairs(sets) do
+            if (js.spacing_eff or js.spacing) <= wcfg.max_spacing then weak_list[#weak_list + 1] = js end
+        end
+    end
+    return weak_list
+end
+collapse.weak_sets = weak_sets
+
 function collapse.failure_params(detail)
     return {
         detail = detail,
-        joint_sets = rockmech.get_joint_sets(),
+        joint_sets = weak_sets(),
         axial = fcfg.enabled,
         weakness = wcfg.enabled and {c = wcfg.c / model_n, tanphi = math.tan(math.rad(wcfg.phi)),
             daylight = wcfg.daylight, wedge = wcfg.wedge, lat_cos = math.cos(math.rad(wcfg.lateral_limit))} or nil,

@@ -208,6 +208,10 @@ rockmech_weakness_lateral_limit (Lateral limit for planar sliding) float 20 0 90
 # (FS = (2c + (sigma_n1 + sigma_n2) tan phi) / shear along the line). The line must daylight like a plane does.
 rockmech_weakness_wedge (Wedge sliding on joint intersections) bool true
 
+# Cell-by-cell joint slip (Jaeger / wedge) only for joint sets with spacing <= this (m): the ubiquitous-joint idea.
+# Wider, explicitly modelled joints are then handled only by block mechanics (key blocks, prisms, overhangs).
+rockmech_weakness_max_spacing (Max spacing for cell-by-cell joint slip) float 100 0 100
+
 [Rockfall]
 
 # Falling rock becomes a tumbling entity (bounce, roll, stop) instead of dropping straight down.
