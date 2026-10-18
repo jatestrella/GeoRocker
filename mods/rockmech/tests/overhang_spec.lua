@@ -402,7 +402,7 @@ describe("overhang 懸空段列表（顯示用）", function()
 	end)
 end)
 
-describe("overhang 層疊荷重（坐在下層上的由下層承擔）", function()
+describe("overhang 層疊荷重（Obert & Duvall 疊層梁）", function()
 	local function layered(t_low, t_up)
 		-- 頁岩：岩柱 x=0（y 1..8）；下層 y 從 8−t_up−t_low+1 起、厚 t_low；上層在其上、厚 t_up；都伸出 x=1..4
 		local top = 8
@@ -427,22 +427,20 @@ describe("overhang 層疊荷重（坐在下層上的由下層承擔）", functio
 		return false
 	end
 
-	it("薄下層（t=1）承擔厚上層（t=2）：下層 FS × 1/3 < 1 → 下層斷，上層由下層承擔", function()
+	it("薄下層（t=1）＋厚上層（t=2）：上層較勁、自己分離，不壓在下層上（m = 1·3/9 < 1）", function()
 		local g, p, low_bot, up_bot = layered(1, 2)
 		local low = overhang.cell_state(g, p, 4, low_bot, 0)
-		assert.near((overhang.lmax(2, 25, 1) / 4) ^ 2 * 1 / 3, low.group_fs, 1e-9)
+		assert.near((overhang.lmax(2, 25, 1) / 4) ^ 2, low.group_fs, 1e-9)
 		local upc = overhang.cell_state(g, p, 4, up_bot, 0)
 		assert.are.equal(0, upc.d)
 		assert.are.equal(math.huge, upc.fs)
-		local groups = overhang.find_failing_local(g, p, {{x = 4, y = low_bot, z = 0}, {x = 4, y = up_bot, z = 0}})
-		assert.is_true(fell(groups, 4, low_bot))
-		assert.is_false(fell(groups, 4, up_bot))
+		assert.are.equal(0, #overhang.find_failing_local(g, p, {{x = 4, y = low_bot, z = 0}, {x = 4, y = up_bot, z = 0}}))
 	end)
 
-	it("厚下層（t=3）承擔薄上層（t=1）：下層 FS × 3/4 ≥ 1 → 都不斷", function()
+	it("厚下層（t=3）承擔薄上層（t=1）：q₁/γt₁ = 9·4/28，下層 FS ÷ 1.286 ≥ 1 → 都不斷", function()
 		local g, p, low_bot, up_bot = layered(3, 1)
 		local low = overhang.cell_state(g, p, 4, low_bot, 0)
-		assert.near((overhang.lmax(2, 25, 3) / 4) ^ 2 * 3 / 4, low.group_fs, 1e-9)
+		assert.near((overhang.lmax(2, 25, 3) / 4) ^ 2 / (9 * 4 / 28), low.group_fs, 1e-9)
 		assert.are.equal(0, #overhang.find_failing_local(g, p, {{x = 4, y = low_bot, z = 0}, {x = 4, y = up_bot, z = 0}}))
 	end)
 end)

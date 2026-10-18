@@ -26,8 +26,9 @@
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
 --     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
---   * 層疊：上段坐在懸空的下段上時，由下段承擔（上段 d = 0），下段的荷重加上上段的厚度：
---     FS × t/(t + load)。
+--   * 層疊（Obert & Duvall 疊層梁）：上段坐在懸空的下段上時（上段 d = 0），下段承受的荷重
+--     q₁ = γ·t₁³·Σt / Σt³（同材料；依序往上加入各層，加入後 q₁ 沒有變大的層自己分離、不加載）。
+--     FS ÷ (q₁ / γt₁)。較厚、較勁的上層自己撐得住，不壓在較薄的下層上。
 --
 -- ## 網格格式
 -- grid = {data, ox, oy, oz, nx, ny, nz, bonded_of, solid_of, lith_of,
@@ -373,9 +374,25 @@ local function local_ctx(g, p)
 				if not rb.supported then add_up(rb, r); visit(rb) end
 			end
 		end
-		-- 層疊：坐在下方懸空 run 上的 run 由下方承擔（d = 0，不用自己的彎曲強度），
-		-- 它的重量加到下方 run 上（load = 坐在上面的 run 厚度總和）
+		-- 層疊：坐在下方懸空 run 上的 run 由下方承擔（d = 0，不用自己的彎曲強度）；
+		-- 下方 run 的荷重倍數依 Obert & Duvall 疊層梁：m = t₁²·Σt / Σt³（只納入會加載的層）
 		local load = {}
+		local function od_factor(lower)
+			local t1 = lower.t
+			if t1 >= THICK then return 1 end
+			local st, st3, best = t1, t1 * t1 * t1, 1
+			local cur = lower
+			for _ = 1, 32 do
+				local ups = up[cur]
+				local u = ups and ups[1]
+				if not u then break end
+				local tu = u.t >= THICK and 1e4 or u.t
+				local m = t1 * t1 * (st + tu) / (st3 + tu * tu * tu)
+				if m <= best then break end   -- 這層比下層勁，自己分離、不加載
+				best, st, st3, cur = m, st + tu, st3 + tu * tu * tu, u
+			end
+			return best
+		end
 		if not aborted then
 			-- 0-1 BFS：坐在下層上的 d = 0（排前面）、與有支撐 run 相鄰的 d = 1、側向 d + 1
 			local front, back, bh = {}, {}, 1
@@ -384,7 +401,7 @@ local function local_ctx(g, p)
 					d[rn] = 0
 					rho[rn] = 1
 					front[#front + 1] = rn
-					load[lower] = (load[lower] or 0) + (rn.t >= THICK and 0 or rn.t)
+					load[lower] = od_factor(lower)
 				end
 			end
 			for _, r in ipairs(frontier) do
@@ -417,14 +434,13 @@ end
 -- run 的懸臂安全係數。根部斷面完好面數 t_eff、run 厚度 t：
 --   σb = M/Z = (γ·t·d²/2) / (t_eff²/6) = 3γ·t·d²/t_eff² → FS = σt/σb = (L_max·rho / d)²，rho = t_eff/t
 -- d 為 nil（碰不到支撐）時 FS = 0。
--- load：坐在這個 run 上、由它承擔的 run 厚度總和（重量 ∝ t + load）：
---   σb = 3γ·(t + load)·d²/t_eff² → FS 再乘 t / (t + load)
+-- load：疊層的荷重倍數 m = q₁/(γt)（Obert & Duvall，≥ 1）：σb × m → FS ÷ m
 -- d = 0：坐在下層岩體上，由下層承擔 → FS = ∞
 local function run_fs(r, d, rho, load)
 	if not d then return 0 end
 	if d == 0 then return math.huge end
 	local f = (r.lmax * (rho or 1) / d) ^ 2
-	if load and load > 0 and r.t < THICK then f = f * r.t / (r.t + load) end
+	if load and load > 1 then f = f / load end
 	return f
 end
 overhang.run_fs = run_fs
@@ -531,11 +547,11 @@ function overhang.cell_state(g, p, x, y, z)
 	local res = ctx.explore(r0)
 	if res.aborted then return {aborted = true, n_cells = res.n_cells} end
 	local d0, rho0 = res.d[r0], res.rho[r0]
-	local load0 = res.load and res.load[r0] or 0
+	local load0 = res.load and res.load[r0] or 1
 	local sigma_b = math.huge
 	if d0 and rho0 and rho0 > 0 then
-		-- σb = 3γ·(t + load)·d²/t_eff²，t_eff = rho·t
-		sigma_b = 3 * r0.crit.gamma * d0 * d0 * (r0.t + load0) / (r0.t * r0.t * rho0 * rho0) / 1000
+		-- σb = 3γ·t·d²/t_eff² × m（疊層荷重倍數），t_eff = rho·t
+		sigma_b = 3 * r0.crit.gamma * d0 * d0 * r0.t * math.max(1, load0) / (r0.t * r0.t * rho0 * rho0) / 1000
 	end
 	local out = {
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
