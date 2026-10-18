@@ -91,6 +91,7 @@ dofile(modpath .. "/tools.lua")
 dofile(modpath .. "/ui.lua")
 dofile(modpath .. "/blasting.lua")
 dofile(modpath .. "/rubble_tool.lua")
+dofile(modpath .. "/worldtools.lua")
 dofile(modpath .. "/fsmask.lua")
 dofile(modpath .. "/jointmesh.lua")
 

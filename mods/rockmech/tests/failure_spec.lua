@@ -311,8 +311,11 @@ describe("failure 節理弱面（Jaeger）", function()
 		assert.is_true(failure.daylights(ne, true, false, true, false, false, c20))
 		-- 傾向 080°、東側臨空：夾角 10° → 可滑
 		assert.is_true(failure.daylights(nvec(60, 80), true, false, false, false, false, c20))
-		-- 下方臨空不受限
-		assert.is_true(failure.daylights(ne, false, false, false, false, true, c20))
+		-- 頂板（只有下方臨空）：單一平面不放行；楔形交線放行
+		assert.is_false(failure.daylights(ne, false, false, false, false, true, c20))
+		assert.is_true(failure.daylights(ne, false, false, false, false, true, c20, nil, true))
+		-- 頂板角落（下方＋東、北臨空）：凸角規則照樣放行
+		assert.is_true(failure.daylights(ne, true, false, true, false, true, c20))
 	end)
 
 	-- 東側是 8 m 高的直立坡面（x ≥ 1 為空氣），坡頂 y = 0

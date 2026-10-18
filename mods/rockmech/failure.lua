@@ -22,7 +22,8 @@
 --      沒有 params.rock：q = σ1 − σ3 ≥ UCS × strength_scale
 -- 6. 弱面（Jaeger single plane of weakness）：穿過此格的每組節理面（法向 n）
 --      σn = n·σ·n、τ = |σ·n − σn·n|，τ ≥ cj + σn·tan φj → 沿節理滑動。
---    運動學（daylight）：下方臨空（頂板／懸垂）任何節理都可釋放；只有上方臨空不算。
+--    運動學（daylight）：只有上方臨空不算。下方臨空（頂板／懸垂）：沒有側向限制時任何節理都可釋放；
+--    有側向限制時只放行楔形（兩組交會），單一平面同側向規則。
 --    側向臨空時（Markland 平面滑動檢核）：節理傾向與坡面外法向的夾角 ≤ λ（側向限制，
 --    weakness.lat_cos = cos λ），或該格在傾向的每個水平分量方向都臨空（凸角，有側向釋放面）。
 --    坡面外法向取「平滑後的坡面方向」（failure.face_normal：同高程 ±2 格內空氣格方向的加權和），
@@ -388,7 +389,7 @@ function failure.cell_state(g, x, y, z, p)
 			wpairs = {}
 			for _, pr in ipairs(failure.wedge_pairs(p.joint_sets)) do
 				if pr.l.y < -0.0175 and (not wk.daylight
-						or failure.daylights(pr.l, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos, fn)) then
+						or failure.daylights(pr.l, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos, fn, true)) then
 					wpairs[#wpairs + 1] = pr
 				end
 			end
@@ -541,8 +542,11 @@ end
 -- ex_p/ex_n：+x/−x 側臨空；ez_p/ez_n：+z/−z 側臨空；e_down：下方臨空
 -- cos_lim：側向限制 cos λ（省略為舊規則：傾向有朝臨空面的分量即可）
 -- fn：平滑後的坡面外法向 {x, z}（可省略）
-function failure.daylights(n, ex_p, ex_n, ez_p, ez_n, e_down, cos_lim, fn)
-	if e_down then return true end
+-- is_line：n 是楔形交線（往下）而不是平面法向。
+-- 有側向限制時，下方臨空（頂板）只放行楔形：單一節理面加上頂板面圍不出可移出的岩塊
+-- （塊體理論：頂板岩塊至少要兩組節理交會），單一平面在頂板也要符合側向條件。
+function failure.daylights(n, ex_p, ex_n, ez_p, ez_n, e_down, cos_lim, fn, is_line)
+	if e_down and (is_line or not cos_lim) then return true end
 	local eps = 1e-9
 	if not cos_lim then
 		return (ex_p and n.x > eps) or (ex_n and n.x < -eps)
