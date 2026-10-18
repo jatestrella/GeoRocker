@@ -626,13 +626,7 @@ function overhang.scan_segments(g, p, starts)
 				if not res.aborted then
 					for _, sg in ipairs((segments(res))) do
 						local _, fs = judge_segment(res, sg)
-						-- 每一欄自己的 FS（顯示用：哪裡弱）；fs 為整段最小（判定用：任一欄不夠就整段斷）
-						local runs = {}
-						for _, r in ipairs(sg) do
-							runs[#runs + 1] = {cells = run_cells(g, {r}),
-								fs = run_fs(r, res.d[r], res.rho[r], res.load and res.load[r])}
-						end
-						out[#out + 1] = {cells = run_cells(g, sg), fs = fs, runs = runs}
+						out[#out + 1] = {cells = run_cells(g, sg), fs = fs}
 					end
 				end
 			end

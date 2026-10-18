@@ -168,15 +168,7 @@ scan_parts[2] = function(st)
 			end
 		end
 		for _, sg in ipairs(rockmech.overhang.scan_segments(grid, collapse.overhang_params(), starts)) do
-			if sg.fs <= 1 or not sg.runs then
-				-- 整段會斷：整段都標（FS 遮罩）
-				for _, p in ipairs(sg.cells) do put(p, sg.fs, "overhang") end
-			else
-				-- 還沒斷：每一欄用自己的 FS（裂紋標在弱的地方；靠近支撐的欄不標）
-				for _, r in ipairs(sg.runs) do
-					for _, p in ipairs(r.cells) do put(p, r.fs, "overhang") end
-				end
-			end
+			for _, p in ipairs(sg.cells) do put(p, sg.fs, "overhang") end
 		end
 	end
 

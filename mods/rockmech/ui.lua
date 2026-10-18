@@ -177,11 +177,7 @@ local function fmt_report_lines(r, header, pname)
 	if cfg.overhang.enabled then
 		local v = "—"
 		if o and o.supported then v = "∞"
-		elseif o and o.group_fs then
-			-- 本欄 FS；整段最小較低時另外標出（任一欄不夠，整段會從根部斷）
-			v = fs_short(o.fs or o.group_fs)
-			if o.fs and o.group_fs < o.fs then v = v .. "（整段 " .. fs_short(o.group_fs) .. "）" end
-		end
+		elseif o and o.group_fs then v = fs_short(o.group_fs) end
 		parts[#parts + 1] = "懸臂 " .. v
 	end
 	local kb = r.keyblock
