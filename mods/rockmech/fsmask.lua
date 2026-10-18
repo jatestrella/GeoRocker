@@ -345,6 +345,20 @@ local function apply(player, a, center, cells)
 	end
 end
 
+-- 警戒裂紋的破壞機制名稱（HUD 用）
+local WARN_LABEL = {
+	slip = "節理滑動", axial = "軸差破壞", overhang = "懸臂斷裂", keyblock = "關鍵塊體",
+	mass = "整體滑動（稜柱）", shear = "節理受剪（只警示，不會因此掉落）",
+}
+
+-- 玩家看到的某格裂紋：回傳 {kind, label, fs} 或 nil
+function rockmech.fswarn_at(name, pos)
+	local a = active[name]
+	local m = a and a.wmarks[pkey(vector.round(pos))]
+	if not (m and m.kind) then return nil end
+	return {kind = m.kind, label = WARN_LABEL[m.kind] or m.kind, fs = m.fs}
+end
+
 -- 警戒裂紋標記（1 < FS < max）：裂紋級數變了就換貼圖
 local function apply_warn(player, a, center, cells)
 	by_distance(cells, center)
@@ -360,6 +374,7 @@ local function apply_warn(player, a, center, cells)
 		local m = a.wmarks[k]
 		if m and m.obj and not m.obj:get_pos() then m.obj = nil end
 		if not m then m = {}; a.wmarks[k] = m end
+		m.kind, m.fs = c.kind, c.fs
 		if not m.obj then
 			m.obj = core.add_entity(c.pos, "rockmech:fswarn")
 			m.stage = nil
@@ -451,6 +466,15 @@ end
 -- 改變紀錄（警戒裂紋判斷「受影響」用）：{pos, n}，n 為流水號
 local change_log, change_n = {}, 0
 local CHANGE_LOG_MAX = 4000
+
+-- 放置非岩石方塊（墊支撐等）不經過 queue_support_check，另外標記附近需更新
+core.register_on_placenode(function(pos)
+	for _, a in pairs(active) do
+		if a.center and vector.distance(pos, a.center) <= LIVE_R + 2 * cfg.failure.window + 2 then
+			a.dirty = true
+		end
+	end
+end)
 
 local orig_queue = collapse.queue_support_check
 collapse.queue_support_check = function(pos, prev)

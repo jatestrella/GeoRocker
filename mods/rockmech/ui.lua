@@ -154,7 +154,7 @@ local function fs_short(f)
 end
 
 -- HUD 的精簡報告（4 行）。詳細數值在資訊頁（/rockmech）與羅盤
-local function fmt_report_lines(r, header)
+local function fmt_report_lines(r, header, pname)
 	local p, i = r.pos, r.init
 	local lines = {}
 	lines[#lines + 1] = ("%s (%d,%d,%d) %s%s　上覆 %d m%s"):format(header, p.x, p.y, p.z,
@@ -190,6 +190,12 @@ local function fmt_report_lines(r, header)
 		parts[#parts + 1] = "塊體 " .. v
 	end
 	lines[#lines + 1] = "FS　" .. table.concat(parts, "｜")
+	-- 這格有警戒裂紋：是哪種破壞、FS 多少
+	local w = pname and rockmech.fswarn_at and rockmech.fswarn_at(pname, p)
+	if w then
+		lines[#lines + 1] = core.colorize("#ffb040", ("裂紋：%s　FS %s"):format(w.label,
+			w.kind == "shear" and w.fs <= 1.011 and "≤ 1" or fs_short(w.fs)))
+	end
 	-- 周圍最低
 	local nb = r.nearby
 	if nb then
@@ -261,7 +267,7 @@ core.register_globalstep(function(dtime)
 			-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
 			if not h or h.key ~= key or h.t > 2 then
 				local lines = fmt_report_lines(rockmech.stress_report(target),
-					target == pos and "[rockmech]" or "[rockmech 腳下]")
+					target == pos and "[rockmech]" or "[rockmech 腳下]", name)
 				hud_set(player, table.concat(lines, "\n"))
 				huds[name].key = key
 				huds[name].t = 0
