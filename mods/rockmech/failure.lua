@@ -45,6 +45,8 @@
 --   weight_of = {[cid] = γ},         -- 承載荷重的格與其單位重 (kN/m³)；nil = 不承載
 --   lith_of   = {[cid] = "shale"},   -- 本 mod 岩性（只有這些會被評估）
 --   p2        = {param2...},          -- （可選）與 data 同索引；岩性格的 param2 1..100 = 該格的 GSI
+--   rubble_of = {[cid] = 級數比例 k/8}, -- （可選）碎石。側面的碎石只給側壓 K·γ_r·h_r（見 cell_state），
+--                                       -- 不當作完整岩石的圍壓；下方、上方的碎石照樣是實心（支撐、荷重）
 -- }
 -- 網格外：側向視為實心（保守），荷重窗格不計入。
 --
@@ -70,6 +72,34 @@ local function is_solid(g, x, y, z)
 	return g.solid_of[g.data[i]] == true
 end
 failure.is_solid = is_solid
+
+-- 側向是否「開放」：非實心，或是碎石（碎石只給側壓，不是岩體的圍壓）
+local function is_open(g, x, y, z)
+	local i = index(g, x, y, z)
+	if not i then return false end
+	local c = g.data[i]
+	return g.solid_of[c] ~= true or (g.rubble_of ~= nil and g.rubble_of[c] ~= nil)
+end
+failure.is_open = is_open
+
+-- 側面碎石的側壓 (MPa)：K·γ_r·h_r，h_r = 該格中心以上的碎石高度（同一欄連續的碎石，依級數）。
+-- 非碎石回傳 0
+local function rubble_pressure(g, x, y, z, p)
+	local ro = g.rubble_of
+	if not ro then return 0 end
+	local i = index(g, x, y, z)
+	local lv = i and ro[g.data[i]]
+	if not lv then return 0 end
+	local h = lv * 0.5
+	for yy = y + 1, y + 64 do
+		local j = index(g, x, yy, z)
+		local l2 = j and ro[g.data[j]]
+		if not l2 then break end
+		h = h + l2
+	end
+	return (p.rubble_k or 0.43) * (p.rubble_gamma or 20) * h / 1000
+end
+failure.rubble_pressure = rubble_pressure
 
 -- 計算柱狀荷重 L 與頂板荷重 R（kPa），存成「緊湊陣列」：
 -- 只存需要評估的範圍（g.req 的欄 × 高度帶），上方只做累加不儲存。
@@ -285,9 +315,18 @@ function failure.cell_state(g, x, y, z, p)
 	local szz_c = (c2 * sH_own + s2 * sh_own) * fz
 	local sxz = (sH_own - sh_own) * sc
 
-	local ex_p, ex_n = not is_solid(g, x + 1, y, z), not is_solid(g, x - 1, y, z)
-	local ez_p, ez_n = not is_solid(g, x, y, z + 1), not is_solid(g, x, y, z - 1)
+	local ex_p, ex_n = is_open(g, x + 1, y, z), is_open(g, x - 1, y, z)
+	local ez_p, ez_n = is_open(g, x, y, z + 1), is_open(g, x, y, z - 1)
 	local ex, ez = ex_p or ex_n, ez_p or ez_n
+	-- 臨空面上的法向壓力：空氣 0、碎石 K·γ_r·h_r；同一軸兩側都臨空取小者
+	local px, pz = 0, 0
+	if g.rubble_of and (ex or ez) then
+		local function side(open, xx, zz)
+			return open and rubble_pressure(g, xx, y, zz, p) or math.huge
+		end
+		if ex then px = math.min(side(ex_p, x + 1, z), side(ex_n, x - 1, z)) end
+		if ez then pz = math.min(side(ez_p, x, z + 1), side(ez_n, x, z - 1)) end
+	end
 	-- 平滑後的坡面外法向（側向臨空時）：自由面條件與節理運動學共用
 	local fn = (ex or ez) and failure.face_normal(g, x, y, z) or nil
 	local e_up = not is_solid(g, x, y + 1, z)
@@ -299,17 +338,22 @@ function failure.cell_state(g, x, y, z, p)
 	-- 側向只朝一個軸臨空時，自由面取平滑後的坡面法向 f（斜向坡面是階梯狀，單看軸向會把
 	-- 沿坡面法向的壓應力留下）：水平應力只保留沿坡面切向 t 的 σtt。平直的坡面 f 為軸向，
 	-- 結果與逐軸歸零相同。兩個軸都臨空（凸角、突出的岩柱）時兩個方向都歸零。
+	-- 側面是碎石時，法向應力不是 0 而是碎石側壓 px／pz（剪應力仍為 0）。
 	local sx, sz
 	if ex and ez then
-		sx, sz, sxz = 0, 0, 0
+		sx, sz, sxz = px, pz, 0
 	elseif ex or ez then
+		local pn = ex and px or pz
 		if fn and math.abs(fn.x) < 0.9999 and math.abs(fn.z) < 0.9999 then
 			local tx, tz = -fn.z, fn.x
 			local stt = sxx_c * tx * tx + 2 * sxz * tx * tz + szz_c * tz * tz
-			sx, sz, sxz = stt * tx * tx, stt * tz * tz, stt * tx * tz
+			local fx_, fz_ = fn.x, fn.z
+			sx = stt * tx * tx + pn * fx_ * fx_
+			sz = stt * tz * tz + pn * fz_ * fz_
+			sxz = stt * tx * tz + pn * fx_ * fz_
 		else
-			sx = ex and 0 or sxx_c
-			sz = ez and 0 or szz_c
+			sx = ex and px or sxx_c
+			sz = ez and pz or szz_c
 			sxz = 0
 		end
 	else
@@ -482,7 +526,7 @@ function failure.face_normal(g, x, y, z, r)
 	local sx, sz = 0, 0
 	for dz = -r, r do
 		for dx = -r, r do
-			if (dx ~= 0 or dz ~= 0) and not is_solid(g, x + dx, y, z + dz) then
+			if (dx ~= 0 or dz ~= 0) and is_open(g, x + dx, y, z + dz) then
 				local d2 = dx * dx + dz * dz
 				sx, sz = sx + dx / d2, sz + dz / d2
 			end
@@ -522,9 +566,9 @@ end
 
 -- 是否有任一面臨空（便宜的前置篩選）
 local function is_exposed(g, x, y, z)
-	return not is_solid(g, x + 1, y, z) or not is_solid(g, x - 1, y, z)
+	return is_open(g, x + 1, y, z) or is_open(g, x - 1, y, z)
 		or not is_solid(g, x, y + 1, z) or not is_solid(g, x, y - 1, z)
-		or not is_solid(g, x, y, z + 1) or not is_solid(g, x, y, z - 1)
+		or is_open(g, x, y, z + 1) or is_open(g, x, y, z - 1)
 end
 failure.is_exposed = is_exposed
 

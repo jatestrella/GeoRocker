@@ -180,3 +180,72 @@ describe("keyblock 滑到平地就停", function()
 		assert.is_true(off.z <= 2)
 	end)
 end)
+
+describe("keyblock 整體滑動（大型楔形／平面）", function()
+	local joints = load_module("joints")
+	-- 正北、正東傾向 60° 的貫通節理（間距 4 m）
+	local sets = joints.prepare({
+		{id = 2, name = "J2", dip = 60, dipdir = 0, spacing = 4, persistence = 1, phi = 30, offset = 0},
+		{id = 3, name = "J3", dip = 60, dipdir = 90, spacing = 4, persistence = 1, phi = 30, offset = 0},
+	}, 1, 8, "patch")
+	local RR = 20
+	local function grid(solid)
+		local g = {ox = -RR, oy = -RR, oz = -RR, nx = 2 * RR + 1, ny = 2 * RR + 1, nz = 2 * RR + 1, data = {},
+			bonded_of = {[ROCK] = true}, solid_of = {[ROCK] = true}, lith_of = {[ROCK] = "rock"}}
+		for z = -RR, RR do for y = -RR, RR do for x = -RR, RR do
+			g.data[1 + (x + RR) + (y + RR) * g.nx + (z + RR) * g.nx * g.ny] = solid(x, y, z) and ROCK or AIR
+		end end end
+		local p = {face_set = function(x, y, z, axis) return joints.face_joint(sets, x, y, z, axis) end,
+			joint_sets = sets, c = 0, tanphi = TAN30, lithologies = {rock = {gamma = GAMMA}},
+			max_mass = 20000}
+		return g, p
+	end
+
+	-- 岩角的稜線（x = 0、z = 0）上的臨空格
+	local edge = {}
+	for y = -13, 0 do edge[#edge + 1] = {x = 0, y = y, z = 0} end
+
+	it("凸出的岩角（東、北兩面臨空）：J2∩J3 上方整團沿交線滑出", function()
+		local g, p = grid(function(x, y, z) return x <= 0 and z <= 0 and y <= 0 or y <= -14 end)
+		local masses = keyblock.find_masses(g, p, edge)
+		assert.is_true(#masses >= 1)
+		local m = masses[1]
+		assert.are.equal("wedge", m.mode)
+		assert.is_true(m.fs < 1)
+		assert.is_true(#m.cells > 50)
+		assert.is_true(m.dir.x > 0 and m.dir.z > 0)   -- 交線朝東北
+	end)
+
+	it("筆直的北向長壁：交線（045°）斜向露出，稜柱照樣滑出", function()
+		local g, p = grid(function(x, y, z) return z <= 0 and y <= 0 or y <= -14 end)
+		local masses = keyblock.find_masses(g, p, edge)
+		assert.is_true(#masses >= 1)
+		assert.are.equal("wedge", masses[1].mode)
+	end)
+
+	it("南向的牆：交線往牆裡（坡腳前方是岩體），不滑", function()
+		local g, p = grid(function(x, y, z) return z >= 0 and y <= 0 or y <= -14 end)
+		local starts = {}
+		for y = -13, 0 do starts[#starts + 1] = {x = 0, y = y, z = 0} end
+		local masses = keyblock.find_masses(g, p, starts)
+		assert.are.equal(0, #masses)
+		-- �Y�}�U�誺����]���_�I�]��u�¤U�S�X�]����G�U���O�|������^
+		local g2, p2 = grid(function(x, y, z) return z >= 0 and y <= 0 or y <= -14 end)
+		assert.are.equal(0, #keyblock.find_masses(g2, p2, {{x = 0, y = -14, z = -1}}))
+	end)
+
+	it("岩橋：bridge_c 未設定時有岩橋就不判定", function()
+		local sets2 = joints.prepare({
+			{id = 2, name = "J2", dip = 60, dipdir = 0, spacing = 4, persistence = 0.5, phi = 30, offset = 0},
+			{id = 3, name = "J3", dip = 60, dipdir = 90, spacing = 4, persistence = 0.5, phi = 30, offset = 0},
+		}, 7, 8, "patch")
+		local g, p = grid(function(x, y, z) return x <= 0 and z <= 0 and y <= 0 or y <= -14 end)
+		p.joint_sets = sets2
+		p.face_set = function(x, y, z, axis) return joints.face_joint(sets2, x, y, z, axis) end
+		local masses = keyblock.find_masses(g, p, edge)
+		assert.are.equal(0, #masses)
+		-- 岩橋強度很低 → 照樣滑
+		p.bridge_c = 1
+		assert.is_true(#keyblock.find_masses(g, p, edge) >= 1)
+	end)
+end)

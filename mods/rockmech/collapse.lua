@@ -439,10 +439,14 @@ local fcfg = cfg.failure
 local stress = rockmech.stress
 local failure = rockmech.failure
 
-local solid_of, weight_of, lith_of, bonded_of
+local solid_of, weight_of, lith_of, bonded_of, rubble_of
 local function build_cid_maps()
     if solid_of then return end
-    solid_of, weight_of, lith_of, bonded_of = {}, {}, {}, {}
+    solid_of, weight_of, lith_of, bonded_of, rubble_of = {}, {}, {}, {}, {}
+    -- 碎石：cid → 級數比例（側面的碎石只給側壓，見 failure.lua）
+    for _, n in ipairs(rockmech.rubble_nodes) do
+        rubble_of[core.get_content_id(n)] = (rockmech.rubble_level[n] or rockmech.RUBBLE_LEVELS) / rockmech.RUBBLE_LEVELS
+    end
     for name, def in pairs(core.registered_nodes) do
         local cid = core.get_content_id(name)
         solid_of[cid] = def.walkable ~= false
@@ -484,6 +488,7 @@ function collapse.read_grid(minp, maxp, no_overburden)
         ox = emin.x, oy = emin.y, oz = emin.z,
         nx = emax.x - emin.x + 1, ny = emax.y - emin.y + 1, nz = emax.z - emin.z + 1,
         solid_of = solid_of, weight_of = weight_of, lith_of = lith_of, bonded_of = bonded_of,
+        rubble_of = rubble_of,
         -- 實際需要的範圍（failure.compute_loads 只算這些欄）
         req = {x1 = minp.x, x2 = maxp.x, z1 = minp.z, z2 = maxp.z, y1 = minp.y, y2 = maxp.y},
     }
@@ -571,6 +576,7 @@ function collapse.failure_params(detail)
         surface_y = cfg.surface_y, k0 = cfg.k0, lithologies = cfg.lithologies,
         window = fcfg.window,
         rock = rock,
+        rubble_k = 1 - math.sin(math.rad(cfg.slope.angle)), rubble_gamma = fcfg.gamma_other,
         KH = cfg.KH, Kh = cfg.Kh, sH0 = cfg.sH0, sh0 = cfg.sh0, sH_azimuth = cfg.sH_azimuth,
     }
 end
@@ -867,6 +873,7 @@ function collapse.queue_failure_check(pos, prev, r, round)
     r = r or primary_radius()
     add_change(queue_changes, p, prev or core.get_node(p).name, nil, r)
     enqueue(cube(p, r), round or 1)
+    if not round and r == primary_radius() and collapse.queue_mass_check then collapse.queue_mass_check(p) end
 end
 
 -- 8. 支撐判定（模型見 support.lua）
@@ -1061,7 +1068,7 @@ local function run_support_check()
             for _, s in ipairs(g.starts) do kstarts[#kstarts + 1] = s end
             local gnx, gny, gnz = grid.nx, grid.ny, grid.nz
             local gsy, gsz = gnx, gnx * gny
-            local gdata, gbond, gsolid = grid.data, grid.bonded_of, grid.solid_of
+            local gdata, gbond, gsolid, grub = grid.data, grid.bonded_of, grid.solid_of, grid.rubble_of
             local kseen = {}
             for _, c in ipairs(changes.list) do
                 local rr = c.r or primary_radius()
@@ -1071,9 +1078,9 @@ local function run_support_check()
                         local i = 1 + lx + ly * gsy + lz * gsz
                         if not kseen[i] and gbond[gdata[i]] then
                             kseen[i] = true
-                            if not gsolid[gdata[i + 1]] or not gsolid[gdata[i - 1]]
-                                    or not gsolid[gdata[i + gsy]] or not gsolid[gdata[i - gsy]]
-                                    or not gsolid[gdata[i + gsz]] or not gsolid[gdata[i - gsz]] then
+                            local function open(j) return not gsolid[gdata[j]] or grub[gdata[j]] ~= nil end
+                            if open(i + 1) or open(i - 1) or open(i + gsz) or open(i - gsz)
+                                    or not gsolid[gdata[i + gsy]] or not gsolid[gdata[i - gsy]] then
                                 kstarts[#kstarts + 1] = {x = x, y = y, z = z}
                             end
                         end
@@ -1453,4 +1460,136 @@ for _, nodename in ipairs(rockmech.rubble_nodes) do
 end
 for _, nodename in ipairs(rockmech.lith_nodes) do
     register_physics_events(nodename, true)
+end
+
+-- 11. 整體滑動（大型平面／楔形，見 keyblock.find_masses）
+-- 玩家造成的改變（挖掘、爆破、清碴）周圍排入檢查；同一秒內的觸發合併，最多每秒一次。
+-- 讀取範圍較大（mass_radius），所以獨立於每次挖掘都會跑的支撐判定。
+-- 滑出的岩體原地變成碎石，再由顆粒流往下攤開。
+do
+    local mass_centers, mass_scheduled, mass_last = {}, false, 0
+    local function run_mass_check()
+        mass_scheduled = false
+        mass_last = core.get_us_time()
+        local centers = mass_centers
+        mass_centers = {}
+        if not (kcfg.enabled and kcfg.mass) or #centers == 0 then return end
+        local t0 = core.get_us_time()
+        local R = kcfg.mass_radius
+        local rs = primary_radius()
+        -- 中心分群（相距 ≤ R 的合併）
+        local groups = {}
+        for _, c in ipairs(centers) do
+            local g
+            for _, cand in ipairs(groups) do
+                if math.abs(c.x - cand.c.x) <= R and math.abs(c.y - cand.c.y) <= R and math.abs(c.z - cand.c.z) <= R then
+                    g = cand; break
+                end
+            end
+            if not g then g = {c = c, list = {}}; groups[#groups + 1] = g end
+            g.list[#g.list + 1] = c
+        end
+        local kp = collapse.keyblock_params()
+        kp.max_mass = kcfg.mass_max
+        kp.max_floods = kcfg.mass_floods
+        local n_mass, n_cells = 0, 0
+        local stats_all = {floods = 0, visited = 0}
+        for _, grp in ipairs(groups) do
+            local a = {x = math.huge, y = math.huge, z = math.huge}
+            local b = {x = -math.huge, y = -math.huge, z = -math.huge}
+            for _, c in ipairs(grp.list) do
+                for _, k in ipairs({"x", "y", "z"}) do
+                    a[k] = math.min(a[k], c[k]); b[k] = math.max(b[k], c[k])
+                end
+            end
+            local grid = collapse.read_grid(vector.subtract(a, R), vector.add(b, R), true)
+            -- 起點：每個中心 ±rs 內、側面或下方開放的岩格
+            local gnx, gny = grid.nx, grid.ny
+            local gsy, gsz = gnx, gnx * gny
+            local gdata, gsolid, grub, gbond = grid.data, grid.solid_of, grid.rubble_of, grid.bonded_of
+            local function open(j) return not gsolid[gdata[j]] or grub[gdata[j]] ~= nil end
+            local starts, seen = {}, {}
+            for _, c in ipairs(grp.list) do
+                for z = c.z - rs, c.z + rs do for y = c.y - rs, c.y + rs do for x = c.x - rs, c.x + rs do
+                    local lx, ly, lz = x - grid.ox, y - grid.oy, z - grid.oz
+                    if lx >= 1 and ly >= 1 and lz >= 1 and lx <= gnx - 2 and ly <= gny - 2 and lz <= grid.nz - 2 then
+                        local i = 1 + lx + ly * gsy + lz * gsz
+                        if not seen[i] and gbond[gdata[i]] then
+                            seen[i] = true
+                            if open(i + 1) or open(i - 1) or open(i + gsz) or open(i - gsz) or open(i - gsy) then
+                                starts[#starts + 1] = {x = x, y = y, z = z}
+                            end
+                        end
+                    end
+                end end end
+            end
+            -- 岩橋的凝聚力：中心高程的岩體張力強度（kPa）
+            local lith = rockmech.lith_at(grp.c.x, grp.c.y, grp.c.z)
+            kp.bridge_c = rock.at(lith.name, grp.c.y).sigt * 1000
+            local masses, st = rockmech.keyblock.find_masses(grid, kp, starts)
+            stats_all.floods = stats_all.floods + st.floods
+            stats_all.visited = stats_all.visited + st.visited
+            for _, m in ipairs(masses) do
+                n_mass = n_mass + 1
+                n_cells = n_cells + #m.cells
+                core.log("action", ("[rockmech] 整體%s（%s）：%d 格（W %.0f kN）FS %.2f，原地崩成碎石")
+                    :format(m.mode == "wedge" and "楔形滑動" or m.mode == "plane" and "平面滑動" or "落下",
+                        table.concat(m.sets, "∩"), #m.cells, m.W, m.fs))
+                -- 原地變成碎石（VoxelManip 一次寫入，不觸發 on_destruct）
+                local ma = {x = math.huge, y = math.huge, z = math.huge}
+                local mb = {x = -math.huge, y = -math.huge, z = -math.huge}
+                for _, p in ipairs(m.cells) do
+                    for _, k in ipairs({"x", "y", "z"}) do
+                        ma[k] = math.min(ma[k], p[k]); mb[k] = math.max(mb[k], p[k])
+                    end
+                end
+                local vm = core.get_voxel_manip()
+                local e1, e2 = vm:read_from_map(ma, mb)
+                local area = VoxelArea(e1, e2)
+                local data = vm:get_data()
+                local own = {}
+                for _, p in ipairs(m.cells) do
+                    local vi = area:index(p.x, p.y, p.z)
+                    local name = core.get_name_from_content_id(data[vi])
+                    if rockmech.lith_of_node[name] then
+                        data[vi] = core.get_content_id(rockmech.rubble_for(name))
+                    end
+                    own[pos_key(p)] = true
+                end
+                vm:set_data(data)
+                vm:write_to_map(true)
+                vm:close()
+                -- 碎屑與顆粒流：每欄的頂格（由下往上），稍後依序判定
+                local tops = {}
+                for _, p in ipairs(m.cells) do
+                    if not own[pos_key({x = p.x, y = p.y + 1, z = p.z})] then tops[#tops + 1] = p end
+                end
+                table.sort(tops, function(u, v) return u.y < v.y end)
+                local step = math.max(1, math.floor(#tops / 16))
+                for i = 1, #tops, step do debris(tops[i], rockmech.RUBBLE, 8) end
+                for i, p in ipairs(tops) do
+                    core.after(0.2 + 0.02 * i, function() collapse.check_cell(p) end)
+                end
+                -- 岩體後方露出的岩面：一次性的破壞檢查（不再連鎖）
+                for i = 1, #m.cells, math.max(1, math.floor(#m.cells / 8)) do
+                    collapse.queue_failure_check(m.cells[i], nil, secondary_radius(), fcfg.max_cascade)
+                end
+            end
+        end
+        local ms = (core.get_us_time() - t0) / 1000
+        if ms > kcfg.mass_budget_ms or n_mass > 0 then
+            core.log(ms > kcfg.mass_budget_ms and "warning" or "action",
+                ("[rockmech] 整體滑動檢查 %.1f ms：擴展 %d 個組合、%d 格；崩落 %d 團、%d 格")
+                :format(ms, stats_all.floods, stats_all.visited, n_mass, n_cells))
+        end
+    end
+
+    function collapse.queue_mass_check(pos)
+        if not (kcfg.enabled and kcfg.mass) then return end
+        mass_centers[#mass_centers + 1] = vector.round(pos)
+        if mass_scheduled then return end
+        mass_scheduled = true
+        local since = (core.get_us_time() - mass_last) / 1e6
+        core.after(math.max(0.3, 1.0 - since), run_mass_check)
+    end
 end

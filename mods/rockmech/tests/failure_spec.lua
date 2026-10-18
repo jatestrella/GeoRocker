@@ -282,6 +282,25 @@ describe("failure 節理弱面（Jaeger）", function()
 		assert.is_true(st.sx > 0 and st.sz > 0)     -- 沿坡面切向仍有壓應力
 	end)
 
+	it("側面的碎石只給側壓 K·γ·h，不是完整岩石的圍壓", function()
+		local RUB = 2
+		-- 東側 x ≥ 1 為空氣；x = 1、y ≤ −5 堆碎石（高 5 格，頂在 y = −5）
+		local g = make_grid(-8, 6, -20, 4, -5, 5, function(x, y) return x <= 0 and y < 0 end)
+		g.solid_of[RUB] = true
+		g.weight_of[RUB] = 20
+		g.rubble_of = {[RUB] = 1}
+		for z = -5, 5 do for y = -20, -5 do g.data[failure.index(g, 1, y, z)] = RUB end end
+		local p = params()
+		p.rubble_k, p.rubble_gamma = 0.43, 20
+		local st = failure.cell_state(g, 0, -10, 0, p)
+		assert.is_true(st.exposed_x)                   -- 碎石側算臨空
+		-- 碎石頂 y = −5，格 y = −10 中心以上 5.5 m
+		assert.near(0.43 * 20 * 5.5 / 1000, st.sx, 1e-9)
+		-- 沒有 rubble_of（舊行為）：碎石是實心，不臨空
+		g.rubble_of = nil
+		assert.is_false(failure.cell_state(g, 0, -10, 0, p).exposed_x)
+	end)
+
 	it("運動學側向限制（Markland ±λ）：傾向偏 45° 的平面只在凸角才能滑", function()
 		local c20 = math.cos(math.rad(20))
 		local ne = nvec(60, 45)    -- 傾向東北

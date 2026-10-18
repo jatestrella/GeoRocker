@@ -11,6 +11,7 @@
 --   * 鄰格是鍵結格（中間一定是節理） → 屬於該組節理的一個平面。法向量用節理的真實方向：
 --       ν = sign(n·e)·n（由岩塊指向鄰格），依 (組, 正負) 合併；真實面積 = Σ |e·ν|
 --   * 鄰格是其他實心格（碎石、地面…） → 以格面方向為法向量（ν = e），凝聚力 0
+--     碎石（grid.rubble_of）只有在岩塊下方時算接觸面（承托）；側面、上方的碎石擋不住岩塊
 --
 -- ## 運動模式（取運動學上可行者之最小 FS）
 -- 重力方向 g = (0, −1, 0)，W = Σγ (kN)。凝聚力 c (kPa)、tanφ。
@@ -116,6 +117,7 @@ end
 local function contacts(ctx, block)
 	local g, p = ctx.g, ctx.p
 	local data, bonded_of, solid_of, lith_of = g.data, g.bonded_of, g.solid_of, g.lith_of
+	local rubble_of = g.rubble_of or {}
 	local sy, sz = ctx.sy, ctx.sz
 	local W = 0
 	local planes, by_key = {}, {}
@@ -143,7 +145,7 @@ local function contacts(ctx, block)
 						area = abs(dot(e, nu))
 						coh = p.c
 					end
-				elseif solid_of[nb] then
+				elseif solid_of[nb] and not (rubble_of[nb] and a[2] >= 0) then
 					pk = -k        -- 非岩體實心格：依格面方向
 					nu = e
 					area = 1
@@ -264,6 +266,216 @@ function keyblock.find_blocks(g, p, starts)
 		end
 	end
 	return out
+end
+
+---------------------------------------------------------------------------
+-- 整體滑動（楔形稜柱）
+-- 節理貫通、間距小於坡高時，坡面上的小岩塊被其他節理面切成一塊塊、互相卡住；但沿兩組
+-- 節理交線 l 的運動與這兩組的所有平面都平行，所以夾在兩組各自相鄰兩道面之間的「稜柱」
+-- （截面約 間距×間距，沿 l 從坡面延伸到地表）可以整根滑出，其他組（例如近水平的 J1）切過
+-- 稜柱內部也不影響（隨稜柱一起移動、不提供強度）。
+--
+-- 稜柱 = 起點所在、a 組平面編號 = ka 且 b 組 = kb（plane_k = ⌊(m·p + o)/L⌋）的相連鍵結格。
+--   稜柱的下端從坡面露出 → 被空氣隔開，有界；下端插進坡腳前方的岩體（例如坑底）→ 沿 l 一直
+--   延伸到範圍邊界、超過 max_mass 格、或延伸到起點下方 drop_max（預設 12）m 以下 → 沒有露出，不判定。
+-- 邊界：鄰格是鍵結格 → 跨過 a 或 b 組的平面（下方的底面或上方平行的面）；該格面是節理
+--       → 節理面（c、φ），是岩橋（延續性 < 1 的缺口）→ 以岩橋強度 bridge_c 計凝聚力。
+--       其他同 contacts()。力學用 keyblock.analyze（兩個底面的楔形；平行的上方面不擋運動）。
+-- 單一平面的平面滑動（岩板沿走向無限延伸，需要側向釋放面）由小岩塊與逐格節理滑動處理。
+--
+-- params 另需：max_mass（預設 8000）、bridge_c（kPa，岩橋的凝聚力；nil = 有岩橋就不判定）、
+--             max_floods（每次最多擴展幾根稜柱，預設 24）
+-- 回傳 masses = {{cells（世界座標）, W, fs, mode, dir, sets = {組名...}, ks}...}（只含 FS < 1 者）, stats
+
+-- 某組節理在格 (x, y, z)（世界座標）的平面編號
+local function plane_k(js, x, y, z)
+	return math.floor((js.mx * x + js.my * y + js.mz * z + js.o) / js.L)
+end
+keyblock.plane_k = plane_k
+
+function keyblock.find_masses(g, p, starts)
+	local ctx = ctx_new(g, p)
+	local sets = p.joint_sets
+	local data, bonded_of, solid_of, lith_of = g.data, g.bonded_of, g.solid_of, g.lith_of
+	local rubble_of = g.rubble_of or {}
+	local sy, sz = ctx.sy, ctx.sz
+	local ox, oy, oz = g.ox, g.oy, g.oz
+	local max_mass = p.max_mass or 8000
+	local max_floods = p.max_floods or 48
+	local drop_max = p.drop_max or 12
+	local stats = {floods = 0, visited = 0, unbounded = 0, evaluated = 0}
+
+	-- 組合：單一平面與兩兩一對；重力下可能的運動方向（平面：沿傾向往下；楔形：交線往下）
+	local combos = {}
+	for a = 1, #sets do
+		if (sets[a].persistence or 1) > 0 and sets[a].mx then
+			local n = sets[a].n_eff
+			for b = a + 1, #sets do
+				if (sets[b].persistence or 1) > 0 and sets[b].mx then
+					local l = norm(cross(n, sets[b].n_eff))
+					if l then
+						if l.y > 0 then l = {x = -l.x, y = -l.y, z = -l.z} end
+						if -l.y > 0.17 then combos[#combos + 1] = {a, b, dir = l} end
+					end
+				end
+			end
+		end
+	end
+	if #combos == 0 then return {}, stats end
+
+	local function open(i)
+		local c = data[i]
+		return not solid_of[c] or rubble_of[c] ~= nil
+	end
+	-- 起點：鍵結格、由低到高
+	local list = {}
+	for _, s in ipairs(starts) do
+		local lx, ly, lz = s.x - ox, s.y - oy, s.z - oz
+		if lx > ctx.x1 and lx < ctx.x2 and ly > ctx.y1 and ly < ctx.y2 and lz > ctx.z1 and lz < ctx.z2
+				and bonded_of[data[1 + lx + ly * sy + lz * sz]] then
+			list[#list + 1] = {lx, ly, lz}
+		end
+	end
+	table.sort(list, function(u, v) return u[2] < v[2] end)
+
+	local out, tried = {}, {}
+	local taken = {}
+	for _, s in ipairs(list) do
+		if stats.floods >= max_floods then break end
+		local lx, ly, lz = s[1], s[2], s[3]
+		local i0 = 1 + lx + ly * sy + lz * sz
+		for ci, cb in ipairs(combos) do
+			if not taken[i0] and stats.floods < max_floods then
+				-- 運動方向的水平分量須朝向起點的開放側面（或下方開放）
+				local d = cb.dir
+				local hl = sqrt(d.x * d.x + d.z * d.z)
+				local ok = open(i0 - sy)
+				if not ok and hl > EPS then
+					local hx, hz = d.x / hl, d.z / hl
+					ok = (hx > 0.5 and open(i0 + 1)) or (hx < -0.5 and open(i0 - 1))
+						or (hz > 0.5 and open(i0 + sz)) or (hz < -0.5 and open(i0 - sz))
+				end
+				if ok then
+					local wx, wy, wz = ox + lx, oy + ly, oz + lz
+					local ks = {}
+					for t = 1, #cb do ks[t] = plane_k(sets[cb[t]], wx, wy, wz) end
+					local key = ci .. ":" .. table.concat(ks, ",")
+					if not tried[key] then
+						tried[key] = true
+						stats.floods = stats.floods + 1
+						local function inside(x, y, z)
+							for t = 1, #cb do
+								if plane_k(sets[cb[t]], x, y, z) ~= ks[t] then return false end
+							end
+							return true
+						end
+						-- 擴展
+						local cells, set = {}, {[i0] = true}
+						local queue, qi = {{lx, ly, lz}}, 1
+						local bounded = true
+						while qi <= #queue do
+							local c = queue[qi]; qi = qi + 1
+							cells[#cells + 1] = c
+							if #cells > max_mass then bounded = false; break end
+							local cx, cy, cz = c[1], c[2], c[3]
+							if cx <= ctx.x1 or cx >= ctx.x2 or cy <= ctx.y1 or cy >= ctx.y2 or cz <= ctx.z1 or cz >= ctx.z2
+									or cy < ly - drop_max then
+								bounded = false; break
+							end
+							for k = 1, 6 do
+								local a = AX[k]
+								local nx_, ny_, nz_ = cx + a[1], cy + a[2], cz + a[3]
+								local j = 1 + nx_ + ny_ * sy + nz_ * sz
+								if not set[j] and bonded_of[data[j]] and inside(ox + nx_, oy + ny_, oz + nz_) then
+									set[j] = true
+									queue[#queue + 1] = {nx_, ny_, nz_}
+								end
+							end
+						end
+						stats.visited = stats.visited + #cells
+						if not bounded then
+							stats.unbounded = stats.unbounded + 1
+						else
+							-- 接觸面
+							local W = 0
+							local planes, by_key = {}, {}
+							local bridged = false
+							for _, c in ipairs(cells) do
+								local cx, cy, cz = c[1], c[2], c[3]
+								local i = 1 + cx + cy * sy + cz * sz
+								local lk = lith_of[data[i]]
+								local lith = lk and p.lithologies[lk]
+								W = W + (lith and lith.gamma or p.gamma_other or 20)
+								for k = 1, 6 do
+									local a = AX[k]
+									local j = 1 + (cx + a[1]) + (cy + a[2]) * sy + (cz + a[3]) * sz
+									if not set[j] then
+										local e = {x = a[1], y = a[2], z = a[3]}
+										local nb = data[j]
+										local pk, nu, area, coh
+										if bonded_of[nb] then
+											-- 跨過哪一組的面
+											local si
+											for t = 1, #cb do
+												if plane_k(sets[cb[t]], ox + cx + a[1], oy + cy + a[2], oz + cz + a[3]) ~= ks[t] then
+													si = cb[t]; break
+												end
+											end
+											if si then
+												local n = sets[si].n_eff
+												local sg = dot(n, e) >= 0 and 1 or -1
+												pk = si * 2 + (sg > 0 and 1 or 0)
+												nu = {x = sg * n.x, y = sg * n.y, z = sg * n.z}
+												area = abs(dot(e, nu))
+												if ctx.face(cx, cy, cz, k) then
+													coh = p.c
+												else
+													coh = p.bridge_c or 0
+													bridged = true
+												end
+											else
+												pk, nu, area, coh = -k, e, 1, p.bridge_c or 0
+											end
+										elseif solid_of[nb] and not (rubble_of[nb] and a[2] >= 0) then
+											pk, nu, area, coh = -k, e, 1, 0
+										end
+										if pk then
+											local pl = by_key[pk]
+											if not pl then
+												pl = {nu = nu, area = 0, ca = 0, set = pk > 0 and math.floor(pk / 2) or nil}
+												by_key[pk] = pl
+												planes[#planes + 1] = pl
+											end
+											pl.area = pl.area + area
+											pl.ca = pl.ca + area * coh
+										end
+									end
+								end
+							end
+							for _, pl in ipairs(planes) do pl.c = pl.area > 0 and pl.ca / pl.area or 0 end
+							if not (bridged and not p.bridge_c) then
+								stats.evaluated = stats.evaluated + 1
+								local r = keyblock.analyze(W, planes, p.tanphi)
+								if r.fs < 1 then
+									local wc = {}
+									for _, c in ipairs(cells) do
+										wc[#wc + 1] = {x = ox + c[1], y = oy + c[2], z = oz + c[3]}
+										taken[1 + c[1] + c[2] * sy + c[3] * sz] = true
+									end
+									table.sort(wc, function(u, v) return u.y < v.y end)
+									local names = {}
+									for t = 1, #cb do names[t] = sets[cb[t]].name end
+									out[#out + 1] = {cells = wc, W = W, fs = r.fs, mode = r.mode, dir = r.dir,
+										sets = names, ks = ks}
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return out, stats
 end
 
 -- 單格所在岩塊（顯示用）。回傳 nil（非鍵結格／範圍外）、false（與岩體相連）或同 find_blocks 的一項

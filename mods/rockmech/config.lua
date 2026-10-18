@@ -168,6 +168,11 @@ config.keyblock_defaults = {
 	enabled = true,
 	max_cells = 500,          -- 岩塊超過此格數視為與岩體相連（不判定）
 	c = 0,                    -- 岩塊邊界節理的凝聚力 (MPa)：圍出岩塊的是連續、張開的節理，通常取 0
+	mass = true,              -- 整體滑動：坡腳露出的節理面（或一對）上方的整個岩體一起滑出
+	mass_radius = 28,         -- 整體滑動的讀取範圍半徑 (m)；岩體碰到範圍邊界視為沒有被圍住
+	mass_max = 8000,          -- 整體滑動的岩體格數上限
+	mass_floods = 48,         -- 每次檢查最多擴展幾根稜柱
+	mass_budget_ms = 40,      -- 單次檢查超過此時間就記 log
 }
 
 -- 只有開挖造成的惡化才破壞（collapse.lua）；設定鍵為 rockmech_induced_<key>
@@ -430,6 +435,9 @@ function config.load(get)
 	cfg.keyblock = load_section("keyblock", config.keyblock_defaults)
 	cfg.keyblock.max_cells = math.max(1, math.floor(cfg.keyblock.max_cells))
 	cfg.keyblock.c = math.max(0, cfg.keyblock.c)
+	cfg.keyblock.mass_radius = math.max(8, math.min(64, math.floor(cfg.keyblock.mass_radius)))
+	cfg.keyblock.mass_max = math.max(100, math.floor(cfg.keyblock.mass_max))
+	cfg.keyblock.mass_floods = math.max(1, math.floor(cfg.keyblock.mass_floods))
 
 	-- 只有開挖造成的惡化才破壞
 	cfg.induced = load_section("induced", config.induced_defaults)
