@@ -17,7 +17,10 @@ local KINDS = {
 	axial = {color = "#ff9900", label = "軸差破壞"},
 	overhang = {color = "#b040ff", label = "懸臂斷裂／被節理切離"},
 	keyblock = {color = "#ffe000", label = "關鍵塊體"},
+	mass = {color = "#ff6a00", label = "整體滑動（稜柱）"},
 }
+-- 只用於警戒裂紋（不會造成破壞）：明確節理的逐格受剪。節理面剪應力接近強度 → 開始滑移、張開
+local SHEAR_KIND = "shear"
 local MAX_ENTITIES = 2000
 local MAX_WAYPOINTS = 300
 local DEFAULT_R, MAX_R = 12, 32
@@ -111,6 +114,16 @@ scan_parts[1] = function(st)
 		local prm = collapse.failure_params(false)
 		prm.fs_cut = fs_max
 		f.compute_loads(grid, prm)
+		-- 明確節理（間距 > weakness.max_spacing）不做逐格破壞，但仍算逐格受剪的 FS 當作警示：
+		-- 節理面上剪應力接近強度 → 裂紋（不會因此掉落；超過強度時以最強的裂紋顯示）
+		local all_sets = rockmech.get_joint_sets()
+		local prm_all
+		if prm.weakness and #prm.joint_sets < #all_sets then
+			prm_all = {}
+			for k, v in pairs(prm) do prm_all[k] = v end
+			prm_all.joint_sets = all_sets
+			prm_all.axial = false
+		end
 		for z = a.z, b.z do
 			for y = a.y, b.y do
 				for x = a.x, b.x do
@@ -121,6 +134,12 @@ scan_parts[1] = function(st)
 						local fj = st.fs_joint
 						if fa <= fj then put({x = x, y = y, z = z}, fa, "axial")
 						else put({x = x, y = y, z = z}, fj, "slip") end
+						if prm_all then
+							local s2 = f.cell_state(grid, x, y, z, prm_all)
+							if s2 and s2.fs_joint < fs_max then
+								put({x = x, y = y, z = z}, math.max(s2.fs_joint, 1.01), SHEAR_KIND)
+							end
+						end
 					end
 				end
 			end
@@ -183,6 +202,39 @@ scan_parts[3] = function(st)
 	end
 end
 
+-- 4. 整體滑動（楔形稜柱）：以範圍內臨空的鍵結格為起點，所有分析過的稜柱都取其 FS
+scan_parts[4] = function(st)
+	local a, b, put = st.a, st.b, st.put
+	local kc = cfg.keyblock
+	if kc.enabled and kc.mass then
+		local R = math.min(kc.mass_radius, 20)
+		local grid = collapse.read_grid(vector.subtract(a, R), vector.add(b, R), true)
+		local nx, ny = grid.nx, grid.ny
+		local data, bonded_of, solid_of = grid.data, grid.bonded_of, grid.solid_of
+		local function idx(x, y, z) return 1 + (x - grid.ox) + (y - grid.oy) * nx + (z - grid.oz) * nx * ny end
+		local starts = {}
+		for z = a.z, b.z do
+			for y = a.y, b.y do
+				for x = a.x, b.x do
+					if bonded_of[data[idx(x, y, z)]] and (not solid_of[data[idx(x + 1, y, z)]]
+							or not solid_of[data[idx(x - 1, y, z)]] or not solid_of[data[idx(x, y - 1, z)]]
+							or not solid_of[data[idx(x, y, z + 1)]] or not solid_of[data[idx(x, y, z - 1)]]) then
+						starts[#starts + 1] = {x = x, y = y, z = z}
+					end
+				end
+			end
+		end
+		local kp = collapse.keyblock_params()
+		kp.max_mass, kp.max_floods, kp.collect_all = kc.mass_max, kc.mass_floods, true
+		local c = vector.divide(vector.add(a, b), 2)
+		local lith = rockmech.lith_at(c.x, c.y, c.z)
+		kp.bridge_c = collapse.rock.at(lith.name, c.y).sigt * 1000
+		for _, m in ipairs(rockmech.keyblock.find_masses(grid, kp, starts)) do
+			for _, p in ipairs(m.cells) do put(p, m.fs, "mass") end
+		end
+	end
+end
+
 -- 一次算完。回傳 {{pos, fs, kind = "slip"|"axial"|"overhang"|"keyblock"}...}, ms
 function rockmech.fs_scan(center, r, fs_max)
 	local t0 = core.get_us_time()
@@ -208,7 +260,7 @@ end
 -- center ±r 內 FS ≤ 1 的格子（FS 遮罩用）。回傳 cells = {{pos, kind, fs}...}, counts, ms
 function rockmech.fsmask_scan(center, r)
 	local all, ms = rockmech.fs_scan(center, r, 1 + 1e-9)
-	local counts = {slip = 0, axial = 0, overhang = 0, keyblock = 0}
+	local counts = {slip = 0, axial = 0, overhang = 0, keyblock = 0, mass = 0, shear = 0}
 	for _, c in ipairs(all) do counts[c.kind] = counts[c.kind] + 1 end
 	return all, counts, ms
 end
@@ -321,7 +373,7 @@ end
 
 local function summary(cells, counts)
 	local parts = {}
-	for _, kind in ipairs({"slip", "axial", "overhang", "keyblock"}) do
+	for _, kind in ipairs({"slip", "axial", "overhang", "keyblock", "mass"}) do
 		parts[#parts + 1] = core.colorize(KINDS[kind].color, ("■ %s %d"):format(KINDS[kind].label, counts[kind]))
 	end
 	local note = ""

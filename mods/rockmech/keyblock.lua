@@ -324,7 +324,7 @@ end
 -- 單一平面的平面滑動（岩板沿走向無限延伸，需要側向釋放面）由小岩塊與逐格節理滑動處理。
 --
 -- params 另需：max_mass（預設 8000）、bridge_c（kPa，岩橋的凝聚力；nil = 有岩橋就不判定）、
---             max_floods（每次最多擴展幾根稜柱，預設 24）
+--             max_floods（每次最多擴展幾根稜柱，預設 24）、collect_all（顯示用：FS ≥ 1 的稜柱也回傳）
 -- 回傳 masses = {{cells（世界座標）, W, fs, mode, dir, sets = {組名...}, ks}...}（只含 FS < 1 者）, stats
 
 -- 某組節理在格 (x, y, z)（世界座標）的平面編號
@@ -502,11 +502,11 @@ function keyblock.find_masses(g, p, starts)
 									add_clamp(ctx, planes, p.mass_clamp)
 									r = keyblock.analyze(W, planes, p.tanphi)
 								end
-								if r.fs < 1 then
+								if r.fs < 1 or p.collect_all then
 									local wc = {}
 									for _, c in ipairs(cells) do
 										wc[#wc + 1] = {x = ox + c[1], y = oy + c[2], z = oz + c[3]}
-										taken[1 + c[1] + c[2] * sy + c[3] * sz] = true
+										if r.fs < 1 then taken[1 + c[1] + c[2] * sy + c[3] * sz] = true end
 									end
 									table.sort(wc, function(u, v) return u.y < v.y end)
 									local names = {}
