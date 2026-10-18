@@ -3,6 +3,9 @@
 --   左鍵：清除面前 3×3×3 的碎石（從指到的那一格往裡 3 層）
 --   右鍵：清除與指到的碎石相連的所有碎石（26 方向相連，上限 MAX_FLOOD 格）
 --   按住 Shift（潛行）：清掉的碎石收進物品欄（不滿格的碎石依級數累加，每 8 級 = 1 個）
+-- 爆破魔杖（rockmech:blast_wand）：
+--   左鍵：在指到的岩面前引爆一個 TNT（同原版 TNT 的爆炸，岩石依強度破碎，見 blasting.lua）
+--   右鍵：一鍵清碴：指到的格子附近（±2 格）所有碎石，以及與它們相連的碎石
 -- 只動碎石，不動岩石。以 VoxelManip 一次移除，再比照爆破觸發後續判定：
 -- 記錄開挖（只算開挖造成的惡化）、緊貼岩石處的支撐判定與破壞檢查、
 -- 周圍沒被清掉的碎石重新判定掉落／顆粒流。
@@ -36,10 +39,14 @@ local function cube_cells(under, n)
 	return cells, vector.subtract(c, 2), vector.add(c, 2)
 end
 
--- 從 start 出發的相連碎石（直接查 node；上限 MAX_FLOOD）
-local function flood_cells(start)
-	local cells, seen = {}, {[key(start.x, start.y, start.z)] = true}
-	local stack = {start}
+-- 從 starts（一格或多格）出發的相連碎石（直接查 node；上限 MAX_FLOOD）
+local function flood_cells(starts)
+	if starts.x then starts = {starts} end
+	local cells, seen, stack = {}, {}, {}
+	for _, s in ipairs(starts) do
+		seen[key(s.x, s.y, s.z)] = true
+		stack[#stack + 1] = s
+	end
 	local capped = false
 	while #stack > 0 do
 		local p = table.remove(stack)
@@ -160,12 +167,22 @@ local function collect(player, levels)
 	return table.concat(parts, "、")
 end
 
-local function use(player, pointed_thing, flood)
+-- flood = "near"：從指到的格子附近 ±2 格內的所有碎石出發
+local function use(player, pointed_thing, flood, tag)
 	if not player or not player:is_player() or pointed_thing.type ~= "node" then return end
+	tag = tag or "清碴魔杖"
 	local pname = player:get_player_name()
 	local under = pointed_thing.under
 	local cells, p1, p2, capped
-	if flood then
+	if flood == "near" then
+		local starts = core.find_nodes_in_area(vector.subtract(under, 2), vector.add(under, 2),
+			{"group:rockmech_rubble"})
+		if #starts == 0 then
+			core.chat_send_player(pname, ("[%s] 附近 2 格內沒有碎石"):format(tag))
+			return
+		end
+		cells, p1, p2, capped = flood_cells(starts)
+	elseif flood then
 		if not rockmech.is_rubble(core.get_node(under).name) then
 			core.chat_send_player(pname, "[清碴魔杖] 右鍵要指著碎石")
 			return
@@ -178,7 +195,7 @@ local function use(player, pointed_thing, flood)
 	local t0 = core.get_us_time()
 	local count, levels = clear(cells, p1, p2, pname)
 	if count == 0 then return end
-	local msg = ("[清碴魔杖] 清除 %d 格碎石%s"):format(count,
+	local msg = ("[%s] 清除 %d 格碎石%s"):format(tag, count,
 		capped and ("（達上限 %d 格，其餘再點一次）"):format(MAX_FLOOD) or "")
 	if player:get_player_control().sneak then
 		local got = collect(player, levels)
@@ -204,6 +221,39 @@ core.register_tool("rockmech:rubble_wand", {
 	end,
 	on_place = function(itemstack, placer, pointed_thing)
 		use(placer, pointed_thing, true)
+		return nil
+	end,
+})
+
+-- 爆破魔杖：左鍵引爆（同原版 TNT），右鍵一鍵清碴
+local function blast_at(player, pointed_thing)
+	if not player or not player:is_player() or pointed_thing.type ~= "node" then return end
+	if not (tnt and tnt.boom) then
+		core.chat_send_player(player:get_player_name(), "[爆破魔杖] 沒有載入 tnt mod")
+		return
+	end
+	-- 炸藥放在岩面前那一格（同把 TNT 放在岩面上點燃）；explode_center：該格算一個 TNT
+	local pos = pointed_thing.above
+	local r = tonumber(core.settings:get("tnt_radius") or 3) or 3
+	tnt.boom(pos, {radius = r, damage_radius = r * 2, explode_center = true})
+	core.log("action", ("[rockmech] %s 爆破魔杖 %s R=%d"):format(player:get_player_name(),
+		core.pos_to_string(pos), r))
+end
+
+core.register_tool("rockmech:blast_wand", {
+	description = "Blast wand (爆破魔杖)\n左鍵：引爆 TNT（岩石依強度破碎）\n右鍵：一鍵清碴（附近與相連的碎石）\n" ..
+		"按住 Shift 右鍵：清掉的碎石收進物品欄",
+	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#fff3a0" ..
+		"^[fill:4x4:11,1:#ff5020^[fill:2x2:12,2:#ffe060" ..
+		"^[fill:2x2:9,5:#5a3a2a^[fill:2x2:7,7:#5a3a2a^[fill:2x2:5,9:#5a3a2a" ..
+		"^[fill:2x2:3,11:#5a3a2a^[fill:2x2:1,13:#3a2418",
+	stack_max = 1,
+	on_use = function(itemstack, user, pointed_thing)
+		blast_at(user, pointed_thing)
+		return nil
+	end,
+	on_place = function(itemstack, placer, pointed_thing)
+		use(placer, pointed_thing, "near", "爆破魔杖")
 		return nil
 	end,
 })
