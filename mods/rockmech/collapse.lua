@@ -920,8 +920,29 @@ local kcfg = cfg.keyblock
 local function face_set(x, y, z, axis)
     return rockmech.joints.face_joint(rockmech.get_joint_sets(), x, y, z, axis)
 end
+-- 塊體接觸面的局部應力（MPa）：{σxx, σyy, σzz, σxz}，依網格快取
+local stress_params
+local function stress_at(g, x, y, z)
+    local cache = g.stress_cache
+    if not cache then cache = {}; g.stress_cache = cache end
+    local i = failure.index(g, x, y, z)
+    if not i then return nil end
+    local v = cache[i]
+    if v == nil then
+        if not stress_params then
+            stress_params = collapse.failure_params()
+            stress_params.weakness = nil
+        end
+        local st = failure.cell_state(g, x, y, z, stress_params)
+        v = st and {st.sx, st.sy, st.sz, st.sxz} or false
+        cache[i] = v
+    end
+    return v or nil
+end
+
 function collapse.keyblock_params()
     return {
+        stress_at = stress_at, clamp = kcfg.clamp, mass_clamp = kcfg.mass_clamp,
         face_set = face_set, joint_sets = rockmech.get_joint_sets(),
         c = kcfg.c * 1000 / model_n, tanphi = math.tan(math.rad(cfg.weakness.phi)),
         lithologies = cfg.lithologies, gamma_other = cfg.failure.gamma_other,
@@ -994,6 +1015,29 @@ local function run_support_check()
         local og = {}
         if ocfg.enabled then
             og = rockmech.overhang.find_failing_local(grid, oparams, g.starts)
+            -- 被節理切離（FS 0）的群：節理不傳張力，但可能被周圍岩塊卡住、或被現地應力夾住。
+            -- 交給塊體分析（含應力夾持）：卡住或 FS ≥ 1 就留在原位
+            if kcfg.enabled and #og > 0 then
+                local kp0 = collapse.keyblock_params()
+                local keep, n_held = {}, 0
+                for _, comp in ipairs(og) do
+                    if (comp.fs or 0) <= 0 and #comp.cells <= kcfg.max_cells then
+                        local r = rockmech.keyblock.analyze_group(grid, kp0, comp.cells)
+                        if r.fs >= 1 then
+                            n_held = n_held + 1
+                        else
+                            keep[#keep + 1] = comp
+                        end
+                    else
+                        keep[#keep + 1] = comp
+                    end
+                end
+                if n_held > 0 then
+                    core.log("action", ("[rockmech] 懸臂：%d 群被節理切離但塊體分析穩定（卡住或被應力夾持），留在原位")
+                        :format(n_held))
+                end
+                og = keep
+            end
         end
         -- 只有開挖造成的才掉落（穩定 → 不穩定）：開挖前就會斷（0 < FS < 1）的群不處理。
         -- 完全懸空、或 FS = 0 的一律掉落

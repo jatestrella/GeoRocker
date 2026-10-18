@@ -249,3 +249,34 @@ describe("keyblock 整體滑動（大型楔形／平面）", function()
 		assert.is_true(#keyblock.find_masses(g, p, edge) >= 1)
 	end)
 end)
+
+describe("keyblock 應力夾持", function()
+	-- 40° 傾向北的滑動面，東西兩側直立面（與滑動方向平行）
+	local function planes(clamp_side, clamp_base)
+		local d = math.rad(40)
+		return {
+			{nu = {x = 0, y = -math.cos(d), z = -math.sin(d)}, area = 10, c = 0, clamp = clamp_base},
+			{nu = {x = 1, y = 0, z = 0}, area = 10, c = 0, clamp = clamp_side},
+			{nu = {x = -1, y = 0, z = 0}, area = 10, c = 0, clamp = clamp_side},
+		}
+	end
+	it("沒有夾持：FS = tanφ/tanψ", function()
+		local r = keyblock.analyze(100, planes(nil, nil), TAN30)
+		-- 平面滑動與「底面＋側面」的楔形等價（側面正向力 0），取哪個都一樣
+		assert.near(TAN30 / math.tan(math.rad(40)), r.fs, 1e-9)
+	end)
+	it("兩側平行面被夾住：摩擦 C·tanφ 加進抵抗力", function()
+		local r0 = keyblock.analyze(100, planes(nil, nil), TAN30)
+		local r = keyblock.analyze(100, planes(50, nil), TAN30)
+		local W, s = 100, math.sin(math.rad(40))
+		assert.near(r0.fs + 2 * 50 * TAN30 / (W * s), r.fs, 1e-9)
+		assert.is_true(r.fs > 1)
+	end)
+	it("會打開的面不提供夾持：落下模式不受影響", function()
+		-- 只有一個往上傾的頂面（ν 朝上），落下時打開
+		local pl = {{nu = {x = 0, y = 1, z = 0}, area = 4, c = 0, clamp = 1000}}
+		local r = keyblock.analyze(100, pl, TAN30)
+		assert.are.equal("fall", r.mode)
+		assert.near(0, r.fs, 1e-9)
+	end)
+end)

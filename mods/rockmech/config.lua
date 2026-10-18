@@ -173,6 +173,8 @@ config.keyblock_defaults = {
 	enabled = true,
 	max_cells = 500,          -- 岩塊超過此格數視為與岩體相連（不判定）
 	c = 0,                    -- 岩塊邊界節理的凝聚力 (MPa)：圍出岩塊的是連續、張開的節理，通常取 0
+	clamp = 0.5,              -- 應力夾持的釋放係數 λ（Unwedge 式）：接觸面夾持力 = λ·σn·A；0 = 只考慮重力
+	mass_clamp = 0,           -- 整體滑動稜柱的 λ（預設 0：坡面附近的應力視為已釋放，同邊坡設計慣例）
 	mass = true,              -- 整體滑動：坡腳露出的節理面（或一對）上方的整個岩體一起滑出
 	mass_radius = 28,         -- 整體滑動的讀取範圍半徑 (m)；岩體碰到範圍邊界視為沒有被圍住
 	mass_max = 8000,          -- 整體滑動的岩體格數上限
@@ -455,6 +457,8 @@ function config.load(get)
 	cfg.keyblock = load_section("keyblock", config.keyblock_defaults)
 	cfg.keyblock.max_cells = math.max(1, math.floor(cfg.keyblock.max_cells))
 	cfg.keyblock.c = math.max(0, cfg.keyblock.c)
+	cfg.keyblock.clamp = math.max(0, math.min(2, cfg.keyblock.clamp))
+	cfg.keyblock.mass_clamp = math.max(0, math.min(2, cfg.keyblock.mass_clamp))
 	cfg.keyblock.mass_radius = math.max(8, math.min(64, math.floor(cfg.keyblock.mass_radius)))
 	cfg.keyblock.mass_max = math.max(100, math.floor(cfg.keyblock.mass_max))
 	cfg.keyblock.mass_floods = math.max(1, math.floor(cfg.keyblock.mass_floods))

@@ -24,6 +24,12 @@
 --       FS = (N_k tanφ + N_l tanφ + c·A_k + c·A_l + Σ c·A(平行於 m 的其他面)) / (W g·m)
 --   都不可行 → 卡住（FS = ∞）。
 --
+-- ## 應力夾持（Unwedge 式的現地應力，含應力釋放係數）
+-- 每個節理接觸面的夾持力 C = λ·σn·A（σn = ν·σ·ν，σ 取塊體這一側格子的局部應力，
+-- 已含開挖後的集中與臨空面釋放；λ = params.clamp，0 = 不考慮）。
+-- 運動時仍保持接觸的面（滑動面、與運動方向平行的面）才提供摩擦 C·tanφ；會打開的面沒有夾持。
+-- 先不含夾持分析，FS < 1 才算應力再分析一次（節省時間）。
+--
 -- ## 網格與參數
 -- grid = {data, ox, oy, oz, nx, ny, nz, bonded_of, solid_of, lith_of,
 --         req = {x1, x2, y1, y2, z1, z2}（世界座標，省略時為整個網格）}
@@ -113,6 +119,30 @@ local function grow(ctx, lx, ly, lz)
 	return result
 end
 
+-- 每個平面的夾持力（kN）：取最多 6 個格面的局部應力平均 σn × 面積 × λ
+local function add_clamp(ctx, planes, lam)
+	local p, g = ctx.p, ctx.g
+	if not (p.stress_at and lam and lam > 0) then return end
+	for _, pl in ipairs(planes) do
+		local fl = pl.faces
+		if fl and #fl > 0 then
+			local nsm = math.min(6, #fl)
+			local sum, n = 0, 0
+			for s = 1, nsm do
+				local f = fl[math.floor((s - 0.5) * #fl / nsm) + 1]
+				local st = p.stress_at(g, g.ox + f[1], g.oy + f[2], g.oz + f[3])
+				if st then
+					local v = pl.nu
+					local sn = st[1] * v.x * v.x + st[2] * v.y * v.y + st[3] * v.z * v.z + 2 * st[4] * v.x * v.z
+					sum, n = sum + math.max(0, sn), n + 1
+				end
+			end
+			if n > 0 then pl.clamp = lam * sum / n * pl.area * 1000 end
+		end
+	end
+end
+keyblock.add_clamp = add_clamp
+
 -- 整理岩塊的重量與接觸平面
 local function contacts(ctx, block)
 	local g, p = ctx.g, ctx.p
@@ -156,11 +186,13 @@ local function contacts(ctx, block)
 				if pk then
 					local pl = by_key[pk]
 					if not pl then
-						pl = {nu = nu, area = 0, c = coh, set = pk > 0 and math.floor(pk / 2) or nil}
+						pl = {nu = nu, area = 0, c = coh, set = pk > 0 and math.floor(pk / 2) or nil,
+							faces = pk > 0 and {} or nil}
 						by_key[pk] = pl
 						planes[#planes + 1] = pl
 					end
 					pl.area = pl.area + area
+					if pl.faces then pl.faces[#pl.faces + 1] = c end
 				end
 			end
 		end
@@ -178,13 +210,17 @@ function keyblock.analyze(W, planes, tanphi)
 		end
 		return true
 	end
+	-- 與運動方向平行的面：凝聚力＋夾持摩擦；滑動面本身的夾持摩擦另外加
 	local function parallel_coh(m, skip1, skip2)
 		local s = 0
 		for idx, pl in ipairs(planes) do
-			if idx ~= skip1 and idx ~= skip2 and abs(dot(pl.nu, m)) <= 1e-3 then s = s + pl.c * pl.area end
+			if idx ~= skip1 and idx ~= skip2 and abs(dot(pl.nu, m)) <= 1e-3 then
+				s = s + pl.c * pl.area + (pl.clamp or 0) * tanphi
+			end
 		end
 		return s
 	end
+	local function clamp_of(k) return (planes[k].clamp or 0) * tanphi end
 	-- 落下
 	if admissible(gv) then
 		local fs = parallel_coh(gv) / W
@@ -199,7 +235,7 @@ function keyblock.analyze(W, planes, tanphi)
 			if tl > 1e-3 then
 				local m = {x = t.x / tl, y = t.y / tl, z = t.z / tl}
 				if admissible(m, k) then
-					local R = W * gn * tanphi + pl.c * pl.area + parallel_coh(m, k)
+					local R = W * gn * tanphi + pl.c * pl.area + clamp_of(k) + parallel_coh(m, k)
 					local fs = R / (W * tl)
 					if fs < best.fs then best = {fs = fs, mode = "plane", dir = m, planes = {k}} end
 				end
@@ -224,7 +260,7 @@ function keyblock.analyze(W, planes, tanphi)
 						local Nb = (fb - ab * fa) / det
 						if Na >= 0 and Nb >= 0 then
 							local R = (Na + Nb) * tanphi + planes[k].c * planes[k].area + planes[l].c * planes[l].area
-								+ parallel_coh(line, k, l)
+								+ clamp_of(k) + clamp_of(l) + parallel_coh(line, k, l)
 							local fs = R / (W * gl)
 							if fs < best.fs then best = {fs = fs, mode = "wedge", dir = line, planes = {k, l}} end
 						end
@@ -250,6 +286,10 @@ function keyblock.find_blocks(g, p, starts)
 				done[b] = true
 				local W, planes, n_free = contacts(ctx, b)
 				local r = keyblock.analyze(W, planes, p.tanphi)
+				if r.fs < 1 and (p.clamp or 0) > 0 then
+					add_clamp(ctx, planes, p.clamp)
+					r = keyblock.analyze(W, planes, p.tanphi)
+				end
 				local cells = {}
 				for _, c in ipairs(b.cells) do
 					cells[#cells + 1] = {x = g.ox + c[1], y = g.oy + c[2], z = g.oz + c[3]}
@@ -442,12 +482,14 @@ function keyblock.find_masses(g, p, starts)
 										if pk then
 											local pl = by_key[pk]
 											if not pl then
-												pl = {nu = nu, area = 0, ca = 0, set = pk > 0 and math.floor(pk / 2) or nil}
+												pl = {nu = nu, area = 0, ca = 0, set = pk > 0 and math.floor(pk / 2) or nil,
+													faces = pk > 0 and {} or nil}
 												by_key[pk] = pl
 												planes[#planes + 1] = pl
 											end
 											pl.area = pl.area + area
 											pl.ca = pl.ca + area * coh
+											if pl.faces then pl.faces[#pl.faces + 1] = c end
 										end
 									end
 								end
@@ -456,6 +498,10 @@ function keyblock.find_masses(g, p, starts)
 							if not (bridged and not p.bridge_c) then
 								stats.evaluated = stats.evaluated + 1
 								local r = keyblock.analyze(W, planes, p.tanphi)
+								if r.fs < 1 and (p.mass_clamp or 0) > 0 then
+									add_clamp(ctx, planes, p.mass_clamp)
+									r = keyblock.analyze(W, planes, p.tanphi)
+								end
 								if r.fs < 1 then
 									local wc = {}
 									for _, c in ipairs(cells) do
@@ -476,6 +522,29 @@ function keyblock.find_masses(g, p, starts)
 		end
 	end
 	return out, stats
+end
+
+-- 給定的格子群（世界座標）當成一個塊體分析：回傳 analyze 的結果（含夾持）
+function keyblock.analyze_group(g, p, cells)
+	local ctx = ctx_new(g, p)
+	local sy, sz = ctx.sy, ctx.sz
+	local block = {cells = {}, set = {}}
+	for _, c in ipairs(cells) do
+		local lx, ly, lz = c.x - g.ox, c.y - g.oy, c.z - g.oz
+		if lx <= 0 or ly <= 0 or lz <= 0 or lx >= g.nx - 1 or ly >= g.ny - 1 or lz >= g.nz - 1 then
+			return {fs = 0}   -- 碰到範圍邊界：無法判斷，照舊（掉落）
+		end
+		block.cells[#block.cells + 1] = {lx, ly, lz}
+		block.set[1 + lx + ly * sy + lz * sz] = true
+	end
+	local W, planes = contacts(ctx, block)
+	local r = keyblock.analyze(W, planes, p.tanphi)
+	if r.fs < 1 and (p.clamp or 0) > 0 then
+		add_clamp(ctx, planes, p.clamp)
+		r = keyblock.analyze(W, planes, p.tanphi)
+	end
+	r.W = W
+	return r
 end
 
 -- 單格所在岩塊（顯示用）。回傳 nil（非鍵結格／範圍外）、false（與岩體相連）或同 find_blocks 的一項
