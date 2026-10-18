@@ -33,7 +33,7 @@ end
 core.register_entity(PART, {
 	initial_properties = {
 		physical = false, pointable = false, static_save = false,
-		visual = "node", node = {name = "air"},
+		visual = "node", node = {name = "air"}, is_visible = false,
 	},
 	on_step = function(self)
 		-- 主 entity 消失後的孤兒子 entity
@@ -110,7 +110,7 @@ end
 core.register_entity(PARENT, {
 	initial_properties = {
 		physical = false, pointable = false, static_save = true,
-		visual = "node", node = {name = "air"},
+		visual = "node", node = {name = "air"}, is_visible = false,
 	},
 
 	on_activate = function(self, staticdata)
@@ -176,12 +176,12 @@ function api.spawn(cells, drop)
 	for i, c in ipairs(cells) do
 		le.cells[i] = {dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z, name = c.name}
 	end
-	parent:set_properties({node = {name = o.name}})
+	parent:set_properties({node = {name = o.name}, is_visible = true})
 	for i = 2, #cells do
 		local c = cells[i]
 		local child = core.add_entity({x = c.x, y = c.y, z = c.z}, PART)
 		if child then
-			child:set_properties({node = {name = c.name}})
+			child:set_properties({node = {name = c.name}, is_visible = true})
 			child:set_attach(parent, "", {x = (c.x - o.x) * 10, y = (c.y - o.y) * 10, z = (c.z - o.z) * 10})
 		end
 	end

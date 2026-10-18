@@ -1186,10 +1186,13 @@ local function run_support_check()
             if d and d >= 1 then
                 local cells = {}
                 for _, p in ipairs(c.cells) do
-                    cells[#cells + 1] = {x = p.x, y = p.y, z = p.z, name = core.get_node(p).name}
+                    local name = core.get_node(p).name
+                    if is_rock(name) then
+                        cells[#cells + 1] = {x = p.x, y = p.y, z = p.z, name = name}
+                    end
                 end
-                for _, p in ipairs(c.cells) do core.remove_node(p) end
-                done = rfe.spawn(cells, d)
+                for _, p in ipairs(cells) do core.remove_node(p) end
+                done = #cells == 0 or rfe.spawn(cells, d)
                 if not done then
                     for _, p in ipairs(cells) do core.set_node(p, {name = p.name}) end
                 end
@@ -1214,8 +1217,11 @@ local function run_support_check()
         local cells = {}
         for _, p in ipairs(b.cells) do
             local name = core.get_node(p).name
-            cells[#cells + 1] = {x = p.x, y = p.y, z = p.z,
-                rubble = rockmech.lith_of_node[name] and rockmech.rubble_for(name) or name}
+            -- 同一輪中已經落下／移走的格子（例如也屬於斷開落下的群）不再滑出
+            if is_rock(name) then
+                cells[#cells + 1] = {x = p.x, y = p.y, z = p.z,
+                    rubble = rockmech.lith_of_node[name] and rockmech.rubble_for(name) or name}
+            end
         end
         local cap = 0
         if rfx and rfx.can_spawn() then cap = cfg.rockfall.max_active - rfx.active_count() end

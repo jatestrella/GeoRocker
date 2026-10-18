@@ -100,6 +100,7 @@ core.register_entity(ENT, {
 		visual = "node",
 		node = {name = "air"},
 		visual_size = {x = 0.9, y = 0.9, z = 0.9},
+		is_visible = false,   -- node 設好才顯示（node = air 會畫出 air 物品的藍色虛線框）
 		static_save = true,
 	},
 
@@ -121,7 +122,7 @@ core.register_entity(ENT, {
 			end
 		end
 		if self.node_name ~= "" then
-			self.object:set_properties({node = {name = self.node_name}})
+			self.object:set_properties({node = {name = self.node_name}, is_visible = true})
 		end
 		self.object:set_acceleration({x = 0, y = -rf.G, z = 0})
 		track(self)
@@ -240,11 +241,13 @@ end
 -- 在 pos 產生翻滾落石（呼叫者需先移除該處的 node）。回傳 ObjectRef 或 nil。
 function api.spawn(pos, node_name, velocity)
 	if not api.can_spawn() then return nil end
+	local def = core.registered_nodes[node_name]
+	if not def or def.drawtype == "airlike" then return nil end
 	local obj = core.add_entity(pos, ENT)
 	if not obj then return nil end
 	local le = obj:get_luaentity()
 	le.node_name = node_name
-	obj:set_properties({node = {name = node_name}})
+	obj:set_properties({node = {name = node_name}, is_visible = true})
 	if velocity then obj:set_velocity(velocity) end
 	return obj
 end
