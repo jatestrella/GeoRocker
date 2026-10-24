@@ -430,23 +430,21 @@ local function local_ctx(g, p)
 		end
 		-- 兩端支撐梁：沿 (hx, hz) 直線在 r 的厚度帶內找有支撐的欄。回傳 距離 k、支承面完好比；
 		-- 碰到空氣（斷開）或找不到 → nil
+		-- 看頂板面往上 4 格（容許凹凸不平的頂板）：成本低，每個懸空 run 都能做
 		local function scan(r, hx, hz)
-			local tt = r.t >= THICK and nil or r.t
-			for k = 1, 96 do
+			local ytop = math.min(r.bot + 3, y2)
+			for k = 1, 48 do
 				local cx, cz = r.lx + hx * k, r.lz + hz * k
-				if cx < x1 or cx > x2 or cz < z1 or cz > z2 then return k, 1 end   -- 範圍外視為連回大岩體
-				local any, sup, intact, n = false, false, 0, 0
-				for yy = r.bot, r.top do
+				if cx < x1 or cx > x2 or cz < z1 or cz > z2 then return k end   -- 範圍外視為連回大岩體
+				local any = false
+				for yy = r.bot, ytop do
 					local j = 1 + cx + yy * sy + cz * sz
 					if bonded_of[data[j]] then
 						any = true
-						n = n + 1
-						if ctx.get_run(cx, yy, cz).supported then sup = true end
-						if not jointed(cx - hx, yy, cz - hz, hx, hz) then intact = intact + 1 end
+						if ctx.get_run(cx, yy, cz).supported then return k end
 					end
 				end
-				if not any then return nil end   -- 碰到空氣才算斷開；被節理切開的仍是頂板（岩塊交給關鍵塊體）
-				if sup then return k, math.min(1, intact / (tt or n)) end
+				if not any then return nil end   -- 這一帶都是空氣才算斷開；被節理切開的仍是頂板
 			end
 			return nil
 		end
@@ -454,14 +452,12 @@ local function local_ctx(g, p)
 		if not aborted then
 			local S6 = math.sqrt(6)
 			for _, r in ipairs(comp) do
-				-- 懸臂 FS（含疊層荷重）已經夠高（≥ 2.5，梁只會更好）或岩柱很厚：不必再算梁
-				local cant = (d[r] and (r.lmax * (rho[r] or 1) / d[r]) ^ 2 or 0) / math.max(1, load[r] or 1)
-				if d[r] ~= 0 and r.t < THICK and cant < 2.5 then
+				if d[r] ~= 0 then
 					local best
 					for _, ax in ipairs({{1, 0}, {0, 1}}) do
-						local kp, rp = scan(r, ax[1], ax[2])
+						local kp = scan(r, ax[1], ax[2])
 						if kp then
-							local kn, rn_ = scan(r, -ax[1], -ax[2])
+							local kn = scan(r, -ax[1], -ax[2])
 							if kn then
 								-- 兩側都連著岩體：頂板，由應力判定
 								local span = kp + kn - 1
