@@ -468,3 +468,23 @@ describe("overhang 層疊荷重（Obert & Duvall 疊層梁）", function()
 		assert.are.equal(0, #overhang.find_failing_local(g, p, {{x = 4, y = low_bot, z = 0}, {x = 4, y = up_bot, z = 0}}))
 	end)
 end)
+
+describe("overhang 取最有利的根部", function()
+	it("最近的根部被節理切掉大半時，改走較遠但完整的根部", function()
+		-- 岩柱 x = 0、z −1..1；板 x 1..6、z −1..1、y 6..8（厚 3）
+		local g = grid(-3, 9, -2, 12, -3, 3, function(x, y, z)
+			if y <= 0 then return "G" end
+			if x == 0 and z >= -1 and z <= 1 and y <= 8 then return "s" end
+			if x >= 1 and x <= 6 and z >= -1 and z <= 1 and y >= 6 and y <= 8 then return "s" end
+		end)
+		local p = {lithologies = LITHS, scale = 1, max_voxels = 2000}
+		-- (1, y, −1) 的根部斷面 y = 7、8 被節理切過：只剩 1/3 完整
+		local set = {["0,7,-1,1"] = true, ["0,8,-1,1"] = true}
+		p.face_jointed = function(x, y, z, axis) return set[x .. "," .. y .. "," .. z .. "," .. axis] or false end
+		local st = overhang.cell_state(g, p, 1, 7, -1)
+		-- 直接根部：d 1、rho 1/3 → (L/3)²；經 (1, 0) 的完整根部：d 2、rho 1 → (L/2)²，較有利
+		assert.are.equal(2, st.d)
+		assert.near(1, st.rho, 1e-12)
+		assert.near((st.lmax / 2) ^ 2, st.fs, 1e-9)
+	end)
+end)

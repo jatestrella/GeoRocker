@@ -303,6 +303,8 @@ local function local_ctx(g, p)
 	-- 回傳 {comp, d = {[run] = 支撐距離}, rho = {[run] = 根部斷面比 t_eff/t}, n_cells, aborted, edge,
 	--       cut = 只隔著被節理完全切開的介面相鄰的懸空 run（另外當成起點處理）}
 	-- 根部斷面：與有支撐 run 之間完好面最多的介面；rho = t_eff / t（上限 1），子 run 沿用。
+	-- 每個 run 取最有利的根部：FS ∝ (rho/d)²，以 d/rho 最小者為準（Dijkstra；荷重走最強的路徑，
+	-- 不是最先碰到的根部——否則結果會隨搜尋順序、讀取範圍而變）
 	-- d 為 nil：碰不到任何支撐（被節理切離，或吊在節理面下）。
 	function ctx.explore(r0)
 		local comp, queue, inq = {}, {r0}, {[r0] = true}
@@ -397,30 +399,61 @@ local function local_ctx(g, p)
 			return best
 		end
 		if not aborted then
-			-- 0-1 BFS：坐在下層上的 d = 0（排前面）、與有支撐 run 相鄰的 d = 1、側向 d + 1
-			local front, back, bh = {}, {}, 1
+			-- Dijkstra（鍵 = d/rho，越小越有利）：坐在下層上的 d = 0、與有支撐 run 相鄰的 d = 1、側向 d + 1
+			local heap, hn = {}, 0
+			local function push(r, k)
+				hn = hn + 1
+				local i = hn
+				heap[i] = {k, r}
+				while i > 1 do
+					local pi = (i - i % 2) / 2
+					if heap[pi][1] <= heap[i][1] then break end
+					heap[pi], heap[i] = heap[i], heap[pi]
+					i = pi
+				end
+			end
+			local function pop()
+				local top = heap[1]
+				heap[1] = heap[hn]; heap[hn] = nil; hn = hn - 1
+				local i = 1
+				while true do
+					local l, s = 2 * i, i
+					if l <= hn and heap[l][1] < heap[s][1] then s = l end
+					if l + 1 <= hn and heap[l + 1][1] < heap[s][1] then s = l + 1 end
+					if s == i then break end
+					heap[s], heap[i] = heap[i], heap[s]
+					i = s
+				end
+				return top[1], top[2]
+			end
+			local key = {}
 			for lower, ups in pairs(up) do
 				for _, rn in ipairs(ups) do
 					d[rn] = 0
 					rho[rn] = 1
-					front[#front + 1] = rn
+					key[rn] = 0
+					push(rn, 0)
 					load[lower] = od_factor(lower)
 				end
 			end
 			for _, r in ipairs(frontier) do
 				if not d[r] then
-					d[r] = 1
-					rho[r] = math.min(1, root_teff[r] / (r.t >= THICK and root_teff[r] or r.t))
-					back[#back + 1] = r
+					local rh = math.min(1, root_teff[r] / (r.t >= THICK and root_teff[r] or r.t))
+					d[r], rho[r], key[r] = 1, rh, 1 / rh
+					push(r, key[r])
 				end
 			end
-			while #front > 0 or bh <= #back do
-				local r
-				if #front > 0 then r = front[#front]; front[#front] = nil
-				else r = back[bh]; bh = bh + 1 end
-				local dr = d[r]
-				for _, rn in ipairs(lat[r] or {}) do
-					if not d[rn] or dr + 1 < d[rn] then d[rn] = dr + 1; rho[rn] = rho[r]; back[#back + 1] = rn end
+			while hn > 0 do
+				local k, r = pop()
+				if k <= key[r] then
+					local nd, rh = d[r] + 1, rho[r]
+					local nk = nd / rh
+					for _, rn in ipairs(lat[r] or {}) do
+						if not key[rn] or nk < key[rn] then
+							d[rn], rho[rn], key[rn] = nd, rh, nk
+							push(rn, nk)
+						end
+					end
 				end
 			end
 		end
