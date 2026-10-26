@@ -364,7 +364,7 @@ describe("overhang 水平節理面（不傳張力）", function()
 		assert.are.equal(0, overhang.cell_state(g, pj, 2, 7, 0).group_fs)
 	end)
 
-	it("頂板（兩側都連著岩體）不用懸臂判定：被層面切開的薄層也不會因懸臂斷", function()
+	it("頂板（兩側都連著岩體）也用懸臂判定：d = 到最近支撐欄的距離；被層面切成薄層就斷", function()
 		-- 頁岩：兩根岩柱 x=0、x=16（y 1..8），中間 y=6..8 的頂板（跨度 15 m）；y=6 與 y=7 之間是層面
 		local g = grid(-3, 19, -2, 12, -2, 2, function(x, y, z)
 			if y <= 0 then return "G" end
@@ -377,11 +377,11 @@ describe("overhang 水平節理面（不傳張力）", function()
 		local starts = {{x = 8, y = 6, z = 0}, {x = 8, y = 7, z = 0}}
 		assert.are.equal(0, #overhang.find_failing_local(g, P, starts))   -- 沒有層面：t=3 撐得住
 		local groups = overhang.find_failing_local(g, pj, starts)
-		assert.is_false(fell(groups, 8, 6, 0))
-		assert.is_false(fell(groups, 8, 7, 0))
+		assert.is_true(fell(groups, 8, 6, 0))            -- 下層 t = 1：(5.16/8)² < 1
 		local st = overhang.cell_state(g, pj, 8, 6, 0)
-		assert.is_true(st.beam and st.beam.roof)
-		assert.are.equal(15, st.beam.span)
+		assert.is_nil(st.beam)
+		assert.are.equal(8, st.d)                        -- 兩根岩柱 x = 0、16，中間 x = 8
+		assert.near((overhang.lmax(2, 25, 1) / 8) ^ 2, st.fs, 1e-9)
 	end)
 
 	it("只有一側連著岩體的仍是懸臂", function()
@@ -395,17 +395,16 @@ describe("overhang 水平節理面（不傳張力）", function()
 		assert.near((overhang.lmax(2, 25, 1) / 9) ^ 2, st.fs, 1e-9)
 	end)
 
-	it("12 m 跨度的 1 m 薄層頂板：不當懸臂（FS ∞）", function()
+	it("12 m 跨度的 1 m 薄層頂板：用懸臂判定，d = 6 → 斷", function()
 		local g = grid(-3, 16, -2, 12, -2, 2, function(x, y, z)
 			if y <= 0 then return "G" end
 			if z == 0 and (x == 0 or x == 13) and y <= 8 then return "h" end
 			if z == 0 and x >= 1 and x <= 12 and y == 8 then return "h" end
 		end)
 		local st = overhang.cell_state(g, P, 6, 8, 0)
-		assert.is_true(st.beam ~= nil and st.beam.roof)
-		assert.are.equal(12, st.beam.span)
-		assert.are.equal(math.huge, st.fs)
-		assert.are.equal(0, #overhang.find_failing_local(g, P, {{x = 6, y = 8, z = 0}}))
+		assert.are.equal(6, st.d)
+		assert.near((overhang.lmax(2, 25, 1) / 6) ^ 2, st.fs, 1e-9)
+		assert.are.equal(1, #overhang.find_failing_local(g, P, {{x = 6, y = 8, z = 0}}))
 	end)
 
 	it("坐在節理面上的岩柱（下段有支撐）仍算有支撐", function()

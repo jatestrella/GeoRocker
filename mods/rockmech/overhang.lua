@@ -26,9 +26,7 @@
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
 --     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
---   * 頂板（兩側都連著岩體）：沿 x、z 直線、在 run 自己的厚度帶內往兩側找有支撐的欄；某一方向兩側
---     都有，就是開挖的頂板，不用懸臂判定（FS = ∞），改由開挖周邊的應力判定（failure.lua 的 Inglis
---     解：頂板受拉張裂、受壓剝落），被節理切開的岩塊由關鍵塊體判定。只有一側連著岩體的才是懸臂。
+--   * 頂板（兩側都連著岩體）也一樣用懸臂判定：d = 到最近有支撐欄的距離（約跨度的一半）。
 --   * 層疊（Obert & Duvall 疊層梁）：上段坐在懸空的下段上時（上段 d = 0），下段承受的荷重
 --     q₁ = γ·t₁³·Σt / Σt³（同材料；依序往上加入各層，加入後 q₁ 沒有變大的層自己分離、不加載）。
 --     FS ÷ (q₁ / γt₁)。較厚、較勁的上層自己撐得住，不壓在較薄的下層上。
@@ -461,47 +459,7 @@ local function local_ctx(g, p)
 		for _, rn in ipairs(cut) do
 			if not inq[rn] then real_cut[#real_cut + 1] = rn end
 		end
-		-- 兩端支撐梁：沿 (hx, hz) 直線在 r 的厚度帶內找有支撐的欄。回傳 距離 k、支承面完好比；
-		-- 碰到空氣（斷開）或找不到 → nil
-		-- 看頂板面往上 4 格（容許凹凸不平的頂板）：成本低，每個懸空 run 都能做
-		local function scan(r, hx, hz)
-			local ytop = math.min(r.bot + 3, y2)
-			for k = 1, 48 do
-				local cx, cz = r.lx + hx * k, r.lz + hz * k
-				if cx < x1 or cx > x2 or cz < z1 or cz > z2 then return k end   -- 範圍外視為連回大岩體
-				local any = false
-				for yy = r.bot, ytop do
-					local j = 1 + cx + yy * sy + cz * sz
-					if bonded_of[data[j]] then
-						any = true
-						if ctx.get_run(cx, yy, cz).supported then return k end
-					end
-				end
-				if not any then return nil end   -- 這一帶都是空氣才算斷開；被節理切開的仍是頂板
-			end
-			return nil
-		end
 		local beam = {}
-		if not aborted then
-			local S6 = math.sqrt(6)
-			for _, r in ipairs(comp) do
-				if d[r] ~= 0 then
-					local best
-					for _, ax in ipairs({{1, 0}, {0, 1}}) do
-						local kp = scan(r, ax[1], ax[2])
-						if kp then
-							local kn = scan(r, -ax[1], -ax[2])
-							if kn then
-								-- 兩側都連著岩體：頂板，由應力判定
-								local span = kp + kn - 1
-								if not best or span < best.span then best = {fs = math.huge, span = span, roof = true} end
-							end
-						end
-					end
-					beam[r] = best
-				end
-			end
-		end
 		return {comp = comp, d = d, rho = rho, n_cells = n_cells, aborted = aborted, edge = edge,
 			cut = real_cut, lat = lat, load = load, beam = beam}
 	end

@@ -939,10 +939,23 @@ function collapse.shear_params()
     }
 end
 
+-- 懸臂／直剪讀取網格的半徑：垂直 overhang.radius，水平至少 shear.max_span
+-- （大房間的頂板要整片在範圍內；範圍邊界視為連回大岩體，範圍太小會高估 FS）
+function collapse.overhang_radius()
+    local rv = cfg.overhang.radius
+    local rh = rv
+    if cfg.shear.max_span > rh then rh = cfg.shear.max_span end
+    return rh, rv
+end
+-- 讀取 a..b 外擴 overhang_radius 的網格（不掃上覆）
+function collapse.read_overhang_grid(a, b)
+    local rh, rv = collapse.overhang_radius()
+    return collapse.read_grid({x = a.x - rh, y = a.y - rv, z = a.z - rh}, {x = b.x + rh, y = b.y + rv, z = b.z + rh}, true)
+end
+
 -- 單格的直剪狀態（HUD／資訊頁用）
 function collapse.shear_state(pos)
-    local r = cfg.overhang.radius
-    local grid = collapse.read_grid(vector.subtract(pos, r), vector.add(pos, r), true)
+    local grid = collapse.read_overhang_grid(pos, pos)
     return failure.shear_state(grid, pos.x, pos.y, pos.z, collapse.shear_params())
 end
 
@@ -1009,8 +1022,7 @@ collapse.keyblock_mode_name = MODE_NAME
 
 -- 單格的懸臂狀態（HUD／資訊頁／羅盤用；與懸臂斷裂同一個模型與範圍）
 function collapse.overhang_state(pos)
-    local r = cfg.overhang.radius
-    local grid = collapse.read_grid(vector.subtract(pos, r), vector.add(pos, r), true)
+    local grid = collapse.read_overhang_grid(pos, pos)
     return rockmech.overhang.cell_state(grid, collapse.overhang_params(), pos.x, pos.y, pos.z)
 end
 
@@ -1028,6 +1040,11 @@ local function run_support_check()
     -- 讀取半徑：支撐判定與懸臂斷裂共用同一份網格，取兩者較大者
     local r = scfg.radius
     if ocfg.enabled and ocfg.radius > r then r = ocfg.radius end
+    local rh = r
+    if ocfg.enabled or shcfg.enabled then
+        local h = collapse.overhang_radius()
+        if h > rh then rh = h end
+    end
     -- 起點分群：相距不超過 r 的歸同一群，各群分別讀取（避免遠處的觸發合併成巨大區域）
     local groups = {}
     for _, s in ipairs(starts) do
@@ -1055,8 +1072,8 @@ local function run_support_check()
     local oparams = collapse.overhang_params()
     for _, g in ipairs(groups) do
         local grid = collapse.read_grid(
-            {x = g.a.x - r, y = g.a.y - r, z = g.a.z - r},
-            {x = g.b.x + r, y = g.b.y + r, z = g.b.z + r}, true)
+            {x = g.a.x - rh, y = g.a.y - r, z = g.a.z - rh},
+            {x = g.b.x + rh, y = g.b.y + r, z = g.b.z + rh}, true)
         local c, st = rockmech.support.find_unsupported(grid, g.starts, scfg.max_voxels)
         stats.visited = stats.visited + st.visited
         local og = {}

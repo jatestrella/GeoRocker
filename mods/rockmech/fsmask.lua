@@ -152,8 +152,7 @@ end
 scan_parts[2] = function(st)
 	local a, b, put = st.a, st.b, st.put
 	if cfg.overhang.enabled then
-		local orad = cfg.overhang.radius
-		local grid = collapse.read_grid(vector.subtract(a, orad), vector.add(b, orad), true)
+		local grid = collapse.read_overhang_grid(a, b)
 		local nx, ny = grid.nx, grid.ny
 		local data, bonded_of, solid_of = grid.data, grid.bonded_of, grid.solid_of
 		local starts = {}
@@ -239,8 +238,7 @@ end
 scan_parts[5] = function(st)
 	local a, b, put = st.a, st.b, st.put
 	if cfg.shear.enabled then
-		local orad = cfg.overhang.radius
-		local grid = collapse.read_grid(vector.subtract(a, orad), vector.add(b, orad), true)
+		local grid = collapse.read_overhang_grid(a, b)
 		local nx, ny = grid.nx, grid.ny
 		local data, lith_of, solid_of = grid.data, grid.lith_of, grid.solid_of
 		local sp = collapse.shear_params()
