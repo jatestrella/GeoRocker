@@ -963,6 +963,7 @@ function collapse.overhang_params()
     local ocfg = cfg.overhang
     return {
         lithologies = cfg.lithologies, scale = ocfg.scale, tensile_at = tensile_at,
+        surface_y = cfg.surface_y,
         gamma_other = cfg.failure.gamma_other, max_voxels = ocfg.max_voxels,
         face_jointed = ocfg.joints and face_jointed or nil,
     }
@@ -1131,11 +1132,18 @@ local function run_support_check()
                 end
                 return false
             end
+            -- 懸空段底下有開挖出來的空間 → 一定是開挖造成的（同軸差、直剪的例外）
+            local function over_excavation(comp)
+                for _, c in ipairs(comp.cells) do
+                    if excavated[pos_key({x = c.x, y = c.y - 1, z = c.z})] then return true end
+                end
+                return false
+            end
             for k, comp in ipairs(og) do
                 local p = comp.cells[1]
                 local before = query(p.x, p.y, p.z)
                 -- FS = 0（被節理切離、碰不到支撐）一律掉落：強度再高也不可能平衡
-                if before >= 1 or fs_after[k] <= 0 then
+                if before >= 1 or fs_after[k] <= 0 or over_excavation(comp) then
                     keep_og[#keep_og + 1] = comp
                     core.log("action", ("[rockmech] 懸臂斷裂（開挖造成）：%d 格，整群 FS %.3f → %.3f")
                         :format(#comp.cells, before, fs_after[k]))

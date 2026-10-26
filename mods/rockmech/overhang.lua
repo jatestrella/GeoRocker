@@ -247,7 +247,10 @@ local function local_ctx(g, p)
 		while t + 1 <= y2 and bonded_of[data[i + (t - ly + 1) * sy]] and not hjoint(lx, t, lz) do t = t + 1 end
 		local ib = 1 + lx + b * sy + lz * sz
 		r = {bot = b, top = t, lx = lx, lz = lz}
-		local edge = lx == x1 or lx == x2 or lz == z1 or lz == z2 or b == y1 or t == y2
+		-- 碰到範圍上緣（t == y2）：有 surface_y 時不算有支撐，厚度假設岩層連續到地表（同柱狀荷重）；
+		-- 沒有 surface_y 時沿用舊規則（視為連回大岩體）
+		local top_extrap = t == y2 and p.surface_y ~= nil
+		local edge = lx == x1 or lx == x2 or lz == z1 or lz == z2 or b == y1 or (t == y2 and not top_extrap)
 		local below = data[ib - sy]
 		r.supported = edge or (solid_of[below] and not bonded_of[below]) or false
 		for yy = b, t do run_of[ib + (yy - b) * sy] = r end
@@ -264,7 +267,12 @@ local function local_ctx(g, p)
 		end
 		r.edge = edge
 		r.edge_lat = lx == x1 or lx == x2 or lz == z1 or lz == z2   -- 水平方向碰到範圍邊界
-		local thick = (b == y1 or t == y2) and THICK or (t - b + 1)
+		local thick = (b == y1 or (t == y2 and not top_extrap)) and THICK or (t - b + 1)
+		-- 根部斷面的完整比用範圍內看得到的那段算（假設上方同比例）
+		r.h_root = t - b + 1
+		if top_extrap and b ~= y1 then
+			thick = math.max(thick, p.surface_y - (g.oy + b))
+		end
 		r.t = thick
 		local lm, crit = math.huge, nil
 		for yy = b, t do
@@ -436,7 +444,7 @@ local function local_ctx(g, p)
 			end
 			for _, r in ipairs(frontier) do
 				if not d[r] then
-					local rh = math.min(1, root_teff[r] / (r.t >= THICK and root_teff[r] or r.t))
+					local rh = math.min(1, root_teff[r] / (r.t >= THICK and root_teff[r] or r.h_root))
 					d[r], rho[r], key[r] = 1, rh, 1 / rh
 					push(r, key[r])
 				end

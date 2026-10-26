@@ -487,3 +487,22 @@ describe("overhang 取最有利的根部", function()
 		assert.near((st.lmax / 2) ^ 2, st.fs, 1e-9)
 	end)
 end)
+
+describe("overhang 碰到範圍上緣的欄", function()
+	-- 岩柱 x = 0（地面到範圍頂）；懸臂 x 1..6 從 y = 6 一路到範圍頂（req y2 = 11）
+	local g = grid(-3, 9, -2, 12, -2, 2, function(x, y, z)
+		if y <= 0 then return "G" end
+		if z == 0 and x == 0 then return "s" end
+		if z == 0 and x >= 1 and x <= 6 and y >= 6 then return "s" end
+	end)
+	it("沒有 surface_y：視為連回大岩體（有支撐）", function()
+		assert.is_true(overhang.cell_state(g, P, 6, 6, 0).supported)
+	end)
+	it("有 surface_y：不算有支撐，厚度假設岩層連續到地表", function()
+		local p = {lithologies = LITHS, scale = 1, max_voxels = 2000, surface_y = 20}
+		local st = overhang.cell_state(g, p, 6, 6, 0)
+		assert.are.equal(14, st.t)                      -- 20 − 6
+		assert.are.equal(6, st.d)
+		assert.near((overhang.lmax(4, 24, 14) / 6) ^ 2, st.fs, 1e-9)
+	end)
+end)
