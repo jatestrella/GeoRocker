@@ -964,6 +964,10 @@ function collapse.overhang_params()
     return {
         lithologies = cfg.lithologies, scale = ocfg.scale, tensile_at = tensile_at,
         surface_y = cfg.surface_y,
+        tensile_at_y = function(key, y)
+            if not key then return cfg.overhang.tensile_other / model_n end
+            return rock.at(key, y).sigt
+        end,
         gamma_other = cfg.failure.gamma_other, max_voxels = ocfg.max_voxels,
         face_jointed = ocfg.joints and face_jointed or nil,
     }

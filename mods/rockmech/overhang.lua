@@ -286,6 +286,21 @@ local function local_ctx(g, p)
 			if v < lm then lm = v; crit = {tensile = st / 1000, gamma = gam} end
 			run_of[c] = r
 		end
+		-- 假設連續到地表的那段（範圍外）：σt 依高程變化（GSI 剖面），取延伸段兩端（範圍上緣、地表）
+		-- 的較小者，與範圍怎麼取無關
+		if top_extrap and b ~= y1 and p.tensile_at_y then
+			local c = ib + (t - b) * sy
+			local key = lith_of[data[c]]
+			local lith = key and p.lithologies[key]
+			local gam = lith and lith.gamma or p.gamma_other or 20
+			for _, yy in ipairs({g.oy + t + 1, p.surface_y - 1}) do
+				if yy > g.oy + t then
+					local st = p.tensile_at_y(key, yy) * 1000 * scale
+					local v = sqrt(st * thick / (3 * gam))
+					if v < lm then lm = v; crit = {tensile = st / 1000, gamma = gam} end
+				end
+			end
+		end
 		r.lmax = lm
 		r.crit = crit
 		return r

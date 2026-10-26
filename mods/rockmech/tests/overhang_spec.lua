@@ -506,3 +506,27 @@ describe("overhang 碰到範圍上緣的欄", function()
 		assert.near((overhang.lmax(4, 24, 14) / 6) ^ 2, st.fs, 1e-9)
 	end)
 end)
+
+describe("overhang 延伸到地表那段的 σt", function()
+	it("範圍外的延伸段若比較弱（地表 GSI 低），L_max 用它", function()
+		local g = grid(-3, 9, -2, 12, -2, 2, function(x, y, z)
+			if y <= 0 then return "G" end
+			if z == 0 and x == 0 then return "s" end
+			if z == 0 and x >= 1 and x <= 6 and y >= 6 then return "s" end
+		end)
+		local p = {lithologies = LITHS, scale = 1, max_voxels = 2000, surface_y = 20,
+			tensile_at_y = function(_, y) return y >= 15 and 1 or 4 end}
+		local st = overhang.cell_state(g, p, 6, 6, 0)
+		assert.near(overhang.lmax(1, 24, 14), st.lmax, 1e-9)
+		-- 讀取範圍不同（上緣較高）時結果一樣
+		local g2 = grid(-3, 9, -2, 16, -2, 2, function(x, y, z)
+			if y <= 0 then return "G" end
+			if z == 0 and x == 0 then return "s" end
+			if z == 0 and x >= 1 and x <= 6 and y >= 6 then return "s" end
+		end)
+		local p2 = {lithologies = LITHS, scale = 1, max_voxels = 2000, surface_y = 20,
+			tensile_at = function(gg, i) local ly = math.floor((i - 1) / gg.nx) % gg.ny; return gg.oy + ly >= 15 and 1 or 4 end,
+			tensile_at_y = function(_, y) return y >= 15 and 1 or 4 end}
+		assert.near(st.lmax, overhang.cell_state(g2, p2, 6, 6, 0).lmax, 1e-9)
+	end)
+end)
