@@ -470,12 +470,12 @@ describe("懸空格直剪（shear_state）", function()
 		assert.are.equal(19, t.hs)
 	end)
 
-	it("懸臂：往自由端的方向碰到空氣不算，只往根部", function()
+	it("懸臂：路徑只經過懸空岩格，走到根部", function()
 		local g = make_grid(-5, 15, -20, -1, -2, 2, function(x, y)
 			return x <= 0 or (y == -10 and x <= 8)
 		end)
 		local s = failure.shear_state(g, 8, -10, 0, sp())
-		assert.are.equal(-1, s.dir[1])
+		assert.are.equal(0, s.ax)
 		assert.are.equal(8, s.n)
 		assert.near(8 * GAMMA, s.Q, 1e-9)            -- 1 m 厚的板，L = γ
 		assert.are.equal(10, s.hs)
@@ -507,5 +507,24 @@ describe("懸空格直剪：坐在懸空岩石上的不算支撐", function()
 		local s = failure.shear_state(g, 0, -18, 0, p)
 		assert.are.equal(5, s.n)                     -- x = 1..4 坐在懸空頂板上，x = 5 才是岩壁
 		assert.near(18 * GAMMA + 4 * 18 * GAMMA, s.Q, 1e-9)
+	end)
+end)
+
+describe("懸空格直剪：最短路徑可以轉彎", function()
+	it("L 形懸臂板：直線方向都是空氣，沿板轉彎走到岩壁", function()
+		local p = params()
+		p.lithologies.rock.tensile = 1
+		p.shear = {k = 2, max_span = 32, max_section = 64}
+		-- 岩壁 x ≤ 0；板 y = −10：(1..3, 0) 再轉向 (3, 1..4)
+		local g = make_grid(-5, 10, -20, -1, -3, 8, function(x, y, z)
+			if x <= 0 then return true end
+			if y ~= -10 then return false end
+			return (z == 0 and x <= 3) or (x == 3 and z >= 1 and z <= 4)
+		end)
+		local s = failure.shear_state(g, 3, -10, 4, p)
+		assert.are.equal(7, s.n)                      -- (3,3)…(3,0)、(2,0)、(1,0) → 岩壁 (0,0)
+		assert.are.equal(0, s.ax)
+		assert.are.equal(0, s.az)
+		assert.near(7 * GAMMA, s.Q, 1e-9)             -- 1 m 厚的板，每格 L = γ
 	end)
 end)

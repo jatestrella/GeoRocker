@@ -24,11 +24,11 @@
 --      開口高 H（頂板往下到地板）、寬 W（頂板正下方那一排沿 x、z 量到兩側岩壁）：
 --      σθ,x = σxx,遠場·(1 + 2H/Wx) − σv，σθ,z 同理；σv 取上覆荷重，σyy = 0。
 --      寬而扁的開口 → σθ → σh − σv：K < 1 時頂板受拉（Hoek-Brown 的張力截斷 → 張裂），K 大時受壓。
--- 5c. 懸空格的直剪（failure.shear_state）：底下懸空的岩格沿 ±x、±z 往外找到第一個有支撐的岩格
+-- 5c. 懸空格的直剪（failure.shear_state）：底下懸空的岩格在同一高程沿懸空岩格找最短路徑到有支撐的岩格
 --      （支撐處：往下一路實心到地面／碎石堆，坐在懸空岩石上的不算）。剪力 Q = 本格與路徑上懸空格的柱狀荷重 L 之和（每格 1 m² 柱，kN）；
 --      支撐處斷面 = 支撐格往上到第一個有節理的格為止（支撐格本身一定算），
 --      抗剪 R = Σ τ0·1 m²，τ0 = k·σt（Griffith：k = 2；σt 為該格岩體張力強度）。
---      FS = R / Q，取四個方向中最有利者。
+--      FS = R / Q（最短路徑；步數相同時取 FS 較大者）。
 -- 6. 弱面（Jaeger single plane of weakness）：穿過此格的每組節理面（法向 n）
 --      σn = n·σ·n、τ = |σ·n − σn·n|，τ ≥ cj + σn·tan φj → 沿節理滑動。
 --    運動學（daylight）：只有上方臨空不算。下方臨空（頂板／懸垂）：沒有側向限制時任何節理都可釋放；
@@ -694,29 +694,28 @@ end
 
 -- 懸空格的直剪（見檔頭 5c）。p 需有 lithologies、rock（可選）、surface_y、
 -- cell_jointed(x, y, z)（該格是否被任一組節理切過）、shear = {k, max_span, max_section}、tensile_other。
+-- 路徑：同一高程上只經過懸空的鍵結格（可以轉彎），到最近的支撐處（最短路徑，步數相同時取 FS 較大者）。
+-- 每一層高程算一次（從所有支撐處同時往外擴散），快取在網格上。
 -- 回傳 nil（不是底下懸空的岩格）或
---   {fs, Q (kN), R (kN), n（到支撐處的格數）, hs（斷面格數）, ax, az（支撐格）, dir = {hx, hz}}
--- 四個方向都碰到空氣（沒有水平連接，例如頂板下倒掛的尖柱）→ 不判定：fs = ∞、isolated = true
--- （掛在上方岩石上靠張力，交給懸臂／關鍵塊體判定）。碰到網格邊界或 max_span 還沒找到支撐處的方向不採用
--- （支撐處在範圍外，荷重不明）；只有這種方向時保守地回傳 fs = ∞（edge = true）
-local SHEAR_DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
-function failure.shear_state(g, x, y, z, p)
-	local i = index(g, x, y, z)
-	if not i then return nil end
+--   {fs, Q (kN), R (kN), n（到支撐處的步數）, hs（斷面格數）, ax, az（支撐格）}
+-- 範圍內（max_span 步、網格內）找不到支撐處 → 不判定：fs = ∞、isolated = true
+-- （例如頂板下倒掛的尖柱：掛在上方岩石上靠張力，交給懸臂／關鍵塊體判定；或支撐處在範圍外）
+local SHEAR_NB = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+local function shear_level(g, y, p)
 	local bonded = g.bonded_of or g.weight_of
-	if not bonded[g.data[i]] or not g.lith_of[g.data[i]] then return nil end
-	if is_solid(g, x, y - 1, z) or not index(g, x, y - 1, z) then return nil end
-	if not g.L then failure.compute_loads(g, p) end
 	local sp = p.shear or {}
 	local k_tau = sp.k or 2
 	local max_span = sp.max_span or 32
 	local max_section = sp.max_section or 64
-	local function load(xx, yy, zz)
-		local c = cindex(g, xx, yy, zz)
+	local function load(j)
+		local k = j - 1
+		local xx = g.ox + k % g.nx
+		local zz = g.oz + math.floor(k / (g.nx * g.ny))
+		local c = cindex(g, xx, y, zz)
 		return c and g.L[c] or 0
 	end
 	-- 單格的直剪強度 τ0·1 m² (kN)
-	local function tau(xx, yy, zz, j)
+	local function tau(yy, j)
 		local key = g.lith_of[g.data[j]]
 		local st
 		if key and p.rock then
@@ -738,9 +737,7 @@ function failure.shear_state(g, x, y, z, p)
 		end
 		return v
 	end
-	-- (xx, yy, zz) 往下一路實心到網格底部（地面、碎石堆）→ 有支撐；中途碰到非實心 → 懸空。
-	-- 快取跟著 g.L（網格改過、荷重重算時一併失效）
-	if g.sup_L ~= g.L then g.sup, g.sup_L = {}, g.L end
+	-- (xx, yy, zz) 往下一路實心到網格底部（地面、碎石堆）→ 有支撐；中途碰到非實心 → 懸空
 	local sup = g.sup
 	local function supported(xx, yy, zz)
 		local path = {}
@@ -758,45 +755,101 @@ function failure.shear_state(g, x, y, z, p)
 		for _, j in ipairs(path) do sup[j] = res end
 		return res
 	end
-	-- 支撐格 (ax, y, az) 往上的斷面抗剪
+	-- 支撐格 (ax, y, az) 往上的斷面抗剪：支撐格本身一定算，往上到第一個有節理的格為止
 	local function section(ax, az)
 		local R, hs = 0, 0
 		for yy = y, y + max_section - 1 do
 			local j = index(g, ax, yy, az)
 			if not j or not bonded[g.data[j]] then break end
 			if yy > y and jointed(ax, yy, az, j) then break end
-			R = R + tau(ax, yy, az, j)
+			R = R + tau(yy, j)
 			hs = hs + 1
 		end
 		return R, hs
 	end
-	local best, unknown
-	local Q0 = load(x, y, z)
-	for _, d in ipairs(SHEAR_DIRS) do
-		local Q = Q0
-		local found = false
-		for k = 1, max_span do
-			local cx, cz = x + d[1] * k, z + d[2] * k
-			local j = index(g, cx, y, cz)
-			local jb = index(g, cx, y - 1, cz)
-			if not j or not jb then break end                     -- 網格邊界：不明
-			if not bonded[g.data[j]] then found = true; break end -- 空氣、碎石：沒有連著岩體
-			if supported(cx, y - 1, cz) then                     -- 支撐處
-				local R, hs = section(cx, cz)
-				local fs = Q > 0 and R / Q or math.huge
-				if not best or fs > best.fs then
-					best = {fs = fs, Q = Q, R = R, n = k, hs = hs, ax = cx, az = cz, dir = d}
+	-- 這一層：支撐格（dist 0）、懸空的鍵結格（可通行）
+	local lv = {dist = {}, Q = {}, R = {}, hs = {}, fs = {}, src = {}}
+	local dist, Q, R, HS, FS, SRC = lv.dist, lv.Q, lv.R, lv.hs, lv.fs, lv.src
+	local hang = {}
+	local frontier = {}
+	local nx, gs = g.nx, g.nx * g.ny
+	for lz = 0, g.nz - 1 do
+		for lx = 0, g.nx - 1 do
+			local j = index(g, g.ox + lx, y, g.oz + lz)
+			if j and bonded[g.data[j]] then
+				if supported(g.ox + lx, y - 1, g.oz + lz) then
+					dist[j] = 0
+					frontier[#frontier + 1] = j
+				else
+					hang[j] = true
 				end
-				found = true
-				break
 			end
-			Q = Q + load(cx, y, cz)
 		end
-		if not found then unknown = true end
 	end
-	if best then return best end
-	if unknown then return {fs = math.huge, Q = Q0, R = math.huge, n = 0, hs = 0, edge = true} end
-	return {fs = math.huge, Q = Q0, R = 0, n = 0, hs = 0, isolated = true}
+	local sec = {}
+	for k = 0, max_span - 1 do
+		local nextf = {}
+		for _, j in ipairs(frontier) do
+			local jk = j - 1
+			local lx, lz = jk % nx, math.floor(jk / gs)
+			local Rj, Qj, hsj, srcj
+			if k == 0 then
+				local s = sec[j]
+				if not s then
+					local r, h = section(g.ox + lx, g.oz + lz)
+					s = {r, h}
+					sec[j] = s
+				end
+				Rj, Qj, hsj, srcj = s[1], 0, s[2], j
+			else
+				Rj, Qj, hsj, srcj = R[j], Q[j], HS[j], SRC[j]
+			end
+			for _, d in ipairs(SHEAR_NB) do
+				local ax, az = lx + d[1], lz + d[2]
+				if ax >= 0 and ax < nx and az >= 0 and az < g.nz then
+					local n = 1 + ax + (y - g.oy) * nx + az * gs
+					if hang[n] and (dist[n] == nil or dist[n] == k + 1) then
+						local q = Qj + load(n)
+						local f = q > 0 and Rj / q or math.huge
+						if dist[n] == nil then
+							dist[n] = k + 1
+							nextf[#nextf + 1] = n
+							Q[n], R[n], HS[n], FS[n], SRC[n] = q, Rj, hsj, f, srcj
+						elseif f > FS[n] then
+							Q[n], R[n], HS[n], FS[n], SRC[n] = q, Rj, hsj, f, srcj
+						end
+					end
+				end
+			end
+		end
+		if #nextf == 0 then break end
+		frontier = nextf
+	end
+	return lv
+end
+
+function failure.shear_state(g, x, y, z, p)
+	local i = index(g, x, y, z)
+	if not i then return nil end
+	local bonded = g.bonded_of or g.weight_of
+	if not bonded[g.data[i]] or not g.lith_of[g.data[i]] then return nil end
+	if is_solid(g, x, y - 1, z) or not index(g, x, y - 1, z) then return nil end
+	if not g.L then failure.compute_loads(g, p) end
+	-- 快取跟著 g.L（網格改過、荷重重算時一併失效）
+	if g.sup_L ~= g.L then g.sup, g.shear_lv, g.sup_L = {}, {}, g.L end
+	local lv = g.shear_lv[y]
+	if not lv then
+		lv = shear_level(g, y, p)
+		g.shear_lv[y] = lv
+	end
+	local d = lv.dist[i]
+	if not d then
+		local c = cindex(g, x, y, z)
+		return {fs = math.huge, Q = c and g.L[c] or 0, R = 0, n = 0, hs = 0, isolated = true}
+	end
+	local s = lv.src[i] - 1
+	return {fs = lv.fs[i], Q = lv.Q[i], R = lv.R[i], n = d, hs = lv.hs[i],
+		ax = g.ox + s % g.nx, az = g.oz + math.floor(s / (g.nx * g.ny))}
 end
 
 -- 以 (cx,cy,cz) 為中心、半邊長 r 的立方體評估

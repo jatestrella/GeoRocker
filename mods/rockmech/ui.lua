@@ -67,14 +67,11 @@ function rockmech.rockmass_line(rm)
 end
 
 -- 懸空格直剪的一行說明。sh = collapse.shear_state 的結果
-local DIR_NAME = {["1,0"] = "東", ["-1,0"] = "西", ["0,1"] = "北", ["0,-1"] = "南"}
 function rockmech.shear_line(sh)
 	if not sh then return "—（底下不是空的）" end
-	if sh.edge then return "支撐處在檢查範圍外（不判定）" end
-	if sh.isolated then return "四周沒有水平連接（掛在上方岩石上，由懸臂／關鍵塊體判定）" end
-	local d = sh.dir and DIR_NAME[sh.dir[1] .. "," .. sh.dir[2]] or "?"
-	return ("往%s第 %d 格是支撐處：Q = 柱狀荷重和 %.0f kN；斷面 %d 格（到第一個有節理的格）R = Σ%g·σt = %.0f kN → FS %.2f"):format(
-		d, sh.n, sh.Q, sh.hs, cfg.shear.k, sh.R, sh.fs)
+	if sh.isolated then return "範圍內找不到支撐處（倒掛的尖柱由懸臂／關鍵塊體判定，或支撐處在範圍外）" end
+	return ("最短路徑 %d 步到支撐處 (%d, %d)：Q = 柱狀荷重和 %.0f kN；斷面 %d 格（到第一個有節理的格）R = Σ%g·σt = %.0f kN → FS %.2f"):format(
+		sh.n, sh.ax, sh.az, sh.Q, sh.hs, cfg.shear.k, sh.R, sh.fs)
 end
 
 -- 頂板 Inglis 應力的一行說明
@@ -205,7 +202,7 @@ local function fmt_report_lines(r, header, pname)
 		parts[#parts + 1] = "懸臂 " .. v
 	end
 	if r.shear then
-		parts[#parts + 1] = "直剪 " .. (r.shear.edge and "?" or r.shear.isolated and "—" or fs_short(r.shear.fs))
+		parts[#parts + 1] = "直剪 " .. (r.shear.isolated and "—" or fs_short(r.shear.fs))
 	end
 	local kb = r.keyblock
 	if cfg.keyblock.enabled then
