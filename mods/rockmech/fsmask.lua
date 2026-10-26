@@ -148,7 +148,7 @@ scan_parts[1] = function(st)
 
 end
 
--- 2. 懸臂：以範圍內所有「下方懸空的鍵結格」為起點，每個懸空段取段內最小 FS
+-- 2. 懸臂：以範圍內所有臨空的鍵結格為起點（所在的懸空段底部可能在範圍外），每個懸空段取段內最小 FS
 scan_parts[2] = function(st)
 	local a, b, put = st.a, st.b, st.put
 	if cfg.overhang.enabled then
@@ -160,7 +160,9 @@ scan_parts[2] = function(st)
 			for y = a.y, b.y do
 				for x = a.x, b.x do
 					local i = 1 + (x - grid.ox) + (y - grid.oy) * nx + (z - grid.oz) * nx * ny
-					if bonded_of[data[i]] and not solid_of[data[i - nx]] then
+					local gs = nx * ny
+					if bonded_of[data[i]] and (not solid_of[data[i - nx]] or not solid_of[data[i + 1]]
+							or not solid_of[data[i - 1]] or not solid_of[data[i + gs]] or not solid_of[data[i - gs]]) then
 						starts[#starts + 1] = {x = x, y = y, z = z}
 					end
 				end
@@ -525,12 +527,16 @@ local function select_warned(a, box, cells)
 		recent[#recent + 1] = c.pos
 	end
 	a.seen_n = change_n
-	-- 懸空直剪受水平 max_span 內的開挖影響（支撐處的路徑可能經過改變處）
+	-- 懸空直剪受水平 max_span 內的開挖影響（支撐處的路徑可能經過改變處）；
+	-- 懸臂是整段一起算的：段內任何位置的開挖都會改變整段的 FS → 用懸臂的讀取範圍
 	local rh_hang = cfg.shear and cfg.shear.max_span or r
+	local rh_oh, rv_oh = collapse.overhang_radius()
 	local function near_change(p, kind)
-		local rh = kind == "hang" and math.max(r, rh_hang) or r
+		local rh, rv = r, r
+		if kind == "hang" then rh = math.max(r, rh_hang)
+		elseif kind == "overhang" then rh, rv = math.max(r, rh_oh), math.max(r, rv_oh) end
 		for _, q in ipairs(recent) do
-			if math.abs(p.x - q.x) <= rh and math.abs(p.y - q.y) <= r and math.abs(p.z - q.z) <= rh then return true end
+			if math.abs(p.x - q.x) <= rh and math.abs(p.y - q.y) <= rv and math.abs(p.z - q.z) <= rh then return true end
 		end
 		return false
 	end
@@ -540,10 +546,24 @@ local function select_warned(a, box, cells)
 			and p.z >= pb[1].z and p.z <= pb[2].z
 	end
 	local now_fs, out = {}, {}
+	-- 懸臂、直剪是整段（整片）一起變化的：段的 FS 可能在玩家不在附近時就降下來。
+	-- 這兩種只要 1 < FS < 門檻、且附近（懸臂讀取範圍內）有開挖過的位置就標（天然懸垂岩不標）
+	local ex_memo = {}
+	local function near_excavation(p)
+		local ck = math.floor(p.x / 8) .. "," .. math.floor(p.y / 8) .. "," .. math.floor(p.z / 8)
+		local v = ex_memo[ck]
+		if v == nil then
+			v = collapse.excavated_near(p, math.max(r, rh_oh), math.max(r, rv_oh))
+			ex_memo[ck] = v
+		end
+		return v
+	end
 	for _, c in ipairs(cells) do
 		local k = pkey(c.pos)
 		now_fs[k] = c.fs
-		if c.fs > 1 then
+		if c.fs > 1 and (c.kind == "overhang" or c.kind == "hang") then
+			if near_excavation(c.pos) then out[#out + 1] = c end
+		elseif c.fs > 1 then
 			if not affected[k] and #recent > 0 and in_prev(c.pos) and near_change(c.pos, c.kind) then
 				local before = a.prev and a.prev[k]
 				-- 新進入警戒範圍（上次 ≥ 門檻），或原本就在範圍內但明顯下降（≥ 5%）
