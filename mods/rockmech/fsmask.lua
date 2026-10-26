@@ -528,9 +528,12 @@ local function select_warned(a, box, cells)
 		recent[#recent + 1] = c.pos
 	end
 	a.seen_n = change_n
-	local function near_change(p)
+	-- 懸空直剪受水平 max_span 內的開挖影響（支撐處的路徑可能經過改變處）
+	local rh_hang = cfg.shear and cfg.shear.max_span or r
+	local function near_change(p, kind)
+		local rh = kind == "hang" and math.max(r, rh_hang) or r
 		for _, q in ipairs(recent) do
-			if math.abs(p.x - q.x) <= r and math.abs(p.y - q.y) <= r and math.abs(p.z - q.z) <= r then return true end
+			if math.abs(p.x - q.x) <= rh and math.abs(p.y - q.y) <= r and math.abs(p.z - q.z) <= rh then return true end
 		end
 		return false
 	end
@@ -544,7 +547,7 @@ local function select_warned(a, box, cells)
 		local k = pkey(c.pos)
 		now_fs[k] = c.fs
 		if c.fs > 1 then
-			if not affected[k] and #recent > 0 and in_prev(c.pos) and near_change(c.pos) then
+			if not affected[k] and #recent > 0 and in_prev(c.pos) and near_change(c.pos, c.kind) then
 				local before = a.prev and a.prev[k]
 				-- 新進入警戒範圍（上次 ≥ 門檻），或原本就在範圍內但明顯下降（≥ 5%）
 				if before == nil or c.fs < before * 0.95 then affected[k] = true end
