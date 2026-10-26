@@ -295,3 +295,27 @@ function rockmech.rubble_for(nodename)
 	local lith = rockmech.lith_of_node[nodename]
 	return lith and rockmech.rubble_of_lith[lith.name] or rockmech.RUBBLE
 end
+
+-- 物品欄裡不滿格的碎石（舊版爆破噴出的）：依級數併成滿格碎石（8 級 = 1 個，四捨五入），才會疊在同一堆
+function rockmech.merge_partial_rubble(inv, listname)
+	local lv = {}
+	local changed = false
+	for i, st in ipairs(inv:get_list(listname) or {}) do
+		local name = st:get_name()
+		local k = rockmech.rubble_level[name]
+		if k and k < rockmech.RUBBLE_LEVELS then
+			local base = rockmech.rubble_base[name]
+			lv[base] = (lv[base] or 0) + k * st:get_count()
+			inv:set_stack(listname, i, ItemStack(""))
+			changed = true
+		end
+	end
+	for base, l in pairs(lv) do
+		local n = math.floor(l / rockmech.RUBBLE_LEVELS + 0.5)
+		if n > 0 then inv:add_item(listname, ItemStack(base .. " " .. n)) end
+	end
+	return changed
+end
+core.register_on_joinplayer(function(player)
+	rockmech.merge_partial_rubble(player:get_inventory(), "main")
+end)

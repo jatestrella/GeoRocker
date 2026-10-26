@@ -70,7 +70,7 @@ function rockmech.blast_rock(center, R)
 	local data = vm:get_data()
 	local c_air = core.get_content_id("air")
 
-	local ejected, n_eject, n_rubble = {}, 0, 0
+	local ejected, n_eject, n_rubble = {}, 0, 0   -- ejected：滿格碎石名稱 → 累計級數
 	local removed, rubbled = {}, {}
 	local changes = {}     -- 開挖前的方塊（只有開挖造成的惡化才破壞）
 	for z = p1.z, p2.z do for y = p1.y, p2.y do
@@ -89,7 +89,7 @@ function rockmech.blast_rock(center, R)
 					if zone then changes[#changes + 1] = {pos = p, name = li.name} end
 					if zone == "eject" then
 						data[vi] = c_air
-						ejected[rname] = (ejected[rname] or 0) + 1
+						ejected[rname] = (ejected[rname] or 0) + rockmech.RUBBLE_LEVELS
 						n_eject = n_eject + 1
 						removed[#removed + 1] = p
 					elseif zone == "rubble" then
@@ -101,7 +101,9 @@ function rockmech.blast_rock(center, R)
 					-- 已經是碎石：中心區一樣炸飛
 					changes[#changes + 1] = {pos = p, name = rb}
 					data[vi] = c_air
-					ejected[rb] = (ejected[rb] or 0) + 1
+					-- 不滿格的碎石：依級數累加到滿格碎石（8 級 = 1 個），物品才會疊在同一堆
+					local base = rockmech.rubble_base[rb] or rb
+					ejected[base] = (ejected[base] or 0) + (rockmech.rubble_level[rb] or rockmech.RUBBLE_LEVELS)
 					n_eject = n_eject + 1
 					removed[#removed + 1] = p
 				end
@@ -117,6 +119,8 @@ function rockmech.blast_rock(center, R)
 		if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
 	end
 	vm:close()
+	-- 級數 → 個數（四捨五入）
+	for name, lv in pairs(ejected) do ejected[name] = math.floor(lv / rockmech.RUBBLE_LEVELS + 0.5) end
 	eject_items(center, ejected)
 
 	-- 觸發後續判定：爆炸範圍內的移除點（支撐判定、懸臂斷裂）與爆心（軸差破壞）
