@@ -515,6 +515,33 @@ local function select_warned(cells)
 	return out
 end
 
+-- FS ≤ 1 理論上就該壞：掃描看到 FS ≤ 1、還沒處理的格子，觸發該位置的判定
+-- （判定照常套用「只有開挖造成的才壞」；同一格 60 秒內不重複觸發，每次掃描最多 24 個位置）
+local TRIGGER_COOLDOWN, TRIGGER_MAX = 60, 24
+local triggered = {}
+local SUPPORT_KINDS = {overhang = true, hang = true, keyblock = true}
+local FAILURE_KINDS = {axial = true, slip = true, mass = true}
+local function trigger_failed(cells)
+	local t, n = now(), 0
+	for _, c in ipairs(cells) do
+		if c.fs <= 1 and (SUPPORT_KINDS[c.kind] or FAILURE_KINDS[c.kind]) then
+			local k = pkey(c.pos)
+			if not triggered[k] or t - triggered[k] > TRIGGER_COOLDOWN then
+				triggered[k] = t
+				if SUPPORT_KINDS[c.kind] then collapse.queue_support_check(c.pos)
+				else collapse.queue_failure_check(c.pos) end
+				n = n + 1
+				if n >= TRIGGER_MAX then break end
+			end
+		end
+	end
+	if n > 0 then
+		for k, v in pairs(triggered) do
+			if t - v > TRIGGER_COOLDOWN then triggered[k] = nil end
+		end
+	end
+end
+
 local tick = 0
 core.register_globalstep(function(dtime)
 	tick = tick + dtime
@@ -544,6 +571,7 @@ core.register_globalstep(function(dtime)
 					if w2 then
 						apply_warn(pl, a, pos, select_warned(cells))
 					end
+					trigger_failed(cells)
 				end)
 			end
 		end
