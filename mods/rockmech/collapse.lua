@@ -758,43 +758,13 @@ end
 local ex_storage = core.get_mod_storage()
 local EX_PREFIX = "ex:"
 local excavated = {}
--- 每個 16³ 區塊內開挖過的位置數（快速查「附近有沒有開挖」）
-local EX_CHUNK = 16
-local ex_chunk = {}
-local function ex_chunk_key(x, y, z)
-    return math.floor(x / EX_CHUNK) .. "," .. math.floor(y / EX_CHUNK) .. "," .. math.floor(z / EX_CHUNK)
-end
-local function ex_chunk_add(k, d)
-    local x, y, z = k:match("^(-?%d+),(-?%d+),(-?%d+)$")
-    if not x then return end
-    local ck = ex_chunk_key(tonumber(x), tonumber(y), tonumber(z))
-    local v = (ex_chunk[ck] or 0) + d
-    ex_chunk[ck] = v > 0 and v or nil
-end
 for k in pairs(ex_storage:to_table().fields) do
-    if k:sub(1, #EX_PREFIX) == EX_PREFIX then
-        local key = k:sub(#EX_PREFIX + 1)
-        excavated[key] = true
-        ex_chunk_add(key, 1)
-    end
-end
--- p 周圍水平 ±rh、垂直 ±rv 內（以 16³ 區塊為單位，略為放寬）有沒有開挖過的位置
-function collapse.excavated_near(p, rh, rv)
-    local c = EX_CHUNK
-    for cx = math.floor((p.x - rh) / c), math.floor((p.x + rh) / c) do
-        for cy = math.floor((p.y - rv) / c), math.floor((p.y + rv) / c) do
-            for cz = math.floor((p.z - rh) / c), math.floor((p.z + rh) / c) do
-                if ex_chunk[cx .. "," .. cy .. "," .. cz] then return true end
-            end
-        end
-    end
-    return false
+    if k:sub(1, #EX_PREFIX) == EX_PREFIX then excavated[k:sub(#EX_PREFIX + 1)] = true end
 end
 function collapse.mark_excavated(p)
     local k = pos_key(vector.round(p))
     if not excavated[k] then
         excavated[k] = true
-        ex_chunk_add(k, 1)
         ex_storage:set_string(EX_PREFIX .. k, "1")
     end
 end
@@ -802,7 +772,6 @@ function collapse.unmark_excavated(p)
     local k = pos_key(vector.round(p))
     if excavated[k] then
         excavated[k] = nil
-        ex_chunk_add(k, -1)
         ex_storage:set_string(EX_PREFIX .. k, "")
     end
 end
