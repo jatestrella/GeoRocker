@@ -211,6 +211,14 @@ config.overhang_defaults = {
 	joints = true,            -- 節理切過的介面不傳張力（根部斷面 t_eff；完全切開則分離成獨立的塊）
 }
 
+-- 懸空格的直剪（failure.shear_state）；設定鍵為 rockmech_shear_<key>
+config.shear_defaults = {
+	enabled = true,
+	k = 2,                    -- 直剪強度 τ0 = k·σt（Griffith：k = 2）
+	max_span = 32,            -- 往外找支撐處最多幾格 (m)
+	max_section = 64,         -- 支撐處斷面最多往上幾格 (m)
+}
+
 -- 安息角滑動（collapse.lua）；設定鍵為 rockmech_slope_<key>
 config.slope_defaults = {
 	enabled = true,           -- 碎石超過安息角會移動（完整岩石不受安息角影響）
@@ -479,6 +487,12 @@ function config.load(get)
 	cfg.overhang.scale = math.max(0.001, cfg.overhang.scale)
 	cfg.overhang.radius = math.max(4, math.floor(cfg.overhang.radius))
 	cfg.overhang.max_voxels = math.max(1, math.floor(cfg.overhang.max_voxels))
+
+	-- 懸空格的直剪
+	cfg.shear = load_section("shear", config.shear_defaults)
+	cfg.shear.k = math.max(0, cfg.shear.k)
+	cfg.shear.max_span = math.max(1, math.floor(cfg.shear.max_span))
+	cfg.shear.max_section = math.max(1, math.floor(cfg.shear.max_section))
 
 	-- 安息角滑動
 	cfg.slope = load_section("slope", config.slope_defaults)

@@ -18,6 +18,7 @@ local KINDS = {
 	overhang = {color = "#b040ff", label = "懸臂斷裂／被節理切離"},
 	keyblock = {color = "#ffe000", label = "關鍵塊體"},
 	mass = {color = "#ff6a00", label = "整體滑動（稜柱）"},
+	hang = {color = "#00c8ff", label = "懸空直剪"},
 }
 -- 只用於警戒裂紋（不會造成破壞）：明確節理的逐格受剪。節理面剪應力接近強度 → 開始滑移、張開
 local SHEAR_KIND = "shear"
@@ -235,7 +236,30 @@ scan_parts[4] = function(st)
 	end
 end
 
--- 一次算完。回傳 {{pos, fs, kind = "slip"|"axial"|"overhang"|"keyblock"}...}, ms
+-- 5. 懸空格直剪：範圍內底下懸空的岩格
+scan_parts[5] = function(st)
+	local a, b, put = st.a, st.b, st.put
+	if cfg.shear.enabled then
+		local orad = cfg.overhang.radius
+		local grid = collapse.read_grid(vector.subtract(a, orad), vector.add(b, orad), true)
+		local nx, ny = grid.nx, grid.ny
+		local data, lith_of, solid_of = grid.data, grid.lith_of, grid.solid_of
+		local sp = collapse.shear_params()
+		for z = a.z, b.z do
+			for y = a.y, b.y do
+				for x = a.x, b.x do
+					local i = 1 + (x - grid.ox) + (y - grid.oy) * nx + (z - grid.oz) * nx * ny
+					if lith_of[data[i]] and not solid_of[data[i - nx]] then
+						local s = rockmech.failure.shear_state(grid, x, y, z, sp)
+						if s then put({x = x, y = y, z = z}, s.fs, "hang") end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- 一次算完。回傳 {{pos, fs, kind = "slip"|"axial"|"overhang"|"keyblock"|"mass"|"hang"}...}, ms
 function rockmech.fs_scan(center, r, fs_max)
 	local t0 = core.get_us_time()
 	local st = scan_state(center, r, fs_max)
@@ -260,7 +284,7 @@ end
 -- center ±r 內 FS ≤ 1 的格子（FS 遮罩用）。回傳 cells = {{pos, kind, fs}...}, counts, ms
 function rockmech.fsmask_scan(center, r)
 	local all, ms = rockmech.fs_scan(center, r, 1 + 1e-9)
-	local counts = {slip = 0, axial = 0, overhang = 0, keyblock = 0, mass = 0, shear = 0}
+	local counts = {slip = 0, axial = 0, overhang = 0, keyblock = 0, mass = 0, shear = 0, hang = 0}
 	for _, c in ipairs(all) do counts[c.kind] = counts[c.kind] + 1 end
 	return all, counts, ms
 end
@@ -348,7 +372,7 @@ end
 -- 警戒裂紋的破壞機制名稱（HUD 用）
 local WARN_LABEL = {
 	slip = "節理滑動", axial = "軸差破壞", overhang = "懸臂斷裂", keyblock = "關鍵塊體",
-	mass = "整體滑動（稜柱）", shear = "節理受剪（只警示，不會因此掉落）",
+	mass = "整體滑動（稜柱）", shear = "節理受剪（只警示，不會因此掉落）", hang = "懸空直剪",
 }
 
 -- 玩家看到的某格裂紋：回傳 {kind, label, fs} 或 nil
@@ -388,7 +412,7 @@ end
 
 local function summary(cells, counts)
 	local parts = {}
-	for _, kind in ipairs({"slip", "axial", "overhang", "keyblock", "mass"}) do
+	for _, kind in ipairs({"slip", "axial", "overhang", "keyblock", "mass", "hang"}) do
 		parts[#parts + 1] = core.colorize(KINDS[kind].color, ("■ %s %d"):format(KINDS[kind].label, counts[kind]))
 	end
 	local note = ""

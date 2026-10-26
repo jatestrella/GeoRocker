@@ -913,6 +913,26 @@ local function face_jointed(x, y, z, axis)
     return rockmech.joints.face_joint(rockmech.get_joint_sets(), x, y, z, axis) ~= nil
 end
 
+-- 懸空格直剪（failure.shear_state）的參數
+local shcfg = cfg.shear
+local function cell_jointed(x, y, z)
+    return #rockmech.jointtex.cell_traces(rockmech.joints, rockmech.get_joint_sets(), x, y, z, 1) > 0
+end
+function collapse.shear_params()
+    return {
+        lithologies = cfg.lithologies, rock = rock, surface_y = cfg.surface_y,
+        cell_jointed = cell_jointed, shear = shcfg,
+        tensile_other = cfg.overhang.tensile_other / model_n,
+    }
+end
+
+-- 單格的直剪狀態（HUD／資訊頁用）
+function collapse.shear_state(pos)
+    local r = cfg.overhang.radius
+    local grid = collapse.read_grid(vector.subtract(pos, r), vector.add(pos, r), true)
+    return failure.shear_state(grid, pos.x, pos.y, pos.z, collapse.shear_params())
+end
+
 function collapse.overhang_params()
     local ocfg = cfg.overhang
     return {
@@ -1117,6 +1137,84 @@ local function run_support_check()
                 comps[#comps + 1] = {cells = cells, grid = grid}
                 n_overhang = n_overhang + 1
             end
+        end
+        -- 懸空格直剪：底下懸空的岩格。改變處會影響水平距離 max_span 內的懸空格（路徑可能經過改變處），
+        -- 範圍 = 所有改變格（含各自的影響半徑）的外框，水平再往外 max_span
+        if shcfg.enabled and #changes.list > 0 then
+            local sp = collapse.shear_params()
+            local gnx, gny, gnz = grid.nx, grid.ny, grid.nz
+            local gsy, gsz = gnx, gnx * gny
+            local gdata, gsolid, glith = grid.data, grid.solid_of, grid.lith_of
+            local bx1, by1, bz1, bx2, by2, bz2 = math.huge, math.huge, math.huge, -math.huge, -math.huge, -math.huge
+            for _, ch in ipairs(changes.list) do
+                local rr = ch.r or primary_radius()
+                bx1 = math.min(bx1, ch.x - rr); bx2 = math.max(bx2, ch.x + rr)
+                by1 = math.min(by1, ch.y - rr); by2 = math.max(by2, ch.y + rr)
+                bz1 = math.min(bz1, ch.z - rr); bz2 = math.max(bz2, ch.z + rr)
+            end
+            local ms = shcfg.max_span
+            bx1, bx2 = math.max(bx1 - ms, grid.ox + 1), math.min(bx2 + ms, grid.ox + gnx - 2)
+            bz1, bz2 = math.max(bz1 - ms, grid.oz + 1), math.min(bz2 + ms, grid.oz + gnz - 2)
+            by1, by2 = math.max(by1, grid.oy + 1), math.min(by2, grid.oy + gny - 2)
+            local cand = {}
+            for z = bz1, bz2 do for y = by1, by2 do for x = bx1, bx2 do
+                local i = 1 + (x - grid.ox) + (y - grid.oy) * gsy + (z - grid.oz) * gsz
+                if glith[gdata[i]] and not gsolid[gdata[i - gsy]] and not taken[pos_key({x = x, y = y, z = z})] then
+                    cand[#cand + 1] = {x = x, y = y, z = z}
+                end
+            end end end
+            local fail = {}
+            for _, q in ipairs(cand) do
+                local s = failure.shear_state(grid, q.x, q.y, q.z, sp)
+                if s and s.fs < 1 then fail[#fail + 1] = {pos = q, after = s} end
+            end
+            -- 只有開挖造成的才剪斷（穩定 → 不穩定）；FS = 0（沒有連著岩體）一律掉
+            if icfg.enabled and #fail > 0 then
+                local undo = restore_grid(grid, changes.list)
+                local keep = {}
+                for _, f in ipairs(fail) do
+                    -- 底下是開挖出來的空間：一定是開挖造成的（開挖前這格不懸空）
+                    local below = {x = f.pos.x, y = f.pos.y - 1, z = f.pos.z}
+                    local b = not excavated[pos_key(below)]
+                        and failure.shear_state(grid, f.pos.x, f.pos.y, f.pos.z, sp)
+                    if not b or b.fs >= 1 or f.after.fs <= 0 then keep[#keep + 1] = f
+                    else n_existing = n_existing + 1 end
+                end
+                undo()
+                fail = keep
+            end
+            -- 相鄰的剪斷格合成一群落下
+            local fset = {}
+            for _, f in ipairs(fail) do fset[pos_key(f.pos)] = f end
+            local n_sh = 0
+            for _, f in ipairs(fail) do
+                local k0 = pos_key(f.pos)
+                if fset[k0] then
+                    local cells, stack = {}, {f.pos}
+                    fset[k0] = nil
+                    local minfs = f.after.fs
+                    while #stack > 0 do
+                        local p = stack[#stack]; stack[#stack] = nil
+                        cells[#cells + 1] = p
+                        taken[pos_key(p)] = true
+                        for _, d in ipairs(NB6) do
+                            local q = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
+                            local fq = fset[pos_key(q)]
+                            if fq then
+                                fset[pos_key(q)] = nil
+                                if fq.after.fs < minfs then minfs = fq.after.fs end
+                                stack[#stack + 1] = q
+                            end
+                        end
+                    end
+                    table.sort(cells, function(u, v) return u.y < v.y end)
+                    comps[#comps + 1] = {cells = cells, grid = grid}
+                    n_sh = n_sh + 1
+                    core.log("action", ("[rockmech] 懸空直剪：%d 格剪斷落下（最小 FS %.3f；例：Q %.0f kN、R %.0f kN、到支撐 %d 格、斷面 %d 格）")
+                        :format(#cells, minfs, f.after.Q, f.after.R, f.after.n, f.after.hs))
+                end
+            end
+            n_overhang = n_overhang + n_sh
         end
         -- 關鍵塊體：被節理與臨空面圍住的岩塊，以重力判斷落下／滑動
         if kcfg.enabled then

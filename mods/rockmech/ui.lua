@@ -44,6 +44,7 @@ function rockmech.stress_report(pos)
 		r.overhang = rockmech.collapse.overhang_state(pos)
 		r.nearby = rockmech.collapse.nearby_min_fs(pos, NEARBY_R)
 		if cfg.keyblock.enabled then r.keyblock = rockmech.collapse.keyblock_state(pos) end
+		if cfg.shear.enabled then r.shear = rockmech.collapse.shear_state(pos) end
 	end
 	return r
 end
@@ -63,6 +64,17 @@ function rockmech.rockmass_line(rm)
 	local n = rockmech.collapse.rock.N
 	return ("GSI %d（mb %.3f  s %.2e  a %.3f）σci %.3g → 臨空單軸 %.3g、σt %.3g MPa%s"):format(
 		rm.gsi, rm.mb, rm.s, rm.a, rm.sigci, rm.ucs_m, rm.sigt, n ~= 1 and ("（已 ÷ N=%g）"):format(n) or "")
+end
+
+-- 懸空格直剪的一行說明。sh = collapse.shear_state 的結果
+local DIR_NAME = {["1,0"] = "東", ["-1,0"] = "西", ["0,1"] = "北", ["0,-1"] = "南"}
+function rockmech.shear_line(sh)
+	if not sh then return "—（底下不是空的）" end
+	if sh.edge then return "支撐處在檢查範圍外（不判定）" end
+	if sh.fs <= 0 then return "四周都沒有連著岩體（FS 0）" end
+	local d = sh.dir and DIR_NAME[sh.dir[1] .. "," .. sh.dir[2]] or "?"
+	return ("往%s第 %d 格是支撐處：Q = 柱狀荷重和 %.0f kN；斷面 %d 格（到第一個有節理的格）R = Σ%g·σt = %.0f kN → FS %.2f"):format(
+		d, sh.n, sh.Q, sh.hs, cfg.shear.k, sh.R, sh.fs)
 end
 
 -- 頂板 Inglis 應力的一行說明
@@ -191,6 +203,9 @@ local function fmt_report_lines(r, header, pname)
 		if o and o.supported then v = "∞"
 		elseif o and o.group_fs then v = fs_short(o.group_fs) end
 		parts[#parts + 1] = "懸臂 " .. v
+	end
+	if r.shear then
+		parts[#parts + 1] = "直剪 " .. (r.shear.edge and "?" or fs_short(r.shear.fs))
 	end
 	local kb = r.keyblock
 	if cfg.keyblock.enabled then
@@ -433,6 +448,7 @@ local function tab_stress(name)
 			{"軸差 FS", ("%.2f"):format(s.fs_axial)},
 			{"節理弱面", rockmech.slip_line(s)},
 			{"懸臂", rockmech.overhang_line(r.overhang)},
+			{"懸空直剪", rockmech.shear_line(r.shear)},
 			{"周圍臨空格", rockmech.nearby_line(r.nearby)},
 			{"關鍵塊體", rockmech.keyblock_line(r.keyblock)},
 			{"臨空面", (s.exposed_x and "東西 " or "") .. (s.exposed_z and "南北 " or "") ..

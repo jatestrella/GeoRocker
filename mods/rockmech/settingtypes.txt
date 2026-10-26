@@ -306,6 +306,23 @@ rockmech_overhang_max_voxels (Max overhang size) int 30000 1 200000
 # (L_max scales with intact/total), and a block cut off completely by joints falls.
 rockmech_overhang_joints (Joints cut overhangs) bool true
 
+[Direct shear of hanging rock]
+
+# Rock with air below hangs on the nearest supported rock along +-x / +-z.
+# Shear force Q = sum of the column loads of the hanging cells on the way;
+# resisting section = the supporting cell and the cells above it up to the first jointed cell,
+# R = sum of tau0 * 1 m2 with tau0 = k * sigma_t (Griffith: k = 2). FS = R / Q.
+rockmech_shear_enabled (Direct shear of hanging rock) bool true
+
+# tau0 = k * sigma_t (Griffith k = 2).
+rockmech_shear_k (Shear strength factor k) float 2 0 20
+
+# How far (m) to search for the supporting rock.
+rockmech_shear_max_span (Shear search span) int 32 1 64
+
+# Maximum height (m) of the resisting section.
+rockmech_shear_max_section (Shear section height) int 64 1 256
+
 [Fall breakage]
 
 # Intact rock that falls may break into rubble on landing: p = 1 - exp(-h / h_ref).
