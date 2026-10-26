@@ -696,7 +696,8 @@ end
 -- cell_jointed(x, y, z)（該格是否被任一組節理切過）、shear = {k, max_span, max_section}、tensile_other。
 -- 回傳 nil（不是底下懸空的岩格）或
 --   {fs, Q (kN), R (kN), n（到支撐處的格數）, hs（斷面格數）, ax, az（支撐格）, dir = {hx, hz}}
--- 四個方向都碰到空氣（沒有連著岩體）→ fs = 0。碰到網格邊界或 max_span 還沒找到支撐處的方向不採用
+-- 四個方向都碰到空氣（沒有水平連接，例如頂板下倒掛的尖柱）→ 不判定：fs = ∞、isolated = true
+-- （掛在上方岩石上靠張力，交給懸臂／關鍵塊體判定）。碰到網格邊界或 max_span 還沒找到支撐處的方向不採用
 -- （支撐處在範圍外，荷重不明）；只有這種方向時保守地回傳 fs = ∞（edge = true）
 local SHEAR_DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 function failure.shear_state(g, x, y, z, p)
@@ -795,7 +796,7 @@ function failure.shear_state(g, x, y, z, p)
 	end
 	if best then return best end
 	if unknown then return {fs = math.huge, Q = Q0, R = math.huge, n = 0, hs = 0, edge = true} end
-	return {fs = 0, Q = Q0, R = 0, n = 0, hs = 0}
+	return {fs = math.huge, Q = Q0, R = 0, n = 0, hs = 0, isolated = true}
 end
 
 -- 以 (cx,cy,cz) 為中心、半邊長 r 的立方體評估

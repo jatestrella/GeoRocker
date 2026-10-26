@@ -71,7 +71,7 @@ local DIR_NAME = {["1,0"] = "東", ["-1,0"] = "西", ["0,1"] = "北", ["0,-1"] =
 function rockmech.shear_line(sh)
 	if not sh then return "—（底下不是空的）" end
 	if sh.edge then return "支撐處在檢查範圍外（不判定）" end
-	if sh.fs <= 0 then return "四周都沒有連著岩體（FS 0）" end
+	if sh.isolated then return "四周沒有水平連接（掛在上方岩石上，由懸臂／關鍵塊體判定）" end
 	local d = sh.dir and DIR_NAME[sh.dir[1] .. "," .. sh.dir[2]] or "?"
 	return ("往%s第 %d 格是支撐處：Q = 柱狀荷重和 %.0f kN；斷面 %d 格（到第一個有節理的格）R = Σ%g·σt = %.0f kN → FS %.2f"):format(
 		d, sh.n, sh.Q, sh.hs, cfg.shear.k, sh.R, sh.fs)
@@ -205,7 +205,7 @@ local function fmt_report_lines(r, header, pname)
 		parts[#parts + 1] = "懸臂 " .. v
 	end
 	if r.shear then
-		parts[#parts + 1] = "直剪 " .. (r.shear.edge and "?" or fs_short(r.shear.fs))
+		parts[#parts + 1] = "直剪 " .. (r.shear.edge and "?" or r.shear.isolated and "—" or fs_short(r.shear.fs))
 	end
 	local kb = r.keyblock
 	if cfg.keyblock.enabled then

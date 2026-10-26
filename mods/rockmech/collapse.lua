@@ -1039,7 +1039,7 @@ local function run_support_check()
 
     local comps, stats = {}, {visited = 0}
     local slides = {}      -- 關鍵塊體滑動（沿滑動方向移出）
-    local n_overhang = 0
+    local n_overhang, n_shear = 0, 0
     local oparams = collapse.overhang_params()
     for _, g in ipairs(groups) do
         local grid = collapse.read_grid(
@@ -1214,7 +1214,7 @@ local function run_support_check()
                         :format(#cells, minfs, f.after.Q, f.after.R, f.after.n, f.after.hs))
                 end
             end
-            n_overhang = n_overhang + n_sh
+            n_shear = n_shear + n_sh
         end
         -- 關鍵塊體：被節理與臨空面圍住的岩塊，以重力判斷落下／滑動
         if kcfg.enabled then
@@ -1436,8 +1436,8 @@ local function run_support_check()
         end
     end
     physics_updating = false
-    core.log("action", ("[rockmech] 支撐判定：%d 群落下（懸臂斷裂 %d 群；整塊落下 %d 群）、共 %d 格（%.1f ms，展開 %d 格）")
-        :format(#comps, n_overhang, n_rigid, n, ms, stats.visited))
+    core.log("action", ("[rockmech] 支撐判定：%d 群落下（懸臂斷裂 %d 群；懸空直剪 %d 群；整塊落下 %d 群）、共 %d 格（%.1f ms，展開 %d 格）")
+        :format(#comps, n_overhang, n_shear, n_rigid, n, ms, stats.visited))
 end
 
 -- 剛體落地後：碎石依安息角判定
