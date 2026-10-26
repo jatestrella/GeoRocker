@@ -51,19 +51,39 @@ describe("failure 柱狀荷重", function()
 		assert.near(1, st.factor, 1e-12)
 	end)
 
-	it("開口頂板荷重 R 轉給兩側（礦柱集中）", function()
-		-- 地下 y=-20..-18 開挖成房間，只留 x=0 的礦柱（z 向全寬）
+	it("開口頂板荷重沿最短路徑轉給礦柱（從屬面積、總荷重守恆）", function()
+		-- 地下 y=-20..-18 開挖成房間，只留 x=0 的礦柱（z 向全寬）；房間延伸到網格邊界
 		local g = make_grid(-6, 6, -30, -1, -6, 6, function(x, y)
 			if y >= -20 and y <= -18 and x ~= 0 then return false end
 			return true
 		end)
 		local st = failure.cell_state(g, 0, -19, 0, params())
-		-- 窗格 9×9：礦柱 9 格（自身柱 19 m）+ 72 個開口格（頂板厚 17 m）
-		-- σy = γ(9·19 + 72·17)/9 → 集中係數 = 155/19
-		assert.near(GAMMA * (9 * 19 + 72 * 17) / 9 / 1000, st.sv, 1e-9)
-		assert.near(155 / 19, st.factor, 1e-9)
+		-- 每一排 12 個頂板格（頂板厚 17 m）都以礦柱為支撐處：σy = γ(19 + 12·17)
+		assert.near(GAMMA * (19 + 12 * 17) / 1000, st.sv, 1e-9)
+		assert.near(223 / 19, st.factor, 1e-9)
 		assert.is_true(st.exposed_x)
 		assert.near(0, st.sx, 1e-12)
+		-- 舊規則（deposits = false）：只算窗格 9×9 內的開口 → σy = γ(9·19 + 72·17)/9
+		local p = params()
+		p.deposits = false
+		local g2 = make_grid(-6, 6, -30, -1, -6, 6, function(x, y)
+			if y >= -20 and y <= -18 and x ~= 0 then return false end
+			return true
+		end)
+		assert.near(GAMMA * (9 * 19 + 72 * 17) / 9 / 1000, failure.cell_state(g2, 0, -19, 0, p).sv, 1e-9)
+	end)
+
+	it("兩根礦柱各收自己那一側的頂板", function()
+		-- 礦柱 x = −4、x = 4；房間 x −3..3（7 m）與外側 x ≤ −5、x ≥ 5（到網格邊界 ±12）
+		local g = make_grid(-12, 12, -30, -1, -3, 3, function(x, y)
+			if y >= -20 and y <= -18 and x ~= -4 and x ~= 4 then return false end
+			return true
+		end)
+		local st = failure.cell_state(g, 4, -19, 0, params())
+		-- x = 4 的礦柱：中間房間 x 1..3（x = 0 與兩根柱距離相同，取 FS 較大者，歸屬不定）
+		-- 加上外側 x 5..12 共 8 格；總荷重介於 11 與 12 格頂板之間
+		local d = st.sv * 1000 / GAMMA - 19
+		assert.is_true(d >= 11 * 17 - 1e-6 and d <= 12 * 17 + 1e-6)
 	end)
 
 	it("頂板格（下方臨空）σy = 0", function()

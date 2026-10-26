@@ -580,8 +580,24 @@ local function weak_sets()
 end
 collapse.weak_sets = weak_sets
 
+-- 軸差判定讀取網格的外擴：水平要看得到 max_span 內的頂板（轉給岩柱的荷重），垂直同舊規則
+function collapse.failure_margin()
+    local v = fcfg.window + 1
+    local h = v
+    if cfg.shear.enabled and cfg.shear.max_span > h then h = cfg.shear.max_span end
+    return h, v
+end
+-- 讀取 a..b 外擴 failure_margin（再加 extra）的網格
+function collapse.read_failure_grid(a, b, extra)
+    local h, v = collapse.failure_margin()
+    h, v = h + (extra or 0), v + (extra or 0)
+    return collapse.read_grid({x = a.x - h, y = a.y - v, z = a.z - h}, {x = b.x + h, y = b.y + v, z = b.z + h})
+end
+
 function collapse.failure_params(detail)
     return {
+        shear = cfg.shear, cell_jointed = collapse.cell_jointed,
+        tensile_other = cfg.overhang.tensile_other / model_n,
         detail = detail,
         joint_sets = weak_sets(),
         axial = fcfg.enabled,
@@ -670,7 +686,6 @@ end
 function collapse.evaluate_failure_boxes(boxes)
     local t0 = core.get_us_time()
     local params = collapse.failure_params()
-    local margin = fcfg.window + 1
     local groups = {boxes}
     local ua, ub = union(boxes)
     local sum = 0
@@ -684,9 +699,7 @@ function collapse.evaluate_failure_boxes(boxes)
     local stats = {evaluated = 0, failed = 0, min_fs = math.huge}
     for _, grp in ipairs(groups) do
         local a, b = union(grp)
-        local grid = collapse.read_grid(
-            {x = a.x - margin, y = a.y - margin, z = a.z - margin},
-            {x = b.x + margin, y = b.y + margin, z = b.z + margin})
+        local grid = collapse.read_failure_grid(a, b)
         local failed, st = failure.evaluate_boxes(grid, params, grp)
         stats.evaluated = stats.evaluated + st.evaluated
         if st.min_fs < stats.min_fs then
@@ -781,8 +794,7 @@ local function filter_induced_failures(failed, changes)
     local t = {}
     for _, f in ipairs(failed) do t[#t + 1] = cube(f, 0) end
     local a, b = union(t)
-    local m = fcfg.window + 1
-    local grid = collapse.read_grid(vector.subtract(a, m), vector.add(b, m))
+    local grid = collapse.read_failure_grid(a, b)
     local params = collapse.failure_params()
     restore_grid(grid, changes.list)
     local out, skipped = {}, 0
@@ -918,6 +930,7 @@ local shcfg = cfg.shear
 local function cell_jointed(x, y, z)
     return #rockmech.jointtex.cell_traces(rockmech.joints, rockmech.get_joint_sets(), x, y, z, 1) > 0
 end
+collapse.cell_jointed = cell_jointed
 function collapse.shear_params()
     return {
         lithologies = cfg.lithologies, rock = rock, surface_y = cfg.surface_y,
@@ -944,8 +957,7 @@ end
 
 -- pos 周圍 ±r 臨空岩格的最小 FS（節理滑動、軸差），顯示用
 function collapse.nearby_min_fs(pos, r)
-    local w = 2 * fcfg.window + 1
-    local grid = collapse.read_grid(vector.subtract(pos, r + w), vector.add(pos, r + w))
+    local grid = collapse.read_failure_grid(vector.subtract(pos, r), vector.add(pos, r), fcfg.window)
     return rockmech.failure.min_fs_in_box(grid, collapse.failure_params(true),
         {vector.subtract(pos, r), vector.add(pos, r)})
 end

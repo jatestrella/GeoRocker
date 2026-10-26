@@ -37,8 +37,7 @@ function rockmech.stress_report(pos)
 	local r = {pos = pos, name = node.name, lith = lith, is_rock = is_rock,
 		init = rockmech.collapse.initial_stress(pos, lith)}
 	if is_rock then
-		local w = 2 * cfg.failure.window + 1
-		local grid = rockmech.collapse.read_grid(vector.subtract(pos, w), vector.add(pos, w))
+		local grid = rockmech.collapse.read_failure_grid(pos, pos, cfg.failure.window)
 		r.local_state = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
 			rockmech.collapse.failure_params(true))
 		r.overhang = rockmech.collapse.overhang_state(pos)

@@ -109,8 +109,7 @@ scan_parts[1] = function(st)
 	local a, b, put, fs_max = st.a, st.b, st.put, st.fs_max
 	if cfg.failure.enabled or cfg.weakness.enabled then
 		local f = rockmech.failure
-		local m = cfg.failure.window + 1
-		local grid = collapse.read_grid(vector.subtract(a, m), vector.add(b, m))
+		local grid = collapse.read_failure_grid(a, b)
 		-- 前置篩選：FS ≥ 2c/q，2c/q ≥ fs_max 的格不可能落在顯示範圍內
 		local prm = collapse.failure_params(false)
 		prm.fs_cut = fs_max
