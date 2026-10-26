@@ -2,9 +2,12 @@
 -- 載具（2×2×2）：挖土機（鏟碎石）、卡車（載運、傾倒）、推土機（推碎石）。
 -- 只處理碎石：完整岩石要先爆破或用魔杖弄碎（爆破 → 裝載 → 運輸）。
 -- 操作：右鍵上車；駕駛中 Shift 下車，W/S 前進後退，A/D 轉向。
---   挖土機：E 鏟起前方的碎石到鏟斗（1 m³ = 8 級）；空白鍵倒出：前方 4 m 內有卡車就倒進卡車，否則倒在前方地上
---   卡車：空白鍵把車斗（8 m³ = 64 級）的碎石倒在車尾
---   推土機：往前開時把正前方的碎石往前推（推不動就停）
+--   挖土機：E 鏟起車頭前方（2 格寬 × 3 格深 × 3 格高）的碎石到鏟斗（4 m³ = 32 級）；
+--           空白鍵倒出：前方 4 m 內有卡車就倒進卡車，否則倒在前方地上
+--   卡車：空白鍵把車斗（8 m³ = 64 級）的碎石倒在車尾；名牌與車斗顯示載量
+--   推土機：E 切換放鏟／收鏟。放鏟：往前開時把車身高度 0 那一層的碎石（含車身前半壓著的薄碎石）
+--           與正前方第二層的碎石推到再前一排，推不動就停；只壓得過很薄的碎石。收鏟：不推，可爬 1 格
+-- 駕駛坐在車身裡（視線不被車身擋住）。
 -- 不在車上時左鍵：收回成物品（車上的碎石換成碎石物品，8 級 = 1 個）
 -- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
 
@@ -12,7 +15,7 @@ local NLEV = rockmech.RUBBLE_LEVELS
 local collapse = rockmech.collapse
 
 local TYPES = {
-	excavator = {desc = "挖土機 Excavator", color = "#e0a020", cap = NLEV, speed = 2.0},
+	excavator = {desc = "挖土機 Excavator", color = "#e0a020", cap = 4 * NLEV, speed = 2.0},
 	truck = {desc = "卡車 Dump truck", color = "#c84020", cap = 8 * NLEV, speed = 5.0},
 	dozer = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5},
 }
@@ -20,7 +23,7 @@ local TURN_RATE = 1.6        -- rad/s
 local DUMP_REACH = 4         -- 挖土機倒進卡車的距離 (m)
 
 -- 貼圖（[fill 組合）。cube 的六面：上、下、+X、−X、+Z（車頭：yaw 0 朝 +Z）、−Z
-local function tex(kind, loaded)
+local function tex(kind, frac, blade_down)
 	local c = TYPES[kind].color
 	local body = ("[fill:16x16:%s^[fill:16x3:0,13:#2a2a2a"):format(c)          -- 底部履帶／輪
 	local side = body .. "^[fill:5x4:9,3:#9fd0ff"                             -- 車窗
@@ -29,10 +32,11 @@ local function tex(kind, loaded)
 	if kind == "excavator" then
 		front = body .. "^[fill:12x5:2,8:#505050^[fill:2x6:7,2:#404040"          -- 鏟斗與手臂
 	elseif kind == "dozer" then
-		front = body .. "^[fill:16x5:0,8:#3a3a3a"                              -- 推土鏟
+		front = body .. (blade_down and "^[fill:16x5:0,11:#3a3a3a" or "^[fill:16x5:0,3:#3a3a3a")   -- 推土鏟（放下／抬起）
 	elseif kind == "truck" then
 		top = ("[fill:16x16:%s^[fill:14x14:1,1:#5a2010"):format(c)             -- 車斗
-		if loaded then top = top .. "^[fill:12x12:2,2:#6a6058" end
+		local h = frac and math.min(12, math.ceil(12 * frac)) or 0         -- 碎石依載量比例填滿
+		if h > 0 then top = top .. ("^[fill:12x%d:2,%d:#6a6058"):format(h, 14 - h) end
 		front = body .. "^[fill:10x4:3,3:#9fd0ff"                              -- 擋風玻璃
 	end
 	return {top, body, side, side, front, body}
@@ -81,8 +85,8 @@ local function take_rubble(cell, want)
 end
 
 -- 在 (x, z) 這一欄、從 ytop 往下找落點，倒 a 級 base 碎石；滿了往上堆（最多 max_h 格，預設 8）。
--- 回傳倒不下的級數
-local function deposit_column(x, z, ytop, base, a, max_h)
+-- placed（可選）：收集倒下的格子，不立即做安息角流動（推土機推著的那堆）。回傳倒不下的級數
+local function deposit_column(x, z, ytop, base, a, max_h, placed)
 	local y = ytop
 	for _ = 1, 8 do
 		if not passable(core.get_node({x = x, y = y - 1, z = z}).name) then break end
@@ -97,12 +101,12 @@ local function deposit_column(x, z, ytop, base, a, max_h)
 			local put = math.min(NLEV, a)
 			core.set_node(p, {name = rockmech.rubble_with_level(base, put)})
 			a = a - put
-			collapse.check_cell(p)
+			if placed then placed[#placed + 1] = p else collapse.check_cell(p) end
 		elseif k and k < NLEV and rockmech.rubble_base[n] == base then
 			local put = math.min(NLEV - k, a)
 			core.swap_node(p, {name = rockmech.rubble_with_level(base, k + put)})
 			a = a - put
-			collapse.check_cell(p)
+			if placed then placed[#placed + 1] = p else collapse.check_cell(p) end
 		end
 		y = y + 1
 	end
@@ -136,11 +140,12 @@ local function find_truck(pos, s)
 	end
 end
 
--- 推土機：把貼著鏟刀那一排（2 格寬、地面層與上一層）的碎石收起來，倒到再前面一排（每欄最多堆 3 格），
--- 不放進車身的位置。前面是岩石或倒不下 → 放回原處，回傳 true（被擋住）
+-- 推土機（放鏟）：把貼著鏟刀那一排（2 格寬、高度 0～2 三層）與車身前半壓著的高度 0 碎石收起來，
+-- 倒到再前面一排（每欄最多堆 3 格），不放進車身的位置。前面是岩石或倒不下 → 放回原處，回傳 true（被擋住）
 local function push(self, pos, s)
 	local y0 = ground_y(pos)
-	local src = face_cells(pos, s, 1, 1.5, y0, 2)
+	local src = face_cells(pos, s, 1, 1.5, y0, 3)   -- 與前面那堆的高度（最多 3 格）一致
+	local under = face_cells(pos, s, 1, 0.5, y0, 1)
 	local dst = face_cells(pos, s, 1, 2.5, y0, 1)
 	local blocked = false
 	for _, c in ipairs(src) do
@@ -149,13 +154,18 @@ local function push(self, pos, s)
 	end
 	if blocked then return true end
 	local got = {}
+	for _, c in ipairs(under) do src[#src + 1] = c end
 	for _, c in ipairs(src) do
 		local n = core.get_node(c).name
 		local k = rockmech.rubble_level[n]
 		if k then
 			local base = rockmech.rubble_base[n]
 			got[base] = (got[base] or 0) + k
-			core.remove_node(c)
+			-- 不用 remove_node：它會讓周圍 5 格的碎石重新流動，剛推出去的那堆會流回鏟刀前。
+			-- 只保留開挖記錄與支撐判定（推走撐住岩石的碎石，上面的岩石照樣會掉）
+			core.swap_node(c, {name = "air"})
+			collapse.mark_excavated(c)
+			collapse.queue_support_check(c, n)
 		end
 	end
 	for base, lv in pairs(got) do
@@ -163,7 +173,8 @@ local function push(self, pos, s)
 		for i, c in ipairs(dst) do
 			local share = math.ceil(lv / (#dst - i + 1))
 			lv = lv - share
-			rest = rest + deposit_column(c.x, c.z, y0 + 2, base, share, 3)
+			self.pile = self.pile or {}
+			rest = rest + deposit_column(c.x, c.z, y0 + 2, base, share, 3, self.pile)
 		end
 		if rest > 0 then
 			-- 前面堆不下：剩下的放回鏟刀前，推土機停住
@@ -177,6 +188,15 @@ local function push(self, pos, s)
 	return blocked
 end
 
+-- 推土機停止推（停下、後退、收鏟）時，前面那堆照安息角攤開
+local function settle_pile(self)
+	if not self.pile then return end
+	local cells = self.pile
+	self.pile = nil
+	table.sort(cells, function(a, b) return a.y > b.y end)
+	for _, p in ipairs(cells) do collapse.check_cell(p) end
+end
+
 -- 駕駛的 HUD
 local function hud_text(self)
 	local def = TYPES[self.vkind]
@@ -185,10 +205,32 @@ local function hud_text(self)
 		local t = load_total(self)
 		s = s .. ("　載量 %d / %d 級（%.1f / %.0f m³）"):format(t, def.cap, t / NLEV, def.cap / NLEV)
 	end
-	if self.vkind == "excavator" then s = s .. "\nE 鏟碎石　空白鍵 倒（前方有卡車就倒進卡車）"
+	if self.vkind == "excavator" then
+		local p = self.object:get_pos()
+		local truck = p and find_truck(p, select(2, dirs(self.object:get_yaw())))
+		if truck then
+			local tt = load_total(truck)
+			s = s .. ("\n前方卡車：%d / %d 級（%.1f / %.0f m³）"):format(tt, TYPES.truck.cap, tt / NLEV, TYPES.truck.cap / NLEV)
+		end
+		s = s .. "\nE 鏟碎石　空白鍵 倒（前方有卡車就倒進卡車）"
 	elseif self.vkind == "truck" then s = s .. "\n空白鍵 把車斗倒在車尾"
-	else s = s .. "\n往前開把碎石往前推" end
+	else s = s .. (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石") .. "\nE 放鏟／收鏟" end
 	return s .. "　Shift 下車"
+end
+
+-- 外觀與名牌（卡車：載量；推土機：鏟子高低）
+local function refresh_look(self)
+	if self.vkind == "truck" then
+		local t, cap = load_total(self), TYPES.truck.cap
+		self.object:set_properties({
+			textures = tex("truck", t / cap),
+			nametag = ("載量 %d / %d 級（%.1f / %.0f m³）"):format(t, cap, t / NLEV, cap / NLEV),
+			nametag_color = t >= cap and "#ff8060" or "#ffffff",
+		})
+	elseif self.vkind == "dozer" then
+		self.object:set_properties({textures = tex("dozer", nil, self.blade),
+			stepheight = self.blade and 0.3 or 1.1})
+	end
 end
 local function update_hud(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
@@ -198,9 +240,7 @@ local function update_hud(self)
 		self.hud = d:hud_add({type = "text", position = {x = 0.5, y = 0.85}, alignment = {x = 0, y = 0},
 			text = hud_text(self), number = 0xFFE080, z_index = 100})
 	end
-	if self.vkind == "truck" then
-		self.object:set_properties({textures = tex("truck", load_total(self) > 0)})
-	end
+	refresh_look(self)
 end
 
 local function get_off(self)
@@ -208,7 +248,6 @@ local function get_off(self)
 	if d then
 		d:set_detach()
 		if self.hud then d:hud_remove(self.hud) end
-		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		local p = self.object:get_pos()
 		local _, s = dirs(self.object:get_yaw())
 		core.after(0.1, function()
@@ -228,8 +267,9 @@ for kind, def in pairs(TYPES) do
 			selectionbox = {-1, -1, -1, 1, 1, 1},
 			visual = "cube",
 			visual_size = {x = 2, y = 2, z = 2},
-			textures = tex(kind, false),
-			stepheight = kind == "dozer" and 0.3 or 1.1,   -- 推土機只壓得過很薄的碎石（3/8 格以上要推走，不是爬過去）
+			textures = tex(kind, 0, true),
+			backface_culling = true,       -- 從車身裡面往外看是透明的
+			stepheight = kind == "dozer" and 0.3 or 1.1,   -- 推土機放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
 			static_save = true,
 		},
 		vkind = kind,
@@ -239,14 +279,16 @@ for kind, def in pairs(TYPES) do
 			if d then
 				self.load = d.load or {}
 				if d.yaw then self.object:set_yaw(d.yaw) end
+				if d.blade ~= nil then self.blade = d.blade end
 			end
+			if kind == "dozer" and self.blade == nil then self.blade = true end
 			self.object:set_acceleration({x = 0, y = -9.81, z = 0})
 			self.object:set_armor_groups({immortal = 1})
-			if kind == "truck" then self.object:set_properties({textures = tex("truck", load_total(self) > 0)}) end
+			refresh_look(self)
 			self.t_act = 0
 		end,
 		get_staticdata = function(self)
-			return core.serialize({load = self.load, yaw = self.object:get_yaw()})
+			return core.serialize({load = self.load, yaw = self.object:get_yaw(), blade = self.blade})
 		end,
 		on_rightclick = function(self, clicker)
 			if not clicker or not clicker:is_player() then return end
@@ -254,8 +296,7 @@ for kind, def in pairs(TYPES) do
 			if self.driver == name then get_off(self); return end
 			if self.driver then return end
 			self.driver = name
-			clicker:set_attach(self.object, "", {x = 0, y = 10, z = -3}, {x = 0, y = 0, z = 0})
-			clicker:set_eye_offset({x = 0, y = 4, z = 0}, {x = 0, y = 4, z = 0})
+			clicker:set_attach(self.object, "", {x = 0, y = -10, z = 0}, {x = 0, y = 0, z = 0})
 			update_hud(self)
 		end,
 		on_punch = function(self, puncher)
@@ -296,19 +337,26 @@ for kind, def in pairs(TYPES) do
 			local dir, s = dirs(yaw)
 			local speed = def.speed * fwd
 			-- 推土機：往前開時推碎石，推不動就停
-			if kind == "dozer" and fwd > 0 then
-				if push(self, pos, s) then speed = 0 end
+			if kind == "dozer" and self.blade and fwd > 0 then
+				if push(self, pos, s) then speed = 0; settle_pile(self) end
+			elseif kind == "dozer" then
+				settle_pile(self)
 			end
 			obj:set_velocity({x = dir.x * speed, y = vel.y, z = dir.z * speed})
 			-- 作業鍵（防連按：0.4 s）
 			self.t_act = self.t_act - dtime
 			if driven and self.t_act <= 0 then
-				if kind == "excavator" and ctrl.aux1 then
+				if kind == "dozer" and ctrl.aux1 then
+					self.t_act = 0.5
+					self.blade = not self.blade
+					update_hud(self)
+					refresh_look(self)
+				elseif kind == "excavator" and ctrl.aux1 then
 					self.t_act = 0.4
 					local want = def.cap - load_total(self)
 					local y0 = ground_y(pos)
 					local cells = {}
-					for _, dist in ipairs({1.5, 2.5}) do
+					for _, dist in ipairs({1.5, 2.5, 3.5}) do
 						for _, c in ipairs(face_cells(pos, s, 1, dist, y0 - 1, 3)) do cells[#cells + 1] = c end
 					end
 					table.sort(cells, function(a, b) return a.y > b.y end)
@@ -334,7 +382,7 @@ for kind, def in pairs(TYPES) do
 								self.load[base] = lv - m > 0 and (lv - m) or nil
 							end
 						end
-						truck.object:set_properties({textures = tex("truck", true)})
+						refresh_look(truck)
 						update_hud(truck)
 					else
 						local f = kind == "truck" and -1 or 1
@@ -347,11 +395,11 @@ for kind, def in pairs(TYPES) do
 	})
 	core.register_craftitem(ename .. "_item", {
 		description = def.desc .. "\n" .. ({
-			excavator = "右鍵上車；E 鏟碎石、空白鍵倒出（前方有卡車就倒進卡車）",
+			excavator = "右鍵上車；E 鏟碎石（鏟斗 4 m³）、空白鍵倒出（前方有卡車就倒進卡車）",
 			truck = "右鍵上車；空白鍵把車斗倒在車尾（載量 8 m³）",
-			dozer = "右鍵上車；往前開把碎石往前推",
+			dozer = "右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走",
 		})[kind],
-		inventory_image = tex(kind, kind == "truck")[5],
+		inventory_image = tex(kind, 0, true)[5],
 		stack_max = 1,
 		on_place = function(itemstack, placer, pointed)
 			if pointed.type ~= "node" then return itemstack end
