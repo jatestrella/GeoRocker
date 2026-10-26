@@ -73,14 +73,6 @@ function rockmech.shear_line(sh)
 		sh.n, sh.ax, sh.az, sh.Q, sh.hs, cfg.shear.k, sh.R, sh.fs)
 end
 
--- 頂板 Inglis 應力的一行說明
-function rockmech.roof_line(s)
-	local r = s and s.roof
-	if not r then return nil end
-	return ("頂板（Inglis）：開口高 %d m、寬 x %d m / z %d m → σθ,x %.3f、σθ,z %.3f MPa%s"):format(
-		r.H, r.Wx, r.Wz, r.sx, r.sz, (r.sx < 0 or r.sz < 0) and "（受拉）" or "")
-end
-
 -- 弱面滑動的一行說明（HUD、資訊頁、羅盤共用）
 function rockmech.slip_line(s)
 	if not cfg.weakness.enabled then return "節理滑動：關閉" end
@@ -118,10 +110,6 @@ function rockmech.overhang_line(o)
 	local root = ""
 	if o.rho and o.rho < 1 then
 		root = ("、根部斷面被節理切過，完好 %.0f%%"):format(o.rho * 100)
-	end
-	if o.beam and o.beam.roof then
-		return ("頂板（兩側都連著岩體、跨度 %d m）：不用懸臂判定，由開挖周邊應力（Inglis）判定；整段最小 FS %s"):format(
-			o.beam.span, fs_str(o.group_fs))
 	end
 	return ("懸臂 d %d m、t %d m%s：σb=3γ·t·d²/t_eff² %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
 		o.d, o.t, root, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax * (o.rho or 1), fs_str(o.group_fs), c.x, c.z,
@@ -437,7 +425,6 @@ local function tab_stress(name)
 			{"局部 σyy", ("%.3f MPa"):format(s.sy)},
 			{"局部 σzz（×集中）", ("%.3f MPa（×%.2f）"):format(s.sz, s.fz)},
 			{"局部 σxz", ("%.3f MPa"):format(s.sxz)},
-			{"頂板應力", rockmech.roof_line(s) or "—（不是頂板）"},
 			{"主應力 σ1 / σ3", ("%.3f / %.3f MPa"):format(s.s1, s.s3)},
 			{"岩體強度", rockmech.rockmass_line(s.rm)},
 			{"q = σ1 − σ3 / 岩體強度 q_f(σ3)", ("%.3f / %.3f MPa"):format(s.q, s.strength)},

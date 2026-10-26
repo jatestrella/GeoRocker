@@ -141,32 +141,6 @@ describe("failure 使用 Hoek-Brown 岩體強度", function()
 		assert.near(b.rm.ucs_m, b.strength, 1e-12)
 	end)
 
-	it("頂板 Inglis：寬扁開口、K 小 → 頂板受拉、張裂；K 大 → 受壓", function()
-		-- 地下 20 m 的開口：x −6..6（寬 13）、y −22..−20（高 3），z 全寬；上方岩石到 y = −1
-		local g = {ox = -12, oy = -40, oz = -4, nx = 25, ny = 40, nz = 9, data = {},
-			solid_of = {[1] = true}, weight_of = {[1] = 25}, lith_of = {[1] = "shale"}}
-		for z = -4, 4 do for y = -40, -1 do for x = -12, 12 do
-			local open = x >= -6 and x <= 6 and y >= -22 and y <= -20
-			g.data[failure.index(g, x, y, z)] = open and 0 or 1
-		end end end
-		local cfg = {surface_y = 0, model_scale = 1, rockmass = {d = 0},
-			lithologies = {shale = {gamma = 25, ucs = 30, tensile = 2, mi = 6, gsi = {top = 50}}}}
-		local function roof(K)
-			local p = params(cfg)
-			p.KH, p.Kh = K, K
-			return failure.cell_state(g, 0, -19, 0, p)
-		end
-		local lo, hi = roof(0.2), roof(1.5)
-		assert.are.equal(3, lo.roof.H)
-		assert.are.equal(13, lo.roof.Wx)
-		-- σθ,x = Kσv·(1 + 2·3/13) − σv
-		assert.near(0.2 * lo.sv0 * (1 + 6 / 13) - lo.sv0, lo.sx, 1e-9)
-		assert.is_true(lo.sx < 0)
-		assert.is_true(lo.fails_axial)          -- 張力截斷
-		assert.is_true(hi.sx > 0)
-		assert.is_false(hi.fails_axial)
-	end)
-
 	it("param2（g.p2）指定的 GSI 優先", function()
 		local g = wall()
 		g.p2 = {}
