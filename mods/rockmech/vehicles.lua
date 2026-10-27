@@ -536,6 +536,7 @@ for kind, def in pairs(TYPES) do
 				self.load = d.load or {}
 				if d.yaw then self.object:set_yaw(d.yaw) end
 				if d.blade ~= nil then self.blade = d.blade end
+				self.swing = d.swing
 			end
 			if kind == "dozer" and self.blade == nil then self.blade = true end
 			self.object:set_acceleration({x = 0, y = -9.81, z = 0})
@@ -552,7 +553,7 @@ for kind, def in pairs(TYPES) do
 			remove_parts(self)
 		end,
 		get_staticdata = function(self)
-			return core.serialize({load = self.load, yaw = self.object:get_yaw(), blade = self.blade})
+			return core.serialize({load = self.load, yaw = self.object:get_yaw(), blade = self.blade, swing = self.swing})
 		end,
 		on_rightclick = function(self, clicker)
 			if not clicker or not clicker:is_player() then return end
@@ -691,7 +692,7 @@ for kind, def in pairs(TYPES) do
 					end
 					update_hud(self)
 				end
-				-- 抬起時上部結構轉向目標，收回時轉回車頭
+				-- 抬起時上部結構轉向目標；挖完收回時轉回車頭，倒完就停在倒的方向（下一次挖再從這裡轉過去）
 				local to = dg.to
 				local above = {x = to.x, y = to.y + DIG_LIFT, z = to.z}
 				local t, ph = dg.t, DIG_PHASES
@@ -704,10 +705,15 @@ for kind, def in pairs(TYPES) do
 				else
 					local u = math.min(1, (t - ph[1] - ph[2] - ph[3]) / ph[4])
 					b = lerp(above, BUCKET_REST, u)
-					self.swing = lerp_angle(dg.psi, 0, u)
+					local back = dg.mode == "dump" and dg.psi or 0
+					self.swing = lerp_angle(dg.psi, back, u)
 				end
 				place_arm(self, b)
-				if t >= DIG_TOTAL then self.dig = nil; self.swing = 0; place_arm(self, BUCKET_REST) end
+				if t >= DIG_TOTAL then
+					self.dig = nil
+					self.swing = dg.mode == "dump" and dg.psi or 0
+					place_arm(self, BUCKET_REST)
+				end
 			end
 			-- Z（zoom 鍵）：切換第一／第三人稱
 			if d then
