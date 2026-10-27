@@ -7,7 +7,7 @@
 --   卡車：空白鍵把車斗（8 m³ = 64 級）的碎石倒在車尾；名牌與車斗顯示載量
 --   推土機：E 切換放鏟／收鏟。放鏟：往前開時把車身高度 0 那一層的碎石（含車身前半壓著的薄碎石）
 --           與正前方第二層的碎石推到再前一排，推不動就停；只壓得過很薄的碎石。收鏟：不推，可爬 1 格
--- 駕駛的視線在車頭那一面的正前方（車身不擋視線）。
+-- 駕駛的相機在車身外 1.5 m（沿視線方向），車身不擋視線。
 -- 不在車上時左鍵：收回成物品（車上的碎石換成碎石物品，8 級 = 1 個）
 -- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
 
@@ -20,13 +20,14 @@ local TYPES = {
 	dozer = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5},
 }
 local TURN_RATE = 1.6        -- rad/s
--- 駕駛視線：車頭那一面的正前方（相對車身中心，單位 m；車頭朝 +Z）。
--- set_attach 的位移單位是 0.1 m（不受車身 visual_size 影響，遊戲內確認過）；玩家的眼睛在腳上方 EYE_HEIGHT。
--- 車身方塊從裡面看不透明，所以視線要在車身外
-local EYE_AT = {x = 0, y = 0.3, z = 1.05}
+-- 駕駛視線：第一人稱相機不受 set_attach 位移影響（遊戲內確認：改位移視角不變），改用 set_eye_offset。
+-- 玩家掛在車身中心（腳在中心），相機往下 EYE_DOWN、沿視線方向往前 EYE_FWD（m）。
+-- EYE_FWD 1.5 > 車身半對角線 1.41：不管往哪看，相機都在車身外（車身方塊從裡面看不透明）
 local EYE_HEIGHT = 1.625
+local EYE_DOWN = EYE_HEIGHT - 0.3   -- 相機在車身中心上方 0.3 m
+local EYE_FWD = 1.5
 local VSIZE = 2
-local SEAT = {x = EYE_AT.x * 10, y = (EYE_AT.y - EYE_HEIGHT) * 10, z = EYE_AT.z * 10}
+local EYE_OFFSET = {x = 0, y = -EYE_DOWN * 10, z = EYE_FWD * 10}
 local DUMP_REACH = 4         -- 挖土機倒進卡車的距離 (m)
 
 -- 貼圖（[fill 組合）。cube 的六面：上、下、+X、−X、+Z（車頭：yaw 0 朝 +Z）、−Z
@@ -254,6 +255,7 @@ local function get_off(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
 	if d then
 		d:set_detach()
+		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		if self.hud then d:hud_remove(self.hud) end
 		local p = self.object:get_pos()
 		local _, s = dirs(self.object:get_yaw())
@@ -310,7 +312,8 @@ for kind, def in pairs(TYPES) do
 				pe.driver, pe.hud = nil, nil
 			end
 			self.driver = name
-			clicker:set_attach(self.object, "", SEAT, {x = 0, y = 0, z = 0})
+			clicker:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+			clicker:set_eye_offset(EYE_OFFSET, {x = 0, y = 0, z = 0})   -- 第三人稱維持預設（前後偏移上限只有 ±0.5 m）
 			update_hud(self)
 		end,
 		on_punch = function(self, puncher)
@@ -340,6 +343,7 @@ for kind, def in pairs(TYPES) do
 				local parent = d:get_attach()
 				if not (parent and parent:get_luaentity() == self) then
 					if self.hud then d:hud_remove(self.hud) end
+					if not parent then d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0}) end
 					self.driver, self.hud, d = nil, nil, nil
 				end
 			end
