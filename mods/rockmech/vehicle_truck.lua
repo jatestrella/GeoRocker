@@ -102,6 +102,7 @@ local function hauler(def, spec)
 	bed.fill_w, bed.fill_l = S.x - 2 * BED_T - 0.1, S.z - 2 * BED_T - 0.1
 	bed.fill_hmax = S.y - BED_T - 0.1
 	def.bed = bed
+	def.look_limit = def.look_limit or math.rad(75)   -- 駕駛只看車頭前方 150°（不會轉頭看到自己的車斗）
 	-- 零件：車斗以外的部分、車斗各片（位置由 place_bed 擺）、車斗裡的碎石
 	local parts = {}
 	for _, p in ipairs(spec.body) do parts[#parts + 1] = p end

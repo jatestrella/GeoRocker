@@ -19,7 +19,7 @@ rockmech.vehicles = V
 -- eye_up／eye_fwd：相機在車身中心上方、沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
 -- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
--- stepheight（預設 1.1）；inv_image、item_desc：物品。
+-- stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
 -- 各車的行為（都可省略）：parts（零件清單）、on_spawn(self)（零件生成後）、on_load(self, data)／on_save(self, data)、
 -- refresh(self)（外觀與名牌）、hud(self)（HUD 加的文字）、can_turn(self, pos, yaw, yaw2)、
 -- move(self, ctx)（設定 ctx.speed）、step(self, ctx)（設定速度之後）、action(self, ctx)（作業鍵）。
@@ -443,6 +443,13 @@ function V.register(kind, def)
 				end
 			end
 			if d then update_mirrors(self, d, dtime) end
+			-- 第一人稱視線限制在車頭左右 look_limit 以內（看後面用後照鏡、倒車攝影機）
+			if d and def.look_limit and not self.chase then
+				local rel = (d:get_look_horizontal() - yaw + math.pi) % (2 * math.pi) - math.pi
+				if math.abs(rel) > def.look_limit then
+					d:set_look_horizontal(yaw + (rel > 0 and def.look_limit or -def.look_limit))
+				end
+			end
 			local fwd, turn = 0, 0
 			-- self.autopilot：沒有駕駛時的控制輸入（測試、指令用），格式同 get_player_control
 			local ctrl = d and d:get_player_control() or self.autopilot or {}
