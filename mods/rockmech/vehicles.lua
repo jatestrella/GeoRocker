@@ -8,7 +8,7 @@
 --         名牌與車斗裡的碎石顯示載量。碰撞箱是駕駛艙那段 3×3×3，車斗那段（往後 5 m）倒車、轉彎前自己檢查
 --   推土機：E 切換放鏟／收鏟。放鏟：往前開時把車身高度 0 那一層的碎石（含車身前半壓著的薄碎石）
 --           與正前方第二層的碎石推到再前一排，推不動就停；只壓得過很薄的碎石。收鏟：不推，可爬 1 格
--- 駕駛的相機在車頂（挖土機：駕駛艙頂）前緣；Z 切換第一／第三人稱（第三人稱從後上方看車子作動）。
+-- 駕駛的相機在車頂（挖土機：駕駛艙頂）前緣；Z 切換追蹤相機（從車子後上方看作動）。
 -- 不在車上時左鍵：收回成物品（車上的碎石換成碎石物品，8 級 = 1 個）
 -- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
 
@@ -337,6 +337,27 @@ local function to_local(self, wp)
 	return {x = dx * c + dz * sn, y = dy, z = -dx * sn + dz * c}
 end
 
+-- 追蹤相機：Z 鍵時把駕駛掛到一個看不見、跟著車子的點上（Luanti 內建第三人稱拉不遠）。
+-- 位置：車身座標 (0, CHASE_UP, −CHASE_BACK)；相機（眼睛）在它上方 EYE_HEIGHT
+local CHASE = "rockmech:chasecam"
+core.register_entity(CHASE, {
+	initial_properties = {
+		physical = false, collide_with_objects = false, pointable = false, static_save = false,
+		visual = "sprite", textures = {"[fill:1x1:#00000000"}, use_texture_alpha = true,
+	},
+	on_activate = function(self)
+		core.after(1, function()
+			if self.object:get_pos() and #self.object:get_children() == 0 then self.object:remove() end
+		end)
+	end,
+})
+local function chase_pos(self, def)
+	local p, yaw = self.object:get_pos(), self.object:get_yaw()
+	local back = (def.rear or def.half) + (def.rear and 5.5 or 6.5)
+	local up = def.half + 1.0
+	return {x = p.x + math.sin(yaw) * back, y = p.y + up - EYE_HEIGHT + 1.0, z = p.z - math.cos(yaw) * back}
+end
+
 -- 滑鼠指的東西：從駕駛的相機沿視線找。回傳 {under, above}（方塊）或 {truck = 卡車實體}；沒有回傳 nil。
 -- with_trucks：也找卡車（跳過自己、零件與玩家）
 local function aim(self, d, pos, def, with_trucks)
@@ -344,6 +365,9 @@ local function aim(self, d, pos, def, with_trucks)
 	local hl = math.sqrt(look.x * look.x + look.z * look.z)
 	local eye = {x = pos.x + (hl > 0 and look.x / hl or 0) * def.eye_fwd, y = pos.y + def.eye_up,
 		z = pos.z + (hl > 0 and look.z / hl or 0) * def.eye_fwd}
+	if self.chase and self.chase:get_pos() then
+		eye = vector.add(self.chase:get_pos(), {x = 0, y = EYE_HEIGHT, z = 0})
+	end
 	local ray = core.raycast(eye, vector.add(eye, vector.multiply(look, DIG_REACH)), with_trucks, false)
 	for pt in ray do
 		if pt.type == "node" then return {under = pt.under, above = pt.above} end
@@ -596,8 +620,16 @@ local function set_seated(player, on)
 	player_api.set_animation(player, on and "sit" or "stand")
 end
 
+local function drop_chase(self)
+	if self.chase then
+		if self.chase:get_pos() then self.chase:remove() end
+		self.chase = nil
+	end
+end
+
 local function get_off(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
+	drop_chase(self)
 	if d then
 		d:set_detach()
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
@@ -660,6 +692,7 @@ for kind, def in pairs(TYPES) do
 		end,
 		on_deactivate = function(self)
 			remove_parts(self)
+			drop_chase(self)
 		end,
 		get_staticdata = function(self)
 			return core.serialize({load = self.load, yaw = self.object:get_yaw(), blade = self.blade, swing = self.swing})
@@ -711,7 +744,8 @@ for kind, def in pairs(TYPES) do
 			-- 駕駛已經不在這台車上（換到別台、被傳送、死亡等）：不再聽他的
 			if d then
 				local parent = d:get_attach()
-				if not (parent and parent:get_luaentity() == self) then
+				local pe = parent and parent:get_luaentity()
+				if not (pe == self or (self.chase and parent and pe and pe.name == CHASE and pe.vehicle == self)) then
 					hud_clear(self, d)
 					if not parent then
 						d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
@@ -842,7 +876,14 @@ for kind, def in pairs(TYPES) do
 				if not tp.done and tp.t >= TIP_UP then
 					tp.done = true
 					local y0 = ground_y(pos, def.half)
-					dump_to_ground(self, face_cells(pos, s, -1, def.rear + 0.5, y0, 1, def.lat), y0 + 1)
+					-- 車尾正後方（用實際朝向，不對齊格線：車子斜停時倒的位置才會在車尾）
+					local d0 = def.rear + 0.5
+					local cx, cz = pos.x - dir.x * d0, pos.z - dir.z * d0
+					local cells = {}
+					for _, l in ipairs(def.lat) do
+						cells[#cells + 1] = {x = math.floor(cx - dir.z * l + 0.5), y = y0, z = math.floor(cz + dir.x * l + 0.5)}
+					end
+					dump_to_ground(self, cells, y0 + 1)
 					self.fill_key = nil
 					update_hud(self)
 				end
@@ -857,13 +898,33 @@ for kind, def in pairs(TYPES) do
 					refresh_look(self)
 				end
 			end
-			-- Z（zoom 鍵）：切換第一／第三人稱
+			-- Z（zoom 鍵）：切換追蹤相機（駕駛掛到車子後上方的點上）／車頂第一人稱
 			if d then
 				if ctrl.zoom and not self.zoom_held then
-					self.third = not self.third
-					d:set_camera({mode = self.third and "third" or "first"})
+					if self.chase then
+						drop_chase(self)
+						d:set_detach()
+						d:set_attach(obj, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+						d:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
+					else
+						local c = core.add_entity(chase_pos(self, def), CHASE)
+						if c then
+							c:get_luaentity().vehicle = self
+							self.chase = c
+							d:set_detach()
+							d:set_attach(c, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+							d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+						end
+					end
+					d:set_camera({mode = "first"})
+					set_seated(d, true)
 				end
 				self.zoom_held = ctrl.zoom
+			end
+			-- 追蹤相機跟著車子
+			if self.chase then
+				if self.chase:get_pos() and d then self.chase:move_to(chase_pos(self, def), true)
+				else drop_chase(self) end
 			end
 			-- 作業鍵（防連按：0.4 s）
 			self.t_act = self.t_act - dtime
