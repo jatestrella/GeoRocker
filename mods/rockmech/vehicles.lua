@@ -4,6 +4,7 @@
 -- 操作：右鍵上車；駕駛中 Shift 下車，W/S 前進後退，A/D 轉向。
 --   挖土機：E 挖斗伸到滑鼠指的位置（10 m 內），挖起那一格周圍 3×3×3 的碎石（鏟斗 4 m³ = 32 級）再收回；
 --           空白鍵：挖斗伸到滑鼠指的位置倒出（指著卡車就倒進卡車），同樣的抬起 → 下降 → 倒 → 收回動作
+--           第一人稱駕駛時上部結構（駕駛艙＋手臂）跟著視線的水平方向迴轉；追蹤相機（第三人稱）時不跟
 --   卡車（3 寬 × 3 高 × 7 長，十輪砂石車）：空白鍵車斗以後端為軸抬起、把碎石（12 m³ = 96 級）倒在車尾再放下；
 --         名牌與車斗裡的碎石顯示載量。碰撞箱是駕駛艙那段 3×3×3，車斗那段（往後 5 m）倒車、轉彎前自己檢查
 --   推土機（車身 3×3×3、鏟刀 3 寬伸出車頭 1 m、車尾多 1 m）：E 放鏟／收鏟（鏟刀與推臂實際抬放）。
@@ -101,6 +102,7 @@ local DIG_REACH = 10        -- 挖斗最遠 (m，從相機量)
 local DIG_LIFT = 2.0
 local DIG_PHASES = {0.3, 0.2, 0.2, 0.3}
 local DIG_TOTAL = DIG_PHASES[1] + DIG_PHASES[2] + DIG_PHASES[3] + DIG_PHASES[4]
+local SWING_RATE = 1.5      -- 上部結構跟著視線迴轉的最大速度（rad/s；真的怪手約 1 rad/s）
 local CLEAR = "[fill:1x1:#00000000"
 local PART = "rockmech:vehicle_part"
 core.register_entity(PART, {
@@ -1332,7 +1334,7 @@ for kind, def in pairs(TYPES) do
 					end
 					update_hud(self)
 				end
-				-- 抬起時上部結構轉向目標；挖完收回時轉回車頭，倒完就停在倒的方向（下一次挖再從這裡轉過去）
+				-- 抬起時上部結構轉向目標；挖完收回時轉回車頭（跟著視線時不轉回），倒完就停在倒的方向
 				local to = dg.to
 				local above = {x = to.x, y = to.y + DIG_LIFT, z = to.z}
 				local t, ph = dg.t, DIG_PHASES
@@ -1345,13 +1347,25 @@ for kind, def in pairs(TYPES) do
 				else
 					local u = math.min(1, (t - ph[1] - ph[2] - ph[3]) / ph[4])
 					b = lerp(above, BUCKET_REST, u)
-					local back = dg.mode == "dump" and dg.psi or 0
+					local back = (dg.mode == "dump" or self.follow) and dg.psi or 0
 					self.swing = lerp_angle(dg.psi, back, u)
 				end
 				place_arm(self, b)
 				if t >= DIG_TOTAL then
 					self.dig = nil
-					self.swing = dg.mode == "dump" and dg.psi or 0
+					self.swing = (dg.mode == "dump" or self.follow) and dg.psi or 0
+					place_arm(self, BUCKET_REST)
+				end
+			end
+			-- 挖土機第一人稱駕駛：上部結構轉向視線的水平方向（車身座標的迴轉角 ψ 往右為正，實體 yaw 往左為正）
+			self.follow = kind == "excavator" and d ~= nil and not self.chase
+			if self.follow and not self.dig and self.parts then
+				local goal = yaw - d:get_look_horizontal()
+				local cur = self.swing or 0
+				local diff = (goal - cur + math.pi) % (2 * math.pi) - math.pi
+				if math.abs(diff) > 1e-3 then
+					local st = SWING_RATE * dtime
+					self.swing = cur + math.max(-st, math.min(st, diff))
 					place_arm(self, BUCKET_REST)
 				end
 			end
