@@ -38,20 +38,21 @@ for _, w in ipairs({{x = -1.95, z = 1.0, wd = 0.9}, {x = 1.95, z = 1.0, wd = 0.9
 	body[#body + 1] = {pos = {x = w.x, y = -1.3, z = w.z}, size = {x = w.wd, y = 2.4, z = 2.4}, tex = wheel}
 end
 
--- 車斗：軸心在後端下緣（離地 2.1 m），外尺寸 4.6 × 1.5 × 6.6（連堆尖約 36 m³）。各片相對軸心：
+-- 車斗：軸心在後端下緣（離地 2.5 m，底板在後輪頂上方 0.1 m），外尺寸 4.6 × 1.5 × 6.6（連堆尖約 36 m³）。各片相對軸心：
 -- 底板前段平的、後段 TAIL_L 往車尾上翹 TAIL_RISE（約 16°，沒有後擋板）；側板後段跟著底板變矮；
--- 前擋板往上加高、再往前接遮罩蓋住平台與駕駛室
+-- 前擋板往上加高到 CANOPY_Y、再往前接遮罩蓋住平台與駕駛室（駕駛室頂 y 1.9）
 local S = {x = 4.6, y = 1.5, z = 6.6}
 local T = 0.1
 local TAIL_L, TAIL_RISE = 2.4, 0.7
+local CANOPY_Y = 2.2
 local tail_deg = math.deg(math.atan(TAIL_RISE / TAIL_L))
 local tail_h = S.y - TAIL_RISE / 2                 -- 側板後段的高度（到上翹底板的平均高度）
 local plates = {
 	{id = "floor_front", rel = {x = 0, y = T / 2, z = (TAIL_L + S.z) / 2}, size = {x = S.x, y = T, z = S.z - TAIL_L}, floor = true},
 	{id = "floor_tail", rel = {x = 0, y = TAIL_RISE / 2 + T / 2, z = TAIL_L / 2}, rot = tail_deg,
 		size = {x = S.x, y = T, z = math.sqrt(TAIL_L ^ 2 + TAIL_RISE ^ 2) + 0.05}, floor = true},
-	{id = "front", rel = {x = 0, y = 2.5 / 2, z = S.z - T / 2}, size = {x = S.x, y = 2.5, z = T}},
-	{id = "canopy", rel = {x = 0, y = 2.5, z = S.z + 1.5}, size = {x = 4.8, y = 0.12, z = 3.0}},
+	{id = "front", rel = {x = 0, y = CANOPY_Y / 2, z = S.z - T / 2}, size = {x = S.x, y = CANOPY_Y, z = T}},
+	{id = "canopy", rel = {x = 0, y = CANOPY_Y, z = S.z + 1.5}, size = {x = 4.8, y = 0.12, z = 3.0}},
 }
 for _, sx in ipairs({-1, 1}) do
 	local x = sx * (S.x - T) / 2
@@ -59,9 +60,9 @@ for _, sx in ipairs({-1, 1}) do
 	plates[#plates + 1] = {id = "side_tail" .. sx, rel = {x = x, y = S.y - tail_h / 2, z = TAIL_L / 2}, size = {x = T, y = tail_h, z = TAIL_L}}
 end
 V.hauler(def, {
-	hinge = {x = 0, y = -0.4, z = -7.3}, size = S, body = body, plates = plates,
+	hinge = {x = 0, y = 0.0, z = -7.3}, size = S, body = body, plates = plates,
 	floor_tex = "[fill:16x16:#5a4010",
 	side_tex = ("[fill:16x16:%s^[fill:16x2:0,0:#8a6a10^[fill:2x16:3,0:#b88a10^[fill:2x16:8,0:#b88a10^[fill:2x16:13,0:#b88a10"):format(c),
-	overlap_lat = {-2.25, -1.1, 0, 1.1, 2.25}, overlap_dy = {1.2, 2.2, 3.2}, aim_top = 1.2, dump_rows = 2,
+	overlap_lat = {-2.25, -1.1, 0, 1.1, 2.25}, overlap_dy = {1.2, 2.2, 3.2}, aim_top = 1.6, dump_rows = 2,
 })
 V.register("haul", def)
