@@ -102,18 +102,14 @@ local function detonate(pos)
 	end
 	core.remove_node(pos)
 	rockmech.blast_charge(center, R)
-	-- 爆破直接改地圖、不會觸發貼壁方塊掉落：後面的岩石沒了的鑽孔就消失，裝藥退回成乳膠炸藥掉在地上
+	-- 爆破直接改地圖、不會觸發貼壁方塊掉落：後面的岩石沒了的鑽孔、裝藥一起消失
 	local r = math.ceil(R) + bcfg.hole_depth + 1
 	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(center, r), vector.add(center, r), {HOLE, CHARGED, SURFACE})) do
 		local hn = core.get_node(hp)
 		local back = core.get_node(vector.add(hp, core.wallmounted_to_dir(hn.param2))).name
 		local nd = core.registered_nodes[back]
 		local held = hn.name == SURFACE and nd and nd.walkable ~= false or rockmech.lith_of_node[back]
-		if not held then
-			local n = core.get_meta(hp):get_int("n")
-			core.remove_node(hp)
-			if n > 0 then core.add_item(hp, ItemStack(EMULSION .. " " .. n)) end
-		end
+		if not held then core.remove_node(hp) end
 	end
 end
 rockmech.detonate_charge = detonate
