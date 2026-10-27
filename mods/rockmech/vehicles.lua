@@ -19,14 +19,16 @@ local collapse = rockmech.collapse
 
 local TYPES = {
 	-- half：碰撞箱半邊長；lat：車頭外一排的橫向位置（相對中心）；eye_up／eye_fwd：相機在車身中心上方、
-	-- 沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；rearcam：倒車攝影機位置
+	-- 沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；rearcam：倒車攝影機位置；
+	-- tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）
 	excavator = {desc = "挖土機 Excavator", color = "#e0a020", cap = 4 * NLEV, speed = 2.0,
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4}},
 	truck = {desc = "卡車 Dump truck", color = "#c84020", cap = 12 * NLEV, speed = 5.0,
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
-		rearcam = {x = 0, y = 1.0, z = -5.7}},
+		rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1}},
 	dozer = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5,
-		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0, mirror = {x = 1.0, y = 1.4, z = -0.2}},
+		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0, mirror = {x = 1.0, y = 1.4, z = -0.2},
+		tilt = {front = 1.3, rear = -2.1, side_z = -0.4, side_x = 1.1}},
 }
 local TURN_RATE = 1.6        -- rad/s
 local TIP_ANGLE, TIP_UP, TIP_HOLD, TIP_DOWN = math.rad(50), 1.0, 0.4, 0.8   -- 卡車車斗抬起
@@ -228,15 +230,15 @@ local function ground_top(x, y_from, z, depth)
 	end
 end
 
--- 卡車隨地形傾斜：量前軸、後軸、左右輪下方的地面，算俯仰（前高為正）與側傾（右側低為正，
--- set_rotation 是右手 Z-X-Y：X 正 = 抬頭、Z 正 = 向右傾）。只有外觀傾斜，碰撞箱維持水平
-local TILT_AXLES = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1}
-local function truck_tilt(p, yaw, def)
+-- 隨地形傾斜（卡車、推土機）：量前後軸（履帶前後端）、左右輪（履帶）下方的地面（def.tilt），算俯仰（前高為正）
+-- 與側傾（右側低為正，set_rotation 是右手 Z-X-Y：X 正 = 抬頭、Z 正 = 向右傾）。只有外觀傾斜，碰撞箱維持水平
+local function ground_tilt(p, yaw, def)
+	local TILT_AXLES = def.tilt
 	local c, sn = math.cos(yaw), math.sin(yaw)
 	local function at(lx, lz)
 		return p.x + lx * c - lz * sn, p.z + lx * sn + lz * c
 	end
-	local from, depth = p.y + 0.5, 5
+	local from, depth = p.y + 0.5, 8   -- 1:1 坡上車尾量測點的地面可比車身中心低 5 m 以上
 	local fx, fz = at(0, TILT_AXLES.front)
 	local rx, rz = at(0, TILT_AXLES.rear)
 	local lx, lz = at(-TILT_AXLES.side_x, TILT_AXLES.side_z)
@@ -1216,9 +1218,9 @@ for kind, def in pairs(TYPES) do
 				yaw = yaw + turn * TURN_RATE * dtime
 				obj:set_yaw(yaw)
 			end
-			-- 卡車外觀隨地形傾斜（角度平滑趨近）
-			if kind == "truck" then
-				local tp, tr = truck_tilt(pos, yaw, def)
+			-- 卡車、推土機外觀隨地形傾斜（角度平滑趨近）
+			if def.tilt then
+				local tp, tr = ground_tilt(pos, yaw, def)
 				local k = math.min(1, dtime * 6)
 				self.pitch = (self.pitch or 0) + (tp - (self.pitch or 0)) * k
 				self.roll = (self.roll or 0) + (tr - (self.roll or 0)) * k
