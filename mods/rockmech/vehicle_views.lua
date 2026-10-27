@@ -20,6 +20,8 @@ local function hud_text(self)
 		s = s .. ("　載量 %d / %d 級（%.1f / %.0f m³）"):format(t, def.cap, t / NLEV, def.cap / NLEV)
 	end
 	if def.hud then s = s .. def.hud(self) end
+	if def.top_speed then s = s .. ("　%d km/h"):format(self.kmh or 0) end
+	if self.steep then s = s .. "\n" .. self.steep end
 	return s .. "　Z 切換視角　Shift 下車"
 end
 

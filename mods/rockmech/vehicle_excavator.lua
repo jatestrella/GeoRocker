@@ -12,7 +12,7 @@ local load_total, update_hud = V.load_total, V.update_hud
 
 local def = {desc = "挖土機 Excavator", color = "#e0a020", cap = 4 * NLEV, speed = 2.0,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4},
-	tilt = {front = 1.3, rear = -1.3, side_z = 0, side_x = 1.25},
+	tilt = {front = 1.3, rear = -1.3, side_z = 0, side_x = 1.25}, max_grade = math.rad(35),   -- 履帶挖土機約 70%
 	item_desc = "右鍵上車；E 挖滑鼠指的位置（鏟斗 4 m³）、空白鍵倒在滑鼠指的位置（指著卡車就倒進卡車）"}
 def.inv_image = V.inv_icon(def.color, "^[fill:12x5:2,8:#505050^[fill:2x6:7,2:#404040")   -- 鏟斗與手臂
 

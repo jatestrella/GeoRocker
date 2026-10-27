@@ -19,7 +19,8 @@ rockmech.vehicles = V
 -- eye_up／eye_fwd：相機在車身中心上方、沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
 -- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
--- overhangs：伸出碰撞箱那段擋人的範圍（見 V.overhang_push）；overhangs_now(self)：會動的擋人範圍（挖土機鏟斗）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
+-- overhangs：伸出碰撞箱那段擋人的範圍（見 V.overhang_push）；overhangs_now(self)：會動的擋人範圍（挖土機鏟斗）；max_grade：最大爬坡角（rad；行進方向整台車長的平均坡度）；
+-- top_speed／accel：直線前進時從 speed 加速到 top_speed（m/s、m/s²）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
 -- 各車的行為（都可省略）：parts（零件清單）、on_spawn(self)（零件生成後）、on_load(self, data)／on_save(self, data)、
 -- refresh(self)（外觀與名牌）、hud(self)（HUD 加的文字）、can_turn(self, pos, yaw, yaw2)、
 -- move(self, ctx)（設定 ctx.speed）、step(self, ctx)（設定速度之後）、action(self, ctx)（作業鍵）。
@@ -139,6 +140,27 @@ end
 
 -- 隨地形傾斜：量前後軸（履帶前後端）、左右輪（履帶）下方的地面（def.tilt），算俯仰（前高為正）
 -- 與側傾（右側低為正，set_rotation 是右手 Z-X-Y：X 正 = 抬頭、Z 正 = 向右傾）。只有外觀傾斜，碰撞箱維持水平
+-- 爬坡：行進方向上（f = 1 前進、−1 倒車）從後端接地點到前端前方 1 m 的平均坡度（rad，上坡為正）。
+-- 沿車身每 0.5 m 量地面高度、最小平方法擬合斜率（方塊地形是台階，只比兩點會差一整階）；
+-- 量整台車長的平均，單一一格台階對長車只是小坡；地面在車底往上 1.6 m 以內找
+local function travel_grade(p, yaw, def, f)
+	local t = def.tilt
+	local c, sn = math.cos(yaw), math.sin(yaw)
+	local za, zb = t.rear, t.front + 1
+	if f < 0 then za, zb = t.rear - 1, t.front end
+	local from = p.y - def.half + 1.6
+	local n, sz, sh, szz, szh = 0, 0, 0, 0, 0
+	for z = za, zb, 0.5 do
+		local h = ground_top(p.x - z * sn, from, p.z + z * c, 10)
+		if h then
+			n, sz, sh, szz, szh = n + 1, sz + z, sh + h, szz + z * z, szh + z * h
+		end
+	end
+	local var = n * szz - sz * sz
+	if n < 3 or var <= 0 then return 0 end
+	return math.atan(f * (n * szh - sz * sh) / var)
+end
+
 local function ground_tilt(p, yaw, def)
 	local TILT_AXLES = def.tilt
 	local c, sn = math.cos(yaw), math.sin(yaw)
@@ -557,10 +579,37 @@ function V.register(kind, def)
 			local regions = def.overhangs_now and def.overhangs_now(self) or def.overhangs
 			if regions then push_players(self, pos, yaw, def, regions) end
 			local dir, s = dirs(yaw)
+			-- 直線前進一段時間後慢慢加速到 top_speed；轉彎時減速回 speed，停下、倒車就回到 speed
+			local speed = def.speed * fwd
+			if def.top_speed then
+				local cur = self.cruise or def.speed
+				if fwd > 0 and turn == 0 then cur = math.min(def.top_speed, cur + def.accel * dtime)
+				elseif fwd > 0 then cur = math.max(def.speed, cur - 4 * dtime)
+				else cur = def.speed end
+				self.cruise = cur
+				if fwd > 0 then speed = cur end
+			end
 			local ctx = {obj = obj, pos = pos, yaw = yaw, dir = dir, s = s, fwd = fwd, dtime = dtime, d = d, ctrl = ctrl,
-				speed = def.speed * fwd}
+				speed = speed}
+			-- 爬坡能力：上坡超過最大爬坡角就上不去；坡上越陡越慢（到最大爬坡角剩 30%）
+			local steep
+			if def.max_grade and fwd ~= 0 then
+				local g = travel_grade(pos, yaw, def, fwd)
+				if g > def.max_grade then
+					ctx.speed, ctx.fwd = 0, 0
+					steep = ("坡太陡（%d° > %d°）"):format(math.floor(math.deg(g) + 0.5), math.floor(math.deg(def.max_grade) + 0.5))
+				elseif g > 0 then
+					ctx.speed = ctx.speed * (1 - 0.7 * g / def.max_grade)
+				end
+			end
+			if steep ~= self.steep then self.steep = steep; update_hud(self) end
 			if def.move then def.move(self, ctx) end
 			obj:set_velocity({x = dir.x * ctx.speed, y = vel.y, z = dir.z * ctx.speed})
+			-- HUD 時速（每 5 km/h 更新一次）
+			if def.top_speed then
+				local kmh = math.floor(math.abs(ctx.speed) * 3.6 / 5 + 0.5) * 5
+				if kmh ~= self.kmh then self.kmh = kmh; update_hud(self) end
+			end
 			if def.step then def.step(self, ctx) end
 			-- Z（zoom 鍵）：切換追蹤相機（駕駛掛到車子後上方的點上）／車頂第一人稱
 			if d then

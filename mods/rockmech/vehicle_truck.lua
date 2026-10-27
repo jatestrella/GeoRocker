@@ -215,8 +215,10 @@ local TREAD = "[fill:16x16:#1c1c1c^[fill:16x1:0,3:#2e2e2e^[fill:16x1:0,8:#2e2e2e
 V.WHEEL, V.TREAD = WHEEL, TREAD
 
 local truck = {desc = "卡車 Dump truck", short = "卡車", color = "#c84020", cap = 12 * NLEV, speed = 5.0,
+	top_speed = 12, accel = 1.5,   -- 直線加速到約 43 km/h
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 	rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
+	max_grade = math.rad(17),   -- 重載砂石車約 30%
 	item_desc = "右鍵上車；空白鍵把車斗倒在車尾（載量 12 m³）"}
 truck.inv_image = V.inv_icon(truck.color, "^[fill:10x4:3,3:#9fd0ff")   -- 擋風玻璃
 do

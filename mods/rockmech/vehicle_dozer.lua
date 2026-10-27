@@ -13,7 +13,7 @@ local collapse = rockmech.collapse
 
 local def = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0, mirror = {x = 1.0, y = 1.4, z = -0.2},
-	tilt = {front = 1.3, rear = -2.1, side_z = -0.4, side_x = 1.1},
+	tilt = {front = 1.3, rear = -2.1, side_z = -0.4, side_x = 1.1}, max_grade = math.rad(30),   -- 履帶推土機
 	stepheight = 0.3,   -- 放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
 	item_desc = "右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走"}
 def.inv_image = V.inv_icon(def.color, "^[fill:16x5:0,11:#3a3a3a")   -- 推土鏟
