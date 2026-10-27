@@ -21,11 +21,11 @@ local TYPES = {
 }
 local TURN_RATE = 1.6        -- rad/s
 -- 駕駛視線：第一人稱相機不受 set_attach 位移影響（遊戲內確認：改位移視角不變），改用 set_eye_offset。
--- 玩家掛在車身中心（腳在中心），相機往下 EYE_DOWN、沿視線方向往前 EYE_FWD（m）。
--- EYE_FWD 1.5 > 車身半對角線 1.41：不管往哪看，相機都在車身外（車身方塊從裡面看不透明）
+-- 玩家掛在車身中心（腳在中心），相機往下 EYE_DOWN、沿視線方向往前 EYE_FWD（m）：坐在車頂前緣，
+-- 往前看得到自己的車頂前緣與車頭正前方的地面（車身方塊從裡面看不透明，相機不能放進車身）
 local EYE_HEIGHT = 1.625
-local EYE_DOWN = EYE_HEIGHT - 0.3   -- 相機在車身中心上方 0.3 m
-local EYE_FWD = 1.5
+local EYE_DOWN = EYE_HEIGHT - 1.15  -- 相機在車身中心上方 1.15 m（車頂上方 0.15 m）
+local EYE_FWD = 0.95                 -- 車頂前緣（車頭那面在 1.0 m）
 local VSIZE = 2
 local EYE_OFFSET = {x = 0, y = -EYE_DOWN * 10, z = EYE_FWD * 10}
 local DUMP_REACH = 4         -- 挖土機倒進卡車的距離 (m)
