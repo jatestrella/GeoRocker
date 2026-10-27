@@ -203,6 +203,16 @@ function V.to_local(self, wp)
 	local cr, sr = math.cos(self.roll or 0), math.sin(self.roll or 0)
 	return {x = x * cr - y * sr, y = x * sr + y * cr, z = z}
 end
+-- 車身座標 → 世界座標（to_local 的反向）
+function V.to_world(self, lp)
+	local p, yaw = self.object:get_pos(), self.object:get_yaw()
+	local cr, sr = math.cos(self.roll or 0), math.sin(self.roll or 0)
+	local x, y, z = lp.x * cr + lp.y * sr, -lp.x * sr + lp.y * cr, lp.z
+	local cp, sp = math.cos(self.pitch or 0), math.sin(self.pitch or 0)
+	y, z = y * cp + z * sp, -y * sp + z * cp
+	local c, sn = math.cos(yaw), math.sin(yaw)
+	return {x = p.x + x * c - z * sn, y = p.y + y, z = p.z + x * sn + z * c}
+end
 
 -- 追蹤相機：Z 鍵時把駕駛掛到一個看不見、跟著車子的點上（Luanti 內建第三人稱拉不遠）。
 -- 位置：車尾後 3.5 m、車頂上方 4 m（眼睛）

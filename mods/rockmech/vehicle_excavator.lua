@@ -348,16 +348,29 @@ function def.action(self, ctx)
 		elseif hit and hit.above then
 			local a = hit.above
 			dg = {t = 0, mode = "dump", target = a, to = to_local(self, {x = a.x, y = a.y + 0.8, z = a.z})}
+		elseif d then
+			-- 10 m 內沒有指到方塊：沿視線取遠處一點，下面抓最遠距離倒
+			dg = {t = 0, mode = "dump", to = to_local(self, vector.add(pos, vector.multiply(d:get_look_dir(), 30)))}
 		end
 		local reach
 		if dg then
 			dg.psi, dg.to, reach = swing_to(dg.to)
 			dg.psi0 = self.swing or 0
-			if reach > ARM_REACH then
-				self.msg = ("超出手臂範圍（%.1f m，手臂約 %.1f m）"):format(reach, ARM_REACH)
+			if reach > ARM_REACH and dg.truck then
+				self.msg = ("搆不到車斗（%.1f m，手臂約 %.1f m）"):format(reach, ARM_REACH)
 			else
+				if reach > ARM_REACH then
+					-- 超出手臂範圍：挖斗伸到同一方向最遠處，倒在那一點正下方
+					local k = (ARM_REACH - 0.2) / reach
+					local b = {x = BOOM_ROOT.x + (dg.to.x - BOOM_ROOT.x) * k, y = BOOM_ROOT.y + (dg.to.y - BOOM_ROOT.y) * k,
+						z = BOOM_ROOT.z + (dg.to.z - BOOM_ROOT.z) * k}
+					dg.to = b
+					dg.target = vector.round(V.to_world(self, h2v(b, dg.psi)))
+					self.msg = ("超出手臂範圍，倒在最遠處（約 %.1f m）"):format(ARM_REACH)
+				else
+					self.msg = nil
+				end
 				self.dig = dg
-				self.msg = nil
 			end
 		else
 			self.msg = "要倒在哪裡？（10 m 內沒有方塊或卡車）"
