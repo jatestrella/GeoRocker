@@ -1,5 +1,5 @@
 -- rockmech/drilling.lua
--- 鑽孔爆破：鑿岩機在岩面鑽孔 → 乳膠炸藥裝進鑽孔 → 打火石點火（只爆那一孔）或起爆器（範圍內的裝藥依序起爆）。
+-- 鑽孔爆破：鑿岩機在岩面鑽孔（按住左鍵 drill_time 秒，像挖礦）→ 乳膠炸藥裝進鑽孔 → 打火石點火（只爆那一孔）或起爆器（範圍內的裝藥依序起爆）。
 --   鑽孔：貼在岩面上的小圓環（中間黑色的孔），是空氣格裡的貼壁方塊；後面的岩石沒了就跟著消失。
 --   孔內裝藥：爆心在孔底（岩面往內 hole_depth 格），破碎半徑 R = charge_radius · n^(1/3)（n 條），
 --             再依岩石強度縮放（blast.lua）；炸飛、碎石化、支撐判定照 blasting.lua。
@@ -132,38 +132,83 @@ local function tell(player, msg)
 	if player and player:is_player() then core.chat_send_player(player:get_player_name(), "[爆破] " .. msg) end
 end
 
--- 鑽孔：pointed 的岩石面（under 是岩石、above 是空氣）。回傳 true 表示開始鑽
-local drilling = {}
-function rockmech.drill_hole(under, above, player)
-	if not rockmech.lith_of_node[core.get_node(under).name] then
-		tell(player, "只能在岩石上鑽孔（碎石鑽不了）")
-		return false
-	end
-	if core.get_node(above).name ~= "air" then
-		tell(player, "孔口前面要是空的")
-		return false
-	end
-	local key = core.pos_to_string(above)
-	if drilling[key] then return false end
-	drilling[key] = true
-	local dir = vector.subtract(under, above)
-	local face = vector.add(above, vector.multiply(dir, 0.45))
-	core.add_particlespawner({
-		amount = math.floor(bcfg.drill_time * 30), time = bcfg.drill_time,
-		minpos = vector.subtract(face, 0.1), maxpos = vector.add(face, 0.1),
-		minvel = {x = -1, y = 0, z = -1}, maxvel = {x = 1, y = 1.5, z = 1},
-		minacc = {x = 0, y = -6, z = 0}, maxacc = {x = 0, y = -6, z = 0},
-		minexptime = 0.3, maxexptime = 0.8, minsize = 0.5, maxsize = 1.2,
-		texture = "[fill:4x4:#9a9088",
-	})
-	core.after(bcfg.drill_time, function()
-		drilling[key] = nil
-		if core.get_node(above).name == "air" and rockmech.lith_of_node[core.get_node(under).name] then
-			core.set_node(above, {name = HOLE, param2 = core.dir_to_wallmounted(dir)})
-		end
-	end)
+-- 能不能在這個岩面鑽孔（under 是岩石、above 是空的）：回傳 nil 或不能的原因
+local function cannot_drill(under, above)
+	if not rockmech.lith_of_node[core.get_node(under).name] then return "只能在岩石上鑽孔（碎石鑽不了）" end
+	if core.get_node(above).name ~= "air" then return "孔口前面要是空的" end
+end
+-- 鑽好一個孔
+function rockmech.make_hole(under, above)
+	if cannot_drill(under, above) then return false end
+	core.set_node(above, {name = HOLE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
 	return true
 end
+
+-- 鑽孔：拿著鑿岩機按住左鍵（像挖礦）、一直指著同一個岩面 drill_time 秒。伺服器每一步看玩家的按鍵與視線；
+-- 放開或指到別處就重來。鑿岩機挖不動任何方塊，所以按住左鍵不會把岩石挖掉
+local DRILL = "rockmech:rock_drill"
+local drilling = {}   -- 玩家名 → {key, under, above, t, hud}
+local function drill_hud(player, st, text)
+	if st.hud then player:hud_change(st.hud, "text", text)
+	else
+		st.hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.56}, alignment = {x = 0, y = 0},
+			text = text, number = 0xFFFFFF, z_index = 50})
+	end
+end
+local function drill_stop(player, name)
+	local st = drilling[name]
+	if st and st.hud and player then player:hud_remove(st.hud) end
+	drilling[name] = nil
+end
+core.register_globalstep(function(dtime)
+	for _, pl in ipairs(core.get_connected_players()) do
+		local name = pl:get_player_name()
+		local ctrl = pl:get_player_control()
+		local hit
+		if (ctrl.dig or ctrl.LMB) and pl:get_wielded_item():get_name() == DRILL and not pl:get_attach() then
+			local eye = vector.add(pl:get_pos(), {x = 0, y = pl:get_properties().eye_height, z = 0})
+			for pt in core.raycast(eye, vector.add(eye, vector.multiply(pl:get_look_dir(), 4)), false, false) do
+				if pt.type == "node" then hit = pt; break end
+			end
+		end
+		if not hit then
+			if drilling[name] then drill_stop(pl, name) end
+		else
+			local key = core.pos_to_string(hit.under) .. core.pos_to_string(hit.above)
+			local st = drilling[name]
+			if not st or st.key ~= key then
+				if st and st.hud then pl:hud_remove(st.hud) end
+				st = {key = key, under = hit.under, above = hit.above, t = 0}
+				drilling[name] = st
+			end
+			local why = cannot_drill(st.under, st.above)
+			if why then
+				drill_hud(pl, st, why)
+			else
+				st.t = st.t + dtime
+				local frac = math.min(1, st.t / bcfg.drill_time)
+				local bars = math.floor(frac * 10 + 0.5)
+				drill_hud(pl, st, "鑽孔 " .. ("■"):rep(bars) .. ("□"):rep(10 - bars))
+				-- 粉塵
+				local dir = vector.subtract(st.under, st.above)
+				local face = vector.add(st.above, vector.multiply(dir, 0.45))
+				core.add_particlespawner({
+					amount = 3, time = dtime,
+					minpos = vector.subtract(face, 0.1), maxpos = vector.add(face, 0.1),
+					minvel = {x = -1, y = 0, z = -1}, maxvel = {x = 1, y = 1.5, z = 1},
+					minacc = {x = 0, y = -6, z = 0}, maxacc = {x = 0, y = -6, z = 0},
+					minexptime = 0.3, maxexptime = 0.8, minsize = 0.5, maxsize = 1.2,
+					texture = "[fill:4x4:#9a9088",
+				})
+				if st.t >= bcfg.drill_time then
+					rockmech.make_hole(st.under, st.above)
+					drill_stop(pl, name)
+				end
+			end
+		end
+	end
+end)
+core.register_on_leaveplayer(function(player) drilling[player:get_player_name()] = nil end)
 
 -- 裝藥：pointed 是鑽孔 → 裝進去；已裝藥 → 加一條；沒有鑽孔的實心面 → 貼面裝藥。回傳 true 表示用掉一條
 function rockmech.load_charge(under, above, player)
@@ -218,12 +263,13 @@ function rockmech.fire_round(pos, player)
 	return #charges
 end
 
-core.register_craftitem("rockmech:rock_drill", {
-	description = "鑿岩機 Rock drill\n對岩面按右鍵鑽孔（" .. bcfg.drill_time .. " 秒）",
+core.register_tool(DRILL, {
+	description = "鑿岩機 Rock drill\n對岩面按住左鍵鑽孔（" .. bcfg.drill_time .. " 秒）",
 	inventory_image = "[fill:16x16:#00000000^[fill:9x5:2,5:#d0a020^[fill:5x1:11,7:#b0b0b0^[fill:3x5:3,10:#404040^[fill:2x1:15,7:#e0e0e0",
-	stack_max = 1,
-	on_place = function(itemstack, placer, pointed)
-		if pointed.type == "node" then rockmech.drill_hole(pointed.under, pointed.above, placer) end
+	-- 挖不動任何方塊（按住左鍵是鑽孔，不是把岩石挖掉）
+	tool_capabilities = {full_punch_interval = 1.0, max_drop_level = 0, groupcaps = {}, damage_groups = {fleshy = 1}},
+	on_place = function(itemstack, placer)
+		tell(placer, "鑿岩機：對岩面按住左鍵鑽孔")
 		return itemstack
 	end,
 })
