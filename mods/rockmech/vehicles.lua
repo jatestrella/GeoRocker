@@ -849,6 +849,14 @@ for kind, def in pairs(TYPES) do
 				place_bed(self, a)
 				if tp.t >= TIP_TOTAL then self.tip = nil; place_bed(self, 0) end
 			end
+			-- 卡車：載量一有變化就重畫車斗裡的碎石與名牌（不管是誰改的）
+			if kind == "truck" and not self.tip then
+				local tot = load_total(self)
+				if tot ~= self.shown_total then
+					self.shown_total = tot
+					refresh_look(self)
+				end
+			end
 			-- Z（zoom 鍵）：切換第一／第三人稱
 			if d then
 				if ctrl.zoom and not self.zoom_held then
