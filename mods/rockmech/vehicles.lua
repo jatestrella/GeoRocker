@@ -64,7 +64,7 @@ local EXC_PARTS = {
 	{pos = {x = -1.25, y = -1.0, z = 0}, size = {x = 0.5, y = 1.0, z = 3.0}, tex = {TRACK, TRACK, TRACK, TRACK, TRACK, TRACK}},
 	{pos = {x = 1.25, y = -1.0, z = 0}, size = {x = 0.5, y = 1.0, z = 3.0}, tex = {TRACK, TRACK, TRACK, TRACK, TRACK, TRACK}},
 	{pos = {x = 0, y = -1.0, z = 0}, size = {x = 2.0, y = 1.0, z = 2.6}, tex = box_tex("#3a3a3a")},
-	{pos = {x = 0, y = 0.5, z = -0.5}, size = {x = 2.0, y = 2.0, z = 2.0},
+	{id = "cab", pos = {x = 0, y = 0.5, z = -0.5}, size = {x = 2.0, y = 2.0, z = 2.0},
 		tex = (function()
 			local c = TYPES.excavator.color
 			local win = ("[fill:16x16:%s^[fill:12x7:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
@@ -128,6 +128,22 @@ end
 -- 挖斗放在 b（車身座標，m）：動臂 BOOM_ROOT → 手肘、斗桿 手肘 → b
 local function lerp(a, b, t) return {x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, z = a.z + (b.z - a.z) * t} end
 local atan2 = math.atan2 or math.atan
+-- 上部結構（駕駛艙＋手臂）迴轉 ψ（rad）：上部座標 → 車身座標。+Z 轉 ψ 後指向 (sin ψ, cos ψ)，
+-- 與掛載旋轉的 Y 角同一個方向（見下面 seg_attach 的說明）
+local CAB_POS = {x = 0, y = 0.5, z = -0.5}
+local function h2v(p, psi)
+	local c, sn = math.cos(psi), math.sin(psi)
+	return {x = p.x * c + p.z * sn, y = p.y, z = -p.x * sn + p.z * c}
+end
+local function v2h(p, psi)
+	local c, sn = math.cos(psi), math.sin(psi)
+	return {x = p.x * c - p.z * sn, y = p.y, z = p.x * sn + p.z * c}
+end
+-- 角度內插（走最短的方向）
+local function lerp_angle(a, b, t)
+	local d = (b - a + math.pi) % (2 * math.pi) - math.pi
+	return a + d * t
+end
 -- 挖斗位置 b（車身座標）→ 實際搆得到的挖斗位置、手肘位置
 local function arm_solve(b)
 	local dx, dy, dz = b.x - BOOM_ROOT.x, b.y - BOOM_ROOT.y, b.z - BOOM_ROOT.z
@@ -158,7 +174,7 @@ local function seg_attach(self, o, a, c)
 	o:set_attach(self.object, "", {x = (a.x + c.x) * 5, y = (a.y + c.y) * 5, z = (a.z + c.z) * 5}, {x = tx, y = ty, z = 0})
 end
 -- 鏟斗裡的碎石（parts.fill）：跟著載量改高度與貼圖，擺在挖斗上面
-local function place_fill(self, b)
+local function place_fill(self, b, psi)
 	local o = self.parts and self.parts.fill
 	if not o then return end
 	local total, best, bl = 0, nil, 0
@@ -180,18 +196,34 @@ local function place_fill(self, b)
 			o:set_properties({is_visible = false})
 		end
 	end
-	o:set_attach(self.object, "", {x = b.x * 10, y = (b.y + 0.4 + h / 2) * 10, z = b.z * 10}, {x = 0, y = 0, z = 0})
+	o:set_attach(self.object, "", {x = b.x * 10, y = (b.y + 0.4 + h / 2) * 10, z = b.z * 10}, {x = 0, y = math.deg(psi or 0), z = 0})
 end
 
+-- 挖斗放在 b（上部結構座標）；上部結構迴轉 self.swing
 local function place_arm(self, b)
 	local parts = self.parts
 	if not parts then return end
+	local psi = self.swing or 0
 	local elbow
 	b, elbow = arm_solve(b)
-	if parts.bucket then parts.bucket:set_attach(self.object, "", {x = b.x * 10, y = b.y * 10, z = b.z * 10}, {x = 0, y = 0, z = 0}) end
-	place_fill(self, b)
-	seg_attach(self, parts.boom, BOOM_ROOT, elbow)
-	seg_attach(self, parts.stick, elbow, b)
+	local vb, ve, vr = h2v(b, psi), h2v(elbow, psi), h2v(BOOM_ROOT, psi)
+	local rot = {x = 0, y = math.deg(psi), z = 0}
+	if parts.cab then
+		local c = h2v(CAB_POS, psi)
+		parts.cab:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, rot)
+	end
+	if parts.bucket then parts.bucket:set_attach(self.object, "", {x = vb.x * 10, y = vb.y * 10, z = vb.z * 10}, rot) end
+	place_fill(self, vb, psi)
+	seg_attach(self, parts.boom, vr, ve)
+	seg_attach(self, parts.stick, ve, vb)
+end
+
+-- 目標（車身座標）→ 上部結構要轉的角度、目標在上部結構座標、離動臂根部的距離
+local function swing_to(tl)
+	local psi = atan2(tl.x, tl.z)
+	local h = v2h(tl, psi)
+	local reach = math.sqrt((h.x - BOOM_ROOT.x) ^ 2 + (h.y - BOOM_ROOT.y) ^ 2 + (h.z - BOOM_ROOT.z) ^ 2)
+	return psi, h, reach
 end
 
 -- 世界座標 → 車身座標（車頭 +Z）
@@ -659,16 +691,23 @@ for kind, def in pairs(TYPES) do
 					end
 					update_hud(self)
 				end
+				-- 抬起時上部結構轉向目標，收回時轉回車頭
 				local to = dg.to
 				local above = {x = to.x, y = to.y + DIG_LIFT, z = to.z}
 				local t, ph = dg.t, DIG_PHASES
 				local b
-				if t < ph[1] then b = lerp(BUCKET_REST, above, t / ph[1])
-				elseif t < ph[1] + ph[2] then b = lerp(above, to, (t - ph[1]) / ph[2])
-				elseif t < ph[1] + ph[2] + ph[3] then b = lerp(to, above, (t - ph[1] - ph[2]) / ph[3])
-				else b = lerp(above, BUCKET_REST, math.min(1, (t - ph[1] - ph[2] - ph[3]) / ph[4])) end
+				if t < ph[1] then
+					b = lerp(BUCKET_REST, above, t / ph[1])
+					self.swing = lerp_angle(dg.psi0, dg.psi, t / ph[1])
+				elseif t < ph[1] + ph[2] then b = lerp(above, to, (t - ph[1]) / ph[2]); self.swing = dg.psi
+				elseif t < ph[1] + ph[2] + ph[3] then b = lerp(to, above, (t - ph[1] - ph[2]) / ph[3]); self.swing = dg.psi
+				else
+					local u = math.min(1, (t - ph[1] - ph[2] - ph[3]) / ph[4])
+					b = lerp(above, BUCKET_REST, u)
+					self.swing = lerp_angle(dg.psi, 0, u)
+				end
 				place_arm(self, b)
-				if t >= DIG_TOTAL then self.dig = nil; place_arm(self, BUCKET_REST) end
+				if t >= DIG_TOTAL then self.dig = nil; self.swing = 0; place_arm(self, BUCKET_REST) end
 			end
 			-- Z（zoom 鍵）：切換第一／第三人稱
 			if d then
@@ -695,11 +734,12 @@ for kind, def in pairs(TYPES) do
 						target = hit and hit.under
 					end
 					local tl = target and to_local(self, target)
-					local reach = tl and math.sqrt((tl.x - BOOM_ROOT.x) ^ 2 + (tl.y - BOOM_ROOT.y) ^ 2 + (tl.z - BOOM_ROOT.z) ^ 2)
+					local psi, th, reach
+					if tl then psi, th, reach = swing_to(tl) end
 					if tl and reach > ARM_REACH then
 						self.msg = ("超出手臂範圍（%.1f m，手臂約 %.1f m）"):format(reach, ARM_REACH)
 					elseif target then
-						self.dig = {t = 0, mode = "dig", target = target, to = tl}
+						self.dig = {t = 0, mode = "dig", target = target, to = th, psi = psi, psi0 = self.swing or 0}
 						self.msg = nil
 					else
 						self.msg = "挖斗搆不到（10 m 內沒有方塊）"
@@ -722,9 +762,10 @@ for kind, def in pairs(TYPES) do
 						local a = hit.above
 						dg = {t = 0, mode = "dump", target = a, to = to_local(self, {x = a.x, y = a.y + 0.8, z = a.z})}
 					end
+					local reach
 					if dg then
-						local tl = dg.to
-						local reach = math.sqrt((tl.x - BOOM_ROOT.x) ^ 2 + (tl.y - BOOM_ROOT.y) ^ 2 + (tl.z - BOOM_ROOT.z) ^ 2)
+						dg.psi, dg.to, reach = swing_to(dg.to)
+						dg.psi0 = self.swing or 0
 						if reach > ARM_REACH then
 							self.msg = ("超出手臂範圍（%.1f m，手臂約 %.1f m）"):format(reach, ARM_REACH)
 						else
