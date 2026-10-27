@@ -302,6 +302,13 @@ for kind, def in pairs(TYPES) do
 			local name = clicker:get_player_name()
 			if self.driver == name then get_off(self); return end
 			if self.driver then return end
+			-- 從別台車直接換過來：先把原本那台的駕駛清掉（否則兩台都聽這個玩家的）
+			local parent = clicker:get_attach()
+			local pe = parent and parent:get_luaentity()
+			if pe and pe ~= self and pe.driver == name then
+				if pe.hud then clicker:hud_remove(pe.hud) end
+				pe.driver, pe.hud = nil, nil
+			end
 			self.driver = name
 			clicker:set_attach(self.object, "", SEAT, {x = 0, y = 0, z = 0})
 			update_hud(self)
@@ -328,6 +335,14 @@ for kind, def in pairs(TYPES) do
 			local vel = obj:get_velocity()
 			local d = self.driver and core.get_player_by_name(self.driver)
 			if self.driver and not d then self.driver, self.hud = nil, nil end
+			-- 駕駛已經不在這台車上（換到別台、被傳送、死亡等）：不再聽他的
+			if d then
+				local parent = d:get_attach()
+				if not (parent and parent:get_luaentity() == self) then
+					if self.hud then d:hud_remove(self.hud) end
+					self.driver, self.hud, d = nil, nil, nil
+				end
+			end
 			local fwd, turn = 0, 0
 			-- self.autopilot：沒有駕駛時的控制輸入（測試、指令用），格式同 get_player_control
 			local ctrl = d and d:get_player_control() or self.autopilot or {}
