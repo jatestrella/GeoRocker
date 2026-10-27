@@ -254,9 +254,27 @@ function rockmech.fire_round(pos, player)
 	table.sort(charges, function(a, b) return vector.distance(a, pos) < vector.distance(b, pos) end)
 	local delay = bcfg.detonator_delay
 	tell(player, ("%d 個裝藥，%d 秒後起爆，退到安全距離！"):format(#charges, math.ceil(delay)))
-	for t = math.ceil(delay) - 1, 1, -1 do
-		core.after(delay - t, function() tell(player, tostring(t)) end)
+	-- 畫面正中央的大倒數：5、4、3、2、1、起爆！
+	local name = player and player:is_player() and player:get_player_name()
+	local hud
+	local function show(text)
+		local pl = name and core.get_player_by_name(name)
+		if not pl then return end
+		if hud then pl:hud_change(hud, "text", text)
+		else
+			hud = pl:hud_add({type = "text", position = {x = 0.5, y = 0.4}, alignment = {x = 0, y = 0},
+				text = text, number = 0xFF3030, size = {x = 8}, style = 1, z_index = 200})
+		end
 	end
+	local n = math.ceil(delay)
+	for t = n, 1, -1 do
+		core.after(delay - t, show, tostring(t))
+	end
+	core.after(delay, show, "起爆！")
+	core.after(delay + 1, function()
+		local pl = name and core.get_player_by_name(name)
+		if pl and hud then pl:hud_remove(hud) end
+	end)
 	for i, p in ipairs(charges) do
 		core.after(delay + (i - 1) * bcfg.hole_interval, detonate, p)
 	end
