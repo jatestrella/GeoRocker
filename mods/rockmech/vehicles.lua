@@ -19,7 +19,7 @@ rockmech.vehicles = V
 -- eye_up／eye_fwd：相機在車身中心上方、沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
 -- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
--- stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
+-- colliders：伸出碰撞箱那段的碰撞塊（V.colliders）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
 -- 各車的行為（都可省略）：parts（零件清單）、on_spawn(self)（零件生成後）、on_load(self, data)／on_save(self, data)、
 -- refresh(self)（外觀與名牌）、hud(self)（HUD 加的文字）、can_turn(self, pos, yaw, yaw2)、
 -- move(self, ctx)（設定 ctx.speed）、step(self, ctx)（設定速度之後）、action(self, ctx)（作業鍵）。
@@ -64,10 +64,33 @@ core.register_entity(PART, {
 		end)
 	end,
 })
+-- 碰撞塊：伸出碰撞箱的車斗、鏟刀等擋人用。看不見、掛在車上（車子不會撞到掛在自己身上的東西），
+-- 玩家照樣被擋住。碰撞框不會跟著車子轉，所以用 1 m 見方的小塊排滿那一段
+local COLLIDER = "rockmech:vehicle_collider"
+core.register_entity(COLLIDER, {
+	initial_properties = {
+		physical = true, collide_with_objects = true, pointable = false, static_save = false,
+		is_visible = false, collisionbox = {-0.5, -0.5, -0.5, 0.5, 0.5, 0.5},
+	},
+	on_activate = function(self)
+		core.after(1, function()
+			if self.object:get_pos() and not self.object:get_attach() then self.object:remove() end
+		end)
+	end,
+})
+-- 車身座標裡一片碰撞塊：中心在 xs × zs 的格點，高度 y0..y1
+function V.colliders(xs, zs, y0, y1)
+	local list = {}
+	for _, x in ipairs(xs) do
+		for _, z in ipairs(zs) do list[#list + 1] = {x = x, z = z, y0 = y0, y1 = y1} end
+	end
+	return list
+end
+
 local function remove_parts(self)
 	for _, c in ipairs(self.object:get_children()) do
 		local e = c:get_luaentity()
-		if e and e.name == PART then c:remove() end
+		if e and (e.name == PART or e.name == COLLIDER) then c:remove() end
 	end
 end
 -- parts：{id（可選，存到 self.parts[id]）, pos（m）, size, tex, rot（可選）}
@@ -80,6 +103,14 @@ local function spawn_parts(self, parts)
 			o:set_properties({visual_size = pt.size, textures = pt.tex})
 			o:set_attach(self.object, "", {x = pt.pos.x * 10, y = pt.pos.y * 10, z = pt.pos.z * 10}, pt.rot or {x = 0, y = 0, z = 0})
 			if pt.id then self.parts[pt.id] = o end
+		end
+	end
+	for _, c in ipairs(TYPES[self.vkind].colliders or {}) do
+		local o = core.add_entity(self.object:get_pos(), COLLIDER)
+		if o then
+			local hh = (c.y1 - c.y0) / 2
+			o:set_properties({collisionbox = {-0.5, -hh, -0.5, 0.5, hh, 0.5}})
+			o:set_attach(self.object, "", {x = c.x * 10, y = (c.y0 + hh) * 10, z = c.z * 10}, {x = 0, y = 0, z = 0})
 		end
 	end
 end
@@ -351,10 +382,12 @@ local function get_off(self)
 		d:set_camera({mode = "any"})
 		set_seated(d, false)
 		hud_clear(self, d)
+		-- 放到車身左側外 1 m（不能放進車身或碰撞塊裡，會卡住）
 		local p = self.object:get_pos()
 		local _, s = dirs(self.object:get_yaw())
+		local side = TYPES[self.vkind].half + 1
 		core.after(0.1, function()
-			if d:get_pos() then d:set_pos({x = p.x - s.z * 2, y = p.y + 0.5, z = p.z + s.x * 2}) end
+			if d:get_pos() then d:set_pos({x = p.x - s.z * side, y = p.y + 0.5, z = p.z + s.x * side}) end
 		end)
 	end
 	self.driver = nil

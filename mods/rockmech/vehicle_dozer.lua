@@ -238,4 +238,7 @@ function def.action(self, ctx)
 	end
 end
 
+-- 鏟刀（車頭外 z 1.5..2.5，從地面到抬起時的上緣）與車尾配重（z −2.5..−1.5）
+def.colliders = V.colliders({-1, 0, 1}, {2}, -1.5, 0.5)
+for _, c in ipairs(V.colliders({-0.5, 0.5}, {-2}, -1.5, -0.2)) do def.colliders[#def.colliders + 1] = c end
 V.register("dozer", def)
