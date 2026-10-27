@@ -107,6 +107,7 @@ local function place_arm(self, b)
 	end
 	if parts.bucket then parts.bucket:set_attach(self.object, "", {x = vb.x * 10, y = vb.y * 10, z = vb.z * 10}, rot) end
 	place_fill(self, vb, psi)
+	self.bucket_at = vb
 	seg_attach(self, parts.boom, vr, ve)
 	seg_attach(self, parts.stick, ve, vb)
 end
@@ -197,6 +198,13 @@ function def.hud(self)
 	end
 	if self.msg then s = s .. "\n" .. self.msg end
 	return s .. "\nE 挖滑鼠指的位置　空白鍵 倒在滑鼠指的位置（指著卡車就倒進卡車）"
+end
+
+-- 擋人：鏟斗（跟著手臂動；用把鏟斗連同裡面的碎石包起來的方塊，不照迴轉角轉）
+function def.overhangs_now(self)
+	local b = self.bucket_at
+	if not b then return nil end
+	return {{x0 = b.x - 0.7, x1 = b.x + 0.7, z0 = b.z - 0.7, z1 = b.z + 0.7, y0 = b.y - 0.45, y1 = b.y + 0.9}}
 end
 
 function def.on_load(self, data) self.swing = data.swing end

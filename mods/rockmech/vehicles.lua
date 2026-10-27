@@ -19,7 +19,7 @@ rockmech.vehicles = V
 -- eye_up／eye_fwd：相機在車身中心上方、沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
 -- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
--- overhangs：伸出碰撞箱那段擋人的範圍（見 V.overhang_push）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
+-- overhangs：伸出碰撞箱那段擋人的範圍（見 V.overhang_push）；overhangs_now(self)：會動的擋人範圍（挖土機鏟斗）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
 -- 各車的行為（都可省略）：parts（零件清單）、on_spawn(self)（零件生成後）、on_load(self, data)／on_save(self, data)、
 -- refresh(self)（外觀與名牌）、hud(self)（HUD 加的文字）、can_turn(self, pos, yaw, yaw2)、
 -- move(self, ctx)（設定 ctx.speed）、step(self, ctx)（設定速度之後）、action(self, ctx)（作業鍵）。
@@ -84,16 +84,17 @@ local function spawn_parts(self, parts)
 	end
 end
 
--- 伸出碰撞箱那段（車斗、鏟刀、車尾）擋人：玩家的碰撞只認碰撞箱（不轉、也不認掛在車上的東西），
+-- 伸出碰撞箱那段（車斗、鏟刀、車尾、鏟斗）擋人：玩家的碰撞只認碰撞箱（不轉、也不認掛在車上的東西；
+-- 而且只看中心在玩家附近約 3.4 m 內的物件，礦卡這種大車的邊緣離中心太遠也擋不住），
 -- 所以由伺服器每一步檢查，站進那段的玩家往最近的開放側推出去（不往車身那側推）。
--- def.overhangs：車身座標的長方體 {x0, x1, z0, z1, y0, y1, body = "z0"／"z1"（貼著車身的那側）}
+-- regions：車身座標的長方體 {x0, x1, z0, z1, y0, y1, body = "z0"／"z1"（貼著車身的那側，可省略）}
 local PLAYER_R, PLAYER_H = 0.3, 1.7
 -- 玩家腳底 p（世界座標）在車身 pos、朝向 yaw 時要推到哪裡（世界座標）；不在任何一段裡回傳 nil
-function V.overhang_push(def, pos, yaw, p)
+function V.overhang_push(regions, pos, yaw, p)
 	local c, sn = math.cos(yaw), math.sin(yaw)
 	local dx, dz = p.x - pos.x, p.z - pos.z
 	local lx, lz, ly = dx * c + dz * sn, -dx * sn + dz * c, p.y - pos.y
-	for _, r in ipairs(def.overhangs) do
+	for _, r in ipairs(regions) do
 		local m = PLAYER_R
 		if lx > r.x0 - m and lx < r.x1 + m and lz > r.z0 - m and lz < r.z1 + m and ly + PLAYER_H > r.y0 and ly < r.y1 then
 			-- 往最近的開放側推（左、右、不貼車身的前或後）；剛好在上緣附近 → 站上去
@@ -110,13 +111,13 @@ function V.overhang_push(def, pos, yaw, p)
 		end
 	end
 end
-local function push_players(self, pos, yaw, def)
-	local reach = (def.rear or def.half) + 4
+local function push_players(self, pos, yaw, def, regions)
+	local reach = (def.rear or def.half) + 8
 	for _, pl in ipairs(core.get_connected_players()) do
 		if not pl:get_attach() then
 			local p = pl:get_pos()
 			if math.abs(p.x - pos.x) < reach and math.abs(p.z - pos.z) < reach then
-				local q = V.overhang_push(def, pos, yaw, p)
+				local q = V.overhang_push(regions, pos, yaw, p)
 				if q then pl:set_pos(q) end
 			end
 		end
@@ -543,7 +544,8 @@ function V.register(kind, def)
 				self.roll = (self.roll or 0) + (tr - (self.roll or 0)) * k
 				obj:set_rotation({x = self.pitch, y = yaw, z = self.roll})
 			end
-			if def.overhangs then push_players(self, pos, yaw, def) end
+			local regions = def.overhangs_now and def.overhangs_now(self) or def.overhangs
+			if regions then push_players(self, pos, yaw, def, regions) end
 			local dir, s = dirs(yaw)
 			local ctx = {obj = obj, pos = pos, yaw = yaw, dir = dir, s = s, fwd = fwd, dtime = dtime, d = d, ctrl = ctrl,
 				speed = def.speed * fwd}
