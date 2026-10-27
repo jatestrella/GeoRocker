@@ -3,8 +3,9 @@
 --   鑽孔：貼在岩面上的小圓環（中間黑色的孔），是空氣格裡的貼壁方塊；後面的岩石沒了就跟著消失。
 --   孔內裝藥：爆心在孔底（岩面往內 hole_depth 格），破碎半徑 R = charge_radius · n^(1/3)（n 條），
 --             再依岩石強度縮放（blast.lua）；炸飛、碎石化、支撐判定照 blasting.lua。
---   側向自由面：炮孔旁 R 內有不是岩石的格子（空氣、碎石…，孔口岩面那側不算），距離 = 抵抗線 B，
---             半徑 × (1 + free_face_k·(1 − B/R))。先炸中間的孔（拔心／掏槽），外圈的孔就有自由面。
+--   夾制與側向自由面：只有孔口一個自由面時岩石夾住炸藥，半徑 × confine_factor；炮孔旁 R 內有不是岩石的格子
+--             （空氣、碎石…，孔口岩面那側不算），距離 = 抵抗線 B，再 × (1 + free_face_k·(1 − B/R))。
+--             先炸中間的孔（拔心／掏槽），外圈的孔就有自由面。
 --   貼面裝藥：沒有鑽孔也能貼在岩面上（無約束），爆心在岩面上，半徑再乘 surface_factor。
 --   裝藥被別的爆炸波及會殉爆。參數在設定 rockmech_blast_*。
 
@@ -77,14 +78,13 @@ local function detonate(pos)
 	local center
 	if node.name == CHARGED then
 		center = vector.add(pos, vector.multiply(dir, bcfg.hole_depth))
-		-- 側向自由面：抵抗線 B < R 時往自由面破裂得比較多，R × (1 + k·(1 − B/R))
+		-- 夾制：只有孔口一個自由面時岩石夾住炸藥，R × confine；
+		-- 側向自由面：抵抗線 B < R 時往自由面破裂，再 × (1 + k·(1 − B/R))
 		local B = burden(center, dir, R)
-		if B then
-			local f = 1 + bcfg.free_face_k * (1 - B / R)
-			core.log("action", ("[rockmech] 鑽孔裝藥 %s：抵抗線 B = %.1f m，半徑 %.1f × %.2f"):format(
-				core.pos_to_string(center), B, R, f))
-			R = R * f
-		end
+		local f = bcfg.confine_factor * (B and (1 + bcfg.free_face_k * (1 - B / R)) or 1)
+		core.log("action", ("[rockmech] 鑽孔裝藥 %s：抵抗線 B = %s，半徑 %.1f × %.2f"):format(
+			core.pos_to_string(center), B and ("%.1f m"):format(B) or "（沒有側向自由面）", R, f))
+		R = R * f
 	else
 		center = vector.add(pos, vector.multiply(dir, 0.5))
 		R = R * bcfg.surface_factor
