@@ -22,7 +22,8 @@ local TYPES = {
 	-- 沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；rearcam：倒車攝影機位置；
 	-- tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）
 	excavator = {desc = "挖土機 Excavator", color = "#e0a020", cap = 4 * NLEV, speed = 2.0,
-		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4}},
+		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4},
+		tilt = {front = 1.3, rear = -1.3, side_z = 0, side_x = 1.25}},
 	truck = {desc = "卡車 Dump truck", color = "#c84020", cap = 12 * NLEV, speed = 5.0,
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 		rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1}},
@@ -230,7 +231,7 @@ local function ground_top(x, y_from, z, depth)
 	end
 end
 
--- 隨地形傾斜（卡車、推土機）：量前後軸（履帶前後端）、左右輪（履帶）下方的地面（def.tilt），算俯仰（前高為正）
+-- 隨地形傾斜：量前後軸（履帶前後端）、左右輪（履帶）下方的地面（def.tilt），算俯仰（前高為正）
 -- 與側傾（右側低為正，set_rotation 是右手 Z-X-Y：X 正 = 抬頭、Z 正 = 向右傾）。只有外觀傾斜，碰撞箱維持水平
 local function ground_tilt(p, yaw, def)
 	local TILT_AXLES = def.tilt
@@ -432,11 +433,17 @@ local function swing_to(tl)
 end
 
 -- 世界座標 → 車身座標（車頭 +Z）
+-- 世界座標 → 車身座標（含隨地形傾斜：實體旋轉依序是側傾 Z、俯仰 X、偏航 Y，這裡反過來解）。
+-- 挖臂在這個座標裡解，車身傾斜時挖斗照樣落在目標上
 local function to_local(self, wp)
 	local p, yaw = self.object:get_pos(), self.object:get_yaw()
 	local dx, dy, dz = wp.x - p.x, wp.y - p.y, wp.z - p.z
 	local c, sn = math.cos(yaw), math.sin(yaw)
-	return {x = dx * c + dz * sn, y = dy, z = -dx * sn + dz * c}
+	local x, y, z = dx * c + dz * sn, dy, -dx * sn + dz * c
+	local cp, sp = math.cos(self.pitch or 0), math.sin(self.pitch or 0)
+	y, z = y * cp - z * sp, y * sp + z * cp
+	local cr, sr = math.cos(self.roll or 0), math.sin(self.roll or 0)
+	return {x = x * cr - y * sr, y = x * sr + y * cr, z = z}
 end
 
 -- 追蹤相機：Z 鍵時把駕駛掛到一個看不見、跟著車子的點上（Luanti 內建第三人稱拉不遠）。
@@ -1218,7 +1225,7 @@ for kind, def in pairs(TYPES) do
 				yaw = yaw + turn * TURN_RATE * dtime
 				obj:set_yaw(yaw)
 			end
-			-- 卡車、推土機外觀隨地形傾斜（角度平滑趨近）
+			-- 外觀隨地形傾斜（角度平滑趨近）
 			if def.tilt then
 				local tp, tr = ground_tilt(pos, yaw, def)
 				local k = math.min(1, dtime * 6)
