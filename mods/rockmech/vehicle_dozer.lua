@@ -238,7 +238,9 @@ function def.action(self, ctx)
 	end
 end
 
--- 鏟刀（車頭外 z 1.5..2.5，從地面到抬起時的上緣）與車尾配重（z −2.5..−1.5）
-def.colliders = V.colliders({-1, 0, 1}, {2}, -1.5, 0.5)
-for _, c in ipairs(V.colliders({-0.5, 0.5}, {-2}, -1.5, -0.2)) do def.colliders[#def.colliders + 1] = c end
+-- 擋人：鏟刀（車頭外 z 1.5..2.5，從地面到抬起時的上緣）與車尾配重（z −2.5..−1.5）
+def.overhangs = {
+	{x0 = -1.5, x1 = 1.5, z0 = 1.5, z1 = 2.5, y0 = -1.5, y1 = 0.5, body = "z0"},
+	{x0 = -0.8, x1 = 0.8, z0 = -2.5, z1 = -1.5, y0 = -1.5, y1 = -0.2, body = "z1"},
+}
 V.register("dozer", def)

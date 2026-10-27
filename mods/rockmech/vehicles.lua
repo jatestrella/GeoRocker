@@ -19,7 +19,7 @@ rockmech.vehicles = V
 -- eye_up／eye_fwd：相機在車身中心上方、沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
 -- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
--- colliders：伸出碰撞箱那段的碰撞塊（V.colliders）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
+-- overhangs：伸出碰撞箱那段擋人的範圍（見 V.overhang_push）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
 -- 各車的行為（都可省略）：parts（零件清單）、on_spawn(self)（零件生成後）、on_load(self, data)／on_save(self, data)、
 -- refresh(self)（外觀與名牌）、hud(self)（HUD 加的文字）、can_turn(self, pos, yaw, yaw2)、
 -- move(self, ctx)（設定 ctx.speed）、step(self, ctx)（設定速度之後）、action(self, ctx)（作業鍵）。
@@ -64,33 +64,10 @@ core.register_entity(PART, {
 		end)
 	end,
 })
--- 碰撞塊：伸出碰撞箱的車斗、鏟刀等擋人用。看不見、掛在車上（車子不會撞到掛在自己身上的東西），
--- 玩家照樣被擋住。碰撞框不會跟著車子轉，所以用 1 m 見方的小塊排滿那一段
-local COLLIDER = "rockmech:vehicle_collider"
-core.register_entity(COLLIDER, {
-	initial_properties = {
-		physical = true, collide_with_objects = true, pointable = false, static_save = false,
-		is_visible = false, collisionbox = {-0.5, -0.5, -0.5, 0.5, 0.5, 0.5},
-	},
-	on_activate = function(self)
-		core.after(1, function()
-			if self.object:get_pos() and not self.object:get_attach() then self.object:remove() end
-		end)
-	end,
-})
--- 車身座標裡一片碰撞塊：中心在 xs × zs 的格點，高度 y0..y1
-function V.colliders(xs, zs, y0, y1)
-	local list = {}
-	for _, x in ipairs(xs) do
-		for _, z in ipairs(zs) do list[#list + 1] = {x = x, z = z, y0 = y0, y1 = y1} end
-	end
-	return list
-end
-
 local function remove_parts(self)
 	for _, c in ipairs(self.object:get_children()) do
 		local e = c:get_luaentity()
-		if e and (e.name == PART or e.name == COLLIDER) then c:remove() end
+		if e and e.name == PART then c:remove() end
 	end
 end
 -- parts：{id（可選，存到 self.parts[id]）, pos（m）, size, tex, rot（可選）}
@@ -105,12 +82,43 @@ local function spawn_parts(self, parts)
 			if pt.id then self.parts[pt.id] = o end
 		end
 	end
-	for _, c in ipairs(TYPES[self.vkind].colliders or {}) do
-		local o = core.add_entity(self.object:get_pos(), COLLIDER)
-		if o then
-			local hh = (c.y1 - c.y0) / 2
-			o:set_properties({collisionbox = {-0.5, -hh, -0.5, 0.5, hh, 0.5}})
-			o:set_attach(self.object, "", {x = c.x * 10, y = (c.y0 + hh) * 10, z = c.z * 10}, {x = 0, y = 0, z = 0})
+end
+
+-- 伸出碰撞箱那段（車斗、鏟刀、車尾）擋人：玩家的碰撞只認碰撞箱（不轉、也不認掛在車上的東西），
+-- 所以由伺服器每一步檢查，站進那段的玩家往最近的開放側推出去（不往車身那側推）。
+-- def.overhangs：車身座標的長方體 {x0, x1, z0, z1, y0, y1, body = "z0"／"z1"（貼著車身的那側）}
+local PLAYER_R, PLAYER_H = 0.3, 1.7
+-- 玩家腳底 p（世界座標）在車身 pos、朝向 yaw 時要推到哪裡（世界座標）；不在任何一段裡回傳 nil
+function V.overhang_push(def, pos, yaw, p)
+	local c, sn = math.cos(yaw), math.sin(yaw)
+	local dx, dz = p.x - pos.x, p.z - pos.z
+	local lx, lz, ly = dx * c + dz * sn, -dx * sn + dz * c, p.y - pos.y
+	for _, r in ipairs(def.overhangs) do
+		local m = PLAYER_R
+		if lx > r.x0 - m and lx < r.x1 + m and lz > r.z0 - m and lz < r.z1 + m and ly + PLAYER_H > r.y0 and ly < r.y1 then
+			-- 往最近的開放側推（左、右、不貼車身的前或後）；剛好在上緣附近 → 站上去
+			local best, ox, oz = math.huge, 0, 0
+			local function try(d, x, z) if math.abs(d) < best then best, ox, oz = math.abs(d), x, z end end
+			try(r.x0 - m - lx, r.x0 - m - lx, 0)
+			try(r.x1 + m - lx, r.x1 + m - lx, 0)
+			if r.body ~= "z0" then try(r.z0 - m - lz, 0, r.z0 - m - lz) end
+			if r.body ~= "z1" then try(r.z1 + m - lz, 0, r.z1 + m - lz) end
+			if r.y1 - ly < math.min(best, 0.6) then
+				return {x = p.x, y = pos.y + r.y1, z = p.z}
+			end
+			return {x = p.x + ox * c - oz * sn, y = p.y, z = p.z + ox * sn + oz * c}
+		end
+	end
+end
+local function push_players(self, pos, yaw, def)
+	local reach = (def.rear or def.half) + 4
+	for _, pl in ipairs(core.get_connected_players()) do
+		if not pl:get_attach() then
+			local p = pl:get_pos()
+			if math.abs(p.x - pos.x) < reach and math.abs(p.z - pos.z) < reach then
+				local q = V.overhang_push(def, pos, yaw, p)
+				if q then pl:set_pos(q) end
+			end
 		end
 	end
 end
@@ -535,6 +543,7 @@ function V.register(kind, def)
 				self.roll = (self.roll or 0) + (tr - (self.roll or 0)) * k
 				obj:set_rotation({x = self.pitch, y = yaw, z = self.roll})
 			end
+			if def.overhangs then push_players(self, pos, yaw, def) end
 			local dir, s = dirs(yaw)
 			local ctx = {obj = obj, pos = pos, yaw = yaw, dir = dir, s = s, fwd = fwd, dtime = dtime, d = d, ctrl = ctrl,
 				speed = def.speed * fwd}

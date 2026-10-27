@@ -240,7 +240,7 @@ do
 		side_tex = ("[fill:16x16:%s^[fill:16x2:0,0:#8a2a10^[fill:2x16:4,0:#a83418^[fill:2x16:10,0:#a83418"):format(c),
 		overlap_lat = {-1.25, 0, 1.25}, overlap_dy = {1.2, 2.2}, aim_top = 1.0,
 	})
-	-- 車斗那段（碰撞箱後方 z −5.5..−1.5）從地面到車斗上緣
-	truck.colliders = V.colliders({-0.8, 0, 0.8}, {-5, -4, -3, -2}, -1.5, 0.8)
+	-- 擋人：車斗那段（碰撞箱後方 z −5.5..−1.5）從地面到車斗上緣
+	truck.overhangs = {{x0 = -1.3, x1 = 1.3, z0 = -5.5, z1 = -1.5, y0 = -1.5, y1 = 0.8, body = "z1"}}
 end
 V.register("truck", truck)

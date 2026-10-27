@@ -74,6 +74,6 @@ V.hauler(def, {
 	side_tex = ("[fill:16x16:%s^[fill:16x2:0,0:#8a6a10^[fill:2x16:3,0:#b88a10^[fill:2x16:8,0:#b88a10^[fill:2x16:13,0:#b88a10"):format(c),
 	overlap_lat = {-2.25, -1.1, 0, 1.1, 2.25}, overlap_dy = {1.2, 2.2, 3.2}, aim_top = 1.6, dump_rows = 2,
 })
--- 車斗那段（碰撞箱後方 z −7.5..−2.5）從地面到車斗上緣
-def.colliders = V.colliders({-1.8, -0.9, 0, 0.9, 1.8}, {-7, -6, -5, -4, -3}, -2.5, S.y)
+-- 擋人：車斗那段（碰撞箱後方 z −7.5..−2.5）從地面到車斗上緣
+def.overhangs = {{x0 = -2.3, x1 = 2.3, z0 = -7.5, z1 = -2.5, y0 = -2.5, y1 = S.y, body = "z1"}}
 V.register("haul", def)
