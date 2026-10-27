@@ -181,9 +181,9 @@ core.register_globalstep(function(dtime)
 				st = {key = key, under = hit.under, above = hit.above, t = 0}
 				drilling[name] = st
 			end
-			local why = cannot_drill(st.under, st.above)
-			if why then
-				drill_hud(pl, st, why)
+			if cannot_drill(st.under, st.above) then
+				-- 鑽不了（碎石、孔口被擋住）：什麼都不顯示
+				if st.hud then pl:hud_remove(st.hud); st.hud = nil end
 			else
 				st.t = st.t + dtime
 				local frac = math.min(1, st.t / bcfg.drill_time)
