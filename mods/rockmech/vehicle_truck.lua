@@ -12,20 +12,21 @@ local TIP_TOTAL = TIP_UP + TIP_HOLD + TIP_DOWN
 local BED_T = 0.1   -- 車斗鋼板厚度
 
 -- 車斗與裡面的碎石：抬起角度 alpha（rad，前端往上）。掛載旋轉繞 X 轉 θx 時 +Z → (0, −sin θx, cos θx)，
--- 所以前端往上 alpha 用 θx = −alpha；相對軸心的點 (y, z) → (y cos α + z sin α, −y sin α + z cos α)
+-- 所以前端往上 alpha 用 θx = −alpha；相對軸心的點 (y, z) → (y cos α + z sin α, −y sin α + z cos α)。
+-- 鋼板自己的傾角 rot（度，θx 同號：正 = 前端往下，例如礦卡往車尾上翹的尾段底板）疊加上去
 local function place_bed(self, alpha)
 	local parts = self.parts
 	if not parts then return end
 	local def = TYPES[self.vkind]
 	local bed = def.bed
 	local ca, sa = math.cos(alpha), math.sin(alpha)
-	local function put(o, rel)
+	local function put(o, rel, rot)
 		if not o then return end
 		local y = bed.hinge.y + rel.y * ca + rel.z * sa
 		local z = bed.hinge.z - rel.y * sa + rel.z * ca
-		o:set_attach(self.object, "", {x = rel.x * 10, y = y * 10, z = z * 10}, {x = -math.deg(alpha), y = 0, z = 0})
+		o:set_attach(self.object, "", {x = rel.x * 10, y = y * 10, z = z * 10}, {x = (rot or 0) - math.deg(alpha), y = 0, z = 0})
 	end
-	for _, p in ipairs(bed.plates) do put(parts[p.id], p.rel) end
+	for _, p in ipairs(bed.plates) do put(parts[p.id], p.rel, p.rot) end
 	-- 碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
 	local o = parts.bedfill
 	if o then
@@ -83,21 +84,21 @@ end
 -- 把 def 做成有車斗的車。spec：
 --   hinge：車斗軸心（車斗後端下緣，車身座標）；size：車斗外尺寸；body：車斗以外的零件；
 --   floor_tex／side_tex：車斗底板與側板貼圖；overlap_lat／overlap_dy：車斗段碰撞的檢查點（橫向位置、離車底高度）；
---   aim_top：挖土機瞄準時車身的上緣（相對車身中心）；extra_plates：跟車斗一起抬的其他片（礦卡的遮罩）；
+--   aim_top：挖土機瞄準時車身的上緣（相對車身中心）；plates：車斗各片（省略 → 方盒車斗），
+--   每片 {id, rel（相對軸心的中心，車斗放平時）, size, rot（可選，度）, floor（可選，用底板貼圖）}；
 --   dump_rows：倒在車尾幾排（預設 1）
 local function hauler(def, spec)
 	local bed = spec
 	local S = bed.size
-	-- 空心車斗的 5 片（rel：相對軸心的中心，車斗放平時）。碎石塊放在裡面，四周與上緣都留空隙，
+	-- 預設：空心方盒車斗的 5 片。碎石塊放在裡面，四周與上緣都留空隙，
 	-- 不和車斗的任何一面重疊（重疊會 z-fighting 閃爍）
-	bed.plates = {
-		{id = "bed_floor", rel = {x = 0, y = BED_T / 2, z = S.z / 2}, size = {x = S.x, y = BED_T, z = S.z}},
+	bed.plates = spec.plates or {
+		{id = "bed_floor", rel = {x = 0, y = BED_T / 2, z = S.z / 2}, size = {x = S.x, y = BED_T, z = S.z}, floor = true},
 		{id = "bed_left", rel = {x = -(S.x - BED_T) / 2, y = S.y / 2, z = S.z / 2}, size = {x = BED_T, y = S.y, z = S.z}},
 		{id = "bed_right", rel = {x = (S.x - BED_T) / 2, y = S.y / 2, z = S.z / 2}, size = {x = BED_T, y = S.y, z = S.z}},
 		{id = "bed_front", rel = {x = 0, y = S.y / 2, z = S.z - BED_T / 2}, size = {x = S.x, y = S.y, z = BED_T}},
 		{id = "bed_back", rel = {x = 0, y = S.y / 2, z = BED_T / 2}, size = {x = S.x, y = S.y, z = BED_T}},
 	}
-	for _, p in ipairs(spec.extra_plates or {}) do bed.plates[#bed.plates + 1] = p end
 	bed.fill_w, bed.fill_l = S.x - 2 * BED_T - 0.1, S.z - 2 * BED_T - 0.1
 	bed.fill_hmax = S.y - BED_T - 0.1
 	def.bed = bed
@@ -106,7 +107,7 @@ local function hauler(def, spec)
 	for _, p in ipairs(spec.body) do parts[#parts + 1] = p end
 	parts[#parts + 1] = {id = "bedfill", pos = {x = 0, y = 0, z = 0}, size = {x = bed.fill_w, y = 0.2, z = bed.fill_l}, tex = box_tex("#6a6058")}
 	for _, p in ipairs(bed.plates) do
-		local t = p.id == "bed_floor" and spec.floor_tex or spec.side_tex
+		local t = p.floor and spec.floor_tex or spec.side_tex
 		parts[#parts + 1] = {id = p.id, pos = {x = 0, y = 0, z = 0}, size = p.size, tex = {t, t, t, t, t, t}}
 	end
 	def.parts = parts
