@@ -254,7 +254,7 @@ function rockmech.fire_round(pos, player)
 	table.sort(charges, function(a, b) return vector.distance(a, pos) < vector.distance(b, pos) end)
 	local delay = bcfg.detonator_delay
 	tell(player, ("%d 個裝藥，%d 秒後起爆，退到安全距離！"):format(#charges, math.ceil(delay)))
-	-- 畫面正中央的大倒數：5、4、3、2、1、起爆！
+	-- 畫面正中央的大倒數：5、4、3、2、1、bomb!
 	local name = player and player:is_player() and player:get_player_name()
 	local hud
 	local function show(text)
@@ -270,7 +270,7 @@ function rockmech.fire_round(pos, player)
 	for t = n, 1, -1 do
 		core.after(delay - t, show, tostring(t))
 	end
-	core.after(delay, show, "起爆！")
+	core.after(delay, show, "bomb!")
 	core.after(delay + 1, function()
 		local pl = name and core.get_player_by_name(name)
 		if pl and hud then pl:hud_remove(hud) end
