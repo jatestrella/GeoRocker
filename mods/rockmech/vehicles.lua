@@ -83,6 +83,7 @@ for i = 1, BOOM_SEG do
 end
 local DIG_REACH = 10        -- 挖斗最遠 (m，從相機量)
 local DIG_TIME = 0.35       -- 挖斗伸出（收回）的時間 (s)
+local CLEAR = "[fill:1x1:#00000000"
 local PART = "rockmech:vehicle_part"
 core.register_entity(PART, {
 	initial_properties = {
@@ -396,8 +397,9 @@ for kind, def in pairs(TYPES) do
 			selectionbox = {-def.half, -def.half, -def.half, def.half, def.half, def.half},
 			visual = "cube",
 			visual_size = kind == "excavator" and {x = 1, y = 1, z = 1} or {x = 2, y = 2, z = 2},
-			is_visible = kind ~= "excavator",   -- 挖土機的外觀由零件組成
-			textures = tex(kind, 0, true),
+			-- 挖土機的外觀由零件組成：車身用全透明貼圖（不能設 is_visible = false，掛在上面的零件會一起被隱藏）
+			textures = kind == "excavator" and {CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR} or tex(kind, 0, true),
+			use_texture_alpha = kind == "excavator",
 			backface_culling = true,       -- 從車身裡面往外看是透明的
 			stepheight = kind == "dozer" and 0.3 or 1.1,   -- 推土機放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
 			static_save = true,
