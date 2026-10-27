@@ -5,7 +5,7 @@
 --             再依岩石強度縮放（blast.lua）；炸飛、碎石化、支撐判定照 blasting.lua。
 --   夾制與側向自由面：只有孔口一個自由面時岩石夾住炸藥，半徑 × confine_factor；炮孔旁 R 內有不是岩石的格子
 --             （空氣、碎石…，孔口岩面那側不算），距離 = 抵抗線 B，再 × (1 + free_face_k·(1 − B/R))。
---             先炸中間的孔（拔心／掏槽），外圈的孔就有自由面。
+--             沒裝藥的鑽孔（空孔）也算自由面（空孔掏槽）。先炸中間的孔（拔心），外圈的孔就有自由面。
 --   貼面裝藥：沒有鑽孔也能貼在岩面上（無約束），爆心在岩面上，半徑再乘 surface_factor。
 --   裝藥被別的爆炸波及會殉爆。參數在設定 rockmech_blast_*。
 
@@ -48,22 +48,33 @@ end
 -- 引爆一個裝藥
 -- 抵抗線 B：炮孔（孔口岩面 → 孔底 center，沿 dir）到最近的側向自由面（不是岩石的格子，空氣、碎石等都算）的距離。
 -- 孔口岩面前方那一側（鑽孔就是從那裡鑽進去的，每個孔都有）不算。R 內沒有就回傳 nil
+-- 沒裝藥的鑽孔（空孔）也是自由面（空孔掏槽）：空孔從孔口岩面到孔底這段，到炮孔的最短距離
 local function burden(center, dir, R)
 	local face_t = 0.5 - bcfg.hole_depth   -- 孔口岩面在軸上的位置（以孔底為 0、往岩石裡為正）
+	-- 點到炮孔線段（軸上 face_t..0）的距離；點在孔口岩面前方（t ≤ face_t）回傳 nil
+	local function dist(px, py, pz)
+		local dx, dy, dz = px - center.x, py - center.y, pz - center.z
+		local t = dx * dir.x + dy * dir.y + dz * dir.z
+		if t <= face_t then return nil end
+		local tc = math.min(0, t)
+		local ex, ey, ez = dx - tc * dir.x, dy - tc * dir.y, dz - tc * dir.z
+		return math.sqrt(ex * ex + ey * ey + ez * ez)
+	end
 	local r = math.ceil(R)
 	local c0 = vector.round(center)
 	local best
+	local function take(d) if d and d <= R and (not best or d < best) then best = d end end
 	for x = c0.x - r, c0.x + r do for y = c0.y - r, c0.y + r do for z = c0.z - r, c0.z + r do
-		local dx, dy, dz = x - center.x, y - center.y, z - center.z
-		local t = dx * dir.x + dy * dir.y + dz * dir.z
-		if t > face_t and not rockmech.lith_of_node[core.get_node({x = x, y = y, z = z}).name] then
-			-- 到炮孔線段（軸上 face_t..0）的距離
-			local tc = math.max(face_t, math.min(0, t))
-			local ex, ey, ez = dx - tc * dir.x, dy - tc * dir.y, dz - tc * dir.z
-			local d = math.sqrt(ex * ex + ey * ey + ez * ez)
-			if d <= R and (not best or d < best) then best = d end
-		end
+		if not rockmech.lith_of_node[core.get_node({x = x, y = y, z = z}).name] then take(dist(x, y, z)) end
 	end end end
+	-- 空孔：沿孔軸每 0.5 m 取一點
+	local reach = r + bcfg.hole_depth
+	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(c0, reach), vector.add(c0, reach), {HOLE})) do
+		local hd = core.wallmounted_to_dir(core.get_node(hp).param2)
+		for s = 0.5, bcfg.hole_depth, 0.5 do
+			take(dist(hp.x + hd.x * s, hp.y + hd.y * s, hp.z + hd.z * s))
+		end
+	end
 	return best
 end
 rockmech.blast_burden = burden   -- 測試用
@@ -91,6 +102,19 @@ local function detonate(pos)
 	end
 	core.remove_node(pos)
 	rockmech.blast_charge(center, R)
+	-- 爆破直接改地圖、不會觸發貼壁方塊掉落：後面的岩石沒了的鑽孔就消失，裝藥退回成乳膠炸藥掉在地上
+	local r = math.ceil(R) + bcfg.hole_depth + 1
+	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(center, r), vector.add(center, r), {HOLE, CHARGED, SURFACE})) do
+		local hn = core.get_node(hp)
+		local back = core.get_node(vector.add(hp, core.wallmounted_to_dir(hn.param2))).name
+		local nd = core.registered_nodes[back]
+		local held = hn.name == SURFACE and nd and nd.walkable ~= false or rockmech.lith_of_node[back]
+		if not held then
+			local n = core.get_meta(hp):get_int("n")
+			core.remove_node(hp)
+			if n > 0 then core.add_item(hp, ItemStack(EMULSION .. " " .. n)) end
+		end
+	end
 end
 rockmech.detonate_charge = detonate
 
