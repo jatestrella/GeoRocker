@@ -73,16 +73,21 @@ local EXC_PARTS = {
 		end)()},
 	{id = "bucket", pos = {x = 0.55, y = -1.0, z = 1.75}, size = {x = 1.3, y = 0.8, z = 0.7}, tex = box_tex("#505050")},
 }
--- 動臂：從駕駛艙前方（BOOM_ROOT）到挖斗，一串 BOOM_SEG 個小方塊
-local BOOM_ROOT = {x = 0.55, y = 0.6, z = 0.55}
+-- 手臂：動臂從駕駛艙前方（BOOM_ROOT）往上斜伸到手肘，斗桿從手肘往下接到挖斗（像真的怪手從上面往下挖）。
+-- 各一串 ARM_SEG 個小方塊（不用旋轉）。手肘在挖斗上方 ELBOW_UP、水平位置在 BOOM_ROOT 與挖斗之間 ELBOW_T
+local BOOM_ROOT = {x = 0.55, y = 0.9, z = 0.5}
 local BUCKET_REST = {x = 0.55, y = -1.0, z = 1.75}
-local BOOM_SEG = 7
-for i = 1, BOOM_SEG do
-	EXC_PARTS[#EXC_PARTS + 1] = {id = "boom" .. i, pos = BUCKET_REST, size = {x = 0.4, y = 0.4, z = 0.4},
+local ARM_SEG = 4
+local ELBOW_UP, ELBOW_T = 1.6, 0.55
+for i = 1, 2 * ARM_SEG do
+	EXC_PARTS[#EXC_PARTS + 1] = {id = "arm" .. i, pos = BUCKET_REST, size = {x = 0.4, y = 0.4, z = 0.4},
 		tex = box_tex(TYPES.excavator.color)}
 end
 local DIG_REACH = 10        -- 挖斗最遠 (m，從相機量)
-local DIG_TIME = 0.35       -- 挖斗伸出（收回）的時間 (s)
+-- 挖的動作：抬到目標上方 DIG_LIFT → 往下插進目標（挖）→ 抬回目標上方 → 收回。各段時間 (s)
+local DIG_LIFT = 2.0
+local DIG_PHASES = {0.3, 0.2, 0.2, 0.3}
+local DIG_TOTAL = DIG_PHASES[1] + DIG_PHASES[2] + DIG_PHASES[3] + DIG_PHASES[4]
 local CLEAR = "[fill:1x1:#00000000"
 local PART = "rockmech:vehicle_part"
 core.register_entity(PART, {
@@ -116,16 +121,19 @@ local function spawn_parts(self, parts)
 	end
 end
 
--- 挖斗放在 b（車身座標，m），動臂的小方塊沿 BOOM_ROOT → b 排開
+-- 挖斗放在 b（車身座標，m）：動臂 BOOM_ROOT → 手肘、斗桿 手肘 → b
+local function lerp(a, b, t) return {x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, z = a.z + (b.z - a.z) * t} end
 local function place_arm(self, b)
 	local parts = self.parts
 	if not parts then return end
 	local function at(o, p) if o then o:set_attach(self.object, "", {x = p.x * 10, y = p.y * 10, z = p.z * 10}, {x = 0, y = 0, z = 0}) end end
 	at(parts.bucket, b)
-	for i = 1, BOOM_SEG do
-		local t = (i - 0.5) / BOOM_SEG
-		at(parts["boom" .. i], {x = BOOM_ROOT.x + (b.x - BOOM_ROOT.x) * t, y = BOOM_ROOT.y + (b.y - BOOM_ROOT.y) * t,
-			z = BOOM_ROOT.z + (b.z - BOOM_ROOT.z) * t})
+	local elbow = lerp(BOOM_ROOT, b, ELBOW_T)
+	elbow.y = math.max(BOOM_ROOT.y, b.y) + ELBOW_UP
+	for i = 1, ARM_SEG do
+		local t = (i - 0.5) / ARM_SEG
+		at(parts["arm" .. i], lerp(BOOM_ROOT, elbow, t))
+		at(parts["arm" .. (ARM_SEG + i)], lerp(elbow, b, t))
 	end
 end
 
@@ -501,11 +509,12 @@ for kind, def in pairs(TYPES) do
 				settle_pile(self)
 			end
 			obj:set_velocity({x = dir.x * speed, y = vel.y, z = dir.z * speed})
-			-- 挖斗：伸出 DIG_TIME 秒 → 挖 → 收回 DIG_TIME 秒
+			-- 挖斗：抬到目標上方 → 往下插進目標（挖）→ 抬回目標上方 → 收回
 			if self.dig then
 				local dg = self.dig
 				dg.t = dg.t + dtime
-				if not dg.done and dg.t >= DIG_TIME then
+				local p1 = DIG_PHASES[1] + DIG_PHASES[2]
+				if not dg.done and dg.t >= p1 then
 					dg.done = true
 					local want = def.cap - load_total(self)
 					local cells = {}
@@ -532,10 +541,16 @@ for kind, def in pairs(TYPES) do
 					end
 					update_hud(self)
 				end
-				local u = dg.t < DIG_TIME and dg.t / DIG_TIME or math.max(0, 2 - dg.t / DIG_TIME)
-				local r, to = BUCKET_REST, dg.to
-				place_arm(self, {x = r.x + (to.x - r.x) * u, y = r.y + (to.y - r.y) * u, z = r.z + (to.z - r.z) * u})
-				if dg.t >= 2 * DIG_TIME then self.dig = nil; place_arm(self, BUCKET_REST) end
+				local to = dg.to
+				local above = {x = to.x, y = to.y + DIG_LIFT, z = to.z}
+				local t, ph = dg.t, DIG_PHASES
+				local b
+				if t < ph[1] then b = lerp(BUCKET_REST, above, t / ph[1])
+				elseif t < ph[1] + ph[2] then b = lerp(above, to, (t - ph[1]) / ph[2])
+				elseif t < ph[1] + ph[2] + ph[3] then b = lerp(to, above, (t - ph[1] - ph[2]) / ph[3])
+				else b = lerp(above, BUCKET_REST, math.min(1, (t - ph[1] - ph[2] - ph[3]) / ph[4])) end
+				place_arm(self, b)
+				if t >= DIG_TOTAL then self.dig = nil; place_arm(self, BUCKET_REST) end
 			end
 			-- 作業鍵（防連按：0.4 s）
 			self.t_act = self.t_act - dtime
@@ -546,7 +561,7 @@ for kind, def in pairs(TYPES) do
 					update_hud(self)
 					refresh_look(self)
 				elseif kind == "excavator" and ctrl.aux1 and not self.dig then
-					self.t_act = 2 * DIG_TIME + 0.1
+					self.t_act = DIG_TOTAL + 0.1
 					-- 滑鼠指的方塊：從相機沿視線找第一個方塊
 					local target = self.autopilot and self.autopilot.target
 					if d then
