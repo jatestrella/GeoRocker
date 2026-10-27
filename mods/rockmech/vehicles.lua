@@ -7,8 +7,9 @@
 --   卡車（3 寬 × 3 高 × 7 長，十輪砂石車）：空白鍵車斗以後端為軸抬起、把碎石（12 m³ = 96 級）倒在車尾再放下；
 --         名牌與車斗裡的碎石顯示載量。碰撞箱是駕駛艙那段 3×3×3，車斗那段（往後 5 m）倒車、轉彎前自己檢查
 --   推土機（車身 3×3×3、鏟刀 3 寬伸出車頭 1 m、車尾多 1 m）：E 放鏟／收鏟（鏟刀與推臂實際抬放）。
---           放鏟：往前開時把鏟刀那一排（3 格寬、高 3 層）與車身前排壓著的薄碎石推到再前一排，推不動就停；
---           只壓得過很薄的碎石。收鏟：不推，可爬 1 格。HUD 顯示鏟刀前那堆碎石的量
+--           放鏟：往前開時把鏟刀那一排（車身蓋到的 3～4 欄、高 3 層）與車身前排壓著的薄碎石推到前面，
+--           那堆最高 2 格、滿了往前一排（最多 3 排），推不動就停；往前時只壓得過很薄的碎石。
+--           收鏟：不推。收鏟或倒車可爬 1 格。HUD 顯示鏟刀前那堆碎石的量
 -- 駕駛的相機在車頂（挖土機：駕駛艙頂）前緣；Z 切換追蹤相機（從車子後上方看作動）。
 -- 不在車上時左鍵：收回成物品（車上的碎石換成碎石物品，8 級 = 1 個）
 -- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
@@ -608,20 +609,31 @@ local function find_truck(pos, s, half)
 	end
 end
 
--- 推土機（放鏟）：把鏟刀那一排（車頭外第一排，3 格寬、高度 0～2 三層）與車身前排壓著的高度 0 碎石收起來，
--- 倒到再前面一排（每欄最多堆 3 格），不放進車身的位置。前面是岩石或倒不下 → 放回原處，回傳 true（被擋住）
+-- 推土機車身（碰撞箱）橫向蓋到的欄（相對車身中心的橫向位置，給 face_cells 的 lat）：
+-- 車子沒對齊格線時 3 格寬的碰撞箱會蓋到 4 欄，鏟刀要清掉全部，不然沒清到的那欄會把車身擋住
+local function body_lat(pos, s)
+	local half = TYPES.dozer.half
+	local cl = pos.x * -s.z + pos.z * s.x
+	local lat = {}
+	for k = math.floor(cl - half + 0.52), math.floor(cl + half - 0.02 + 0.5) do lat[#lat + 1] = k - cl end
+	return lat
+end
+local PILE_H, PILE_ROWS = 2, 3   -- 鏟刀前那堆：最高 2 格；前一排滿了往前一排倒，最多往前 3 排
+
+-- 推土機（放鏟）：把鏟刀那一排（車頭外第一排、高度 0～2 三層）與車身前排壓著的高度 0 碎石收起來，
+-- 倒到再前面（每欄最高 PILE_H 格，滿了往前一排，最多 PILE_ROWS 排），不放進車身的位置。
+-- 前面是岩石或倒不下 → 放回原處，回傳被擋住的原因（沒被擋住回傳 nil）
 local function push(self, pos, s)
-	local lat = TYPES.dozer.lat
+	local lat = body_lat(pos, s)
 	local y0 = ground_y(pos, TYPES.dozer.half)
-	local src = face_cells(pos, s, 1, 2, y0, 3, lat)   -- 與前面那堆的高度（最多 3 格）一致
+	local src = face_cells(pos, s, 1, 2, y0, 3, lat)
 	local under = face_cells(pos, s, 1, 1, y0, 1, lat)
-	local dst = face_cells(pos, s, 1, 3, y0, 1, lat)
 	local blocked = false
 	for _, c in ipairs(src) do
 		local n = core.get_node(c).name
 		if not rockmech.rubble_level[n] and not passable(n) then blocked = true end   -- 岩石：推不動
 	end
-	if blocked then return true end
+	if blocked then return "鏟刀前是岩石" end
 	local got = {}
 	for _, c in ipairs(under) do src[#src + 1] = c end
 	for _, c in ipairs(src) do
@@ -637,13 +649,26 @@ local function push(self, pos, s)
 			collapse.queue_support_check(c, n)
 		end
 	end
+	local ycap = y0 + PILE_H - 1
 	for base, lv in pairs(got) do
-		local rest = 0
-		for i, c in ipairs(dst) do
-			local share = math.ceil(lv / (#dst - i + 1))
-			lv = lv - share
-			self.pile = self.pile or {}
-			rest = rest + deposit_column(c.x, c.z, y0 + 2, base, share, 3, self.pile)
+		local rest = lv
+		for row = 1, PILE_ROWS do
+			if rest <= 0 then break end
+			local dst = face_cells(pos, s, 1, 2 + row, y0, 1, lat)
+			local left = 0
+			for i, c in ipairs(dst) do
+				local share = math.ceil(rest / (#dst - i + 1))
+				rest = rest - share
+				-- 從 ycap 往下找落點，往上倒到 ycap 為止
+				local y = ycap
+				for _ = 1, 8 do
+					if not passable(core.get_node({x = c.x, y = y - 1, z = c.z}).name) then break end
+					y = y - 1
+				end
+				self.pile = self.pile or {}
+				left = left + deposit_column(c.x, c.z, ycap, base, share, ycap - y + 1, self.pile)
+			end
+			rest = left
 		end
 		if rest > 0 then
 			-- 前面堆不下：剩下的放回鏟刀前，推土機停住
@@ -654,16 +679,16 @@ local function push(self, pos, s)
 			end
 		end
 	end
-	return blocked
+	return blocked and ("前面的碎石已堆滿（最高 %d 格、往前 %d 排）"):format(PILE_H, PILE_ROWS) or nil
 end
 
--- 鏟刀前那堆碎石的量（級）：鏟刀前兩排、高 3 層
+-- 鏟刀前那堆碎石的量（級）：鏟刀前 PILE_ROWS 排、高 3 層
 local function pile_amount(pos, s)
 	local def = TYPES.dozer
 	local y0 = ground_y(pos, def.half)
 	local lv = 0
-	for _, dist in ipairs({3, 4}) do
-		for _, c in ipairs(face_cells(pos, s, 1, dist, y0, 3, def.lat)) do
+	for row = 1, PILE_ROWS do
+		for _, c in ipairs(face_cells(pos, s, 1, 2 + row, y0, 3, body_lat(pos, s))) do
 			lv = lv + (rockmech.rubble_level[core.get_node(c).name] or 0)
 		end
 	end
@@ -674,7 +699,7 @@ local function overhang_blocked(pos, s, f, layers)
 	local def = TYPES.dozer
 	local y0 = ground_y(pos, def.half)
 	for _, dy in ipairs(layers) do
-		for _, c in ipairs(face_cells(pos, s, f, 2, y0 + dy, 1, def.lat)) do
+		for _, c in ipairs(face_cells(pos, s, f, 2, y0 + dy, 1, body_lat(pos, s))) do
 			local n = core.get_node(c).name
 			if not rockmech.rubble_level[n] and not passable(n) then return true end
 		end
@@ -711,7 +736,8 @@ local function hud_text(self)
 	elseif self.vkind == "truck" then s = s .. "\n空白鍵 把車斗倒在車尾"
 	else
 		s = s .. (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石")
-			.. ("\n鏟刀前碎石 %d 級（%.1f m³）"):format(self.pile_lv or 0, (self.pile_lv or 0) / NLEV) .. "\nE 放鏟／收鏟"
+			.. ("\n鏟刀前碎石 %d 級（%.1f m³）"):format(self.pile_lv or 0, (self.pile_lv or 0) / NLEV)
+			.. (self.push_msg and ("\n推不動：" .. self.push_msg .. "，倒車換個方向或先推開前面") or "") .. "\nE 放鏟／收鏟"
 	end
 	return s .. "　Z 切換視角　Shift 下車"
 end
@@ -725,8 +751,6 @@ local function refresh_look(self)
 			nametag_color = t >= cap and "#ff8060" or "#ffffff",
 		})
 		if not self.tip then place_bed(self, 0) end
-	elseif self.vkind == "dozer" then
-		self.object:set_properties({stepheight = self.blade and 0.3 or 1.1})
 	end
 end
 -- 駕駛艙框（全螢幕 HUD 圖片，中間透明）：上方車頂邊條、左右 A 柱（車身顏色）、左右上方後照鏡、下方儀表板
@@ -1213,12 +1237,18 @@ for kind, def in pairs(TYPES) do
 			-- 後面（配重的高度）是岩石就停
 			if kind == "dozer" then
 				if self.blade and fwd > 0 then
-					if push(self, pos, s) then speed = 0; settle_pile(self) end
+					local why = push(self, pos, s)
+					if why then speed = 0; settle_pile(self) end
+					if why ~= self.push_msg then self.push_msg = why; update_hud(self) end
 				else
 					settle_pile(self)
 					if fwd > 0 and overhang_blocked(pos, s, 1, {1, 2}) then speed = 0 end
+					if self.push_msg then self.push_msg = nil; update_hud(self) end
 				end
 				if fwd < 0 and overhang_blocked(pos, s, -1, {1}) then speed = 0 end
+				-- 越障高度：放鏟往前（含停著）只壓得過很薄的碎石（要推走，不是爬過去）；倒車、收鏟可爬 1 格
+				local sh = (self.blade and fwd >= 0) and 0.3 or 1.1
+				if sh ~= self.step_h then self.step_h = sh; obj:set_properties({stepheight = sh}) end
 				-- 鏟刀抬放
 				local goal = self.blade and 0 or BLADE_UP
 				if self.blade_h ~= goal then
