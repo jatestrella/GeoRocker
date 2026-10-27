@@ -73,16 +73,18 @@ local EXC_PARTS = {
 		end)()},
 	{id = "bucket", pos = {x = 0.55, y = -0.9, z = 2.6}, size = {x = 1.3, y = 0.8, z = 0.7}, tex = box_tex("#505050")},
 }
--- 手臂：動臂從駕駛艙前方（BOOM_ROOT）往上斜伸到手肘，斗桿從手肘往下接到挖斗（像真的怪手從上面往下挖）。
--- 各一串 ARM_SEG 個小方塊（不用旋轉）。手肘在挖斗上方 ELBOW_UP、水平位置在 BOOM_ROOT 與挖斗之間 ELBOW_T
+-- 手臂（兩節、長度固定的長方體，像真的怪手）：動臂從駕駛艙前方（BOOM_ROOT）到手肘、斗桿從手肘到挖斗。
+-- 給定挖斗位置，手肘由兩節長度以餘弦定理求出（手肘朝上）；長方體沿各節方向旋轉。
+-- 掛載旋轉：左手座標、外旋 X → Y → Z（度）。+Y 軸先繞 X 轉 θx、再繞 Y 轉 θy 後指向
+-- (sin θx·sin θy, cos θx, sin θx·cos θy)：θx = acos(v.y)、θy = atan2(v.x, v.z)
 local BOOM_ROOT = {x = 0.55, y = 0.3, z = 0.7}       -- 駕駛艙前方（駕駛的右手邊）
 local BUCKET_REST = {x = 0.55, y = -0.9, z = 2.6}    -- 收起時挖斗在車頭前方約 1.1 m
-local ARM_SEG = 8                                    -- 每節 8 個方塊（間距小於方塊大小，看起來連續）
-local ELBOW_UP, ELBOW_T = 1.4, 0.75
-for i = 1, 2 * ARM_SEG do
-	EXC_PARTS[#EXC_PARTS + 1] = {id = "arm" .. i, pos = BUCKET_REST, size = {x = 0.45, y = 0.45, z = 0.45},
-		tex = box_tex(TYPES.excavator.color)}
-end
+local BOOM_LEN, STICK_LEN = 3.6, 3.0
+local ARM_REACH = BOOM_LEN + STICK_LEN
+EXC_PARTS[#EXC_PARTS + 1] = {id = "boom", pos = BUCKET_REST, size = {x = 0.5, y = BOOM_LEN, z = 0.5},
+	tex = box_tex(TYPES.excavator.color)}
+EXC_PARTS[#EXC_PARTS + 1] = {id = "stick", pos = BUCKET_REST, size = {x = 0.4, y = STICK_LEN, z = 0.4},
+	tex = box_tex(TYPES.excavator.color)}
 local DIG_REACH = 10        -- 挖斗最遠 (m，從相機量)
 -- 挖的動作：抬到目標上方 DIG_LIFT → 往下插進目標（挖）→ 抬回目標上方 → 收回。各段時間 (s)
 local DIG_LIFT = 2.0
@@ -123,18 +125,44 @@ end
 
 -- 挖斗放在 b（車身座標，m）：動臂 BOOM_ROOT → 手肘、斗桿 手肘 → b
 local function lerp(a, b, t) return {x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, z = a.z + (b.z - a.z) * t} end
+local atan2 = math.atan2 or math.atan
+-- 挖斗位置 b（車身座標）→ 實際搆得到的挖斗位置、手肘位置
+local function arm_solve(b)
+	local dx, dy, dz = b.x - BOOM_ROOT.x, b.y - BOOM_ROOT.y, b.z - BOOM_ROOT.z
+	local hl = math.sqrt(dx * dx + dz * dz)
+	local hx, hz = 0, 1
+	if hl > 1e-6 then hx, hz = dx / hl, dz / hl end
+	local D = math.sqrt(hl * hl + dy * dy)
+	local Dmin, Dmax = math.abs(BOOM_LEN - STICK_LEN) + 0.05, ARM_REACH - 0.05
+	local phi = atan2(dy, hl)
+	if D > Dmax or D < Dmin then
+		D = math.max(Dmin, math.min(Dmax, D))
+		b = {x = BOOM_ROOT.x + D * math.cos(phi) * hx, y = BOOM_ROOT.y + D * math.sin(phi), z = BOOM_ROOT.z + D * math.cos(phi) * hz}
+	end
+	local cosA = (BOOM_LEN * BOOM_LEN + D * D - STICK_LEN * STICK_LEN) / (2 * BOOM_LEN * D)
+	local ang = phi + math.acos(math.max(-1, math.min(1, cosA)))
+	local elbow = {x = BOOM_ROOT.x + BOOM_LEN * math.cos(ang) * hx, y = BOOM_ROOT.y + BOOM_LEN * math.sin(ang),
+		z = BOOM_ROOT.z + BOOM_LEN * math.cos(ang) * hz}
+	return b, elbow
+end
+-- 長方體（長軸是自身 +Y）擺在 a → c 之間
+local function seg_attach(self, o, a, c)
+	if not o then return end
+	local v = {x = c.x - a.x, y = c.y - a.y, z = c.z - a.z}
+	local len = math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+	if len < 1e-6 then return end
+	local tx = math.deg(math.acos(math.max(-1, math.min(1, v.y / len))))
+	local ty = math.deg(atan2(v.x, v.z))
+	o:set_attach(self.object, "", {x = (a.x + c.x) * 5, y = (a.y + c.y) * 5, z = (a.z + c.z) * 5}, {x = tx, y = ty, z = 0})
+end
 local function place_arm(self, b)
 	local parts = self.parts
 	if not parts then return end
-	local function at(o, p) if o then o:set_attach(self.object, "", {x = p.x * 10, y = p.y * 10, z = p.z * 10}, {x = 0, y = 0, z = 0}) end end
-	at(parts.bucket, b)
-	local elbow = lerp(BOOM_ROOT, b, ELBOW_T)
-	elbow.y = math.max(BOOM_ROOT.y, b.y) + ELBOW_UP
-	for i = 1, ARM_SEG do
-		local t = (i - 0.5) / ARM_SEG
-		at(parts["arm" .. i], lerp(BOOM_ROOT, elbow, t))
-		at(parts["arm" .. (ARM_SEG + i)], lerp(elbow, b, t))
-	end
+	local elbow
+	b, elbow = arm_solve(b)
+	if parts.bucket then parts.bucket:set_attach(self.object, "", {x = b.x * 10, y = b.y * 10, z = b.z * 10}, {x = 0, y = 0, z = 0}) end
+	seg_attach(self, parts.boom, BOOM_ROOT, elbow)
+	seg_attach(self, parts.stick, elbow, b)
 end
 
 -- 世界座標 → 車身座標（車頭 +Z）
@@ -574,8 +602,12 @@ for kind, def in pairs(TYPES) do
 							if pt.type == "node" then target = pt.under; break end
 						end
 					end
-					if target then
-						self.dig = {t = 0, target = target, to = to_local(self, target)}
+					local tl = target and to_local(self, target)
+					local reach = tl and math.sqrt((tl.x - BOOM_ROOT.x) ^ 2 + (tl.y - BOOM_ROOT.y) ^ 2 + (tl.z - BOOM_ROOT.z) ^ 2)
+					if tl and reach > ARM_REACH then
+						self.msg = ("超出手臂範圍（%.1f m，手臂約 %.1f m）"):format(reach, ARM_REACH)
+					elseif target then
+						self.dig = {t = 0, target = target, to = tl}
 						self.msg = nil
 					else
 						self.msg = "挖斗搆不到（10 m 內沒有方塊）"
