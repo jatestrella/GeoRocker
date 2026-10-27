@@ -7,7 +7,7 @@
 --   卡車：空白鍵把車斗（8 m³ = 64 級）的碎石倒在車尾；名牌與車斗顯示載量
 --   推土機：E 切換放鏟／收鏟。放鏟：往前開時把車身高度 0 那一層的碎石（含車身前半壓著的薄碎石）
 --           與正前方第二層的碎石推到再前一排，推不動就停；只壓得過很薄的碎石。收鏟：不推，可爬 1 格
--- 駕駛坐在車身裡（視線不被車身擋住）。
+-- 駕駛的視線在車頭那一面的正前方（車身不擋視線）。
 -- 不在車上時左鍵：收回成物品（車上的碎石換成碎石物品，8 級 = 1 個）
 -- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
 
@@ -20,6 +20,13 @@ local TYPES = {
 	dozer = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5},
 }
 local TURN_RATE = 1.6        -- rad/s
+-- 駕駛視線：車頭那一面的正前方（相對車身中心，單位 m；車頭朝 +Z）。
+-- 掛在車身上的位移會乘上車身的 visual_size（2），所以換算成 set_attach 的值時除以 2；
+-- 玩家的眼睛在腳上方 EYE_HEIGHT
+local EYE_AT = {x = 0, y = 0.3, z = 1.05}
+local EYE_HEIGHT = 1.625
+local VSIZE = 2
+local SEAT = {x = EYE_AT.x * 10 / VSIZE, y = (EYE_AT.y - EYE_HEIGHT) * 10 / VSIZE, z = EYE_AT.z * 10 / VSIZE}
 local DUMP_REACH = 4         -- 挖土機倒進卡車的距離 (m)
 
 -- 貼圖（[fill 組合）。cube 的六面：上、下、+X、−X、+Z（車頭：yaw 0 朝 +Z）、−Z
@@ -266,7 +273,7 @@ for kind, def in pairs(TYPES) do
 			collisionbox = {-0.98, -1, -0.98, 0.98, 0.98, 0.98},
 			selectionbox = {-1, -1, -1, 1, 1, 1},
 			visual = "cube",
-			visual_size = {x = 2, y = 2, z = 2},
+			visual_size = {x = VSIZE, y = VSIZE, z = VSIZE},
 			textures = tex(kind, 0, true),
 			backface_culling = true,       -- 從車身裡面往外看是透明的
 			stepheight = kind == "dozer" and 0.3 or 1.1,   -- 推土機放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
@@ -296,7 +303,7 @@ for kind, def in pairs(TYPES) do
 			if self.driver == name then get_off(self); return end
 			if self.driver then return end
 			self.driver = name
-			clicker:set_attach(self.object, "", {x = 0, y = -10, z = 0}, {x = 0, y = 0, z = 0})
+			clicker:set_attach(self.object, "", SEAT, {x = 0, y = 0, z = 0})
 			update_hud(self)
 		end,
 		on_punch = function(self, puncher)
