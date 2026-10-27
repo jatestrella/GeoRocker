@@ -212,6 +212,41 @@ end
 
 -- 卡車車斗那段（車身座標 z −rear..−half）在位置 p、朝向 yaw 時會不會撞到實心方塊（車底往上 1.2 m 以內不算：
 -- 小台階、碎石讓碰撞箱自己爬）
+-- (x, z) 這一欄、y_from 往下 depth 格內最上面的實心面高度（不滿格碎石照級數），找不到回傳 nil
+local function ground_top(x, y_from, z, depth)
+	local xi, zi = math.floor(x + 0.5), math.floor(z + 0.5)
+	for y = math.floor(y_from + 0.5), math.floor(y_from + 0.5) - depth, -1 do
+		local n = core.get_node({x = xi, y = y, z = zi}).name
+		local nd = core.registered_nodes[n]
+		if n ~= "air" and (not nd or nd.walkable ~= false) then
+			local k = rockmech.rubble_level[n]
+			return k and (y - 0.5 + k / NLEV) or (y + 0.5)
+		end
+	end
+end
+
+-- 卡車隨地形傾斜：量前軸、後軸、左右輪下方的地面，算俯仰（前高為正）與側傾（右側低為正，
+-- set_rotation 是右手 Z-X-Y：X 正 = 抬頭、Z 正 = 向右傾）。只有外觀傾斜，碰撞箱維持水平
+local TILT_AXLES = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1}
+local function truck_tilt(p, yaw, def)
+	local c, sn = math.cos(yaw), math.sin(yaw)
+	local function at(lx, lz)
+		return p.x + lx * c - lz * sn, p.z + lx * sn + lz * c
+	end
+	local from, depth = p.y + 0.5, 5
+	local fx, fz = at(0, TILT_AXLES.front)
+	local rx, rz = at(0, TILT_AXLES.rear)
+	local lx, lz = at(-TILT_AXLES.side_x, TILT_AXLES.side_z)
+	local qx, qz = at(TILT_AXLES.side_x, TILT_AXLES.side_z)
+	local hf, hr = ground_top(fx, from, fz, depth), ground_top(rx, from, rz, depth)
+	local hl, hq = ground_top(lx, from, lz, depth), ground_top(qx, from, qz, depth)
+	local pitch, roll = 0, 0
+	if hf and hr then pitch = math.atan((hf - hr) / (TILT_AXLES.front - TILT_AXLES.rear)) end
+	if hl and hq then roll = math.atan((hl - hq) / (2 * TILT_AXLES.side_x)) end
+	local lim = math.rad(25)
+	return math.max(-lim, math.min(lim, pitch)), math.max(-lim, math.min(lim, roll))
+end
+
 local function truck_blocked(p, yaw, def)
 	local c, sn = math.cos(yaw), math.sin(yaw)
 	local bottom = p.y - def.half
@@ -801,6 +836,14 @@ for kind, def in pairs(TYPES) do
 			if turn ~= 0 then
 				yaw = yaw + turn * TURN_RATE * dtime
 				obj:set_yaw(yaw)
+			end
+			-- 卡車外觀隨地形傾斜（角度平滑趨近）
+			if kind == "truck" then
+				local tp, tr = truck_tilt(pos, yaw, def)
+				local k = math.min(1, dtime * 6)
+				self.pitch = (self.pitch or 0) + (tp - (self.pitch or 0)) * k
+				self.roll = (self.roll or 0) + (tr - (self.roll or 0)) * k
+				obj:set_rotation({x = self.pitch, y = yaw, z = self.roll})
 			end
 			local dir, s = dirs(yaw)
 			local speed = def.speed * fwd
