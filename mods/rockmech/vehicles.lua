@@ -71,16 +71,16 @@ local EXC_PARTS = {
 			local side = ("[fill:16x16:%s^[fill:6x6:8,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
 			return {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", side, side, win, ("[fill:16x16:%s"):format(c)}
 		end)()},
-	{id = "bucket", pos = {x = 0.55, y = -1.0, z = 1.75}, size = {x = 1.3, y = 0.8, z = 0.7}, tex = box_tex("#505050")},
+	{id = "bucket", pos = {x = 0.55, y = -0.9, z = 2.6}, size = {x = 1.3, y = 0.8, z = 0.7}, tex = box_tex("#505050")},
 }
 -- 手臂：動臂從駕駛艙前方（BOOM_ROOT）往上斜伸到手肘，斗桿從手肘往下接到挖斗（像真的怪手從上面往下挖）。
 -- 各一串 ARM_SEG 個小方塊（不用旋轉）。手肘在挖斗上方 ELBOW_UP、水平位置在 BOOM_ROOT 與挖斗之間 ELBOW_T
-local BOOM_ROOT = {x = 0.55, y = 0.9, z = 0.5}
-local BUCKET_REST = {x = 0.55, y = -1.0, z = 1.75}
-local ARM_SEG = 4
-local ELBOW_UP, ELBOW_T = 1.6, 0.55
+local BOOM_ROOT = {x = 0.55, y = 0.3, z = 0.7}       -- 駕駛艙前方（駕駛的右手邊）
+local BUCKET_REST = {x = 0.55, y = -0.9, z = 2.6}    -- 收起時挖斗在車頭前方約 1.1 m
+local ARM_SEG = 8                                    -- 每節 8 個方塊（間距小於方塊大小，看起來連續）
+local ELBOW_UP, ELBOW_T = 1.4, 0.75
 for i = 1, 2 * ARM_SEG do
-	EXC_PARTS[#EXC_PARTS + 1] = {id = "arm" .. i, pos = BUCKET_REST, size = {x = 0.4, y = 0.4, z = 0.4},
+	EXC_PARTS[#EXC_PARTS + 1] = {id = "arm" .. i, pos = BUCKET_REST, size = {x = 0.45, y = 0.45, z = 0.45},
 		tex = box_tex(TYPES.excavator.color)}
 end
 local DIG_REACH = 10        -- 挖斗最遠 (m，從相機量)
