@@ -63,7 +63,8 @@ function rockmech.blast_rock(center, R)
 		if f > fmax then fmax = f end
 	end
 	local rr = math.ceil(R * fmax)
-	local p1, p2 = vector.subtract(center, rr), vector.add(center, rr)
+	local c0 = vector.round(center)   -- 掃描用整數格點（爆心可以不在格點上，距離照實際爆心算）
+	local p1, p2 = vector.subtract(c0, rr), vector.add(c0, rr)
 	local vm = core.get_voxel_manip()
 	local e1, e2 = vm:read_from_map(p1, p2)
 	local area = VoxelArea(e1, e2)
@@ -134,7 +135,7 @@ function rockmech.blast_rock(center, R)
 	core.after(0.1, function()
 		for _, p in ipairs(rubbled) do col.check_cell(p) end
 	end)
-	core.log("action", ("[rockmech] 爆破 %s R=%d：炸飛 %d 格、碎石化 %d 格"):format(
+	core.log("action", ("[rockmech] 爆破 %s R=%.1f：炸飛 %d 格、碎石化 %d 格"):format(
 		core.pos_to_string(center), R, n_eject, n_rubble))
 	return n_eject, n_rubble
 end
@@ -152,6 +153,16 @@ local function count_tnt(pos)
 end
 
 local orig_boom = tnt.boom
+
+-- 炸藥（鑽孔裝藥、貼面裝藥，drilling.lua）：爆心 center（可以在岩石裡、可以不在格點上）、岩石破碎半徑 R（m，可為小數）。
+-- 原版爆炸照常（聲音、粒子、傷害、炸掉附近非岩石方塊與殉爆；在最近的格點），岩石的破碎用 center 與 R
+function rockmech.blast_charge(center, R)
+	orig_boom(vector.round(center), {radius = math.max(1, math.floor(R + 0.5)), explode_center = true})
+	if bcfg.enabled and R > 0 then
+		rockmech.blast_rock(center, R)
+	end
+end
+
 tnt.boom = function(pos, def)
 	def = def or {}
 	local center = vector.round(pos)

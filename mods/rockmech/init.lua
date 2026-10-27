@@ -90,6 +90,7 @@ dofile(modpath .. "/collapse.lua") -- 沿用 physics_core 的坍塌機制，階�
 dofile(modpath .. "/tools.lua")
 dofile(modpath .. "/ui.lua")
 dofile(modpath .. "/blasting.lua")
+dofile(modpath .. "/drilling.lua")
 dofile(modpath .. "/rubble_tool.lua")
 dofile(modpath .. "/vehicles.lua")
 dofile(modpath .. "/worldtools.lua")

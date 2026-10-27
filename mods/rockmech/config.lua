@@ -160,6 +160,16 @@ config.blast_defaults = {
 	enabled = true,
 	ucs_ref = 60,             -- 破碎半徑 = 爆炸半徑 × (ucs_ref / UCS)^(1/3)
 	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
+	-- 鑽孔爆破（drilling.lua）
+	charge_radius = 2.0,      -- 一條乳膠炸藥的爆炸半徑 R0 (m)；n 條 R = R0·n^(1/3)（再依岩石強度縮放）
+	max_cartridges = 4,       -- 一個鑽孔最多裝幾條
+	hole_depth = 2,           -- 孔深 (m)：爆心在岩面往內這麼深（孔底）
+	surface_factor = 0.3,     -- 貼面裝藥（沒有鑽孔、沒有約束）的半徑係數
+	drill_time = 1.5,         -- 鑽一個孔的時間 (s)
+	fuse_time = 4,            -- 點火後幾秒爆炸 (s)
+	detonator_range = 30,     -- 起爆器引爆幾公尺內的裝藥
+	detonator_delay = 5,      -- 起爆器倒數 (s)
+	hole_interval = 0.1,      -- 起爆器各孔依序起爆的間隔（段發）(s)
 }
 
 -- 警戒裂紋（fsmask.lua）：1 < FS < max 的岩格加上裂紋；設定鍵為 rockmech_fswarn_<key>
