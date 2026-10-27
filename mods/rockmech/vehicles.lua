@@ -1,13 +1,14 @@
 -- rockmech/vehicles.lua
--- 載具：挖土機（3×3×3：兩側半格寬履帶、2×2×2 駕駛艙、前方動臂與鏟斗）、卡車與推土機（2×2×2）。
+-- 載具：挖土機（3×3×3：兩側半格寬履帶、2×2×2 駕駛艙、前方動臂與鏟斗）、卡車、推土機（3 寬 × 3 高 × 5 長）。
 -- 只處理碎石：完整岩石要先爆破或用魔杖弄碎（爆破 → 裝載 → 運輸）。
 -- 操作：右鍵上車；駕駛中 Shift 下車，W/S 前進後退，A/D 轉向。
 --   挖土機：E 挖斗伸到滑鼠指的位置（10 m 內），挖起那一格周圍 3×3×3 的碎石（鏟斗 4 m³ = 32 級）再收回；
 --           空白鍵：挖斗伸到滑鼠指的位置倒出（指著卡車就倒進卡車），同樣的抬起 → 下降 → 倒 → 收回動作
 --   卡車（3 寬 × 3 高 × 7 長，十輪砂石車）：空白鍵車斗以後端為軸抬起、把碎石（12 m³ = 96 級）倒在車尾再放下；
 --         名牌與車斗裡的碎石顯示載量。碰撞箱是駕駛艙那段 3×3×3，車斗那段（往後 5 m）倒車、轉彎前自己檢查
---   推土機：E 切換放鏟／收鏟。放鏟：往前開時把車身高度 0 那一層的碎石（含車身前半壓著的薄碎石）
---           與正前方第二層的碎石推到再前一排，推不動就停；只壓得過很薄的碎石。收鏟：不推，可爬 1 格
+--   推土機（車身 3×3×3、鏟刀 3 寬伸出車頭 1 m、車尾多 1 m）：E 放鏟／收鏟（鏟刀與推臂實際抬放）。
+--           放鏟：往前開時把鏟刀那一排（3 格寬、高 3 層）與車身前排壓著的薄碎石推到再前一排，推不動就停；
+--           只壓得過很薄的碎石。收鏟：不推，可爬 1 格。HUD 顯示鏟刀前那堆碎石的量
 -- 駕駛的相機在車頂（挖土機：駕駛艙頂）前緣；Z 切換追蹤相機（從車子後上方看作動）。
 -- 不在車上時左鍵：收回成物品（車上的碎石換成碎石物品，8 級 = 1 個）
 -- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
@@ -24,7 +25,7 @@ local TYPES = {
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 		rearcam = {x = 0, y = 1.0, z = -5.7}},
 	dozer = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5,
-		half = 1, lat = {-0.5, 0.5}, eye_up = 1.15, eye_fwd = 0.95, mirror = {x = 1.1, y = 0.9, z = 0.6}},
+		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0, mirror = {x = 1.0, y = 1.4, z = -0.2}},
 }
 local TURN_RATE = 1.6        -- rad/s
 local TIP_ANGLE, TIP_UP, TIP_HOLD, TIP_DOWN = math.rad(50), 1.0, 0.4, 0.8   -- 卡車車斗抬起
@@ -320,6 +321,60 @@ local function seg_attach(self, o, a, c)
 	local ty = math.deg(atan2(v.x, v.z))
 	o:set_attach(self.object, "", {x = (a.x + c.x) * 5, y = (a.y + c.y) * 5, z = (a.z + c.z) * 5}, {x = tx, y = ty, z = 0})
 end
+-- 推土機外觀（原點在 3×3×3 碰撞箱中心；車頭 z +1.5、鏟刀到 +2.5、車尾 −2.5；車底 y −1.5）：
+-- 兩側履帶、車架、前方引擎蓋、中後段駕駛艙、車尾配重、排氣管；鏟刀由兩側推臂（繞車架上的樞軸轉）
+-- 與兩支油壓缸（引擎蓋前端 → 鏟刀背）撐著
+local DOZER_PARTS = (function()
+	local c = TYPES.dozer.color
+	local y = ("[fill:16x16:%s"):format(c)
+	local grille = ("[fill:16x16:%s^[fill:12x9:2,4:#2a2a2a^[fill:12x1:2,6:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)
+	local win = ("[fill:16x16:%s^[fill:12x8:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local side = ("[fill:16x16:%s^[fill:10x8:3,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local blade = "[fill:16x16:#4a4a4a^[fill:16x2:0,14:#b0b0b0^[fill:16x1:0,0:#3a3a3a"
+	local steel = box_tex("#3a3a3a")
+	return {
+		{pos = {x = -1.1, y = -1.0, z = -0.4}, size = {x = 0.7, y = 1.0, z = 3.8}, tex = {TRACK, TRACK, TRACK, TRACK, TRACK, TRACK}},
+		{pos = {x = 1.1, y = -1.0, z = -0.4}, size = {x = 0.7, y = 1.0, z = 3.8}, tex = {TRACK, TRACK, TRACK, TRACK, TRACK, TRACK}},
+		{pos = {x = 0, y = -0.75, z = -0.4}, size = {x = 1.5, y = 0.7, z = 3.6}, tex = box_tex("#3a3a3a")},       -- 車架
+		{pos = {x = 0, y = -0.05, z = 0.7}, size = {x = 1.6, y = 1.0, z = 1.6}, tex = {y, y, y, y, grille, y}},    -- 引擎蓋
+		{pos = {x = 0, y = 0.55, z = -0.9}, size = {x = 1.8, y = 1.9, z = 1.6},                                   -- 駕駛艙
+			tex = {y, "[fill:16x16:#2a2a2a", side, side, win, y}},
+		{pos = {x = 0, y = -0.6, z = -2.15}, size = {x = 1.6, y = 0.8, z = 0.7}, tex = box_tex("#b89a18")},      -- 車尾配重
+		{pos = {x = 0.5, y = 0.75, z = 1.0}, size = {x = 0.12, y = 0.6, z = 0.12}, tex = box_tex("#202020")},     -- 排氣管
+		{id = "blade", pos = {x = 0, y = -0.95, z = 2.15}, size = {x = 3.0, y = 1.1, z = 0.3}, tex = {blade, blade, blade, blade, blade, blade}},
+		{id = "arm_l", pos = {x = 0, y = 0, z = 0}, size = {x = 0.15, y = 2.3, z = 0.22}, tex = steel},
+		{id = "arm_r", pos = {x = 0, y = 0, z = 0}, size = {x = 0.15, y = 2.3, z = 0.22}, tex = steel},
+		{id = "cyl_l", pos = {x = 0, y = 0, z = 0}, size = {x = 0.14, y = 0.8, z = 0.14}, tex = box_tex("#c0c0c0")},
+		{id = "cyl_r", pos = {x = 0, y = 0, z = 0}, size = {x = 0.14, y = 0.8, z = 0.14}, tex = box_tex("#c0c0c0")},
+	}
+end)()
+-- 推臂：樞軸 ARM_PIVOT（車架兩側）到鏟刀背 ARM_TIP（鏟刀放下時），長度固定；抬鏟 h（m）時推臂繞樞軸往上轉
+local ARM_PIVOT = {x = 1.3, y = -0.8, z = -0.3}
+local ARM_TIP = {x = 1.3, y = -1.05, z = 2.0}
+local ARM_LEN = math.sqrt((ARM_TIP.y - ARM_PIVOT.y) ^ 2 + (ARM_TIP.z - ARM_PIVOT.z) ^ 2)
+local CYL_BASE = {x = 0.6, y = 0.3, z = 1.4}      -- 油壓缸在引擎蓋前端的支點
+local BLADE_UP = 0.8                              -- 收鏟時鏟刀抬高 (m)
+local BLADE_RATE = 1.2                            -- 抬放速度 (m/s)
+local function place_blade(self, h)
+	local parts = self.parts
+	if not parts then return end
+	local th = math.asin(math.max(-1, math.min(1, (ARM_TIP.y + h - ARM_PIVOT.y) / ARM_LEN)))
+	local tip_y, tip_z = ARM_PIVOT.y + ARM_LEN * math.sin(th), ARM_PIVOT.z + ARM_LEN * math.cos(th)
+	if parts.blade then
+		parts.blade:set_attach(self.object, "", {x = 0, y = (tip_y + 0.1) * 10, z = (tip_z + 0.15) * 10}, {x = 0, y = 0, z = 0})
+	end
+	for _, sd in ipairs({{-1, parts.arm_l, parts.cyl_l}, {1, parts.arm_r, parts.cyl_r}}) do
+		local x = sd[1]
+		seg_attach(self, sd[2], {x = x * ARM_PIVOT.x, y = ARM_PIVOT.y, z = ARM_PIVOT.z}, {x = x * ARM_TIP.x, y = tip_y, z = tip_z})
+		local top = {x = x * CYL_BASE.x, y = tip_y + 0.55, z = tip_z}
+		local base = {x = x * CYL_BASE.x, y = CYL_BASE.y, z = CYL_BASE.z}
+		if sd[3] then
+			sd[3]:set_properties({visual_size = {x = 0.14, y = vector.distance(base, top), z = 0.14}})
+			seg_attach(self, sd[3], base, top)
+		end
+	end
+end
+
 -- 鏟斗裡的碎石（parts.fill）：跟著載量改高度與貼圖，擺在挖斗上面
 local function place_fill(self, b, psi)
 	local o = self.parts and self.parts.fill
@@ -553,13 +608,14 @@ local function find_truck(pos, s, half)
 	end
 end
 
--- 推土機（放鏟）：把貼著鏟刀那一排（2 格寬、高度 0～2 三層）與車身前半壓著的高度 0 碎石收起來，
+-- 推土機（放鏟）：把鏟刀那一排（車頭外第一排，3 格寬、高度 0～2 三層）與車身前排壓著的高度 0 碎石收起來，
 -- 倒到再前面一排（每欄最多堆 3 格），不放進車身的位置。前面是岩石或倒不下 → 放回原處，回傳 true（被擋住）
 local function push(self, pos, s)
-	local y0 = ground_y(pos)
-	local src = face_cells(pos, s, 1, 1.5, y0, 3)   -- 與前面那堆的高度（最多 3 格）一致
-	local under = face_cells(pos, s, 1, 0.5, y0, 1)
-	local dst = face_cells(pos, s, 1, 2.5, y0, 1)
+	local lat = TYPES.dozer.lat
+	local y0 = ground_y(pos, TYPES.dozer.half)
+	local src = face_cells(pos, s, 1, 2, y0, 3, lat)   -- 與前面那堆的高度（最多 3 格）一致
+	local under = face_cells(pos, s, 1, 1, y0, 1, lat)
+	local dst = face_cells(pos, s, 1, 3, y0, 1, lat)
 	local blocked = false
 	for _, c in ipairs(src) do
 		local n = core.get_node(c).name
@@ -601,6 +657,31 @@ local function push(self, pos, s)
 	return blocked
 end
 
+-- 鏟刀前那堆碎石的量（級）：鏟刀前兩排、高 3 層
+local function pile_amount(pos, s)
+	local def = TYPES.dozer
+	local y0 = ground_y(pos, def.half)
+	local lv = 0
+	for _, dist in ipairs({3, 4}) do
+		for _, c in ipairs(face_cells(pos, s, 1, dist, y0, 3, def.lat)) do
+			lv = lv + (rockmech.rubble_level[core.get_node(c).name] or 0)
+		end
+	end
+	return lv
+end
+-- 鏟刀（f = 1，車頭外第一排）或車尾（f = −1）伸出碰撞箱的那段會撞進岩石（碎石不算）：layers 是要檢查的高度
+local function overhang_blocked(pos, s, f, layers)
+	local def = TYPES.dozer
+	local y0 = ground_y(pos, def.half)
+	for _, dy in ipairs(layers) do
+		for _, c in ipairs(face_cells(pos, s, f, 2, y0 + dy, 1, def.lat)) do
+			local n = core.get_node(c).name
+			if not rockmech.rubble_level[n] and not passable(n) then return true end
+		end
+	end
+	return false
+end
+
 -- 推土機停止推（停下、後退、收鏟）時，前面那堆照安息角攤開
 local function settle_pile(self)
 	if not self.pile then return end
@@ -628,7 +709,10 @@ local function hud_text(self)
 		if self.msg then s = s .. "\n" .. self.msg end
 		s = s .. "\nE 挖滑鼠指的位置　空白鍵 倒在滑鼠指的位置（指著卡車就倒進卡車）"
 	elseif self.vkind == "truck" then s = s .. "\n空白鍵 把車斗倒在車尾"
-	else s = s .. (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石") .. "\nE 放鏟／收鏟" end
+	else
+		s = s .. (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石")
+			.. ("\n鏟刀前碎石 %d 級（%.1f m³）"):format(self.pile_lv or 0, (self.pile_lv or 0) / NLEV) .. "\nE 放鏟／收鏟"
+	end
 	return s .. "　Z 切換視角　Shift 下車"
 end
 
@@ -642,8 +726,7 @@ local function refresh_look(self)
 		})
 		if not self.tip then place_bed(self, 0) end
 	elseif self.vkind == "dozer" then
-		self.object:set_properties({textures = tex("dozer", nil, self.blade),
-			stepheight = self.blade and 0.3 or 1.1})
+		self.object:set_properties({stepheight = self.blade and 0.3 or 1.1})
 	end
 end
 -- 駕駛艙框（全螢幕 HUD 圖片，中間透明）：上方車頂邊條、左右 A 柱（車身顏色）、左右上方後照鏡、下方儀表板
@@ -988,11 +1071,11 @@ for kind, def in pairs(TYPES) do
 			selectionbox = def.rear and {-def.half, -def.half, -def.rear, def.half, def.half, def.half, rotate = true}
 				or {-def.half, -def.half, -def.half, def.half, def.half, def.half},
 			visual = "cube",
-			-- 由零件組成的車（挖土機、卡車）車身不能放大：掛在上面的零件位置與大小會跟著放大
-			visual_size = (kind == "excavator" or kind == "truck") and {x = 1, y = 1, z = 1} or {x = 2, y = 2, z = 2},
-			-- 挖土機的外觀由零件組成：車身用全透明貼圖（不能設 is_visible = false，掛在上面的零件會一起被隱藏）
-			textures = (kind == "excavator" or kind == "truck") and {CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR} or tex(kind, 0, true),
-			use_texture_alpha = kind == "excavator" or kind == "truck",
+			-- 外觀都由零件組成：車身不能放大（掛在上面的零件位置與大小會跟著放大），
+			-- 用全透明貼圖（不能設 is_visible = false，掛在上面的零件會一起被隱藏）
+			visual_size = {x = 1, y = 1, z = 1},
+			textures = {CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR},
+			use_texture_alpha = true,
 			backface_culling = true,       -- 從車身裡面往外看是透明的
 			stepheight = kind == "dozer" and 0.3 or 1.1,   -- 推土機放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
 			static_save = true,
@@ -1019,6 +1102,11 @@ for kind, def in pairs(TYPES) do
 			elseif kind == "truck" then
 				core.after(0, function()
 					if self.object:get_pos() then spawn_parts(self, TRUCK_PARTS); self.fill_key = nil; place_bed(self, 0) end
+				end)
+			else
+				self.blade_h = self.blade and 0 or BLADE_UP
+				core.after(0, function()
+					if self.object:get_pos() then spawn_parts(self, DOZER_PARTS); place_blade(self, self.blade_h) end
 				end)
 			end
 		end,
@@ -1121,11 +1209,30 @@ for kind, def in pairs(TYPES) do
 					speed = 0
 				end
 			end
-			-- 推土機：往前開時推碎石，推不動就停
-			if kind == "dozer" and self.blade and fwd > 0 then
-				if push(self, pos, s) then speed = 0; settle_pile(self) end
-			elseif kind == "dozer" then
-				settle_pile(self)
+			-- 推土機：往前開時推碎石，推不動就停。鏟刀與車尾伸出碰撞箱：前面（收鏟時看鏟刀抬起的高度）、
+			-- 後面（配重的高度）是岩石就停
+			if kind == "dozer" then
+				if self.blade and fwd > 0 then
+					if push(self, pos, s) then speed = 0; settle_pile(self) end
+				else
+					settle_pile(self)
+					if fwd > 0 and overhang_blocked(pos, s, 1, {1, 2}) then speed = 0 end
+				end
+				if fwd < 0 and overhang_blocked(pos, s, -1, {1}) then speed = 0 end
+				-- 鏟刀抬放
+				local goal = self.blade and 0 or BLADE_UP
+				if self.blade_h ~= goal then
+					local st = BLADE_RATE * dtime
+					self.blade_h = math.abs(goal - self.blade_h) <= st and goal or self.blade_h + (goal > self.blade_h and st or -st)
+					place_blade(self, self.blade_h)
+				end
+				-- 鏟刀前碎石量（有變才更新 HUD）
+				self.pile_t = (self.pile_t or 0) + dtime
+				if self.pile_t >= 0.3 then
+					self.pile_t = 0
+					local lv = pile_amount(pos, s)
+					if lv ~= self.pile_lv then self.pile_lv = lv; update_hud(self) end
+				end
 			end
 			obj:set_velocity({x = dir.x * speed, y = vel.y, z = dir.z * speed})
 			-- 挖斗：抬到目標上方 → 往下插進目標（挖）→ 抬回目標上方 → 收回
