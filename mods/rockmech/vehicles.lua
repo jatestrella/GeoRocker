@@ -354,7 +354,7 @@ core.register_entity(CHASE, {
 local function chase_pos(self, def)
 	local p, yaw = self.object:get_pos(), self.object:get_yaw()
 	local back = (def.rear or def.half) + 3.5   -- 車尾後 3.5 m
-	local up = def.half + 1.5                 -- 車頂上方 1.5 m（眼睛）
+	local up = def.half + 4.0                 -- 車頂上方 4 m（眼睛）
 	return {x = p.x + math.sin(yaw) * back, y = p.y + up - EYE_HEIGHT, z = p.z - math.cos(yaw) * back}
 end
 
