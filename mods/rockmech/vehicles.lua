@@ -453,12 +453,21 @@ local function update_hud(self)
 	refresh_look(self)
 end
 
+-- 駕駛的姿勢（有 player_api 時）：上車坐著、下車恢復
+local function set_seated(player, on)
+	if not (player_api and player) then return end
+	local name = player:get_player_name()
+	player_api.player_attached[name] = on or nil
+	player_api.set_animation(player, on and "sit" or "stand")
+end
+
 local function get_off(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
 	if d then
 		d:set_detach()
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		d:set_camera({mode = "any"})
+		set_seated(d, false)
 		hud_clear(self, d)
 		local p = self.object:get_pos()
 		local _, s = dirs(self.object:get_yaw())
@@ -531,6 +540,7 @@ for kind, def in pairs(TYPES) do
 			clicker:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
 			self.third = false
 			clicker:set_camera({mode = "first"})
+			set_seated(clicker, true)
 			update_hud(self)
 		end,
 		on_punch = function(self, puncher)
@@ -564,6 +574,7 @@ for kind, def in pairs(TYPES) do
 					if not parent then
 						d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 						d:set_camera({mode = "any"})
+						set_seated(d, false)
 					end
 					self.driver, d = nil, nil
 				end
