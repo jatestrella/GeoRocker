@@ -610,7 +610,8 @@ for kind, def in pairs(TYPES) do
 			selectionbox = def.rear and {-def.half, -def.half, -def.rear, def.half, def.half, def.half, rotate = true}
 				or {-def.half, -def.half, -def.half, def.half, def.half, def.half},
 			visual = "cube",
-			visual_size = kind == "excavator" and {x = 1, y = 1, z = 1} or {x = 2, y = 2, z = 2},
+			-- 由零件組成的車（挖土機、卡車）車身不能放大：掛在上面的零件位置與大小會跟著放大
+			visual_size = (kind == "excavator" or kind == "truck") and {x = 1, y = 1, z = 1} or {x = 2, y = 2, z = 2},
 			-- 挖土機的外觀由零件組成：車身用全透明貼圖（不能設 is_visible = false，掛在上面的零件會一起被隱藏）
 			textures = (kind == "excavator" or kind == "truck") and {CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR} or tex(kind, 0, true),
 			use_texture_alpha = kind == "excavator" or kind == "truck",
