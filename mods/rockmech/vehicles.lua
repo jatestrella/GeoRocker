@@ -1,6 +1,7 @@
 -- rockmech/vehicles.lua
 -- 載具共用部分：實體註冊（上下車、駕駛、追蹤相機、隨地形傾斜、收回成物品）、零件、碎石的取放。
--- 各種車在自己的檔案：vehicle_excavator.lua（挖土機）、vehicle_truck.lua（卡車）、vehicle_dozer.lua（推土機）；
+-- 各種車在自己的檔案：vehicle_excavator.lua（挖土機）、vehicle_truck.lua（卡車；有車斗的車共用部分）、
+-- vehicle_haul.lua（礦卡）、vehicle_dozer.lua（推土機）；
 -- 駕駛艙 HUD、後照鏡與倒車攝影機畫面在 vehicle_views.lua。
 -- 只處理碎石：完整岩石要先爆破或用魔杖弄碎（爆破 → 裝載 → 運輸）。
 -- 操作：右鍵上車；駕駛中 Shift 下車，W/S 前進後退，A/D 轉向；Z 切換追蹤相機（從車子後上方看作動）。
@@ -17,7 +18,8 @@ rockmech.vehicles = V
 -- desc、color；cap：載量（級）；speed：m/s；half：碰撞箱半邊長；lat：車頭外一排的橫向位置（相對中心）；
 -- eye_up／eye_fwd：相機在車身中心上方、沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
--- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；stepheight（預設 1.1）；inv_image、item_desc：物品。
+-- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
+-- stepheight（預設 1.1）；inv_image、item_desc：物品。
 -- 各車的行為（都可省略）：parts（零件清單）、on_spawn(self)（零件生成後）、on_load(self, data)／on_save(self, data)、
 -- refresh(self)（外觀與名牌）、hud(self)（HUD 加的文字）、can_turn(self, pos, yaw, yaw2)、
 -- move(self, ctx)（設定 ctx.speed）、step(self, ctx)（設定速度之後）、action(self, ctx)（作業鍵）。
@@ -339,9 +341,9 @@ function V.register(kind, def)
 		initial_properties = {
 			physical = true,
 			collide_with_objects = false,
-			collisionbox = {-def.half + 0.02, -def.half, -def.half + 0.02, def.half - 0.02, def.half - 0.02, def.half - 0.02},
-			selectionbox = def.rear and {-def.half, -def.half, -def.rear, def.half, def.half, def.half, rotate = true}
-				or {-def.half, -def.half, -def.half, def.half, def.half, def.half},
+			collisionbox = {-def.half + 0.02, -def.half, -def.half + 0.02, def.half - 0.02, (def.top or def.half) - 0.02, def.half - 0.02},
+			selectionbox = def.rear and {-def.half, -def.half, -def.rear, def.half, def.top or def.half, def.half, rotate = true}
+				or {-def.half, -def.half, -def.half, def.half, def.top or def.half, def.half},
 			visual = "cube",
 			-- 外觀都由零件組成：車身不能放大（掛在上面的零件位置與大小會跟著放大），
 			-- 用全透明貼圖（不能設 is_visible = false，掛在上面的零件會一起被隱藏）
@@ -523,4 +525,5 @@ end
 
 dofile(rockmech.modpath .. "/vehicle_excavator.lua")
 dofile(rockmech.modpath .. "/vehicle_truck.lua")
+dofile(rockmech.modpath .. "/vehicle_haul.lua")
 dofile(rockmech.modpath .. "/vehicle_dozer.lua")

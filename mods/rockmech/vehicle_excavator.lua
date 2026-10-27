@@ -50,7 +50,7 @@ local DIG_LIFT = 2.0
 local DIG_PHASES = {0.3, 0.2, 0.2, 0.3}
 local DIG_TOTAL = DIG_PHASES[1] + DIG_PHASES[2] + DIG_PHASES[3] + DIG_PHASES[4]
 local SWING_RATE = 1.5      -- 上部結構跟著視線迴轉的最大速度（rad/s；真的怪手約 1 rad/s）
-local DUMP_REACH = 4        -- HUD 顯示前方車斗載量的距離 (m)
+local DUMP_REACH = 6        -- HUD 顯示前方車斗載量的距離 (m)
 
 -- 挖斗位置 b（上部結構座標）→ 實際搆得到的挖斗位置、手肘位置
 local function arm_solve(b)

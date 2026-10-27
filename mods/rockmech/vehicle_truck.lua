@@ -52,7 +52,7 @@ local function bed_overlap(p, yaw, def)
 	local c, sn = math.cos(yaw), math.sin(yaw)
 	local bottom = p.y - def.half
 	local n_hit = 0
-	for lz = -def.rear + 0.25, -def.half - 0.25, 0.5 do
+	for lz = -def.rear + 0.05, -def.half - 0.25, 0.5 do   -- 從車尾最末端開始
 		for _, lx in ipairs(def.bed.overlap_lat) do
 			local wx, wz = p.x + lx * c - lz * sn, p.z + lx * sn + lz * c
 			for _, dy in ipairs(def.bed.overlap_dy) do
@@ -83,7 +83,8 @@ end
 -- 把 def 做成有車斗的車。spec：
 --   hinge：車斗軸心（車斗後端下緣，車身座標）；size：車斗外尺寸；body：車斗以外的零件；
 --   floor_tex／side_tex：車斗底板與側板貼圖；overlap_lat／overlap_dy：車斗段碰撞的檢查點（橫向位置、離車底高度）；
---   aim_top：挖土機瞄準時車身的上緣（相對車身中心）
+--   aim_top：挖土機瞄準時車身的上緣（相對車身中心）；extra_plates：跟車斗一起抬的其他片（礦卡的遮罩）；
+--   dump_rows：倒在車尾幾排（預設 1）
 local function hauler(def, spec)
 	local bed = spec
 	local S = bed.size
@@ -124,12 +125,25 @@ local function hauler(def, spec)
 	function def.can_turn(self, pos, yaw, yaw2)
 		return not (self.tip or bed_blocked(pos, yaw, pos, yaw2, def))
 	end
-	-- 前進時車斗跟著駕駛艙走過的路，不必檢查；倒車看後面一點（全速 0.5 m）；倒土時不動
+	-- 前進時車斗跟著駕駛艙走過的路，不必檢查；倒車看後面一點（全速 0.1 s 走的距離）；倒土時不動。
+	-- 伺服器卡頓時一步會退很遠、預判擋不住：倒車後車斗撞得比上一步多，就退回上一步的位置
 	function def.move(self, ctx)
+		local pos, dir = ctx.pos, ctx.dir
+		if self.bed_safe then
+			local safe = self.bed_safe
+			self.bed_safe = nil
+			if bed_overlap(pos, ctx.yaw, def) > safe.n then
+				ctx.obj:set_pos(safe.pos)
+				ctx.speed = 0
+				return
+			end
+		end
 		if ctx.speed == 0 then return end
-		local pos, dir, la = ctx.pos, ctx.dir, ctx.speed * 0.1
+		local la = ctx.speed * 0.1
 		if self.tip or (ctx.speed < 0 and bed_blocked(pos, ctx.yaw, {x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}, ctx.yaw, def)) then
 			ctx.speed = 0
+		elseif ctx.speed < 0 then
+			self.bed_safe = {pos = vector.copy(pos), n = bed_overlap(pos, ctx.yaw, def)}
 		end
 	end
 	function def.step(self, ctx)
@@ -146,11 +160,13 @@ local function hauler(def, spec)
 				local pos, dir = ctx.pos, ctx.dir
 				local y0 = V.ground_y(pos, def.half)
 				-- 車尾正後方（用實際朝向，不對齊格線：車子斜停時倒的位置才會在車尾）
-				local d0 = def.rear + 0.5
-				local cx, cz = pos.x - dir.x * d0, pos.z - dir.z * d0
 				local cells = {}
-				for _, l in ipairs(def.lat) do
-					cells[#cells + 1] = {x = math.floor(cx - dir.z * l + 0.5), y = y0, z = math.floor(cz + dir.x * l + 0.5)}
+				for r = 0, (spec.dump_rows or 1) - 1 do
+					local d0 = def.rear + 0.5 + r
+					local cx, cz = pos.x - dir.x * d0, pos.z - dir.z * d0
+					for _, l in ipairs(def.lat) do
+						cells[#cells + 1] = {x = math.floor(cx - dir.z * l + 0.5), y = y0, z = math.floor(cz + dir.x * l + 0.5)}
+					end
 				end
 				V.dump_to_ground(self, cells, y0 + 1)
 				self.fill_key = nil
