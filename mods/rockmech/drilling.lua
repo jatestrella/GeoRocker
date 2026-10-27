@@ -145,7 +145,7 @@ function rockmech.make_hole(under, above)
 end
 
 -- 鑽孔：拿著鑿岩機按住左鍵（像挖礦）、一直指著同一個岩面 drill_time 秒。伺服器每一步看玩家的按鍵與視線；
--- 放開或指到別處就重來。鑿岩機挖不動任何方塊，所以按住左鍵不會把岩石挖掉
+-- 放開或指到別處就重來。鑿岩機有 on_use，按左鍵不會把岩石挖掉
 local DRILL = "rockmech:rock_drill"
 local drilling = {}   -- 玩家名 → {key, under, above, t, hud}
 local function drill_hud(player, st, text)
@@ -266,8 +266,10 @@ end
 core.register_tool(DRILL, {
 	description = "鑿岩機 Rock drill\n對岩面按住左鍵鑽孔（" .. bcfg.drill_time .. " 秒）",
 	inventory_image = "[fill:16x16:#00000000^[fill:9x5:2,5:#d0a020^[fill:5x1:11,7:#b0b0b0^[fill:3x5:3,10:#404040^[fill:2x1:15,7:#e0e0e0",
-	-- 挖不動任何方塊（按住左鍵是鑽孔，不是把岩石挖掉）
+	-- 有 on_use 的物品按左鍵只會「使用」、不會挖方塊（只有 groupcaps 空的話會改用手挖，創造模式的手什麼都挖得動）。
+	-- 鑽孔看的是左鍵有沒有按住（上面的 globalstep），這裡什麼都不做
 	tool_capabilities = {full_punch_interval = 1.0, max_drop_level = 0, groupcaps = {}, damage_groups = {fleshy = 1}},
+	on_use = function() return nil end,
 	on_place = function(itemstack, placer)
 		tell(placer, "鑿岩機：對岩面按住左鍵鑽孔")
 		return itemstack
