@@ -240,9 +240,39 @@ local function refresh_look(self)
 			stepheight = self.blade and 0.3 or 1.1})
 	end
 end
+-- 駕駛艙框（全螢幕 HUD 圖片，中間透明）：上方車頂邊條、左右 A 柱（車身顏色）、下方儀表板
+local function cockpit_tex(kind)
+	local c = TYPES[kind].color
+	local dark, mid = "#1e1e1e", "#2c2c2c"
+	return table.concat({
+		"[fill:160x90:#00000000",
+		"^[fill:160x7:0,0:" .. dark, "^[fill:160x2:0,7:" .. c,                        -- 車頂邊條
+		"^[fill:10x90:0,0:" .. c, "^[fill:2x90:10,0:" .. dark,                          -- 左 A 柱
+		"^[fill:10x90:150,0:" .. c, "^[fill:2x90:148,0:" .. dark,                       -- 右 A 柱
+		"^[fill:6x8:12,9:" .. c, "^[fill:6x8:142,9:" .. c,                              -- 柱子上方的斜角
+		"^[fill:3x6:18,9:" .. c, "^[fill:3x6:139,9:" .. c,
+		"^[fill:160x2:0,70:" .. c, "^[fill:160x18:0,72:" .. mid,                       -- 儀表板
+		"^[fill:14x8:18,78:#101010^[fill:12x6:19,79:#203828",                            -- 儀表
+		"^[fill:14x8:128,78:#101010^[fill:12x6:129,79:#382820",
+	})
+end
+
+-- 移除駕駛的 HUD（說明文字與駕駛艙框）
+local function hud_clear(self, player)
+	if player then
+		if self.hud then player:hud_remove(self.hud) end
+		if self.hud_cockpit then player:hud_remove(self.hud_cockpit) end
+	end
+	self.hud, self.hud_cockpit = nil, nil
+end
+
 local function update_hud(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
 	if not d then return end
+	if not self.hud_cockpit then
+		self.hud_cockpit = d:hud_add({type = "image", position = {x = 0.5, y = 0.5}, alignment = {x = 0, y = 0},
+			scale = {x = -100, y = -100}, text = cockpit_tex(self.vkind), z_index = -10})
+	end
 	if self.hud then d:hud_change(self.hud, "text", hud_text(self))
 	else
 		self.hud = d:hud_add({type = "text", position = {x = 0.5, y = 0.85}, alignment = {x = 0, y = 0},
@@ -256,14 +286,15 @@ local function get_off(self)
 	if d then
 		d:set_detach()
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
-		if self.hud then d:hud_remove(self.hud) end
+		hud_clear(self, d)
 		local p = self.object:get_pos()
 		local _, s = dirs(self.object:get_yaw())
 		core.after(0.1, function()
 			if d:get_pos() then d:set_pos({x = p.x - s.z * 2, y = p.y + 0.5, z = p.z + s.x * 2}) end
 		end)
 	end
-	self.driver, self.hud = nil, nil
+	self.driver = nil
+	hud_clear(self, nil)
 end
 
 for kind, def in pairs(TYPES) do
@@ -308,8 +339,8 @@ for kind, def in pairs(TYPES) do
 			local parent = clicker:get_attach()
 			local pe = parent and parent:get_luaentity()
 			if pe and pe ~= self and pe.driver == name then
-				if pe.hud then clicker:hud_remove(pe.hud) end
-				pe.driver, pe.hud = nil, nil
+				hud_clear(pe, clicker)
+				pe.driver = nil
 			end
 			self.driver = name
 			clicker:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
@@ -337,14 +368,14 @@ for kind, def in pairs(TYPES) do
 			local yaw = obj:get_yaw()
 			local vel = obj:get_velocity()
 			local d = self.driver and core.get_player_by_name(self.driver)
-			if self.driver and not d then self.driver, self.hud = nil, nil end
+			if self.driver and not d then self.driver = nil; hud_clear(self, nil) end
 			-- 駕駛已經不在這台車上（換到別台、被傳送、死亡等）：不再聽他的
 			if d then
 				local parent = d:get_attach()
 				if not (parent and parent:get_luaentity() == self) then
-					if self.hud then d:hud_remove(self.hud) end
+					hud_clear(self, d)
 					if not parent then d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0}) end
-					self.driver, self.hud, d = nil, nil, nil
+					self.driver, d = nil, nil
 				end
 			end
 			local fwd, turn = 0, 0
