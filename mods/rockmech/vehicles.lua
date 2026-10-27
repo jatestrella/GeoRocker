@@ -17,11 +17,12 @@ local collapse = rockmech.collapse
 
 local TYPES = {
 	-- half：碰撞箱半邊長；lat：車頭外一排的橫向位置（相對中心）；eye_up／eye_fwd：相機在車身中心上方、
-	-- 沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）
+	-- 沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；rearcam：倒車攝影機位置
 	excavator = {desc = "挖土機 Excavator", color = "#e0a020", cap = 4 * NLEV, speed = 2.0,
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4}},
 	truck = {desc = "卡車 Dump truck", color = "#c84020", cap = 12 * NLEV, speed = 5.0,
-		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2}},
+		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
+		rearcam = {x = 0, y = 1.0, z = -5.7}},
 	dozer = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5,
 		half = 1, lat = {-0.5, 0.5}, eye_up = 1.15, eye_fwd = 0.95, mirror = {x = 1.1, y = 0.9, z = 0.6}},
 }
@@ -662,21 +663,33 @@ local function cockpit_tex(kind)
 		-- 後照鏡（左上、右上）：支架 + 鏡框；鏡面 24×14（x 18／118、y 11 起）上面再疊後照鏡畫面
 		"^[fill:6x2:12,17:#303030", "^[fill:26x16:17,10:#151515", "^[fill:24x14:18,11:#7f9fb8",
 		"^[fill:6x2:142,17:#303030", "^[fill:26x16:117,10:#151515", "^[fill:24x14:118,11:#7f9fb8",
+		TYPES[kind].rearcam and "^[fill:38x23:61,9:#151515^[fill:2x1:79,32:#303030" or "",   -- 倒車攝影機螢幕
 	})
 end
 
--- 後照鏡畫面：Luanti 只有一個相機，所以鏡子裡的畫面是伺服器從鏡子位置往後打射線、
--- 依碰到的方塊上色拼成的小圖（MIRROR_W × MIRROR_H 格，每 MIRROR_DT 秒更新）。
--- 只畫方塊（不畫車輛、玩家）；遠處淡入天空色；靠車身那側畫一條車身顏色（自己的車側）
-local MIRROR_W, MIRROR_H = 36, 21
+-- 後照鏡、倒車攝影機畫面：Luanti 只有一個相機，所以這些畫面是伺服器從鏡頭位置往後打射線、
+-- 依碰到的東西上色拼成的小圖（每 MIRROR_DT 秒更新）。
+-- 畫方塊、車輛（含自己的車：用實際掛著的零件方塊，位置、旋轉、貼圖照實）與沒在車上的玩家；遠處淡入天空色
 local MIRROR_RANGE = 24                                         -- m
-local MIRROR_HFOV, MIRROR_VFOV = math.rad(44), math.rad(26)
-local MIRROR_OUT, MIRROR_DOWN = math.rad(14), math.rad(5)       -- 鏡子中心朝外、朝下偏
 local MIRROR_DT = 0.35
--- 鏡面在駕駛艙框（160×90）裡的中心；大小用螢幕百分比
-local MIRROR_HUD = {{side = -1, pos = {x = 30 / 160, y = 18 / 90}}, {side = 1, pos = {x = 130 / 160, y = 18 / 90}}}
-local MIRROR_SCALE = {x = -24 / 160 * 100, y = -14 / 90 * 100}
 local SKY = {0x9c, 0xc0, 0xe4}
+-- 畫面：o 鏡頭位置（車身座標；swing → 挖土機用上部結構座標、跟著迴轉）、dir 中心朝向（從正後方往右偏的角度）、
+-- down 往下的角度、hfov／vfov 視角、w × h 解析度、hud 在駕駛艙框（160×90）裡的左上角與大小
+local function mirror_view(side, m)
+	return {o = {x = side * m.x, y = m.y, z = m.z}, dir = side * math.rad(14), down = math.rad(5),
+		hfov = math.rad(44), vfov = math.rad(26), w = 24, h = 14, swing = true,
+		hud = {x = side < 0 and 18 or 118, y = 11, w = 24, h = 14}}
+end
+local REARCAM_HUD = {x = 62, y = 10, w = 36, h = 20.25}
+local function views_of(kind)
+	local def = TYPES[kind]
+	local v = {mirror_view(-1, def.mirror), mirror_view(1, def.mirror)}
+	if def.rearcam then
+		v[3] = {o = def.rearcam, dir = 0, down = math.rad(24), hfov = math.rad(80), vfov = math.rad(42),
+			w = 40, h = 22, hud = REARCAM_HUD}
+	end
+	return v
+end
 
 local function hex_rgb(h)
 	return {tonumber(h:sub(2, 3), 16), tonumber(h:sub(4, 5), 16), tonumber(h:sub(6, 7), 16)}
@@ -701,68 +714,203 @@ local function rgb_of(name)
 	return c
 end
 
--- side：−1 左鏡、1 右鏡。鏡子看往後方：畫面左邊 = 車身左側（−X），上 = 上
-local function mirror_tex(self, side)
-	local def = TYPES[self.vkind]
+-- [fill 組合貼圖 → 色塊清單（後面的蓋前面的）；不是 [fill 組合（例如碎石方塊貼圖）→ false
+local tex_cache = {}
+local function tex_rects(t)
+	local r = tex_cache[t]
+	if r ~= nil then return r end
+	r = {}
+	for op in (t .. "^"):gmatch("(.-)%^") do
+		local w, h, x, y, c = op:match("^%[fill:(%d+)x(%d+):(%d+),(%d+):(#%x+)$")
+		if not w then w, h, c = op:match("^%[fill:(%d+)x(%d+):(#%x+)$"); x, y = 0, 0 end
+		if not w then r = false; break end
+		r[#r + 1] = {tonumber(x), tonumber(y), tonumber(w), tonumber(h), c}
+	end
+	if r and #r == 0 then r = false end
+	if r then r.W, r.H = r[1][3], r[1][4] end
+	tex_cache[t] = r
+	return r
+end
+-- 貼圖在 (u, v)（0～1，v 往下）的顏色；不認得的貼圖當碎石色
+local function tex_color(t, u, v)
+	local r = tex_rects(t)
+	if not r then return "#6a6058" end
+	local px, py = u * r.W, v * r.H
+	for k = #r, 1, -1 do
+		local q = r[k]
+		if px >= q[1] and px < q[1] + q[3] and py >= q[2] and py < q[2] + q[4] then return q[5] end
+	end
+	return r[1][5]
+end
+
+-- 掛載旋轉（度；先繞 X、再繞 Y，與 seg_attach 相同）作用在零件座標的向量上
+local function attach_rot(v, rx, ry)
+	local cx, sx = math.cos(math.rad(rx)), math.sin(math.rad(rx))
+	return h2v({x = v.x, y = v.y * cx - v.z * sx, z = v.y * sx + v.z * cx}, math.rad(ry))
+end
+local AXES = {{x = 1, y = 0, z = 0}, {x = 0, y = 1, z = 0}, {x = 0, y = 0, z = 1}}
+-- 一台車（本體看得見時）與它的零件 → 世界座標的有向箱子 {c 中心, ax 三軸, h 半邊長, tex 六面貼圖}。
+-- 只用車子的 yaw（地形傾斜不算）。實體 yaw 對應 h2v(·, −yaw)
+local function vehicle_boxes(o, boxes)
+	local p, yaw = o:get_pos(), o:get_yaw()
+	local function add(off, rx, ry, size, textures)
+		local ax = {}
+		for i, e in ipairs(AXES) do ax[i] = h2v(attach_rot(e, rx, ry), -yaw) end
+		boxes[#boxes + 1] = {c = vector.add(p, h2v(off, -yaw)), ax = ax,
+			h = {size.x / 2, size.y / 2, size.z / 2}, tex = textures}
+	end
+	local pr = o:get_properties()
+	if pr.textures[1] ~= CLEAR then add({x = 0, y = 0, z = 0}, 0, 0, pr.visual_size, pr.textures) end
+	for _, ch in ipairs(o:get_children()) do
+		local e = ch:get_luaentity()
+		if e and e.name == PART then
+			local cp = ch:get_properties()
+			if cp.is_visible ~= false then
+				local _, _, ap, ar = ch:get_attach()
+				add(vector.multiply(ap, 0.1), ar.x, ar.y, cp.visual_size, cp.textures)
+			end
+		end
+	end
+end
+local PLAYER_TEX = {}
+for i = 1, 6 do PLAYER_TEX[i] = "[fill:4x8:#3a5a9a^[fill:4x2:0,0:#c8a080^[fill:4x3:0,5:#30304a" end
+
+-- 射線（從 eye、單位方向 dir）打到箱子：回傳距離、進入面的軸（1～3）與正負；只找比 tmax 近的
+local function hit_box(bx, eye, dir, tmax)
+	local dx, dy, dz = bx.c.x - eye.x, bx.c.y - eye.y, bx.c.z - eye.z
+	local tmin, axis, sgn = 0, nil, 0
+	for i = 1, 3 do
+		local a, h = bx.ax[i], bx.h[i]
+		local e = a.x * dx + a.y * dy + a.z * dz
+		local fd = a.x * dir.x + a.y * dir.y + a.z * dir.z
+		if math.abs(fd) > 1e-9 then
+			local tn, tf, sg
+			if fd > 0 then tn, tf, sg = (e - h) / fd, (e + h) / fd, -1 else tn, tf, sg = (e + h) / fd, (e - h) / fd, 1 end
+			if tn > tmin then tmin, axis, sgn = tn, i, sg end
+			if tf < tmax then tmax = tf end
+			if tmin > tmax then return nil end
+		elseif math.abs(e) > h then
+			return nil
+		end
+	end
+	if not axis then return nil end   -- 鏡子在箱子裡面
+	return tmin, axis, sgn
+end
+-- 打到箱子那一點的顏色：面（貼圖順序 +Y −Y +X −X +Z −Z）與面上的 (u, v)
+local FACE = {{4, 3}, {2, 1}, {6, 5}}
+local function box_color(bx, eye, dir, t, axis, sgn)
+	local q = {}
+	for i = 1, 3 do
+		local a = bx.ax[i]
+		q[i] = a.x * (eye.x + dir.x * t - bx.c.x) + a.y * (eye.y + dir.y * t - bx.c.y) + a.z * (eye.z + dir.z * t - bx.c.z)
+		q[i] = math.max(0, math.min(0.999, (q[i] / bx.h[i] + 1) / 2))
+	end
+	local u, v
+	if axis == 1 then u, v = q[3], 1 - q[2]
+	elseif axis == 2 then u, v = q[1], q[3]
+	else u, v = q[1], 1 - q[2] end
+	local t6 = bx.tex[FACE[axis][sgn > 0 and 2 or 1]] or bx.tex[1]
+	return hex_rgb(tex_color(t6, u, v)), {x = bx.ax[axis].x * sgn, y = bx.ax[axis].y * sgn, z = bx.ax[axis].z * sgn}
+end
+
+-- 畫一個畫面（view 見 views_of）。看往後方，和照後鏡一樣：畫面左邊 = 車身左側（−X），上 = 上
+local function render_view(self, view)
 	local p, yaw = self.object:get_pos(), self.object:get_yaw()
-	local psi = self.vkind == "excavator" and self.swing or 0
+	local psi = view.swing and self.vkind == "excavator" and self.swing or 0
 	local cy, sy = math.cos(yaw), math.sin(yaw)
 	local function world(l)   -- 上部結構（挖土機）／車身座標 → 世界方向
 		l = h2v(l, psi)
 		return {x = l.x * cy - l.z * sy, y = l.y, z = l.x * sy + l.z * cy}
 	end
-	local m = def.mirror
-	local eye = vector.add(p, world({x = side * m.x, y = m.y, z = m.z}))
-	local body = hex_rgb(def.color)
-	local out = {("[fill:%dx%d:#%02x%02x%02x"):format(MIRROR_W, MIRROR_H, SKY[1], SKY[2], SKY[3])}
-	for v = 0, MIRROR_H - 1 do
-		local b = -MIRROR_DOWN + (0.5 - (v + 0.5) / MIRROR_H) * MIRROR_VFOV
+	local eye = vector.add(p, world(view.o))
+	-- 附近的車輛（含自己）與沒在車上的玩家
+	-- 每台車（或玩家）一組：箱子與外接球（射線先比外接球，碰不到整組跳過）
+	local groups = {}
+	for _, o in ipairs(core.get_objects_inside_radius(eye, MIRROR_RANGE + 8)) do
+		local e = o:get_luaentity()
+		local boxes = {}
+		if e and e.vkind and TYPES[e.vkind] then
+			vehicle_boxes(o, boxes)
+		elseif o:is_player() and not o:get_attach() then
+			boxes[1] = {c = vector.add(o:get_pos(), {x = 0, y = 0.9, z = 0}), ax = AXES, h = {0.3, 0.9, 0.3}, tex = PLAYER_TEX}
+		end
+		if #boxes > 0 then
+			local c = {x = 0, y = 0, z = 0}
+			for _, bx in ipairs(boxes) do c = vector.add(c, bx.c) end
+			c = vector.divide(c, #boxes)
+			local r = 0
+			for _, bx in ipairs(boxes) do
+				r = math.max(r, vector.distance(c, bx.c) + math.sqrt(bx.h[1] ^ 2 + bx.h[2] ^ 2 + bx.h[3] ^ 2))
+			end
+			groups[#groups + 1] = {c = c, r = r, boxes = boxes}
+		end
+	end
+	local W, H = view.w, view.h
+	local out = {("[fill:%dx%d:#%02x%02x%02x"):format(W, H, SKY[1], SKY[2], SKY[3])}
+	for v = 0, H - 1 do
+		local b = -view.down + (0.5 - (v + 0.5) / H) * view.vfov
 		local cb, sb = math.cos(b), math.sin(b)
 		local run, run_x = nil, 0
 		local function flush(u)
 			if run then out[#out + 1] = ("^[fill:%dx1:%d,%d:%s"):format(u - run_x, run_x, v, run) end
 		end
-		for u = 0, MIRROR_W - 1 do
+		for u = 0, W - 1 do
 			local col
-			if (side < 0 and u >= MIRROR_W - 3 or side > 0 and u < 3) and v >= MIRROR_H * 0.35 then
-				col = body
-			else
-				local a = side * MIRROR_OUT + ((u + 0.5) / MIRROR_W - 0.5) * MIRROR_HFOV
-				local dw = world({x = math.sin(a) * cb, y = sb, z = -math.cos(a) * cb})
-				local hit = core.raycast(eye, vector.add(eye, vector.multiply(dw, MIRROR_RANGE)), false, false):next()
-				if hit and hit.type == "node" then
-					local c = rgb_of(core.get_node(hit.under).name)
-					local n = hit.intersection_normal
-					local shade = n.y > 0 and 1 or n.y < 0 and 0.55 or n.x ~= 0 and 0.82 or 0.7
-					local t = 0.6 * vector.distance(eye, hit.intersection_point) / MIRROR_RANGE
-					col = {c[1] * shade * (1 - t) + SKY[1] * t, c[2] * shade * (1 - t) + SKY[2] * t,
-						c[3] * shade * (1 - t) + SKY[3] * t}
+			local a = view.dir + ((u + 0.5) / W - 0.5) * view.hfov
+			local dw = world({x = math.sin(a) * cb, y = sb, z = -math.cos(a) * cb})
+			local hit = core.raycast(eye, vector.add(eye, vector.multiply(dw, MIRROR_RANGE)), false, false):next()
+			local c, n, dist
+			if hit and hit.type == "node" then
+				c, n = rgb_of(core.get_node(hit.under).name), hit.intersection_normal
+				dist = vector.distance(eye, hit.intersection_point)
+			end
+			local best, bt, bax, bsg = nil, dist or MIRROR_RANGE, nil, nil
+			for _, g in ipairs(groups) do
+				local ox, oy, oz = g.c.x - eye.x, g.c.y - eye.y, g.c.z - eye.z
+				local along = ox * dw.x + oy * dw.y + oz * dw.z
+				if along + g.r > 0 and along - g.r < bt and ox * ox + oy * oy + oz * oz - along * along < g.r * g.r then
+					for _, bx in ipairs(g.boxes) do
+						local t, axis, sg = hit_box(bx, eye, dw, bt)
+						if t then best, bt, bax, bsg = bx, t, axis, sg end
+					end
 				end
+			end
+			if best then
+				dist = bt
+				c, n = box_color(best, eye, dw, bt, bax, bsg)
+			end
+			if c then
+				local shade = n.y > 0.5 and 1 or n.y < -0.5 and 0.55 or math.abs(n.x) > math.abs(n.z) and 0.82 or 0.7
+				local t = 0.6 * dist / MIRROR_RANGE
+				col = {c[1] * shade * (1 - t) + SKY[1] * t, c[2] * shade * (1 - t) + SKY[2] * t,
+					c[3] * shade * (1 - t) + SKY[3] * t}
 			end
 			local hx = col and ("#%02x%02x%02x"):format(math.floor(col[1]), math.floor(col[2]), math.floor(col[3]))
 			if hx ~= run then flush(u); run, run_x = hx, u end
 		end
-		flush(MIRROR_W)
+		flush(W)
 	end
 	return table.concat(out)
 end
 
-rockmech.vehicle_mirror_tex = mirror_tex   -- 測試用
+rockmech.vehicle_render_view, rockmech.vehicle_views = render_view, views_of   -- 測試用
 
 local function update_mirrors(self, d, dtime)
+	if not self.hud_mirror then return end
+	local views = views_of(self.vkind)
 	self.mirror_t = (self.mirror_t or MIRROR_DT) + dtime
-	if self.mirror_t < MIRROR_DT or not self.hud_mirror then return end
+	if self.mirror_t < MIRROR_DT / #views then return end
 	self.mirror_t = 0
-	for i, mh in ipairs(MIRROR_HUD) do
-		local tex = mirror_tex(self, mh.side)
-		if tex ~= self.mirror_last[i] then
-			d:hud_change(self.hud_mirror[i], "text", tex)
-			self.mirror_last[i] = tex
-		end
+	local i = (self.mirror_i or 0) % #views + 1
+	self.mirror_i = i
+	local tex = render_view(self, views[i])
+	if tex ~= self.mirror_last[i] then
+		d:hud_change(self.hud_mirror[i], "text", tex)
+		self.mirror_last[i] = tex
 	end
 end
 
--- 移除駕駛的 HUD（說明文字、駕駛艙框、後照鏡畫面）
+-- 移除駕駛的 HUD（說明文字、駕駛艙框、後照鏡與倒車攝影機畫面）
 local function hud_clear(self, player)
 	if player then
 		if self.hud then player:hud_remove(self.hud) end
@@ -781,9 +929,11 @@ local function update_hud(self)
 	end
 	if not self.hud_mirror then
 		self.hud_mirror, self.mirror_last, self.mirror_t = {}, {}, nil
-		for i, mh in ipairs(MIRROR_HUD) do
-			self.hud_mirror[i] = d:hud_add({type = "image", position = mh.pos, alignment = {x = 0, y = 0},
-				scale = MIRROR_SCALE, text = "[fill:1x1:#7f9fb8", z_index = -9})
+		for i, view in ipairs(views_of(self.vkind)) do
+			local r = view.hud
+			self.hud_mirror[i] = d:hud_add({type = "image", alignment = {x = 0, y = 0},
+				position = {x = (r.x + r.w / 2) / 160, y = (r.y + r.h / 2) / 90},
+				scale = {x = -r.w / 160 * 100, y = -r.h / 90 * 100}, text = "[fill:1x1:#7f9fb8", z_index = -9})
 		end
 	end
 	if self.hud then d:hud_change(self.hud, "text", hud_text(self))
