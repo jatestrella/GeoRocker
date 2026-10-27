@@ -39,28 +39,37 @@ for _, w in ipairs({{x = -1.95, z = 1.0, wd = 0.9}, {x = 1.95, z = 1.0, wd = 0.9
 end
 
 -- 車斗：軸心在後端下緣（離地 2.5 m，底板在後輪頂上方 0.1 m），外尺寸 4.6 × 1.5 × 6.6（連堆尖約 36 m³）。各片相對軸心：
--- 底板前段平的、後段 TAIL_L 往車尾上翹 TAIL_RISE（約 16°，沒有後擋板）；側板後段跟著底板變矮；
+-- 底板前段平的、後段 TAIL_L 往車尾上翹 TAIL_RISE（約 16°，沒有後擋板）；側板後段：上半水平、下半是沿著上翹底板的斜條
+-- （稍微往內縮，不和上半同一個面，免得閃爍）；裡面的碎石也分前後兩段，後段躺在上翹的底板上；
 -- 前擋板往上加高到 CANOPY_Y、再往前接遮罩蓋住平台與駕駛室（駕駛室頂 y 1.9）
 local S = {x = 4.6, y = 1.5, z = 6.6}
 local T = 0.1
 local TAIL_L, TAIL_RISE = 2.4, 0.7
 local CANOPY_Y = 2.2
 local tail_deg = math.deg(math.atan(TAIL_RISE / TAIL_L))
-local tail_h = S.y - TAIL_RISE / 2                 -- 側板後段的高度（到上翹底板的平均高度）
+local tail_len = math.sqrt(TAIL_L ^ 2 + TAIL_RISE ^ 2)
+local STRIP_H = 0.8                                -- 側板後段下半斜條的高度（從底板往上）
 local plates = {
 	{id = "floor_front", rel = {x = 0, y = T / 2, z = (TAIL_L + S.z) / 2}, size = {x = S.x, y = T, z = S.z - TAIL_L}, floor = true},
 	{id = "floor_tail", rel = {x = 0, y = TAIL_RISE / 2 + T / 2, z = TAIL_L / 2}, rot = tail_deg,
-		size = {x = S.x, y = T, z = math.sqrt(TAIL_L ^ 2 + TAIL_RISE ^ 2) + 0.05}, floor = true},
+		size = {x = S.x, y = T, z = tail_len + 0.05}, floor = true},
 	{id = "front", rel = {x = 0, y = CANOPY_Y / 2, z = S.z - T / 2}, size = {x = S.x, y = CANOPY_Y, z = T}},
 	{id = "canopy", rel = {x = 0, y = CANOPY_Y, z = S.z + 1.5}, size = {x = 4.8, y = 0.12, z = 3.0}},
 }
 for _, sx in ipairs({-1, 1}) do
 	local x = sx * (S.x - T) / 2
 	plates[#plates + 1] = {id = "side_front" .. sx, rel = {x = x, y = S.y / 2, z = (TAIL_L + S.z) / 2}, size = {x = T, y = S.y, z = S.z - TAIL_L}}
-	plates[#plates + 1] = {id = "side_tail" .. sx, rel = {x = x, y = S.y - tail_h / 2, z = TAIL_L / 2}, size = {x = T, y = tail_h, z = TAIL_L}}
+	plates[#plates + 1] = {id = "side_tail" .. sx, rel = {x = x, y = (S.y + TAIL_RISE) / 2, z = TAIL_L / 2},
+		size = {x = T, y = S.y - TAIL_RISE, z = TAIL_L}}
+	plates[#plates + 1] = {id = "side_strip" .. sx, rel = {x = x - sx * 0.02, y = TAIL_RISE / 2 + STRIP_H / 2, z = TAIL_L / 2}, rot = tail_deg,
+		size = {x = T, y = STRIP_H, z = tail_len}}
 end
 V.hauler(def, {
 	hinge = {x = 0, y = 0.0, z = -7.3}, size = S, body = body, plates = plates,
+	fills = {
+		{id = "fill_front", z = (TAIL_L + S.z - T - 0.05) / 2, len = S.z - T - 0.05 - TAIL_L, y0 = T},
+		{id = "fill_tail", z = TAIL_L / 2, len = tail_len - 0.1, y0 = TAIL_RISE / 2 + T, rot = tail_deg, hmax = 0.6},
+	},
 	floor_tex = "[fill:16x16:#5a4010",
 	side_tex = ("[fill:16x16:%s^[fill:16x2:0,0:#8a6a10^[fill:2x16:3,0:#b88a10^[fill:2x16:8,0:#b88a10^[fill:2x16:13,0:#b88a10"):format(c),
 	overlap_lat = {-2.25, -1.1, 0, 1.1, 2.25}, overlap_dy = {1.2, 2.2, 3.2}, aim_top = 1.6, dump_rows = 2,

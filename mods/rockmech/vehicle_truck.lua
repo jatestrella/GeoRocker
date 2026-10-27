@@ -27,23 +27,27 @@ local function place_bed(self, alpha)
 		o:set_attach(self.object, "", {x = rel.x * 10, y = y * 10, z = z * 10}, {x = (rot or 0) - math.deg(alpha), y = 0, z = 0})
 	end
 	for _, p in ipairs(bed.plates) do put(parts[p.id], p.rel, p.rot) end
-	-- 碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
-	local o = parts.bedfill
-	if o then
-		local total, best = V.load_mix(self)
-		local frac = math.min(1, total / def.cap)
-		local h = frac > 0 and (0.1 + (bed.fill_hmax - 0.1) * frac) or 0
-		local key = ("%.2f/%s"):format(h, tostring(best))
-		if self.fill_key ~= key then
-			self.fill_key = key
-			if h > 0 then
-				local t = V.rubble_tex(best)
-				o:set_properties({is_visible = true, visual_size = {x = bed.fill_w, y = h, z = bed.fill_l}, textures = {t, t, t, t, t, t}})
-			else
-				o:set_properties({is_visible = false})
+	-- 碎石（各段 bed.fills 躺在各段底板上）：厚度依載量（空 → 不顯示，各段有上限），貼圖用載最多的那種碎石
+	local total, best = V.load_mix(self)
+	local frac = math.min(1, total / def.cap)
+	local h = frac > 0 and (0.1 + (bed.fill_hmax - 0.1) * frac) or 0
+	local key = ("%.2f/%s"):format(h, tostring(best))
+	local changed = self.fill_key ~= key
+	self.fill_key = key
+	for _, fp in ipairs(bed.fills) do
+		local o = parts[fp.id]
+		if o then
+			local hh = math.min(h, fp.hmax or h)
+			if changed then
+				if hh > 0 then
+					local t = V.rubble_tex(best)
+					o:set_properties({is_visible = true, visual_size = {x = bed.fill_w, y = hh, z = fp.len}, textures = {t, t, t, t, t, t}})
+				else
+					o:set_properties({is_visible = false})
+				end
 			end
+			put(o, {x = 0, y = fp.y0 + hh / 2, z = fp.z}, fp.rot)
 		end
-		put(o, {x = 0, y = BED_T + h / 2, z = bed.size.z / 2})
 	end
 end
 
@@ -86,6 +90,7 @@ end
 --   floor_tex／side_tex：車斗底板與側板貼圖；overlap_lat／overlap_dy：車斗段碰撞的檢查點（橫向位置、離車底高度）；
 --   aim_top：挖土機瞄準時車身的上緣（相對車身中心）；plates：車斗各片（省略 → 方盒車斗），
 --   每片 {id, rel（相對軸心的中心，車斗放平時）, size, rot（可選，度）, floor（可選，用底板貼圖）}；
+--   fills：車斗裡的碎石分段（省略 → 一整塊），每段 {id, z（中心）, len, y0（底面）, rot（可選）, hmax（可選，厚度上限）}；
 --   dump_rows：倒在車尾幾排（預設 1）
 local function hauler(def, spec)
 	local bed = spec
@@ -99,14 +104,17 @@ local function hauler(def, spec)
 		{id = "bed_front", rel = {x = 0, y = S.y / 2, z = S.z - BED_T / 2}, size = {x = S.x, y = S.y, z = BED_T}},
 		{id = "bed_back", rel = {x = 0, y = S.y / 2, z = BED_T / 2}, size = {x = S.x, y = S.y, z = BED_T}},
 	}
-	bed.fill_w, bed.fill_l = S.x - 2 * BED_T - 0.1, S.z - 2 * BED_T - 0.1
+	bed.fill_w = S.x - 2 * BED_T - 0.1
 	bed.fill_hmax = S.y - BED_T - 0.1
+	bed.fills = spec.fills or {{id = "bedfill", z = S.z / 2, len = S.z - 2 * BED_T - 0.1, y0 = BED_T}}
 	def.bed = bed
 	def.look_limit = def.look_limit or math.rad(75)   -- 駕駛只看車頭前方 150°（不會轉頭看到自己的車斗）
 	-- 零件：車斗以外的部分、車斗各片（位置由 place_bed 擺）、車斗裡的碎石
 	local parts = {}
 	for _, p in ipairs(spec.body) do parts[#parts + 1] = p end
-	parts[#parts + 1] = {id = "bedfill", pos = {x = 0, y = 0, z = 0}, size = {x = bed.fill_w, y = 0.2, z = bed.fill_l}, tex = box_tex("#6a6058")}
+	for _, fp in ipairs(bed.fills) do
+		parts[#parts + 1] = {id = fp.id, pos = {x = 0, y = 0, z = 0}, size = {x = bed.fill_w, y = 0.2, z = fp.len}, tex = box_tex("#6a6058")}
+	end
 	for _, p in ipairs(bed.plates) do
 		local t = p.floor and spec.floor_tex or spec.side_tex
 		parts[#parts + 1] = {id = p.id, pos = {x = 0, y = 0, z = 0}, size = p.size, tex = {t, t, t, t, t, t}}
