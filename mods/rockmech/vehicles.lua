@@ -21,12 +21,12 @@ local TYPES = {
 }
 local TURN_RATE = 1.6        -- rad/s
 -- 駕駛視線：車頭那一面的正前方（相對車身中心，單位 m；車頭朝 +Z）。
--- 掛在車身上的位移會乘上車身的 visual_size（2），所以換算成 set_attach 的值時除以 2；
--- 玩家的眼睛在腳上方 EYE_HEIGHT
+-- set_attach 的位移單位是 0.1 m（不受車身 visual_size 影響，遊戲內確認過）；玩家的眼睛在腳上方 EYE_HEIGHT。
+-- 車身方塊從裡面看不透明，所以視線要在車身外
 local EYE_AT = {x = 0, y = 0.3, z = 1.05}
 local EYE_HEIGHT = 1.625
 local VSIZE = 2
-local SEAT = {x = EYE_AT.x * 10 / VSIZE, y = (EYE_AT.y - EYE_HEIGHT) * 10 / VSIZE, z = EYE_AT.z * 10 / VSIZE}
+local SEAT = {x = EYE_AT.x * 10, y = (EYE_AT.y - EYE_HEIGHT) * 10, z = EYE_AT.z * 10}
 local DUMP_REACH = 4         -- 挖土機倒進卡車的距離 (m)
 
 -- 貼圖（[fill 組合）。cube 的六面：上、下、+X、−X、+Z（車頭：yaw 0 朝 +Z）、−Z
