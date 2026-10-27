@@ -133,22 +133,36 @@ end
 -- （碰撞箱仍是 3 格寬）。車底在 y −1.5
 local TRUCK_HINGE = {x = 0, y = -0.4, z = -5.5}
 local BED_SIZE = {x = 2.6, y = 1.2, z = 4.8}
+-- 空心車斗的 5 片（rel：相對軸心 TRUCK_HINGE 的中心，車斗放平時）。碎石塊放在裡面，四周與上緣都留空隙，
+-- 不和車斗的任何一面重疊（重疊會 z-fighting 閃爍）
+local BED_T = 0.1
+local BED_PLATES = {
+	{id = "bed_floor", rel = {x = 0, y = BED_T / 2, z = BED_SIZE.z / 2}, size = {x = BED_SIZE.x, y = BED_T, z = BED_SIZE.z}},
+	{id = "bed_left", rel = {x = -(BED_SIZE.x - BED_T) / 2, y = BED_SIZE.y / 2, z = BED_SIZE.z / 2}, size = {x = BED_T, y = BED_SIZE.y, z = BED_SIZE.z}},
+	{id = "bed_right", rel = {x = (BED_SIZE.x - BED_T) / 2, y = BED_SIZE.y / 2, z = BED_SIZE.z / 2}, size = {x = BED_T, y = BED_SIZE.y, z = BED_SIZE.z}},
+	{id = "bed_front", rel = {x = 0, y = BED_SIZE.y / 2, z = BED_SIZE.z - BED_T / 2}, size = {x = BED_SIZE.x, y = BED_SIZE.y, z = BED_T}},
+	{id = "bed_back", rel = {x = 0, y = BED_SIZE.y / 2, z = BED_T / 2}, size = {x = BED_SIZE.x, y = BED_SIZE.y, z = BED_T}},
+}
+local FILL_W, FILL_L = BED_SIZE.x - 2 * BED_T - 0.1, BED_SIZE.z - 2 * BED_T - 0.1
+local FILL_HMAX = BED_SIZE.y - BED_T - 0.1
 local WHEEL = "[fill:16x16:#1c1c1c^[fill:10x10:3,3:#3a3a3a^[fill:6x6:5,5:#8a8a8a^[fill:2x2:7,7:#c0c0c0"
 local TREAD = "[fill:16x16:#1c1c1c^[fill:16x1:0,3:#2e2e2e^[fill:16x1:0,8:#2e2e2e^[fill:16x1:0,13:#2e2e2e"
 local TRUCK_PARTS = (function()
 	local c = TYPES.truck.color
 	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)
 	local cab_side = ("[fill:16x16:%s^[fill:6x6:8,2:#9fd0ff"):format(c)
-	local bed_top = ("[fill:16x16:%s^[fill:14x14:1,1:#4a2010"):format(c)
 	local bed_side = ("[fill:16x16:%s^[fill:16x2:0,0:#8a2a10^[fill:2x16:4,0:#a83418^[fill:2x16:10,0:#a83418"):format(c)
 	local wheel = {TREAD, TREAD, WHEEL, WHEEL, TREAD, TREAD}   -- 上下前後是胎面，左右兩側是輪圈
 	local parts = {
 		{pos = {x = 0, y = -0.55, z = -2.0}, size = {x = 1.6, y = 0.3, z = 6.6}, tex = box_tex("#2a2a2a")},   -- 底盤
 		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0},
 			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side, cab_front, ("[fill:16x16:%s"):format(c)}},
-		{id = "bed", pos = {x = 0, y = -0.1, z = -3.1}, size = BED_SIZE, tex = {bed_top, "[fill:16x16:#2a2a2a", bed_side, bed_side, bed_side, bed_side}},
-		{id = "bedfill", pos = {x = 0, y = -0.1, z = -3.1}, size = {x = 2.4, y = 0.2, z = 4.6}, tex = box_tex("#6a6058")},
+		{id = "bedfill", pos = {x = 0, y = -0.1, z = -3.1}, size = {x = FILL_W, y = 0.2, z = FILL_L}, tex = box_tex("#6a6058")},
 	}
+	for _, p in ipairs(BED_PLATES) do
+		local t = p.id == "bed_floor" and "[fill:16x16:#4a2010" or bed_side
+		parts[#parts + 1] = {id = p.id, pos = {x = p.rel.x, y = -0.1, z = -3.1}, size = p.size, tex = {t, t, t, t, t, t}}
+	end
 	-- 前軸單輪、後兩軸雙輪（較寬），外緣在車斗外側
 	for _, w in ipairs({{x = -1.15, z = 0.5, wd = 0.35}, {x = 1.15, z = 0.5, wd = 0.35},
 			{x = -1.1, z = -3.2, wd = 0.6}, {x = 1.1, z = -3.2, wd = 0.6}, {x = -1.1, z = -4.4, wd = 0.6}, {x = 1.1, z = -4.4, wd = 0.6}}) do
@@ -169,7 +183,7 @@ local function place_bed(self, alpha)
 		local z = TRUCK_HINGE.z - rel.y * sa + rel.z * ca
 		o:set_attach(self.object, "", {x = rel.x * 10, y = y * 10, z = z * 10}, {x = -math.deg(alpha), y = 0, z = 0})
 	end
-	put(parts.bed, {x = 0, y = BED_SIZE.y / 2, z = BED_SIZE.z / 2})
+	for _, p in ipairs(BED_PLATES) do put(parts[p.id], p.rel) end
 	-- 碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
 	local o = parts.bedfill
 	if o then
@@ -179,7 +193,7 @@ local function place_bed(self, alpha)
 			if lv > bl then best, bl = base, lv end
 		end
 		local frac = math.min(1, total / TYPES.truck.cap)
-		local h = frac > 0 and (0.1 + 1.0 * frac) or 0
+		local h = frac > 0 and (0.1 + (FILL_HMAX - 0.1) * frac) or 0
 		local key = ("%.2f/%s"):format(h, tostring(best))
 		if self.fill_key ~= key then
 			self.fill_key = key
@@ -187,12 +201,12 @@ local function place_bed(self, alpha)
 				local nd = core.registered_nodes[best]
 				local t = nd and nd.tiles and nd.tiles[1]
 				t = type(t) == "table" and t.name or t or "[fill:16x16:#6a6058"
-				o:set_properties({is_visible = true, visual_size = {x = 2.4, y = h, z = 4.6}, textures = {t, t, t, t, t, t}})
+				o:set_properties({is_visible = true, visual_size = {x = FILL_W, y = h, z = FILL_L}, textures = {t, t, t, t, t, t}})
 			else
 				o:set_properties({is_visible = false})
 			end
 		end
-		put(o, {x = 0, y = 0.1 + h / 2, z = BED_SIZE.z / 2})
+		put(o, {x = 0, y = BED_T + h / 2, z = BED_SIZE.z / 2})
 	end
 end
 
