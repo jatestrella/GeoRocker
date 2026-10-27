@@ -247,20 +247,28 @@ local function truck_tilt(p, yaw, def)
 	return math.max(-lim, math.min(lim, pitch)), math.max(-lim, math.min(lim, roll))
 end
 
-local function truck_blocked(p, yaw, def)
+-- 回傳車斗那段卡進實心方塊的檢查點數
+local function truck_overlap(p, yaw, def)
 	local c, sn = math.cos(yaw), math.sin(yaw)
 	local bottom = p.y - def.half
+	local n_hit = 0
 	for lz = -def.rear + 0.25, -def.half - 0.25, 0.5 do
 		for _, lx in ipairs({-1.25, 0, 1.25}) do
 			local wx, wz = p.x + lx * c - lz * sn, p.z + lx * sn + lz * c
 			for _, dy in ipairs({1.2, 2.2}) do
 				local n = core.get_node({x = math.floor(wx + 0.5), y = math.floor(bottom + dy + 0.5), z = math.floor(wz + 0.5)}).name
 				local nd = core.registered_nodes[n]
-				if n ~= "air" and (not nd or nd.walkable ~= false) then return true end
+				if n ~= "air" and (not nd or nd.walkable ~= false) then n_hit = n_hit + 1 end
 			end
 		end
 	end
-	return false
+	return n_hit
+end
+-- 從 (p, yaw) 動到 (p2, yaw2) 會不會讓車斗撞得更多（已經卡住時，不會更糟的動作照樣允許，才能脫困）
+local function truck_blocked(p, yaw, p2, yaw2, def)
+	local after = truck_overlap(p2, yaw2, def)
+	if after == 0 then return false end
+	return after > truck_overlap(p, yaw, def)
 end
 
 -- 挖斗放在 b（車身座標，m）：動臂 BOOM_ROOT → 手肘、斗桿 手肘 → b
@@ -830,7 +838,7 @@ for kind, def in pairs(TYPES) do
 				fwd = (ctrl.up and 1 or 0) - (ctrl.down and 1 or 0)
 				turn = (ctrl.left and 1 or 0) - (ctrl.right and 1 or 0)
 			end
-			if def.rear and (self.tip or (turn ~= 0 and truck_blocked(pos, yaw + turn * TURN_RATE * dtime, def))) then
+			if def.rear and (self.tip or (turn ~= 0 and truck_blocked(pos, yaw, pos, yaw + turn * TURN_RATE * dtime, def))) then
 				turn = 0   -- 車斗那段會撞到（或正在倒土）：不轉
 			end
 			if turn ~= 0 then
@@ -848,8 +856,11 @@ for kind, def in pairs(TYPES) do
 			local dir, s = dirs(yaw)
 			local speed = def.speed * fwd
 			if def.rear and speed ~= 0 then
-				local la = speed * 0.1    -- 看前面一點（全速 0.5 m）
-				if self.tip or truck_blocked({x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}, yaw, def) then speed = 0 end
+				-- 前進時車斗跟著駕駛艙走過的路，不必檢查；倒車看後面一點（全速 0.5 m）
+				local la = speed * 0.1
+				if self.tip or (speed < 0 and truck_blocked(pos, yaw, {x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}, yaw, def)) then
+					speed = 0
+				end
 			end
 			-- 推土機：往前開時推碎石，推不動就停
 			if kind == "dozer" and self.blade and fwd > 0 then
