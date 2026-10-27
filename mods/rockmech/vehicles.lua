@@ -353,9 +353,9 @@ core.register_entity(CHASE, {
 })
 local function chase_pos(self, def)
 	local p, yaw = self.object:get_pos(), self.object:get_yaw()
-	local back = (def.rear or def.half) + (def.rear and 5.5 or 6.5)
-	local up = def.half + 1.0
-	return {x = p.x + math.sin(yaw) * back, y = p.y + up - EYE_HEIGHT + 1.0, z = p.z - math.cos(yaw) * back}
+	local back = (def.rear or def.half) + 3.5   -- 車尾後 3.5 m
+	local up = def.half + 1.5                 -- 車頂上方 1.5 m（眼睛）
+	return {x = p.x + math.sin(yaw) * back, y = p.y + up - EYE_HEIGHT, z = p.z - math.cos(yaw) * back}
 end
 
 -- 滑鼠指的東西：從駕駛的相機沿視線找。回傳 {under, above}（方塊）或 {truck = 卡車實體}；沒有回傳 nil。
@@ -365,18 +365,49 @@ local function aim(self, d, pos, def, with_trucks)
 	local hl = math.sqrt(look.x * look.x + look.z * look.z)
 	local eye = {x = pos.x + (hl > 0 and look.x / hl or 0) * def.eye_fwd, y = pos.y + def.eye_up,
 		z = pos.z + (hl > 0 and look.z / hl or 0) * def.eye_fwd}
+	local reach = DIG_REACH
 	if self.chase and self.chase:get_pos() then
 		eye = vector.add(self.chase:get_pos(), {x = 0, y = EYE_HEIGHT, z = 0})
+		reach = DIG_REACH + 12   -- 追蹤相機在車子後方，射線要長一點
 	end
-	local ray = core.raycast(eye, vector.add(eye, vector.multiply(look, DIG_REACH)), with_trucks, false)
-	for pt in ray do
-		if pt.type == "node" then return {under = pt.under, above = pt.above} end
-		if pt.type == "object" then
-			local e = pt.ref:get_luaentity()
-			if e and e ~= self and e.vkind == "truck" then return {truck = e} end
+	-- 先找方塊
+	local node_hit, node_t
+	for pt in core.raycast(eye, vector.add(eye, vector.multiply(look, reach)), false, false) do
+		if pt.type == "node" then
+			node_hit = {under = pt.under, above = pt.above}
+			node_t = vector.distance(eye, pt.intersection_point)
+			break
 		end
 	end
+	-- 再找卡車：沿視線每 0.2 m 檢查是否落在卡車車身內（照卡車朝向旋轉；伺服器的射線不會旋轉選取框）
+	if with_trucks then
+		local trucks = {}
+		for _, o in ipairs(core.get_objects_inside_radius(eye, reach + 8)) do
+			local e = o:get_luaentity()
+			if e and e ~= self and e.vkind == "truck" then trucks[#trucks + 1] = e end
+		end
+		if #trucks > 0 then
+			local tmax = node_t or reach
+			for t = 0, tmax, 0.2 do
+				local p = vector.add(eye, vector.multiply(look, t))
+				for _, e in ipairs(trucks) do
+					local tp, ty = e.object:get_pos(), e.object:get_yaw()
+					if tp then
+						local dx, dy, dz = p.x - tp.x, p.y - tp.y, p.z - tp.z
+						local c, sn = math.cos(ty), math.sin(ty)
+						local lx, lz = dx * c + dz * sn, -dx * sn + dz * c
+						local td = TYPES.truck
+						if math.abs(lx) <= 1.4 and dy >= -td.half and dy <= 1.0 and lz >= -td.rear and lz <= td.half then
+							return {truck = e}
+						end
+					end
+				end
+			end
+		end
+	end
+	return node_hit
 end
+rockmech.vehicle_aim = aim   -- 測試用
 
 local function passable(name)
 	local def = core.registered_nodes[name]
