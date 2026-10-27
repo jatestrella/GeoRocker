@@ -4,7 +4,8 @@
 -- 操作：右鍵上車；駕駛中 Shift 下車，W/S 前進後退，A/D 轉向。
 --   挖土機：E 挖斗伸到滑鼠指的位置（10 m 內），挖起那一格周圍 3×3×3 的碎石（鏟斗 4 m³ = 32 級）再收回；
 --           空白鍵：挖斗伸到滑鼠指的位置倒出（指著卡車就倒進卡車），同樣的抬起 → 下降 → 倒 → 收回動作
---   卡車：空白鍵把車斗（8 m³ = 64 級）的碎石倒在車尾；名牌與車斗顯示載量
+--   卡車（3 寬 × 3 高 × 7 長，十輪砂石車）：空白鍵車斗以後端為軸抬起、把碎石（12 m³ = 96 級）倒在車尾再放下；
+--         名牌與車斗裡的碎石顯示載量。碰撞箱是駕駛艙那段 3×3×3，車斗那段（往後 5 m）倒車、轉彎前自己檢查
 --   推土機：E 切換放鏟／收鏟。放鏟：往前開時把車身高度 0 那一層的碎石（含車身前半壓著的薄碎石）
 --           與正前方第二層的碎石推到再前一排，推不動就停；只壓得過很薄的碎石。收鏟：不推，可爬 1 格
 -- 駕駛的相機在車頂（挖土機：駕駛艙頂）前緣；Z 切換第一／第三人稱（第三人稱從後上方看車子作動）。
@@ -19,12 +20,14 @@ local TYPES = {
 	-- 沿視線往前的距離（m）
 	excavator = {desc = "挖土機 Excavator", color = "#e0a020", cap = 4 * NLEV, speed = 2.0,
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45},
-	truck = {desc = "卡車 Dump truck", color = "#c84020", cap = 8 * NLEV, speed = 5.0,
-		half = 1, lat = {-0.5, 0.5}, eye_up = 1.15, eye_fwd = 0.95},
+	truck = {desc = "卡車 Dump truck", color = "#c84020", cap = 12 * NLEV, speed = 5.0,
+		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5},
 	dozer = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5,
 		half = 1, lat = {-0.5, 0.5}, eye_up = 1.15, eye_fwd = 0.95},
 }
 local TURN_RATE = 1.6        -- rad/s
+local TIP_ANGLE, TIP_UP, TIP_HOLD, TIP_DOWN = math.rad(50), 1.0, 0.4, 0.8   -- 卡車車斗抬起
+local TIP_TOTAL = TIP_UP + TIP_HOLD + TIP_DOWN
 -- 駕駛視線：第一人稱相機不受 set_attach 位移影響（遊戲內確認：改位移視角不變），改用 set_eye_offset。
 -- 玩家掛在車身中心（腳在中心），相機往下 EYE_DOWN、沿視線方向往前 EYE_FWD（m）：坐在車頂前緣，
 -- 往前看得到自己的車頂前緣與車頭正前方的地面（車身方塊從裡面看不透明，相機不能放進車身）
@@ -123,6 +126,88 @@ local function spawn_parts(self, parts)
 			if pt.id then self.parts[pt.id] = o end
 		end
 	end
+end
+
+-- 卡車外觀（原點在駕駛艙那段 3×3×3 的中心；車頭 z +1.5、車尾 z −5.5）。車斗以後端下緣 TRUCK_HINGE 為軸抬起
+local TRUCK_HINGE = {x = 0, y = -0.6, z = -5.5}
+local BED_SIZE = {x = 3.0, y = 1.0, z = 4.8}
+local WHEEL = "[fill:16x16:#1c1c1c^[fill:8x8:4,4:#555555^[fill:4x4:6,6:#888888"
+local TRUCK_PARTS = (function()
+	local c = TYPES.truck.color
+	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)
+	local cab_side = ("[fill:16x16:%s^[fill:6x6:8,2:#9fd0ff"):format(c)
+	local bed_top = ("[fill:16x16:%s^[fill:14x14:1,1:#4a2010"):format(c)
+	local bed_side = ("[fill:16x16:%s^[fill:16x2:0,0:#8a2a10^[fill:2x16:4,0:#a83418^[fill:2x16:10,0:#a83418"):format(c)
+	local wheel = {WHEEL, WHEEL, WHEEL, WHEEL, WHEEL, WHEEL}
+	local parts = {
+		{pos = {x = 0, y = -0.75, z = -2.0}, size = {x = 2.0, y = 0.3, z = 6.6}, tex = box_tex("#2a2a2a")},   -- 底盤
+		{pos = {x = 0, y = 0.4, z = 0.5}, size = {x = 2.6, y = 2.0, z = 2.0},
+			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side, cab_front, ("[fill:16x16:%s"):format(c)}},
+		{id = "bed", pos = {x = 0, y = -0.1, z = -3.1}, size = BED_SIZE, tex = {bed_top, "[fill:16x16:#2a2a2a", bed_side, bed_side, bed_side, bed_side}},
+		{id = "bedfill", pos = {x = 0, y = -0.1, z = -3.1}, size = {x = 2.8, y = 0.2, z = 4.6}, tex = box_tex("#6a6058")},
+	}
+	for _, w in ipairs({{x = -1.25, z = 0.5, wd = 0.5}, {x = 1.25, z = 0.5, wd = 0.5},
+			{x = -1.15, z = -3.2, wd = 0.7}, {x = 1.15, z = -3.2, wd = 0.7}, {x = -1.15, z = -4.4, wd = 0.7}, {x = 1.15, z = -4.4, wd = 0.7}}) do
+		parts[#parts + 1] = {pos = {x = w.x, y = -1.0, z = w.z}, size = {x = w.wd, y = 1.0, z = 1.0}, tex = wheel}
+	end
+	return parts
+end)()
+
+-- 車斗與裡面的碎石：抬起角度 alpha（rad，前端往上）。掛載旋轉繞 X 轉 θx 時 +Z → (0, −sin θx, cos θx)，
+-- 所以前端往上 alpha 用 θx = −alpha；相對軸心的點 (y, z) → (y cos α + z sin α, −y sin α + z cos α)
+local function place_bed(self, alpha)
+	local parts = self.parts
+	if not parts then return end
+	local ca, sa = math.cos(alpha), math.sin(alpha)
+	local function put(o, rel)
+		if not o then return end
+		local y = TRUCK_HINGE.y + rel.y * ca + rel.z * sa
+		local z = TRUCK_HINGE.z - rel.y * sa + rel.z * ca
+		o:set_attach(self.object, "", {x = rel.x * 10, y = y * 10, z = z * 10}, {x = -math.deg(alpha), y = 0, z = 0})
+	end
+	put(parts.bed, {x = 0, y = BED_SIZE.y / 2, z = BED_SIZE.z / 2})
+	-- 碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
+	local o = parts.bedfill
+	if o then
+		local total, best, bl = 0, nil, 0
+		for base, lv in pairs(self.load or {}) do
+			total = total + lv
+			if lv > bl then best, bl = base, lv end
+		end
+		local frac = math.min(1, total / TYPES.truck.cap)
+		local h = frac > 0 and (0.1 + 0.85 * frac) or 0
+		local key = ("%.2f/%s"):format(h, tostring(best))
+		if self.fill_key ~= key then
+			self.fill_key = key
+			if h > 0 then
+				local nd = core.registered_nodes[best]
+				local t = nd and nd.tiles and nd.tiles[1]
+				t = type(t) == "table" and t.name or t or "[fill:16x16:#6a6058"
+				o:set_properties({is_visible = true, visual_size = {x = 2.8, y = h, z = 4.6}, textures = {t, t, t, t, t, t}})
+			else
+				o:set_properties({is_visible = false})
+			end
+		end
+		put(o, {x = 0, y = 0.1 + h / 2, z = BED_SIZE.z / 2})
+	end
+end
+
+-- 卡車車斗那段（車身座標 z −rear..−half）在位置 p、朝向 yaw 時會不會撞到實心方塊（車底往上 1.2 m 以內不算：
+-- 小台階、碎石讓碰撞箱自己爬）
+local function truck_blocked(p, yaw, def)
+	local c, sn = math.cos(yaw), math.sin(yaw)
+	local bottom = p.y - def.half
+	for lz = -def.rear + 0.25, -def.half - 0.25, 0.5 do
+		for _, lx in ipairs({-1.25, 0, 1.25}) do
+			local wx, wz = p.x + lx * c - lz * sn, p.z + lx * sn + lz * c
+			for _, dy in ipairs({1.2, 2.2}) do
+				local n = core.get_node({x = math.floor(wx + 0.5), y = math.floor(bottom + dy + 0.5), z = math.floor(wz + 0.5)}).name
+				local nd = core.registered_nodes[n]
+				if n ~= "air" and (not nd or nd.walkable ~= false) then return true end
+			end
+		end
+	end
+	return false
 end
 
 -- 挖斗放在 b（車身座標，m）：動臂 BOOM_ROOT → 手肘、斗桿 手肘 → b
@@ -435,10 +520,10 @@ local function refresh_look(self)
 	if self.vkind == "truck" then
 		local t, cap = load_total(self), TYPES.truck.cap
 		self.object:set_properties({
-			textures = tex("truck", t / cap),
 			nametag = ("載量 %d / %d 級（%.1f / %.0f m³）"):format(t, cap, t / NLEV, cap / NLEV),
 			nametag_color = t >= cap and "#ff8060" or "#ffffff",
 		})
+		if not self.tip then place_bed(self, 0) end
 	elseif self.vkind == "dozer" then
 		self.object:set_properties({textures = tex("dozer", nil, self.blade),
 			stepheight = self.blade and 0.3 or 1.1})
@@ -518,12 +603,13 @@ for kind, def in pairs(TYPES) do
 			physical = true,
 			collide_with_objects = false,
 			collisionbox = {-def.half + 0.02, -def.half, -def.half + 0.02, def.half - 0.02, def.half - 0.02, def.half - 0.02},
-			selectionbox = {-def.half, -def.half, -def.half, def.half, def.half, def.half},
+			selectionbox = def.rear and {-def.half, -def.half, -def.rear, def.half, def.half, def.half, rotate = true}
+				or {-def.half, -def.half, -def.half, def.half, def.half, def.half},
 			visual = "cube",
 			visual_size = kind == "excavator" and {x = 1, y = 1, z = 1} or {x = 2, y = 2, z = 2},
 			-- 挖土機的外觀由零件組成：車身用全透明貼圖（不能設 is_visible = false，掛在上面的零件會一起被隱藏）
-			textures = kind == "excavator" and {CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR} or tex(kind, 0, true),
-			use_texture_alpha = kind == "excavator",
+			textures = (kind == "excavator" or kind == "truck") and {CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR} or tex(kind, 0, true),
+			use_texture_alpha = kind == "excavator" or kind == "truck",
 			backface_culling = true,       -- 從車身裡面往外看是透明的
 			stepheight = kind == "dozer" and 0.3 or 1.1,   -- 推土機放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
 			static_save = true,
@@ -546,6 +632,10 @@ for kind, def in pairs(TYPES) do
 			if kind == "excavator" then
 				core.after(0, function()
 					if self.object:get_pos() then spawn_parts(self, EXC_PARTS); place_arm(self, BUCKET_REST) end
+				end)
+			elseif kind == "truck" then
+				core.after(0, function()
+					if self.object:get_pos() then spawn_parts(self, TRUCK_PARTS); self.fill_key = nil; place_bed(self, 0) end
 				end)
 			end
 		end,
@@ -621,12 +711,19 @@ for kind, def in pairs(TYPES) do
 				fwd = (ctrl.up and 1 or 0) - (ctrl.down and 1 or 0)
 				turn = (ctrl.left and 1 or 0) - (ctrl.right and 1 or 0)
 			end
+			if def.rear and (self.tip or (turn ~= 0 and truck_blocked(pos, yaw + turn * TURN_RATE * dtime, def))) then
+				turn = 0   -- 車斗那段會撞到（或正在倒土）：不轉
+			end
 			if turn ~= 0 then
 				yaw = yaw + turn * TURN_RATE * dtime
 				obj:set_yaw(yaw)
 			end
 			local dir, s = dirs(yaw)
 			local speed = def.speed * fwd
+			if def.rear and speed ~= 0 then
+				local la = speed * 0.1    -- 看前面一點（全速 0.5 m）
+				if self.tip or truck_blocked({x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}, yaw, def) then speed = 0 end
+			end
 			-- 推土機：往前開時推碎石，推不動就停
 			if kind == "dozer" and self.blade and fwd > 0 then
 				if push(self, pos, s) then speed = 0; settle_pile(self) end
@@ -715,6 +812,24 @@ for kind, def in pairs(TYPES) do
 					place_arm(self, BUCKET_REST)
 				end
 			end
+			-- 卡車倒土：車斗抬起 TIP_UP 秒到 TIP_ANGLE → 倒在車尾 → 停 TIP_HOLD 秒 → 放下 TIP_DOWN 秒
+			if self.tip then
+				local tp = self.tip
+				tp.t = tp.t + dtime
+				local a
+				if tp.t < TIP_UP then a = TIP_ANGLE * tp.t / TIP_UP
+				elseif tp.t < TIP_UP + TIP_HOLD then a = TIP_ANGLE
+				else a = TIP_ANGLE * math.max(0, 1 - (tp.t - TIP_UP - TIP_HOLD) / TIP_DOWN) end
+				if not tp.done and tp.t >= TIP_UP then
+					tp.done = true
+					local y0 = ground_y(pos, def.half)
+					dump_to_ground(self, face_cells(pos, s, -1, def.rear + 0.5, y0, 1, def.lat), y0 + 1)
+					self.fill_key = nil
+					update_hud(self)
+				end
+				place_bed(self, a)
+				if tp.t >= TIP_TOTAL then self.tip = nil; place_bed(self, 0) end
+			end
 			-- Z（zoom 鍵）：切換第一／第三人稱
 			if d then
 				if ctrl.zoom and not self.zoom_held then
@@ -763,7 +878,10 @@ for kind, def in pairs(TYPES) do
 					local dg
 					if hit and hit.truck then
 						local tp = hit.truck.object:get_pos()
-						dg = {t = 0, mode = "dump", truck = hit.truck, to = to_local(self, {x = tp.x, y = tp.y + 1.6, z = tp.z})}
+						local ty = hit.truck.object:get_yaw()
+						local bz = -3.1   -- 車斗中心（卡車座標）
+						dg = {t = 0, mode = "dump", truck = hit.truck,
+							to = to_local(self, {x = tp.x - bz * math.sin(ty), y = tp.y + 1.6, z = tp.z + bz * math.cos(ty)})}   -- 卡車座標 +Z → (−sin, cos)
 					elseif hit and hit.above then
 						local a = hit.above
 						dg = {t = 0, mode = "dump", target = a, to = to_local(self, {x = a.x, y = a.y + 0.8, z = a.z})}
@@ -782,11 +900,9 @@ for kind, def in pairs(TYPES) do
 						self.msg = "要倒在哪裡？（10 m 內沒有方塊或卡車）"
 					end
 					update_hud(self)
-				elseif ctrl.jump and kind == "truck" and load_total(self) > 0 then
-					self.t_act = 0.6
-					local y0 = ground_y(pos, def.half)
-					dump_to_ground(self, face_cells(pos, s, -1, def.half + 0.5, y0, 1, def.lat), y0 + 1)
-					update_hud(self)
+				elseif ctrl.jump and kind == "truck" and load_total(self) > 0 and not self.tip then
+					self.t_act = TIP_TOTAL + 0.1
+					self.tip = {t = 0}
 				end
 			end
 		end,
