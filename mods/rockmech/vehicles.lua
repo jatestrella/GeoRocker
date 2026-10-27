@@ -3,11 +3,11 @@
 -- 只處理碎石：完整岩石要先爆破或用魔杖弄碎（爆破 → 裝載 → 運輸）。
 -- 操作：右鍵上車；駕駛中 Shift 下車，W/S 前進後退，A/D 轉向。
 --   挖土機：E 挖斗伸到滑鼠指的位置（10 m 內），挖起那一格周圍 3×3×3 的碎石（鏟斗 4 m³ = 32 級）再收回；
---           空白鍵倒出：前方 4 m 內有卡車就倒進卡車，否則倒在前方地上
+--           空白鍵：挖斗伸到滑鼠指的位置倒出（指著卡車就倒進卡車），同樣的抬起 → 下降 → 倒 → 收回動作
 --   卡車：空白鍵把車斗（8 m³ = 64 級）的碎石倒在車尾；名牌與車斗顯示載量
 --   推土機：E 切換放鏟／收鏟。放鏟：往前開時把車身高度 0 那一層的碎石（含車身前半壓著的薄碎石）
 --           與正前方第二層的碎石推到再前一排，推不動就停；只壓得過很薄的碎石。收鏟：不推，可爬 1 格
--- 駕駛的相機在車頂（挖土機：駕駛艙頂）前緣。
+-- 駕駛的相機在車頂（挖土機：駕駛艙頂）前緣；Z 切換第一／第三人稱（第三人稱從後上方看車子作動）。
 -- 不在車上時左鍵：收回成物品（車上的碎石換成碎石物品，8 級 = 1 個）
 -- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
 
@@ -85,6 +85,8 @@ EXC_PARTS[#EXC_PARTS + 1] = {id = "boom", pos = BUCKET_REST, size = {x = 0.5, y 
 	tex = box_tex(TYPES.excavator.color)}
 EXC_PARTS[#EXC_PARTS + 1] = {id = "stick", pos = BUCKET_REST, size = {x = 0.4, y = STICK_LEN, z = 0.4},
 	tex = box_tex(TYPES.excavator.color)}
+-- 鏟斗裡的碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
+EXC_PARTS[#EXC_PARTS + 1] = {id = "fill", pos = BUCKET_REST, size = {x = 1.1, y = 0.2, z = 0.55}, tex = box_tex("#6a6058")}
 local DIG_REACH = 10        -- 挖斗最遠 (m，從相機量)
 -- 挖的動作：抬到目標上方 DIG_LIFT → 往下插進目標（挖）→ 抬回目標上方 → 收回。各段時間 (s)
 local DIG_LIFT = 2.0
@@ -155,12 +157,39 @@ local function seg_attach(self, o, a, c)
 	local ty = math.deg(atan2(v.x, v.z))
 	o:set_attach(self.object, "", {x = (a.x + c.x) * 5, y = (a.y + c.y) * 5, z = (a.z + c.z) * 5}, {x = tx, y = ty, z = 0})
 end
+-- 鏟斗裡的碎石（parts.fill）：跟著載量改高度與貼圖，擺在挖斗上面
+local function place_fill(self, b)
+	local o = self.parts and self.parts.fill
+	if not o then return end
+	local total, best, bl = 0, nil, 0
+	for base, lv in pairs(self.load or {}) do
+		total = total + lv
+		if lv > bl then best, bl = base, lv end
+	end
+	local frac = math.min(1, total / TYPES.excavator.cap)
+	local h = frac > 0 and (0.12 + 0.6 * frac) or 0
+	local key = ("%.2f/%s"):format(h, tostring(best))
+	if self.fill_key ~= key then
+		self.fill_key = key
+		if h > 0 then
+			local nd = core.registered_nodes[best]
+			local t = nd and nd.tiles and nd.tiles[1]
+			t = type(t) == "table" and t.name or t or "[fill:16x16:#6a6058"
+			o:set_properties({is_visible = true, visual_size = {x = 1.1, y = h, z = 0.55}, textures = {t, t, t, t, t, t}})
+		else
+			o:set_properties({is_visible = false})
+		end
+	end
+	o:set_attach(self.object, "", {x = b.x * 10, y = (b.y + 0.4 + h / 2) * 10, z = b.z * 10}, {x = 0, y = 0, z = 0})
+end
+
 local function place_arm(self, b)
 	local parts = self.parts
 	if not parts then return end
 	local elbow
 	b, elbow = arm_solve(b)
 	if parts.bucket then parts.bucket:set_attach(self.object, "", {x = b.x * 10, y = b.y * 10, z = b.z * 10}, {x = 0, y = 0, z = 0}) end
+	place_fill(self, b)
 	seg_attach(self, parts.boom, BOOM_ROOT, elbow)
 	seg_attach(self, parts.stick, elbow, b)
 end
@@ -171,6 +200,23 @@ local function to_local(self, wp)
 	local dx, dy, dz = wp.x - p.x, wp.y - p.y, wp.z - p.z
 	local c, sn = math.cos(yaw), math.sin(yaw)
 	return {x = dx * c + dz * sn, y = dy, z = -dx * sn + dz * c}
+end
+
+-- 滑鼠指的東西：從駕駛的相機沿視線找。回傳 {under, above}（方塊）或 {truck = 卡車實體}；沒有回傳 nil。
+-- with_trucks：也找卡車（跳過自己、零件與玩家）
+local function aim(self, d, pos, def, with_trucks)
+	local look = d:get_look_dir()
+	local hl = math.sqrt(look.x * look.x + look.z * look.z)
+	local eye = {x = pos.x + (hl > 0 and look.x / hl or 0) * def.eye_fwd, y = pos.y + def.eye_up,
+		z = pos.z + (hl > 0 and look.z / hl or 0) * def.eye_fwd}
+	local ray = core.raycast(eye, vector.add(eye, vector.multiply(look, DIG_REACH)), with_trucks, false)
+	for pt in ray do
+		if pt.type == "node" then return {under = pt.under, above = pt.above} end
+		if pt.type == "object" then
+			local e = pt.ref:get_luaentity()
+			if e and e ~= self and e.vkind == "truck" then return {truck = e} end
+		end
+	end
 end
 
 local function passable(name)
@@ -346,10 +392,10 @@ local function hud_text(self)
 			s = s .. ("\n前方卡車：%d / %d 級（%.1f / %.0f m³）"):format(tt, TYPES.truck.cap, tt / NLEV, TYPES.truck.cap / NLEV)
 		end
 		if self.msg then s = s .. "\n" .. self.msg end
-		s = s .. "\nE 挖斗挖滑鼠指的位置　空白鍵 倒（前方有卡車就倒進卡車）"
+		s = s .. "\nE 挖滑鼠指的位置　空白鍵 倒在滑鼠指的位置（指著卡車就倒進卡車）"
 	elseif self.vkind == "truck" then s = s .. "\n空白鍵 把車斗倒在車尾"
 	else s = s .. (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石") .. "\nE 放鏟／收鏟" end
-	return s .. "　Shift 下車"
+	return s .. "　Z 切換視角　Shift 下車"
 end
 
 -- 外觀與名牌（卡車：載量；推土機：鏟子高低）
@@ -412,6 +458,7 @@ local function get_off(self)
 	if d then
 		d:set_detach()
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+		d:set_camera({mode = "any"})
 		hud_clear(self, d)
 		local p = self.object:get_pos()
 		local _, s = dirs(self.object:get_yaw())
@@ -480,7 +527,10 @@ for kind, def in pairs(TYPES) do
 			end
 			self.driver = name
 			clicker:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
-			clicker:set_eye_offset(eye_offset(def), {x = 0, y = 0, z = 0})   -- 第三人稱維持預設（前後偏移上限只有 ±0.5 m）
+			-- 第三人稱：盡量抬高（上限 y 1.5 m、前後 ±0.5 m），從後上方看得到駕駛艙與手臂
+			clicker:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
+			self.third = false
+			clicker:set_camera({mode = "first"})
 			update_hud(self)
 		end,
 		on_punch = function(self, puncher)
@@ -511,7 +561,10 @@ for kind, def in pairs(TYPES) do
 				local parent = d:get_attach()
 				if not (parent and parent:get_luaentity() == self) then
 					hud_clear(self, d)
-					if not parent then d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0}) end
+					if not parent then
+						d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+						d:set_camera({mode = "any"})
+					end
 					self.driver, d = nil, nil
 				end
 			end
@@ -542,6 +595,32 @@ for kind, def in pairs(TYPES) do
 				local dg = self.dig
 				dg.t = dg.t + dtime
 				local p1 = DIG_PHASES[1] + DIG_PHASES[2]
+				if not dg.done and dg.t >= p1 and dg.mode == "dump" then
+					dg.done = true
+					local truck = dg.truck
+					if truck and truck.object:get_pos() then
+						local room = TYPES.truck.cap - load_total(truck)
+						for base, lv in pairs(self.load) do
+							local m = math.min(lv, room)
+							if m > 0 then
+								truck.load[base] = (truck.load[base] or 0) + m
+								room = room - m
+								self.load[base] = lv - m > 0 and (lv - m) or nil
+							end
+						end
+						if load_total(self) > 0 then self.msg = "卡車滿了" end
+						refresh_look(truck)
+						update_hud(truck)
+					elseif dg.target then
+						-- 倒在指到的那格（與周圍 3×3 欄），之後依安息角攤開
+						local a = dg.target
+						local cells = {}
+						for dx = -1, 1 do for dz = -1, 1 do cells[#cells + 1] = {x = a.x + dx, y = a.y, z = a.z + dz} end end
+						table.sort(cells, function(u, v) return math.abs(u.x - a.x) + math.abs(u.z - a.z) < math.abs(v.x - a.x) + math.abs(v.z - a.z) end)
+						dump_to_ground(self, cells, a.y + 1)
+					end
+					update_hud(self)
+				end
 				if not dg.done and dg.t >= p1 then
 					dg.done = true
 					local want = def.cap - load_total(self)
@@ -580,6 +659,14 @@ for kind, def in pairs(TYPES) do
 				place_arm(self, b)
 				if t >= DIG_TOTAL then self.dig = nil; place_arm(self, BUCKET_REST) end
 			end
+			-- Z（zoom 鍵）：切換第一／第三人稱
+			if d then
+				if ctrl.zoom and not self.zoom_held then
+					self.third = not self.third
+					d:set_camera({mode = self.third and "third" or "first"})
+				end
+				self.zoom_held = ctrl.zoom
+			end
 			-- 作業鍵（防連按：0.4 s）
 			self.t_act = self.t_act - dtime
 			if driven and self.t_act <= 0 then
@@ -593,46 +680,54 @@ for kind, def in pairs(TYPES) do
 					-- 滑鼠指的方塊：從相機沿視線找第一個方塊
 					local target = self.autopilot and self.autopilot.target
 					if d then
-						local look = d:get_look_dir()
-						local hl = math.sqrt(look.x * look.x + look.z * look.z)
-						local eye = {x = pos.x + (hl > 0 and look.x / hl or 0) * def.eye_fwd, y = pos.y + def.eye_up,
-							z = pos.z + (hl > 0 and look.z / hl or 0) * def.eye_fwd}
-						local ray = core.raycast(eye, vector.add(eye, vector.multiply(look, DIG_REACH)), false, false)
-						for pt in ray do
-							if pt.type == "node" then target = pt.under; break end
-						end
+						local hit = aim(self, d, pos, def, false)
+						target = hit and hit.under
 					end
 					local tl = target and to_local(self, target)
 					local reach = tl and math.sqrt((tl.x - BOOM_ROOT.x) ^ 2 + (tl.y - BOOM_ROOT.y) ^ 2 + (tl.z - BOOM_ROOT.z) ^ 2)
 					if tl and reach > ARM_REACH then
 						self.msg = ("超出手臂範圍（%.1f m，手臂約 %.1f m）"):format(reach, ARM_REACH)
 					elseif target then
-						self.dig = {t = 0, target = target, to = tl}
+						self.dig = {t = 0, mode = "dig", target = target, to = tl}
 						self.msg = nil
 					else
 						self.msg = "挖斗搆不到（10 m 內沒有方塊）"
 					end
 					update_hud(self)
-				elseif ctrl.jump and (kind == "excavator" or kind == "truck") and load_total(self) > 0 then
-					self.t_act = 0.6
-					local truck = kind == "excavator" and find_truck(pos, s, def.half)
-					if truck then
-						local room = TYPES.truck.cap - load_total(truck)
-						for base, lv in pairs(self.load) do
-							local m = math.min(lv, room)
-							if m > 0 then
-								truck.load[base] = (truck.load[base] or 0) + m
-								room = room - m
-								self.load[base] = lv - m > 0 and (lv - m) or nil
-							end
-						end
-						refresh_look(truck)
-						update_hud(truck)
-					else
-						local f = kind == "truck" and -1 or 1
-						local y0 = ground_y(pos, def.half)
-						dump_to_ground(self, face_cells(pos, s, f, def.half + 0.5, y0, 1, def.lat), y0 + 1)
+				elseif ctrl.jump and kind == "excavator" and load_total(self) > 0 and not self.dig then
+					self.t_act = DIG_TOTAL + 0.1
+					local hit
+					if d then hit = aim(self, d, pos, def, true)
+					elseif self.autopilot then
+						local t = self.autopilot.dump_target
+						hit = self.autopilot.dump_truck and {truck = self.autopilot.dump_truck}
+							or t and {above = {x = t.x, y = t.y + 1, z = t.z}}
 					end
+					local dg
+					if hit and hit.truck then
+						local tp = hit.truck.object:get_pos()
+						dg = {t = 0, mode = "dump", truck = hit.truck, to = to_local(self, {x = tp.x, y = tp.y + 1.6, z = tp.z})}
+					elseif hit and hit.above then
+						local a = hit.above
+						dg = {t = 0, mode = "dump", target = a, to = to_local(self, {x = a.x, y = a.y + 0.8, z = a.z})}
+					end
+					if dg then
+						local tl = dg.to
+						local reach = math.sqrt((tl.x - BOOM_ROOT.x) ^ 2 + (tl.y - BOOM_ROOT.y) ^ 2 + (tl.z - BOOM_ROOT.z) ^ 2)
+						if reach > ARM_REACH then
+							self.msg = ("超出手臂範圍（%.1f m，手臂約 %.1f m）"):format(reach, ARM_REACH)
+						else
+							self.dig = dg
+							self.msg = nil
+						end
+					else
+						self.msg = "要倒在哪裡？（10 m 內沒有方塊或卡車）"
+					end
+					update_hud(self)
+				elseif ctrl.jump and kind == "truck" and load_total(self) > 0 then
+					self.t_act = 0.6
+					local y0 = ground_y(pos, def.half)
+					dump_to_ground(self, face_cells(pos, s, -1, def.half + 0.5, y0, 1, def.lat), y0 + 1)
 					update_hud(self)
 				end
 			end
@@ -640,7 +735,7 @@ for kind, def in pairs(TYPES) do
 	})
 	core.register_craftitem(ename .. "_item", {
 		description = def.desc .. "\n" .. ({
-			excavator = "右鍵上車；E 挖斗挖滑鼠指的位置（鏟斗 4 m³）、空白鍵倒出（前方有卡車就倒進卡車）",
+			excavator = "右鍵上車；E 挖滑鼠指的位置（鏟斗 4 m³）、空白鍵倒在滑鼠指的位置（指著卡車就倒進卡車）",
 			truck = "右鍵上車；空白鍵把車斗倒在車尾（載量 8 m³）",
 			dozer = "右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走",
 		})[kind],
