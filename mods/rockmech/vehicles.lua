@@ -129,25 +129,29 @@ local function spawn_parts(self, parts)
 end
 
 -- 卡車外觀（原點在駕駛艙那段 3×3×3 的中心；車頭 z +1.5、車尾 z −5.5）。車斗以後端下緣 TRUCK_HINGE 為軸抬起
-local TRUCK_HINGE = {x = 0, y = -0.6, z = -5.5}
-local BED_SIZE = {x = 3.0, y = 1.0, z = 4.8}
-local WHEEL = "[fill:16x16:#1c1c1c^[fill:8x8:4,4:#555555^[fill:4x4:6,6:#888888"
+-- 尺寸接近真實的十輪砂石車：車寬 2.4～2.6 m、駕駛室頂離地約 3.1 m、車斗上緣約 2.3 m、輪胎直徑 1.0 m
+-- （碰撞箱仍是 3 格寬）。車底在 y −1.5
+local TRUCK_HINGE = {x = 0, y = -0.4, z = -5.5}
+local BED_SIZE = {x = 2.6, y = 1.2, z = 4.8}
+local WHEEL = "[fill:16x16:#1c1c1c^[fill:10x10:3,3:#3a3a3a^[fill:6x6:5,5:#8a8a8a^[fill:2x2:7,7:#c0c0c0"
+local TREAD = "[fill:16x16:#1c1c1c^[fill:16x1:0,3:#2e2e2e^[fill:16x1:0,8:#2e2e2e^[fill:16x1:0,13:#2e2e2e"
 local TRUCK_PARTS = (function()
 	local c = TYPES.truck.color
 	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)
 	local cab_side = ("[fill:16x16:%s^[fill:6x6:8,2:#9fd0ff"):format(c)
 	local bed_top = ("[fill:16x16:%s^[fill:14x14:1,1:#4a2010"):format(c)
 	local bed_side = ("[fill:16x16:%s^[fill:16x2:0,0:#8a2a10^[fill:2x16:4,0:#a83418^[fill:2x16:10,0:#a83418"):format(c)
-	local wheel = {WHEEL, WHEEL, WHEEL, WHEEL, WHEEL, WHEEL}
+	local wheel = {TREAD, TREAD, WHEEL, WHEEL, TREAD, TREAD}   -- 上下前後是胎面，左右兩側是輪圈
 	local parts = {
-		{pos = {x = 0, y = -0.75, z = -2.0}, size = {x = 2.0, y = 0.3, z = 6.6}, tex = box_tex("#2a2a2a")},   -- 底盤
-		{pos = {x = 0, y = 0.4, z = 0.5}, size = {x = 2.6, y = 2.0, z = 2.0},
+		{pos = {x = 0, y = -0.55, z = -2.0}, size = {x = 1.6, y = 0.3, z = 6.6}, tex = box_tex("#2a2a2a")},   -- 底盤
+		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0},
 			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side, cab_front, ("[fill:16x16:%s"):format(c)}},
 		{id = "bed", pos = {x = 0, y = -0.1, z = -3.1}, size = BED_SIZE, tex = {bed_top, "[fill:16x16:#2a2a2a", bed_side, bed_side, bed_side, bed_side}},
-		{id = "bedfill", pos = {x = 0, y = -0.1, z = -3.1}, size = {x = 2.8, y = 0.2, z = 4.6}, tex = box_tex("#6a6058")},
+		{id = "bedfill", pos = {x = 0, y = -0.1, z = -3.1}, size = {x = 2.4, y = 0.2, z = 4.6}, tex = box_tex("#6a6058")},
 	}
-	for _, w in ipairs({{x = -1.25, z = 0.5, wd = 0.5}, {x = 1.25, z = 0.5, wd = 0.5},
-			{x = -1.15, z = -3.2, wd = 0.7}, {x = 1.15, z = -3.2, wd = 0.7}, {x = -1.15, z = -4.4, wd = 0.7}, {x = 1.15, z = -4.4, wd = 0.7}}) do
+	-- 前軸單輪、後兩軸雙輪（較寬），外緣在車斗外側
+	for _, w in ipairs({{x = -1.15, z = 0.5, wd = 0.35}, {x = 1.15, z = 0.5, wd = 0.35},
+			{x = -1.1, z = -3.2, wd = 0.6}, {x = 1.1, z = -3.2, wd = 0.6}, {x = -1.1, z = -4.4, wd = 0.6}, {x = 1.1, z = -4.4, wd = 0.6}}) do
 		parts[#parts + 1] = {pos = {x = w.x, y = -1.0, z = w.z}, size = {x = w.wd, y = 1.0, z = 1.0}, tex = wheel}
 	end
 	return parts
@@ -175,7 +179,7 @@ local function place_bed(self, alpha)
 			if lv > bl then best, bl = base, lv end
 		end
 		local frac = math.min(1, total / TYPES.truck.cap)
-		local h = frac > 0 and (0.1 + 0.85 * frac) or 0
+		local h = frac > 0 and (0.1 + 1.0 * frac) or 0
 		local key = ("%.2f/%s"):format(h, tostring(best))
 		if self.fill_key ~= key then
 			self.fill_key = key
@@ -183,7 +187,7 @@ local function place_bed(self, alpha)
 				local nd = core.registered_nodes[best]
 				local t = nd and nd.tiles and nd.tiles[1]
 				t = type(t) == "table" and t.name or t or "[fill:16x16:#6a6058"
-				o:set_properties({is_visible = true, visual_size = {x = 2.8, y = h, z = 4.6}, textures = {t, t, t, t, t, t}})
+				o:set_properties({is_visible = true, visual_size = {x = 2.4, y = h, z = 4.6}, textures = {t, t, t, t, t, t}})
 			else
 				o:set_properties({is_visible = false})
 			end
