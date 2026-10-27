@@ -295,11 +295,11 @@ rockmech_blast_hole_depth (Drill hole depth) int 2 1 10
 rockmech_blast_surface_factor (Unconfined charge factor) float 0.3 0 1
 
 # Confinement: a drill hole whose only free face is its collar face has its radius multiplied by this.
-rockmech_blast_confine_factor (Confinement factor) float 0.5 0 1
+rockmech_blast_confine_factor (Confinement factor) float 0.75 0 1
 
 # Free-face bonus: when a free face (any non-rock cell, excluding the collar face) lies within the blast radius
 # of a drill hole, at burden B from the hole, the radius is further multiplied by (1 + k * (1 - B / R)).
-rockmech_blast_free_face_k (Free-face bonus) float 2.0 0 10
+rockmech_blast_free_face_k (Free-face bonus) float 1.0 0 10
 
 # Time to drill one hole (s).
 rockmech_blast_drill_time (Drilling time) float 1.5 0 30
