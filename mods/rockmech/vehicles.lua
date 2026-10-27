@@ -280,6 +280,34 @@ function V.dump_to_ground(self, cells, ytop)
 	end
 end
 
+-- 車身在 pos、朝向 yaw 時，車身座標的長方形範圍 x0..x1、z0..z1（高度在車底到車頂之間）裡有沒有
+-- 沒在車上的玩家（半徑 0.3）或別台車（碰撞箱半邊長當半徑）。碰撞箱只蓋到車身那段，
+-- 伸出去的車斗、鏟刀、車尾移動前用這個檢查人和車（方塊另外檢查）
+function V.objects_in(self, pos, yaw, x0, x1, z0, z1)
+	local def = TYPES[self.vkind]
+	local c, sn = math.cos(yaw), math.sin(yaw)
+	local cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
+	local center = {x = pos.x + cx * c - cz * sn, y = pos.y, z = pos.z + cx * sn + cz * c}
+	local r = math.sqrt(((x1 - x0) / 2) ^ 2 + ((z1 - z0) / 2) ^ 2) + 3
+	local bottom, top = pos.y - def.half, pos.y + (def.top or def.half)
+	for _, o in ipairs(core.get_objects_inside_radius(center, r)) do
+		local e = o:get_luaentity()
+		local p, m, lo, hi = o:get_pos()
+		if o:is_player() and not o:get_attach() then
+			m, lo, hi = 0.3, p.y, p.y + 1.8
+		elseif e and e ~= self and e.vkind and TYPES[e.vkind] then
+			local od = TYPES[e.vkind]
+			m, lo, hi = od.half, p.y - od.half, p.y + (od.top or od.half)
+		end
+		if m and hi > bottom and lo < top then
+			local dx, dz = p.x - pos.x, p.z - pos.z
+			local lx, lz = dx * c + dz * sn, -dx * sn + dz * c
+			if lx > x0 - m and lx < x1 + m and lz > z0 - m and lz < z1 + m then return true end
+		end
+	end
+	return false
+end
+
 -- 載的碎石裡最多的那種（給車斗、鏟斗裡的碎石塊用貼圖）：回傳 總級數, 種類
 function V.load_mix(self)
 	local total, best, bl = 0, nil, 0
@@ -340,7 +368,7 @@ function V.register(kind, def)
 	core.register_entity(ename, {
 		initial_properties = {
 			physical = true,
-			collide_with_objects = false,
+			collide_with_objects = true,   -- 玩家擋得住、車子之間會相撞（只有碰撞箱那段；伸出去的車斗、鏟刀、挖臂不算）
 			collisionbox = {-def.half + 0.02, -def.half, -def.half + 0.02, def.half - 0.02, (def.top or def.half) - 0.02, def.half - 0.02},
 			selectionbox = def.rear and {-def.half, -def.half, -def.rear, def.half, def.top or def.half, def.half, rotate = true}
 				or {-def.half, -def.half, -def.half, def.half, def.top or def.half, def.half},

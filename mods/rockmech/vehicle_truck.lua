@@ -133,7 +133,8 @@ local function hauler(def, spec)
 	function def.hud() return "\n空白鍵 把車斗倒在車尾" end
 	-- 車斗那段會撞到（或正在倒土）：不轉
 	function def.can_turn(self, pos, yaw, yaw2)
-		return not (self.tip or bed_blocked(pos, yaw, pos, yaw2, def))
+		return not (self.tip or bed_blocked(pos, yaw, pos, yaw2, def)
+			or V.objects_in(self, pos, yaw2, -def.half, def.half, -def.rear, -def.half))
 	end
 	-- 前進時車斗跟著駕駛艙走過的路，不必檢查；倒車看後面一點（全速 0.1 s 走的距離）；倒土時不動。
 	-- 伺服器卡頓時一步會退很遠、預判擋不住：倒車後車斗撞得比上一步多，就退回上一步的位置
@@ -150,7 +151,9 @@ local function hauler(def, spec)
 		end
 		if ctx.speed == 0 then return end
 		local la = ctx.speed * 0.1
-		if self.tip or (ctx.speed < 0 and bed_blocked(pos, ctx.yaw, {x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}, ctx.yaw, def)) then
+		local p2 = {x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}
+		if self.tip or (ctx.speed < 0 and (bed_blocked(pos, ctx.yaw, p2, ctx.yaw, def)
+				or V.objects_in(self, p2, ctx.yaw, -def.half, def.half, -def.rear, -def.half))) then
 			ctx.speed = 0
 		elseif ctx.speed < 0 then
 			self.bed_safe = {pos = vector.copy(pos), n = bed_overlap(pos, ctx.yaw, def)}

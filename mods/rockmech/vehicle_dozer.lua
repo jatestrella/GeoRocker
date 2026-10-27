@@ -193,6 +193,14 @@ function def.on_spawn(self) place_blade(self, self.blade_h) end
 -- 推土、鏟刀與車尾伸出段撞岩石就停、越障高度、鏟刀抬放、鏟刀前碎石量
 function def.move(self, ctx)
 	local pos, s, fwd, obj = ctx.pos, ctx.s, ctx.fwd, ctx.obj
+	-- 鏟刀（車頭外 1 m）、車尾（車尾外 1 m）伸出碰撞箱：往那邊開之前看有沒有人或車
+	local la = ctx.speed * 0.1
+	local p2 = {x = pos.x + ctx.dir.x * la, y = pos.y, z = pos.z + ctx.dir.z * la}
+	local h = def.half
+	if (fwd > 0 and V.objects_in(self, p2, ctx.yaw, -h, h, h, h + 1))
+		or (fwd < 0 and V.objects_in(self, p2, ctx.yaw, -h, h, -h - 1, -h)) then
+		ctx.speed, fwd = 0, 0
+	end
 	if self.blade and fwd > 0 then
 		local why = push(self, pos, s)
 		if why then ctx.speed = 0; settle_pile(self) end
