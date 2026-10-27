@@ -17,13 +17,13 @@ local collapse = rockmech.collapse
 
 local TYPES = {
 	-- half：碰撞箱半邊長；lat：車頭外一排的橫向位置（相對中心）；eye_up／eye_fwd：相機在車身中心上方、
-	-- 沿視線往前的距離（m）
+	-- 沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）
 	excavator = {desc = "挖土機 Excavator", color = "#e0a020", cap = 4 * NLEV, speed = 2.0,
-		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45},
+		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4}},
 	truck = {desc = "卡車 Dump truck", color = "#c84020", cap = 12 * NLEV, speed = 5.0,
-		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5},
+		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2}},
 	dozer = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5,
-		half = 1, lat = {-0.5, 0.5}, eye_up = 1.15, eye_fwd = 0.95},
+		half = 1, lat = {-0.5, 0.5}, eye_up = 1.15, eye_fwd = 0.95, mirror = {x = 1.1, y = 0.9, z = 0.6}},
 }
 local TURN_RATE = 1.6        -- rad/s
 local TIP_ANGLE, TIP_UP, TIP_HOLD, TIP_DOWN = math.rad(50), 1.0, 0.4, 0.8   -- 卡車車斗抬起
@@ -659,21 +659,117 @@ local function cockpit_tex(kind)
 		"^[fill:160x2:0,70:" .. c, "^[fill:160x18:0,72:" .. mid,                       -- 儀表板
 		"^[fill:14x8:18,78:#101010^[fill:12x6:19,79:#203828",                            -- 儀表
 		"^[fill:14x8:128,78:#101010^[fill:12x6:129,79:#382820",
-		-- 後照鏡（左上、右上；只是外觀）：支架 + 鏡框 + 鏡面 + 反光
-		"^[fill:6x2:12,17:#303030", "^[fill:20x13:17,11:#151515", "^[fill:18x11:18,12:#7f9fb8",
-		"^[fill:18x4:18,12:#a8c4dc", "^[fill:3x9:21,13:#d8ecf8",
-		"^[fill:6x2:142,17:#303030", "^[fill:20x13:123,11:#151515", "^[fill:18x11:124,12:#7f9fb8",
-		"^[fill:18x4:124,12:#a8c4dc", "^[fill:3x9:136,13:#d8ecf8",
+		-- 後照鏡（左上、右上）：支架 + 鏡框；鏡面 24×14（x 18／118、y 11 起）上面再疊後照鏡畫面
+		"^[fill:6x2:12,17:#303030", "^[fill:26x16:17,10:#151515", "^[fill:24x14:18,11:#7f9fb8",
+		"^[fill:6x2:142,17:#303030", "^[fill:26x16:117,10:#151515", "^[fill:24x14:118,11:#7f9fb8",
 	})
 end
 
--- 移除駕駛的 HUD（說明文字與駕駛艙框）
+-- 後照鏡畫面：Luanti 只有一個相機，所以鏡子裡的畫面是伺服器從鏡子位置往後打射線、
+-- 依碰到的方塊上色拼成的小圖（MIRROR_W × MIRROR_H 格，每 MIRROR_DT 秒更新）。
+-- 只畫方塊（不畫車輛、玩家）；遠處淡入天空色；靠車身那側畫一條車身顏色（自己的車側）
+local MIRROR_W, MIRROR_H = 36, 21
+local MIRROR_RANGE = 24                                         -- m
+local MIRROR_HFOV, MIRROR_VFOV = math.rad(44), math.rad(26)
+local MIRROR_OUT, MIRROR_DOWN = math.rad(14), math.rad(5)       -- 鏡子中心朝外、朝下偏
+local MIRROR_DT = 0.35
+-- 鏡面在駕駛艙框（160×90）裡的中心；大小用螢幕百分比
+local MIRROR_HUD = {{side = -1, pos = {x = 30 / 160, y = 18 / 90}}, {side = 1, pos = {x = 130 / 160, y = 18 / 90}}}
+local MIRROR_SCALE = {x = -24 / 160 * 100, y = -14 / 90 * 100}
+local SKY = {0x9c, 0xc0, 0xe4}
+
+local function hex_rgb(h)
+	return {tonumber(h:sub(2, 3), 16), tonumber(h:sub(4, 5), 16), tonumber(h:sub(6, 7), 16)}
+end
+-- 方塊顏色：岩石用岩性顏色、碎石用碎石顏色，其他依群組大略給
+local node_rgb = {}
+local function rgb_of(name)
+	local c = node_rgb[name]
+	if c then return c end
+	local lith, base = rockmech.lith_of_node[name], rockmech.rubble_base[name]
+	local h
+	if lith then h = lith.color
+	elseif base == rockmech.RUBBLE_GRANITE then h = rockmech.cfg.lithologies.granite.color
+	elseif base then h = "#6a6058"
+	else
+		local g = (core.registered_nodes[name] or {}).groups or {}
+		h = name:find("grass") and "#5a8a38" or g.leaves and "#356a28" or g.tree and "#6b5030"
+			or g.sand and "#d8c890" or g.soil and "#6b4a2b" or g.water and "#3a68b0" or "#808080"
+	end
+	c = hex_rgb(h)
+	node_rgb[name] = c
+	return c
+end
+
+-- side：−1 左鏡、1 右鏡。鏡子看往後方：畫面左邊 = 車身左側（−X），上 = 上
+local function mirror_tex(self, side)
+	local def = TYPES[self.vkind]
+	local p, yaw = self.object:get_pos(), self.object:get_yaw()
+	local psi = self.vkind == "excavator" and self.swing or 0
+	local cy, sy = math.cos(yaw), math.sin(yaw)
+	local function world(l)   -- 上部結構（挖土機）／車身座標 → 世界方向
+		l = h2v(l, psi)
+		return {x = l.x * cy - l.z * sy, y = l.y, z = l.x * sy + l.z * cy}
+	end
+	local m = def.mirror
+	local eye = vector.add(p, world({x = side * m.x, y = m.y, z = m.z}))
+	local body = hex_rgb(def.color)
+	local out = {("[fill:%dx%d:#%02x%02x%02x"):format(MIRROR_W, MIRROR_H, SKY[1], SKY[2], SKY[3])}
+	for v = 0, MIRROR_H - 1 do
+		local b = -MIRROR_DOWN + (0.5 - (v + 0.5) / MIRROR_H) * MIRROR_VFOV
+		local cb, sb = math.cos(b), math.sin(b)
+		local run, run_x = nil, 0
+		local function flush(u)
+			if run then out[#out + 1] = ("^[fill:%dx1:%d,%d:%s"):format(u - run_x, run_x, v, run) end
+		end
+		for u = 0, MIRROR_W - 1 do
+			local col
+			if (side < 0 and u >= MIRROR_W - 3 or side > 0 and u < 3) and v >= MIRROR_H * 0.35 then
+				col = body
+			else
+				local a = side * MIRROR_OUT + ((u + 0.5) / MIRROR_W - 0.5) * MIRROR_HFOV
+				local dw = world({x = math.sin(a) * cb, y = sb, z = -math.cos(a) * cb})
+				local hit = core.raycast(eye, vector.add(eye, vector.multiply(dw, MIRROR_RANGE)), false, false):next()
+				if hit and hit.type == "node" then
+					local c = rgb_of(core.get_node(hit.under).name)
+					local n = hit.intersection_normal
+					local shade = n.y > 0 and 1 or n.y < 0 and 0.55 or n.x ~= 0 and 0.82 or 0.7
+					local t = 0.6 * vector.distance(eye, hit.intersection_point) / MIRROR_RANGE
+					col = {c[1] * shade * (1 - t) + SKY[1] * t, c[2] * shade * (1 - t) + SKY[2] * t,
+						c[3] * shade * (1 - t) + SKY[3] * t}
+				end
+			end
+			local hx = col and ("#%02x%02x%02x"):format(math.floor(col[1]), math.floor(col[2]), math.floor(col[3]))
+			if hx ~= run then flush(u); run, run_x = hx, u end
+		end
+		flush(MIRROR_W)
+	end
+	return table.concat(out)
+end
+
+rockmech.vehicle_mirror_tex = mirror_tex   -- 測試用
+
+local function update_mirrors(self, d, dtime)
+	self.mirror_t = (self.mirror_t or MIRROR_DT) + dtime
+	if self.mirror_t < MIRROR_DT or not self.hud_mirror then return end
+	self.mirror_t = 0
+	for i, mh in ipairs(MIRROR_HUD) do
+		local tex = mirror_tex(self, mh.side)
+		if tex ~= self.mirror_last[i] then
+			d:hud_change(self.hud_mirror[i], "text", tex)
+			self.mirror_last[i] = tex
+		end
+	end
+end
+
+-- 移除駕駛的 HUD（說明文字、駕駛艙框、後照鏡畫面）
 local function hud_clear(self, player)
 	if player then
 		if self.hud then player:hud_remove(self.hud) end
 		if self.hud_cockpit then player:hud_remove(self.hud_cockpit) end
+		for _, id in ipairs(self.hud_mirror or {}) do player:hud_remove(id) end
 	end
-	self.hud, self.hud_cockpit = nil, nil
+	self.hud, self.hud_cockpit, self.hud_mirror = nil, nil, nil
 end
 
 local function update_hud(self)
@@ -682,6 +778,13 @@ local function update_hud(self)
 	if not self.hud_cockpit then
 		self.hud_cockpit = d:hud_add({type = "image", position = {x = 0.5, y = 0.5}, alignment = {x = 0, y = 0},
 			scale = {x = -100, y = -100}, text = cockpit_tex(self.vkind), z_index = -10})
+	end
+	if not self.hud_mirror then
+		self.hud_mirror, self.mirror_last, self.mirror_t = {}, {}, nil
+		for i, mh in ipairs(MIRROR_HUD) do
+			self.hud_mirror[i] = d:hud_add({type = "image", position = mh.pos, alignment = {x = 0, y = 0},
+				scale = MIRROR_SCALE, text = "[fill:1x1:#7f9fb8", z_index = -9})
+		end
 	end
 	if self.hud then d:hud_change(self.hud, "text", hud_text(self))
 	else
@@ -834,6 +937,7 @@ for kind, def in pairs(TYPES) do
 					self.driver, d = nil, nil
 				end
 			end
+			if d then update_mirrors(self, d, dtime) end
 			local fwd, turn = 0, 0
 			-- self.autopilot：沒有駕駛時的控制輸入（測試、指令用），格式同 get_player_control
 			local ctrl = d and d:get_player_control() or self.autopilot or {}
