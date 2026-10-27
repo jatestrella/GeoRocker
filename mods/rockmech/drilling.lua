@@ -3,6 +3,8 @@
 --   鑽孔：貼在岩面上的小圓環（中間黑色的孔），是空氣格裡的貼壁方塊；後面的岩石沒了就跟著消失。
 --   孔內裝藥：爆心在孔底（岩面往內 hole_depth 格），破碎半徑 R = charge_radius · n^(1/3)（n 條），
 --             再依岩石強度縮放（blast.lua）；炸飛、碎石化、支撐判定照 blasting.lua。
+--   側向自由面：炮孔旁 R 內有不是岩石的格子（空氣、碎石…，孔口岩面那側不算），距離 = 抵抗線 B，
+--             半徑 × (1 + free_face_k·(1 − B/R))。先炸中間的孔（拔心／掏槽），外圈的孔就有自由面。
 --   貼面裝藥：沒有鑽孔也能貼在岩面上（無約束），爆心在岩面上，半徑再乘 surface_factor。
 --   裝藥被別的爆炸波及會殉爆。參數在設定 rockmech_blast_*。
 
@@ -43,6 +45,28 @@ local function set_info(pos)
 end
 
 -- 引爆一個裝藥
+-- 抵抗線 B：炮孔（孔口岩面 → 孔底 center，沿 dir）到最近的側向自由面（不是岩石的格子，空氣、碎石等都算）的距離。
+-- 孔口岩面前方那一側（鑽孔就是從那裡鑽進去的，每個孔都有）不算。R 內沒有就回傳 nil
+local function burden(center, dir, R)
+	local face_t = 0.5 - bcfg.hole_depth   -- 孔口岩面在軸上的位置（以孔底為 0、往岩石裡為正）
+	local r = math.ceil(R)
+	local c0 = vector.round(center)
+	local best
+	for x = c0.x - r, c0.x + r do for y = c0.y - r, c0.y + r do for z = c0.z - r, c0.z + r do
+		local dx, dy, dz = x - center.x, y - center.y, z - center.z
+		local t = dx * dir.x + dy * dir.y + dz * dir.z
+		if t > face_t and not rockmech.lith_of_node[core.get_node({x = x, y = y, z = z}).name] then
+			-- 到炮孔線段（軸上 face_t..0）的距離
+			local tc = math.max(face_t, math.min(0, t))
+			local ex, ey, ez = dx - tc * dir.x, dy - tc * dir.y, dz - tc * dir.z
+			local d = math.sqrt(ex * ex + ey * ey + ez * ez)
+			if d <= R and (not best or d < best) then best = d end
+		end
+	end end end
+	return best
+end
+rockmech.blast_burden = burden   -- 測試用
+
 local function detonate(pos)
 	local node = core.get_node(pos)
 	if node.name ~= CHARGED and node.name ~= SURFACE then return end
@@ -53,6 +77,14 @@ local function detonate(pos)
 	local center
 	if node.name == CHARGED then
 		center = vector.add(pos, vector.multiply(dir, bcfg.hole_depth))
+		-- 側向自由面：抵抗線 B < R 時往自由面破裂得比較多，R × (1 + k·(1 − B/R))
+		local B = burden(center, dir, R)
+		if B then
+			local f = 1 + bcfg.free_face_k * (1 - B / R)
+			core.log("action", ("[rockmech] 鑽孔裝藥 %s：抵抗線 B = %.1f m，半徑 %.1f × %.2f"):format(
+				core.pos_to_string(center), B, R, f))
+			R = R * f
+		end
 	else
 		center = vector.add(pos, vector.multiply(dir, 0.5))
 		R = R * bcfg.surface_factor

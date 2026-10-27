@@ -294,6 +294,10 @@ rockmech_blast_hole_depth (Drill hole depth) int 2 1 10
 # Radius factor of an unconfined charge laid on a rock face without a drill hole.
 rockmech_blast_surface_factor (Unconfined charge factor) float 0.3 0 1
 
+# Free-face bonus: when a free face (any non-rock cell, excluding the collar face) lies within the blast radius
+# of a drill hole, at burden B from the hole, the radius becomes R * (1 + k * (1 - B / R)).
+rockmech_blast_free_face_k (Free-face bonus) float 0.5 0 5
+
 # Time to drill one hole (s).
 rockmech_blast_drill_time (Drilling time) float 1.5 0 30
 
