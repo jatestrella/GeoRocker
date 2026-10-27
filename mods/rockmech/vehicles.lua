@@ -645,7 +645,7 @@ local function refresh_look(self)
 			stepheight = self.blade and 0.3 or 1.1})
 	end
 end
--- 駕駛艙框（全螢幕 HUD 圖片，中間透明）：上方車頂邊條、左右 A 柱（車身顏色）、下方儀表板
+-- 駕駛艙框（全螢幕 HUD 圖片，中間透明）：上方車頂邊條、左右 A 柱（車身顏色）、左右上方後照鏡、下方儀表板
 local function cockpit_tex(kind)
 	local c = TYPES[kind].color
 	local dark, mid = "#1e1e1e", "#2c2c2c"
@@ -659,6 +659,11 @@ local function cockpit_tex(kind)
 		"^[fill:160x2:0,70:" .. c, "^[fill:160x18:0,72:" .. mid,                       -- 儀表板
 		"^[fill:14x8:18,78:#101010^[fill:12x6:19,79:#203828",                            -- 儀表
 		"^[fill:14x8:128,78:#101010^[fill:12x6:129,79:#382820",
+		-- 後照鏡（左上、右上；只是外觀）：支架 + 鏡框 + 鏡面 + 反光
+		"^[fill:6x2:12,17:#303030", "^[fill:20x13:17,11:#151515", "^[fill:18x11:18,12:#7f9fb8",
+		"^[fill:18x4:18,12:#a8c4dc", "^[fill:3x9:21,13:#d8ecf8",
+		"^[fill:6x2:142,17:#303030", "^[fill:20x13:123,11:#151515", "^[fill:18x11:124,12:#7f9fb8",
+		"^[fill:18x4:124,12:#a8c4dc", "^[fill:3x9:136,13:#d8ecf8",
 	})
 end
 
