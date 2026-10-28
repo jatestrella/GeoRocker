@@ -7,6 +7,9 @@
 --             （空氣、碎石…，孔口岩面那側不算），距離 = 抵抗線 B，再 × (1 + free_face_k·(1 − B/R))。
 --             沒裝藥的鑽孔（空孔）也算自由面（空孔掏槽）。先炸中間的孔（拔心），外圈的孔就有自由面。
 --   貼面裝藥：沒有鑽孔也能貼在岩面上（無約束），爆心在岩面上，半徑再乘 surface_factor。
+--   ANFO（露天台階的垂直孔，vehicle_drillrig.lua 鑽）：倒進往下的鑽孔成柱狀裝藥（孔口留 anfo_stemming 填塞），
+--             沿孔每 1.5 m 一段、每段半徑 anfo_radius（再乘夾制／自由面）；ANFO 對雷管不敏感，孔裡要有一條乳膠炸藥
+--             當起爆藥包，沒有就拒爆（留在原地）。孔深記在鑽孔的 meta depth（沒有就是 hole_depth）。
 --   裝藥被別的爆炸波及會殉爆。參數在設定 rockmech_blast_*。
 
 if not rockmech.blast_charge then return end   -- 沒有 tnt mod
@@ -16,6 +19,12 @@ local HOLE = "rockmech:drill_hole"
 local CHARGED = "rockmech:charged_hole"
 local SURFACE = "rockmech:surface_charge"
 local EMULSION = "rockmech:emulsion"
+local ANFO = "rockmech:anfo"
+-- 鑽孔的孔深（m）：鑽機鑽的垂直孔記在 meta depth，其他是 hole_depth
+local function hole_len(pos)
+	local d = core.get_meta(pos):get_float("depth")
+	return d > 0 and d or bcfg.hole_depth
+end
 
 -- 方塊外觀：貼壁方塊（paramtype2 wallmounted）的 fixed 方塊以「貼在地上」的方向定義，引擎依 param2 轉到各面。
 -- 上面（+Y）的貼圖就是朝外那一面；側面貼圖的最下一列對應貼著岩面的那層
@@ -38,7 +47,11 @@ local function set_info(pos)
 	local node = core.get_node(pos)
 	local n = core.get_meta(pos):get_int("n")
 	local meta = core.get_meta(pos)
-	if node.name == CHARGED then
+	if node.name == CHARGED and meta:get_int("anfo") == 1 then
+		meta:set_string("infotext", n > 0
+			and ("ANFO 柱狀裝藥（孔深 %.0f m）＋ 起爆藥包 %d 條\n打火石點火、或用起爆器"):format(hole_len(pos), n)
+			or ("ANFO 柱狀裝藥（孔深 %.0f m）\n還沒有起爆藥包：放一條乳膠炸藥，否則會拒爆"):format(hole_len(pos)))
+	elseif node.name == CHARGED then
 		meta:set_string("infotext", ("裝藥鑽孔：%d 條乳膠炸藥（最多 %d）\n打火石點火、或用起爆器"):format(n, bcfg.max_cartridges))
 	elseif node.name == SURFACE then
 		meta:set_string("infotext", ("貼面裝藥：%d 條（沒有鑽孔，威力 ×%.1f）\n打火石點火、或用起爆器"):format(n, bcfg.surface_factor))
@@ -49,8 +62,8 @@ end
 -- 抵抗線 B：炮孔（孔口岩面 → 孔底 center，沿 dir）到最近的側向自由面（不是岩石的格子，空氣、碎石等都算）的距離。
 -- 孔口岩面前方那一側（鑽孔就是從那裡鑽進去的，每個孔都有）不算。R 內沒有就回傳 nil
 -- 沒裝藥的鑽孔（空孔）也是自由面（空孔掏槽）：空孔從孔口岩面到孔底這段，到炮孔的最短距離
-local function burden(center, dir, R)
-	local face_t = 0.5 - bcfg.hole_depth   -- 孔口岩面在軸上的位置（以孔底為 0、往岩石裡為正）
+local function burden(center, dir, R, depth)
+	local face_t = 0.5 - (depth or bcfg.hole_depth)   -- 孔口岩面在軸上的位置（以孔底為 0、往岩石裡為正）
 	-- 點到炮孔線段（軸上 face_t..0）的距離；點在孔口岩面前方（t ≤ face_t）回傳 nil
 	local function dist(px, py, pz)
 		local dx, dy, dz = px - center.x, py - center.y, pz - center.z
@@ -68,10 +81,10 @@ local function burden(center, dir, R)
 		if not rockmech.lith_of_node[core.get_node({x = x, y = y, z = z}).name] then take(dist(x, y, z)) end
 	end end end
 	-- 空孔：沿孔軸每 0.5 m 取一點
-	local reach = r + bcfg.hole_depth
+	local reach = r + math.max(depth or 0, bcfg.hole_depth)
 	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(c0, reach), vector.add(c0, reach), {HOLE})) do
 		local hd = core.wallmounted_to_dir(core.get_node(hp).param2)
-		for s = 0.5, bcfg.hole_depth, 0.5 do
+		for s = 0.5, hole_len(hp), 0.5 do
 			take(dist(hp.x + hd.x * s, hp.y + hd.y * s, hp.z + hd.z * s))
 		end
 	end
@@ -82,16 +95,53 @@ rockmech.blast_burden = burden   -- 測試用
 local function detonate(pos)
 	local node = core.get_node(pos)
 	if node.name ~= CHARGED and node.name ~= SURFACE then return end
-	local n = math.max(1, core.get_meta(pos):get_int("n"))
-	local R = bcfg.charge_radius * n ^ (1 / 3)
-	-- wallmounted 的方向指向貼著的岩面。孔內：孔底（從岩面往裡 hole_depth 格）；貼面：岩面上（半格）
+	local meta = core.get_meta(pos)
 	local dir = core.wallmounted_to_dir(node.param2)
+	local depth = hole_len(pos)
+	if node.name == CHARGED and meta:get_int("anfo") == 1 then
+		if meta:get_int("n") < 1 then
+			-- 拒爆：ANFO 沒有起爆藥包炸不響，留在孔裡
+			meta:set_int("lit", 0)
+			meta:set_string("infotext", "拒爆：ANFO 沒有起爆藥包（放一條乳膠炸藥再起爆）")
+			core.log("action", "[rockmech] 拒爆（ANFO 沒有起爆藥包）" .. core.pos_to_string(pos))
+			return
+		end
+		-- 柱狀裝藥：孔口留填塞，往下每 1.5 m 一段；夾制／自由面整根孔一起算
+		local R = bcfg.anfo_radius
+		local bottom = vector.add(pos, vector.multiply(dir, depth))
+		local B = burden(bottom, dir, R, depth)
+		local f = bcfg.confine_factor * (B and (1 + bcfg.free_face_k * (1 - B / R)) or 1)
+		core.log("action", ("[rockmech] ANFO 柱狀裝藥 %s 孔深 %.0f m：抵抗線 B = %s，每段半徑 %.1f × %.2f"):format(
+			core.pos_to_string(pos), depth, B and ("%.1f m"):format(B) or "（沒有側向自由面）", R, f))
+		core.remove_node(pos)
+		local t = 0.5 + bcfg.anfo_stemming + 0.75
+		local last
+		repeat
+			last = vector.add(pos, vector.multiply(dir, math.min(t, depth)))
+			rockmech.blast_charge(last, R * f)
+			t = t + 1.5
+		until t > depth + 0.5
+		R = R * f + depth
+		local center = last
+		local r = math.ceil(R) + 1
+		for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(center, r), vector.add(center, r), {HOLE, CHARGED, SURFACE})) do
+			local hn = core.get_node(hp)
+			local back = core.get_node(vector.add(hp, core.wallmounted_to_dir(hn.param2))).name
+			local nd = core.registered_nodes[back]
+			local held = hn.name == SURFACE and nd and nd.walkable ~= false or rockmech.lith_of_node[back]
+			if not held then core.remove_node(hp) end
+		end
+		return
+	end
+	local n = math.max(1, meta:get_int("n"))
+	local R = bcfg.charge_radius * n ^ (1 / 3)
+	-- wallmounted 的方向指向貼著的岩面。孔內：孔底（從岩面往裡孔深 depth 格）；貼面：岩面上（半格）
 	local center
 	if node.name == CHARGED then
-		center = vector.add(pos, vector.multiply(dir, bcfg.hole_depth))
+		center = vector.add(pos, vector.multiply(dir, depth))
 		-- 夾制：只有孔口一個自由面時岩石夾住炸藥，R × confine；
 		-- 側向自由面：抵抗線 B < R 時往自由面破裂，再 × (1 + k·(1 − B/R))
-		local B = burden(center, dir, R)
+		local B = burden(center, dir, R, depth)
 		local f = bcfg.confine_factor * (B and (1 + bcfg.free_face_k * (1 - B / R)) or 1)
 		core.log("action", ("[rockmech] 鑽孔裝藥 %s：抵抗線 B = %s，半徑 %.1f × %.2f"):format(
 			core.pos_to_string(center), B and ("%.1f m"):format(B) or "（沒有側向自由面）", R, f))
@@ -103,7 +153,7 @@ local function detonate(pos)
 	core.remove_node(pos)
 	rockmech.blast_charge(center, R)
 	-- 爆破直接改地圖、不會觸發貼壁方塊掉落：後面的岩石沒了的鑽孔、裝藥一起消失
-	local r = math.ceil(R) + bcfg.hole_depth + 1
+	local r = math.ceil(R) + depth + 1
 	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(center, r), vector.add(center, r), {HOLE, CHARGED, SURFACE})) do
 		local hn = core.get_node(hp)
 		local back = core.get_node(vector.add(hp, core.wallmounted_to_dir(hn.param2))).name
@@ -290,6 +340,32 @@ function rockmech.load_charge(under, above, player)
 	return true
 end
 
+-- 倒 ANFO：只能倒進往下的鑽孔（靠重力）；一袋裝滿整根孔。回傳 true 表示用掉一袋
+function rockmech.pour_anfo(pos, player)
+	local node = core.get_node(pos)
+	if node.name ~= HOLE and node.name ~= CHARGED then
+		tell(player, "ANFO 要倒進鑽孔（露天鑽機鑽的往下的孔）")
+		return false
+	end
+	if core.wallmounted_to_dir(node.param2).y >= 0 then
+		tell(player, "ANFO 只能倒進往下的鑽孔")
+		return false
+	end
+	local meta = core.get_meta(pos)
+	if meta:get_int("anfo") == 1 then
+		tell(player, "這個孔已經裝滿 ANFO 了")
+		return false
+	end
+	if node.name == HOLE then
+		core.swap_node(pos, {name = CHARGED, param2 = node.param2})
+		meta:set_int("n", 0)
+	end
+	meta:set_int("anfo", 1)
+	set_info(pos)
+	if meta:get_int("n") < 1 then tell(player, "還沒有起爆藥包：放一條乳膠炸藥，否則會拒爆") end
+	return true
+end
+
 -- 起爆器：range 內所有裝藥倒數後依序起爆。回傳裝藥數
 function rockmech.fire_round(pos, player)
 	local r = bcfg.detonator_range
@@ -350,6 +426,18 @@ core.register_craftitem(EMULSION, {
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
 		if rockmech.load_charge(pointed.under, pointed.above, placer)
+			and not core.is_creative_enabled(placer and placer:get_player_name() or "") then
+			itemstack:take_item()
+		end
+		return itemstack
+	end,
+})
+core.register_craftitem(ANFO, {
+	description = "ANFO（銨油炸藥，一袋）\n對往下的鑽孔按右鍵倒進去成柱狀裝藥；要有一條乳膠炸藥當起爆藥包",
+	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#e8e4d8^[fill:10x2:3,3:#c8c0a8^[fill:6x3:5,8:#d03020",
+	on_place = function(itemstack, placer, pointed)
+		if pointed.type ~= "node" then return itemstack end
+		if rockmech.pour_anfo(pointed.under, placer)
 			and not core.is_creative_enabled(placer and placer:get_player_name() or "") then
 			itemstack:take_item()
 		end

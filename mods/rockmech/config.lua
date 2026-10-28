@@ -172,6 +172,8 @@ config.blast_defaults = {
 	detonator_range = 30,     -- 起爆器引爆幾公尺內的裝藥
 	detonator_delay = 5,      -- 起爆器倒數 (s)
 	hole_interval = 0.1,      -- 起爆器各孔依序起爆的間隔（段發）(s)
+	anfo_radius = 2.5,        -- ANFO 柱狀裝藥每 1.5 m 一段的爆炸半徑 (m)（一段約 7 kg，比一條乳膠炸藥多很多）
+	anfo_stemming = 1.5,      -- ANFO 孔口填塞長度 (m)
 }
 
 -- 警戒裂紋（fsmask.lua）：1 < FS < max 的岩格加上裂紋；設定鍵為 rockmech_fswarn_<key>

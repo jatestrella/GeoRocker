@@ -316,6 +316,12 @@ rockmech_blast_detonator_delay (Blasting machine countdown) float 5 0 60
 # ...one hole after another with this delay between holes (s).
 rockmech_blast_hole_interval (Delay between holes) float 0.1 0 5
 
+# ANFO column charge (vertical bench holes): blast radius of each 1.5 m segment (m).
+rockmech_blast_anfo_radius (ANFO segment radius) float 2.5 0.1 10
+
+# ANFO: stemming length left uncharged at the collar (m).
+rockmech_blast_anfo_stemming (ANFO stemming) float 1.5 0 10
+
 [Overhang]
 
 # Overhanging rock (cantilevers, thin roofs) breaks at its root and falls when its distance from

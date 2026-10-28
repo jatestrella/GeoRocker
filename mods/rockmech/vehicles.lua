@@ -1,7 +1,7 @@
 -- rockmech/vehicles.lua
 -- 載具共用部分：實體註冊（上下車、駕駛、追蹤相機、隨地形傾斜、收回成物品）、零件、碎石的取放。
 -- 各種車在自己的檔案：vehicle_excavator.lua（挖土機）、vehicle_truck.lua（卡車；有車斗的車共用部分）、
--- vehicle_haul.lua（礦卡）、vehicle_dozer.lua（推土機）、vehicle_jumbo.lua（鑽堡）；
+-- vehicle_haul.lua（礦卡）、vehicle_dozer.lua（推土機）、vehicle_jumbo.lua（鑽堡、裝藥台車）、vehicle_drillrig.lua（露天鑽機）；
 -- 駕駛艙 HUD、後照鏡與倒車攝影機畫面在 vehicle_views.lua。
 -- 只處理碎石：完整岩石要先爆破或用魔杖弄碎（爆破 → 裝載 → 運輸）。
 -- 操作：右鍵上車；駕駛中 Shift 下車，W/S 前進後退，A/D 轉向；Z 切換追蹤相機（從車子後上方看作動）。
@@ -722,3 +722,4 @@ dofile(rockmech.modpath .. "/vehicle_truck.lua")
 dofile(rockmech.modpath .. "/vehicle_haul.lua")
 dofile(rockmech.modpath .. "/vehicle_dozer.lua")
 dofile(rockmech.modpath .. "/vehicle_jumbo.lua")
+dofile(rockmech.modpath .. "/vehicle_drillrig.lua")

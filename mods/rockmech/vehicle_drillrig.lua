@@ -1,0 +1,186 @@
+-- rockmech/vehicle_drillrig.lua
+-- 露天鑽機（履帶式台階鑽機，Epiroc SmartROC／Sandvik Pantera 類）。由 vehicles.lua 載入。
+-- 3 寬 × 3 高 × 約 6 m；履帶底盤、左前方駕駛室、後方動力箱；車頭前方一根約 8 m 高的垂直桅桿。
+--   E：在桅桿腳正下方往下鑽一個垂直孔（孔深照設定，碰到下方岩石不夠深就鑽到岩石底）；鑽的時候迴轉頭
+--      沿桅桿往下走，每公尺 SEC_PER_M 秒，不能開車。一次鑽一孔，自己開車對位下一孔。
+--   空白鍵：設定孔深（3～10 m）。
+-- 垂直孔裝 ANFO（drilling.lua：倒進往下的鑽孔成柱狀裝藥，要一條乳膠炸藥當起爆藥包）。
+
+local V = rockmech.vehicles
+local box_tex, update_hud = V.box_tex, V.update_hud
+
+local SEC_PER_M = 0.6       -- 鑽 1 m 的時間 (s)
+local MAST_FOOT = {x = 0, y = -1.5, z = 2.3}   -- 桅桿腳（孔口）在車身座標
+local MAST_TOP = 6.7        -- 桅桿頂（車身座標 y）
+local HEAD_TOP, HEAD_LOW = 6.0, -0.9   -- 迴轉頭在桅桿上的上下限
+
+local def = {desc = "露天鑽機 Surface drill rig", color = "#d8b020", cap = 0, speed = 1.2,
+	half = 1.5, rear = 3.0, lat = {-1, 0, 1}, eye_up = 1.75, eye_fwd = 0.9, eye_side = -0.5,
+	tail_lat = {-1.1, 0, 1.1}, tail_dy = {1.2, 2.2},
+	mirror = {x = 1.35, y = 1.4, z = 0.6},
+	tilt = {front = 1.3, rear = -2.6, side_z = -0.6, side_x = 1.1}, max_grade = math.rad(20),
+	item_desc = "右鍵上車；E 在桅桿下方往下鑽一個垂直孔、空白鍵 設定孔深（露天台階爆破，孔裡倒 ANFO）"}
+def.inv_image = V.inv_icon(def.color, "^[fill:2x13:12,0:#3a3a3a^[fill:3x2:11,3:#808080^[fill:4x4:2,4:#9fd0ff")
+
+do
+	local c = def.color
+	local o = ("[fill:16x16:%s"):format(c)
+	local win = ("[fill:16x16:%s^[fill:12x9:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local side = ("[fill:16x16:%s^[fill:10x8:3,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local grille = ("[fill:16x16:%s^[fill:12x8:2,4:#2a2a2a^[fill:12x1:2,6:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)
+	local mast = "[fill:16x16:#3a3a3a^[fill:4x16:6,0:#5a5a5a^[fill:16x1:0,3:" .. c .. "^[fill:16x1:0,11:" .. c
+	local TRACK = V.TRACK
+	local trk = {TRACK, TRACK, TRACK, TRACK, TRACK, TRACK}
+	def.parts = {
+		{pos = {x = -1.1, y = -1.0, z = -0.6}, size = {x = 0.7, y = 1.0, z = 4.2}, tex = trk},
+		{pos = {x = 1.1, y = -1.0, z = -0.6}, size = {x = 0.7, y = 1.0, z = 4.2}, tex = trk},
+		{pos = {x = 0, y = -0.35, z = -0.7}, size = {x = 2.2, y = 0.5, z = 4.4}, tex = box_tex("#3a3a3a")},   -- 甲板
+		{pos = {x = -0.5, y = 0.6, z = 0.2}, size = {x = 1.2, y = 1.5, z = 1.4}, tex = {o, "[fill:16x16:#2a2a2a", side, side, win, o}},   -- 駕駛室
+		{pos = {x = 0.4, y = 0.45, z = -1.9}, size = {x = 1.8, y = 1.4, z = 2.0}, tex = {o, o, grille, grille, o, o}},   -- 動力箱
+		{pos = {x = 0, y = -0.2, z = 1.75}, size = {x = 0.6, y = 0.5, z = 1.0}, tex = box_tex(c)},   -- 桅桿臂
+		{pos = {x = 0, y = (MAST_FOOT.y + MAST_TOP) / 2, z = MAST_FOOT.z}, size = {x = 0.35, y = MAST_TOP - MAST_FOOT.y, z = 0.45},
+			tex = {mast, mast, mast, mast, mast, mast}},   -- 桅桿
+		{pos = {x = 0, y = MAST_FOOT.y + 0.15, z = MAST_FOOT.z}, size = {x = 0.8, y = 0.3, z = 0.8}, tex = box_tex("#4a4a4a")},   -- 桅桿腳
+		{id = "head", pos = {x = 0, y = HEAD_TOP, z = MAST_FOOT.z}, size = {x = 0.6, y = 0.7, z = 0.6}, tex = box_tex(c)},   -- 迴轉頭
+	}
+end
+
+-- 擋人：桅桿（車頭外）與車尾
+def.overhangs = {
+	{x0 = -0.6, x1 = 0.6, z0 = 1.5, z1 = 2.8, y0 = -1.5, y1 = MAST_TOP, body = "z0"},
+	{x0 = -1.2, x1 = 1.2, z0 = -3.0, z1 = -1.5, y0 = -1.5, y1 = 1.2, body = "z1"},
+}
+
+local function place_head(self, y)
+	local h = self.parts and self.parts.head
+	if h then h:set_attach(self.object, "", {x = MAST_FOOT.x * 10, y = y * 10, z = MAST_FOOT.z * 10}, {x = 0, y = 0, z = 0}) end
+end
+local function depth_setting(self) return self.depth or 6 end
+
+-- 桅桿腳下的孔位：孔口那格（空氣，下面是岩石）與往下的岩石有幾格（最多 want 格）。找不到回傳 nil 與原因
+local function hole_site(self, want)
+	local foot = V.to_world(self, MAST_FOOT)
+	local x, z = math.floor(foot.x + 0.5), math.floor(foot.z + 0.5)
+	local y = math.floor(foot.y + 0.5)
+	-- 孔口往上找空氣、往下找岩面（桅桿腳可能稍微懸空或卡進地面）
+	for _ = 1, 3 do
+		if V.passable(core.get_node({x = x, y = y, z = z}).name) then break end
+		y = y + 1
+	end
+	for _ = 1, 3 do
+		if not V.passable(core.get_node({x = x, y = y - 1, z = z}).name) then break end
+		y = y - 1
+	end
+	local above = {x = x, y = y, z = z}
+	if core.get_node(above).name ~= "air" then return nil, "孔口要是空的" end
+	if not rockmech.lith_of_node[core.get_node({x = x, y = y - 1, z = z}).name] then return nil, "桅桿下面不是岩石（碎石鑽不了）" end
+	local n = 0
+	for k = 1, want do
+		if not rockmech.lith_of_node[core.get_node({x = x, y = y - k, z = z}).name] then break end
+		n = k
+	end
+	if n < 2 then return nil, "下面的岩石不到 2 m" end
+	return above, n
+end
+
+function def.hud(self)
+	local s = ("\n孔深設定 %d m"):format(depth_setting(self))
+	if self.boring then s = s .. ("　鑽孔中 %.0f / %d m"):format(self.boring.t / SEC_PER_M, self.boring.depth) end
+	if self.msg then s = s .. "\n" .. self.msg end
+	return s .. "\nE 在桅桿下方往下鑽孔　空白鍵 設定孔深"
+end
+function def.on_load(self, data) self.depth = data.depth end
+function def.on_save(self, data) data.depth = self.depth end
+function def.on_spawn(self) place_head(self, HEAD_TOP) end
+
+function def.can_turn(self, pos, yaw, yaw2)
+	return not self.boring and V.tail_can_turn(self, pos, yaw, yaw2, def)
+end
+function def.move(self, ctx)
+	if self.boring then ctx.speed = 0; return end
+	if ctx.speed > 0 then
+		-- 桅桿伸出車頭：前方一排（車身高度上）有岩石、人或車就停
+		local y0 = V.ground_y(ctx.pos, def.half)
+		for _, dy in ipairs({1, 2}) do
+			for _, c in ipairs(V.face_cells(ctx.pos, ctx.s, 1, 2, y0 + dy, 1, {0})) do
+				local n = core.get_node(c).name
+				if not rockmech.rubble_level[n] and not V.passable(n) then ctx.speed = 0; return end
+			end
+		end
+		local la = ctx.speed * 0.1
+		local p2 = {x = ctx.pos.x + ctx.dir.x * la, y = ctx.pos.y, z = ctx.pos.z + ctx.dir.z * la}
+		if V.objects_in(self, p2, ctx.yaw, -0.6, 0.6, def.half, 2.8) then ctx.speed = 0 end
+		return
+	end
+	V.tail_guard(self, def, ctx)
+end
+
+function def.step(self, ctx)
+	local b = self.boring
+	if not b then return end
+	b.t = b.t + ctx.dtime
+	local total = b.depth * SEC_PER_M
+	place_head(self, HEAD_TOP - (HEAD_TOP - HEAD_LOW) * math.min(1, b.t / total))
+	local face = {x = b.above.x, y = b.above.y - 0.45, z = b.above.z}
+	core.add_particlespawner({
+		amount = 4, time = ctx.dtime,
+		minpos = vector.subtract(face, 0.2), maxpos = vector.add(face, 0.2),
+		minvel = {x = -1.2, y = 0.5, z = -1.2}, maxvel = {x = 1.2, y = 2, z = 1.2},
+		minacc = {x = 0, y = -6, z = 0}, maxacc = {x = 0, y = -6, z = 0},
+		minexptime = 0.4, maxexptime = 1.0, minsize = 0.6, maxsize = 1.4,
+		texture = "[fill:4x4:#a89c90",
+	})
+	if b.t >= total then
+		local under = {x = b.above.x, y = b.above.y - 1, z = b.above.z}
+		if rockmech.make_hole(under, b.above) then
+			local meta = core.get_meta(b.above)
+			meta:set_float("depth", b.depth)
+			meta:set_string("infotext", ("垂直孔（深 %d m）\n倒 ANFO，並放一條乳膠炸藥當起爆藥包"):format(b.depth))
+			self.msg = ("鑽好一個 %d m 的孔"):format(b.depth)
+		else
+			self.msg = "孔位被擋住了"
+		end
+		self.boring = nil
+		place_head(self, HEAD_TOP)
+		update_hud(self)
+	end
+end
+
+local editing = {}
+local function depth_formspec(self)
+	return ("formspec_version[6]size[6,3.2]label[0.5,0.6;孔深（台階高度＋超鑽）：%d m]"
+		.. "button[0.5,1.2;1.2,0.9;dec;−]button[1.9,1.2;1.2,0.9;inc;+]button_exit[3.5,2.2;2,0.7;ok;完成]"):format(depth_setting(self))
+end
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= "rockmech:drillrig_depth" then return end
+	local name = player:get_player_name()
+	local self = editing[name]
+	if not self or not self.object:get_pos() then return true end
+	if fields.dec then self.depth = math.max(3, depth_setting(self) - 1) end
+	if fields.inc then self.depth = math.min(10, depth_setting(self) + 1) end
+	if fields.quit or fields.ok then editing[name] = nil
+	else core.show_formspec(name, "rockmech:drillrig_depth", depth_formspec(self)) end
+	update_hud(self)
+	return true
+end)
+
+function def.action(self, ctx)
+	local ctrl, d = ctx.ctrl, ctx.d
+	if ctrl.aux1 and not self.boring then
+		self.t_act = 0.5
+		local above, n = hole_site(self, depth_setting(self))
+		if not above then
+			self.msg = n
+		else
+			self.boring = {above = above, depth = n, t = 0}
+			self.msg = n < depth_setting(self) and ("下面岩石只有 %d m，鑽到岩石底"):format(n) or nil
+		end
+		update_hud(self)
+	elseif ctrl.jump and d and not self.boring then
+		self.t_act = 0.5
+		editing[d:get_player_name()] = self
+		core.show_formspec(d:get_player_name(), "rockmech:drillrig_depth", depth_formspec(self))
+	end
+end
+
+V.register("drillrig", def)
