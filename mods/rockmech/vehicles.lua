@@ -16,7 +16,7 @@ rockmech.vehicles = V
 
 -- 各種車的設定（各車的檔案用 V.register 加入）。
 -- desc、color；cap：載量（級）；speed：m/s；half：碰撞箱半邊長；lat：車頭外一排的橫向位置（相對中心）；
--- eye_up／eye_fwd：相機在車身中心上方、沿視線往前的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
+-- eye_up／eye_fwd／eye_side：相機在車身中心上方、沿視線往前、往右（負 = 左）的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
 -- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
 -- overhangs：伸出碰撞箱那段擋人的範圍（見 V.overhang_push）；overhangs_now(self)：會動的擋人範圍（挖土機鏟斗）；max_grade：最大爬坡角（rad；行進方向整台車長的平均坡度）；
@@ -35,7 +35,7 @@ local TURN_RATE = 1.6        -- rad/s
 local EYE_HEIGHT = 1.625
 V.EYE_HEIGHT = EYE_HEIGHT
 local function eye_offset(def)
-	return {x = 0, y = (def.eye_up - EYE_HEIGHT) * 10, z = def.eye_fwd * 10}
+	return {x = (def.eye_side or 0) * 10, y = (def.eye_up - EYE_HEIGHT) * 10, z = def.eye_fwd * 10}
 end
 
 -- 貼圖（[fill 組合）。cube 的六面：上、下、+X、−X、+Z（車頭：yaw 0 朝 +Z）、−Z
