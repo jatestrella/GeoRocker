@@ -197,7 +197,7 @@ describe("overhang 局部版本與全範圍版本一致", function()
 end)
 
 describe("overhang 懸臂安全係數", function()
-	it("FS = σt/(3γd²/t) = (L_max/d)²；整段取最小（尖端）", function()
+	it("FS = σt/(3γ·HR²/t) = (L_max/HR)²；單邊懸臂 HR = 伸出長度，整段共用", function()
 		local g = cantilever("h", 4, 1)
 		local lm = overhang.lmax(2, 25, 1)
 		local tip = overhang.cell_state(g, P, 4, 8, 0)
@@ -206,11 +206,11 @@ describe("overhang 懸臂安全係數", function()
 		assert.near((lm / 4) ^ 2, tip.fs, 1e-9)
 		assert.near(3 * 25 * 16 / 1 / 1000, tip.sigma_b, 1e-12)
 		assert.near(2 / tip.sigma_b, tip.fs, 1e-9)
+		assert.near(4, tip.hr, 1e-12)                -- 懸空 4 m² ／ 有支撐周長 1 m
 		local root = overhang.cell_state(g, P, 1, 8, 0)
 		assert.are.equal(1, root.d)
-		assert.near(lm ^ 2, root.fs, 1e-9)
+		assert.near(tip.fs, root.fs, 1e-12)          -- 同一段共用 HR
 		assert.near(tip.fs, root.group_fs, 1e-12)
-		assert.are.equal(4, root.crit.x)
 	end)
 
 	it("岩柱本身（坐在地面上）：有支撐", function()
@@ -364,7 +364,7 @@ describe("overhang 水平節理面（不傳張力）", function()
 		assert.are.equal(0, overhang.cell_state(g, pj, 2, 7, 0).group_fs)
 	end)
 
-	it("頂板（兩側都連著岩體）也用懸臂判定：d = 到最近支撐欄的距離；被層面切成薄層就斷", function()
+	it("頂板（兩側都連著岩體）：HR = 懸空面積／有支撐周長；被層面切成薄層就斷", function()
 		-- 頁岩：兩根岩柱 x=0、x=16（y 1..8），中間 y=6..8 的頂板（跨度 15 m）；y=6 與 y=7 之間是層面
 		local g = grid(-3, 19, -2, 12, -2, 2, function(x, y, z)
 			if y <= 0 then return "G" end
@@ -381,7 +381,8 @@ describe("overhang 水平節理面（不傳張力）", function()
 		local st = overhang.cell_state(g, pj, 8, 6, 0)
 		assert.is_nil(st.beam)
 		assert.are.equal(8, st.d)                        -- 兩根岩柱 x = 0、16，中間 x = 8
-		assert.near((overhang.lmax(2, 25, 1) / 8) ^ 2, st.fs, 1e-9)
+		assert.near(7.5, st.hr, 1e-12)                   -- 15 m² ／ 兩端各 1 m
+		assert.near((overhang.lmax(2, 25, 1) / 7.5) ^ 2, st.fs, 1e-9)
 	end)
 
 	it("只有一側連著岩體的仍是懸臂", function()
@@ -484,7 +485,40 @@ describe("overhang 取最有利的根部", function()
 		-- 直接根部：d 1、rho 1/3 → (L/3)²；經 (1, 0) 的完整根部：d 2、rho 1 → (L/2)²，較有利
 		assert.are.equal(2, st.d)
 		assert.near(1, st.rho, 1e-12)
-		assert.near((st.lmax / 2) ^ 2, st.fs, 1e-9)
+		assert.near(6, st.hr, 1e-12)                     -- 18 m² ／ 根部 3 m（被切大半的那欄仍有一個完好面）
+		assert.near((st.lmax / 6) ^ 2, st.fs, 1e-9)
+	end)
+end)
+
+describe("overhang 水力半徑與方向無關", function()
+	-- 頁岩頂板 t = 1（y = 8），四周岩柱；開口形狀不同
+	local function roof(open)
+		return grid(-2, 14, -2, 12, -2, 14, function(x, y, z)
+			if y <= 0 then return "G" end
+			if open(x, z) then
+				if y == 8 then return "h" end
+				return nil
+			end
+			if y <= 8 then return "h" end
+		end)
+	end
+	it("長隧道寬 3：HR ≈ 1.5，斜著挖也一樣", function()
+		local straight = roof(function(x, z) return x >= 2 and x <= 4 and z >= 1 and z <= 11 end)
+		local s = overhang.cell_state(straight, P, 3, 8, 6)
+		assert.near(33 / (2 * 11 + 2 * 3), s.hr, 1e-12)
+		-- 對角線方向（寬約 3 格的階梯狀）
+		local diag = roof(function(x, z) local u = x - z; return u >= -1 and u <= 1 and x + z >= 4 and x + z <= 20 end)
+		local d = overhang.cell_state(diag, P, 6, 8, 6)
+		assert.is_true(d.hr > 0.6 and d.hr < 1.6)
+	end)
+	it("正方形房間比同寬的長隧道穩（雙向支撐）", function()
+		local room = roof(function(x, z) return x >= 2 and x <= 8 and z >= 2 and z <= 8 end)
+		local tun = roof(function(x, z) return x >= 2 and x <= 8 and z >= 1 and z <= 13 end)
+		local r = overhang.cell_state(room, P, 5, 8, 5)
+		local t = overhang.cell_state(tun, P, 5, 8, 7)
+		assert.near(49 / 28, r.hr, 1e-12)
+		assert.is_true(r.hr < t.hr)
+		assert.is_true(r.fs > t.fs)
 	end)
 end)
 

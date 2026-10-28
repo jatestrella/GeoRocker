@@ -197,8 +197,9 @@ describe("support 頂板：往上托抵銷自重", function()
 		local g = cantilever(2, 6)                  -- 6 m 厚、伸出 2 m
 		local s1 = overhang.cell_state(g, OP, 1, 8, 0)
 		local s2 = overhang.cell_state(g, OP, 2, 8, 0)
-		assert.are.equal(2, s1.h)                   -- d = 1 → 2 m
-		assert.are.equal(4, s2.h)                   -- d = 2 → 4 m
+		assert.near(2, s2.hr, 1e-12)                -- 單邊伸出 2 m：HR = 2
+		assert.are.equal(4, s1.h)                   -- 整段 h = min(6, 2·HR) = 4
+		assert.are.equal(4, s2.h)
 		-- FS = (L_max·ρ/d)² × t/h
 		assert.near((s2.lmax / 2) ^ 2 * 6 / 4, s2.fs, 1e-9)
 		under(g, 2, 6, 0, 0.1)                      -- 100 kPa ≥ γh = 25 × 4 → 托住

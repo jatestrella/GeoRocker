@@ -344,6 +344,7 @@ local function local_ctx(g, p)
 		local d, rho = {}, {}
 		local frontier, root_teff = {}, {}
 		local lat = {}        -- run → 側向相連的懸空 run
+		local nsup = {}       -- run → 接著有支撐岩柱的側面數（水力半徑的周長）
 		local up, up_set = {}, {} -- run → 坐在它上面的懸空 run（支撐由下往上）
 		local cut, cut_seen = {}, {}
 		local function visit(rn)
@@ -366,8 +367,9 @@ local function local_ctx(g, p)
 			if n_cells > max_voxels then aborted = true; break end
 			lat[r] = {}
 			local intact, nbs = {}, {}
+			local supdir = {}   -- 哪幾個方向接著有支撐的岩柱（至少一個完好面）：水力半徑的周長
 			for yy = r.bot, r.top do
-				for _, h in ipairs(H) do
+				for k, h in ipairs(H) do
 					local ax, az = r.lx + h[1], r.lz + h[2]
 					if ax >= x1 and ax <= x2 and az >= z1 and az <= z2 then
 						local j = 1 + ax + yy * sy + az * sz
@@ -377,6 +379,7 @@ local function local_ctx(g, p)
 								if intact[rn] == nil then intact[rn] = 0; nbs[#nbs + 1] = rn end
 								if not jointed(r.lx, yy, r.lz, h[1], h[2]) then
 									intact[rn] = intact[rn] + 1
+									if rn.supported then supdir[k] = true end
 								end
 							end
 						end
@@ -397,6 +400,9 @@ local function local_ctx(g, p)
 					cut[#cut + 1] = rn
 				end
 			end
+			local ns = 0
+			for _ in pairs(supdir) do ns = ns + 1 end
+			nsup[r] = ns
 			if best > 0 then
 				frontier[#frontier + 1] = r
 				root_teff[r] = best
@@ -495,7 +501,7 @@ local function local_ctx(g, p)
 		end
 		local beam = {}
 		return {comp = comp, d = d, rho = rho, n_cells = n_cells, aborted = aborted, edge = edge,
-			cut = real_cut, lat = lat, load = load, beam = beam}
+			cut = real_cut, lat = lat, load = load, beam = beam, nsup = nsup}
 	end
 	return ctx
 end
@@ -506,9 +512,13 @@ end
 -- load：疊層的荷重倍數 m = q₁/(γt)（Obert & Duvall，≥ 1）：σb × m → FS ÷ m
 -- d = 0：坐在下層岩體上，由下層承擔 → FS = ∞
 -- beam：兩端支撐梁的 FS（未含疊層荷重），有就取兩者較大
+-- 跨度用水力半徑 HR（Mathews 穩定圖、Laubscher 的跨度參數）取代 d：一段側向相連的懸空頂板，
+--   HR = 懸空面積（欄數）／有支撐的周長（接著有支撐岩柱、至少一個完好面的側面數；旁邊是空的不算）。
+--   與方向、形狀無關：長隧道寬 W → W/2；正方形房間邊長 S → S/4（雙向支撐）；單邊伸出 d 的懸臂 → d。
+--   沒有有支撐的周長（只坐在下層懸空岩體上）時用 d。
 -- 荷重高度（1:2 拱）：從根部（有支撐的岩壁邊）往上以 2（垂直）：1（水平）畫線，線以上的岩石靠拱作用
--- 傳回岩壁，壓在懸臂上的只有線以下的三角形：離根部 d 的欄荷重高度 h = min(t, 2d)，抗彎厚度仍是 t。
---   σb = 3γ·h·d²/t_eff² → FS 再 × t/h。碰不到支撐（d = nil）的整欄都壓著：h = t
+-- 傳回岩壁，壓在懸臂上的只有線以下的三角形：荷重高度 h = min(t, 2·HR)，抗彎厚度仍是 t。
+--   σb = 3γ·h·HR²/t_eff² → FS = (L_max·ρ/HR)² × t/h。碰不到支撐（d = nil）的整欄都壓著：h = t
 local function load_height(r, d)
 	return d and math.min(r.t, 2 * d) or r.t
 end
@@ -521,11 +531,13 @@ local function support_factor(r, d)
 	if p >= q0 then return math.huge end
 	return q0 / (q0 - p)
 end
-local function run_fs(r, d, rho, load, beam)
+-- hr：這一段的水力半徑（省略 → 用 d）
+local function run_fs(r, d, rho, load, beam, hr)
 	if d == 0 then return math.huge end
-	local sf = support_factor(r, d)
+	local span = d and (hr or d)
+	local sf = support_factor(r, span)
 	if sf == math.huge then return math.huge end
-	local f = d and (r.lmax * (rho or 1) / d) ^ 2 * (r.t / load_height(r, d)) or 0
+	local f = span and (r.lmax * (rho or 1) / span) ^ 2 * (r.t / load_height(r, span)) or 0
 	if beam and beam > f then f = beam end
 	if load and load > 1 then f = f / load end
 	return f * sf
@@ -553,12 +565,28 @@ local function segments(res)
 	return list, seg_of
 end
 
+-- 一段的水力半徑 HR = 懸空面積（欄數）／有支撐的周長；沒有有支撐的周長回傳 nil（用 d）
+local function seg_hr(res, sg)
+	local area, perim = {}, {}
+	local na, np = 0, 0
+	for _, r in ipairs(sg) do
+		local key = r.lx * 65536 + r.lz
+		if not area[key] then area[key] = true; na = na + 1 end
+		local n = res.nsup and res.nsup[r] or 0
+		if n > (perim[key] or 0) then np = np + n - (perim[key] or 0); perim[key] = n end
+	end
+	if np == 0 then return nil, na, 0 end
+	return na / np, na, np
+end
+overhang.seg_hr = seg_hr
+
 -- 一段的判定：碰不到支撐（d = nil）→ 掉、FS 0；有任一 run FS < 1 → 整段從根部斷。
 -- 回傳 falls, fs（段內最小 FS）, crit（最小 FS 的 run）
 local function judge_segment(res, sg)
 	local minf, crit, fail = math.huge, sg[1], false
+	local hr = seg_hr(res, sg)
 	for _, r in ipairs(sg) do
-		local f = run_fs(r, res.d[r], res.rho[r], res.load and res.load[r], res.beam and res.beam[r] and res.beam[r].fs)
+		local f = run_fs(r, res.d[r], res.rho[r], res.load and res.load[r], res.beam and res.beam[r] and res.beam[r].fs, hr)
 		if f < minf then minf, crit = f, r end
 		if f < 1 then fail = true end
 	end
@@ -635,22 +663,25 @@ function overhang.cell_state(g, p, x, y, z)
 	if res.aborted then return {aborted = true, n_cells = res.n_cells} end
 	local d0, rho0 = res.d[r0], res.rho[r0]
 	local load0 = res.load and res.load[r0] or 1
+	local segs, seg_of = segments(res)
+	local hr0, area0, perim0 = seg_hr(res, seg_of[r0])
+	local span0 = d0 and d0 > 0 and (hr0 or d0) or d0
 	local sigma_b = math.huge
-	if d0 and rho0 and rho0 > 0 then
-		-- σb = 3γ·h·d²/t_eff² × m（疊層荷重倍數），t_eff = rho·t、h = 1:2 拱的荷重高度
-		sigma_b = 3 * r0.crit.gamma * d0 * d0 * load_height(r0, d0) * math.max(1, load0) / (r0.t * r0.t * rho0 * rho0) / 1000
-			/ support_factor(r0, d0)
+	if span0 and span0 > 0 and rho0 and rho0 > 0 then
+		-- σb = 3γ·h·HR²/t_eff² × m（疊層荷重倍數），t_eff = rho·t、h = 1:2 拱的荷重高度
+		sigma_b = 3 * r0.crit.gamma * span0 * span0 * load_height(r0, span0) * math.max(1, load0) / (r0.t * r0.t * rho0 * rho0) / 1000
+			/ support_factor(r0, span0)
 	end
 	local out = {
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
-		h = load_height(r0, d0),   -- 1:2 拱的荷重高度 (m)
-		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0, res.beam and res.beam[r0] and res.beam[r0].fs),
+		hr = hr0, area = area0, perim = perim0,   -- 這一段的水力半徑 = 懸空面積／有支撐的周長
+		h = load_height(r0, span0),   -- 1:2 拱的荷重高度 (m)
+		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0, res.beam and res.beam[r0] and res.beam[r0].fs, hr0),
 		n_cells = res.n_cells, edge = res.edge,
 		beam = res.beam and res.beam[r0] or nil,
 		load = load0,
 		p_sup = r0.p_sup,   -- 底面往上托的支護壓力 (kPa)
 	}
-	local segs, seg_of = segments(res)
 	local cut_cells = 0
 	local _, gfs, cr = judge_segment(res, seg_of[r0])
 	for _, sg in ipairs(segs) do
