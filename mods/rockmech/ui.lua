@@ -331,7 +331,7 @@ local function kv_rows(list)
 end
 
 local function tab_overview()
-	local f, o, rf, sp, sl = cfg.failure, cfg.overhang, cfg.rockfall, cfg.support, cfg.slope
+	local f, o, rf, sp, sl = cfg.failure, cfg.overhang, cfg.rockfall, cfg.stability, cfg.slope
 	local rows = kv_rows({
 		{"世界資料夾", core.get_worldpath()},
 		{"地表高程 y0", cfg.surface_y},
@@ -356,7 +356,7 @@ local function tab_overview()
 			f.strength_scale ~= 1 and ("；舊設定 strength_scale %g"):format(f.strength_scale) or "")},
 		{"懸臂斷裂", ("%s；半徑 %d%s"):format(o.enabled and "開" or "關", o.radius,
 			o.scale ~= 1 and ("；舊設定 overhang_scale %g"):format(o.scale) or "")},
-		{"支撐判定", ("%s；半徑 %d、剛體上限 %d 格"):format(sp.enabled and "開" or "關", sp.radius, sp.rigid_max)},
+		{"穩定判定", ("%s；半徑 %d、剛體上限 %d 格"):format(sp.enabled and "開" or "關", sp.radius, sp.rigid_max)},
 		{"碎石安息角", ("%s；%g°"):format(sl.enabled and "開" or "關", sl.angle)},
 		{"落石翻滾", ("%s；其他表面 Rn %.2f Rt %.2f μr %.2f"):format(rf.enabled and "開" or "關", rf.rn, rf.rt, rf.mu_roll)},
 		{"掉落破碎", cfg.fallbreak.enabled and "開" or "關"},

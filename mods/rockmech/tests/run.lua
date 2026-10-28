@@ -15,7 +15,7 @@ local SPECS = {
 	"joints_spec.lua",
 	"failure_spec.lua",
 	"rockfall_spec.lua",
-	"support_spec.lua",
+	"stability_spec.lua",
 	"rigidfall_spec.lua",
 	"jointtex_spec.lua",
 	"overhang_spec.lua",

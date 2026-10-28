@@ -1,5 +1,5 @@
--- rockmech/support.lua
--- 支撐判定：找出「與大岩體斷開、也沒有坐在其他東西上」的岩石群（純函式，不依賴引擎）。
+-- rockmech/stability.lua
+-- 穩定判定（與岩體是否相連）：找出「與大岩體斷開、也沒有坐在其他東西上」的岩石群（純函式，不依賴引擎）。
 -- 這是階段 3 關鍵塊搜尋的骨架；目前鍵結只看相鄰的實心岩石，尚未用節理切開。
 --
 -- ## 規則
@@ -22,7 +22,7 @@
 --   solid_of  = {[cid] = true},  -- 可以承托東西的實心格（含碎石、沙等非黏結者）
 -- }
 
-local support = {}
+local stability = {}
 
 local floor = math.floor
 
@@ -31,7 +31,7 @@ local ANCHORED, FALLING = 1, 2
 -- starts：世界座標陣列。回傳 components, stats
 --   components = {{cells = {{x=,y=,z=}, ...}}, ...}（只含懸空的群；cells 依 y 由低到高）
 --   stats = {visited = 展開總格數, searches = 搜尋次數}
-function support.find_unsupported(g, starts, max_voxels)
+function stability.find_detached(g, starts, max_voxels)
 	local nx, ny, nz = g.nx, g.ny, g.nz
 	local sy, sz = nx, nx * ny
 	local data, bonded_of, solid_of = g.data, g.bonded_of, g.solid_of
@@ -130,4 +130,4 @@ function support.find_unsupported(g, starts, max_voxels)
 	return components, stats
 end
 
-return support
+return stability

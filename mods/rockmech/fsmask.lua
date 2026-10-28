@@ -485,9 +485,9 @@ end
 -- 即時更新（FS 遮罩即時模式、警戒裂紋共用一次掃描）
 ---------------------------------------------------------------------------
 
--- 地形改變（挖掘、放置、坍塌、爆破都會經過 queue_support_check）：附近的即時顯示標記為需更新
+-- 地形改變（挖掘、放置、坍塌、爆破都會經過 queue_stability_check）：附近的即時顯示標記為需更新
 
--- 放置非岩石方塊（墊支撐等）不經過 queue_support_check，另外標記附近需更新
+-- 放置非岩石方塊（墊支撐等）不經過 queue_stability_check，另外標記附近需更新
 core.register_on_placenode(function(pos)
 	for _, a in pairs(active) do
 		if a.center and vector.distance(pos, a.center) <= LIVE_R + 2 * cfg.failure.window + 2 then
@@ -496,8 +496,8 @@ core.register_on_placenode(function(pos)
 	end
 end)
 
-local orig_queue = collapse.queue_support_check
-collapse.queue_support_check = function(pos, prev)
+local orig_queue = collapse.queue_stability_check
+collapse.queue_stability_check = function(pos, prev)
 	orig_queue(pos, prev)
 	for _, a in pairs(active) do
 		if a.center and vector.distance(pos, a.center) <= LIVE_R + 2 * cfg.failure.window + 2 then
@@ -519,16 +519,16 @@ end
 -- （判定照常套用「只有開挖造成的才壞」；同一格 60 秒內不重複觸發，每次掃描最多 24 個位置）
 local TRIGGER_COOLDOWN, TRIGGER_MAX = 60, 24
 local triggered = {}
-local SUPPORT_KINDS = {overhang = true, hang = true, keyblock = true}
+local STABILITY_KINDS = {overhang = true, hang = true, keyblock = true}
 local FAILURE_KINDS = {axial = true, slip = true, mass = true}
 local function trigger_failed(cells)
 	local t, n = now(), 0
 	for _, c in ipairs(cells) do
-		if c.fs <= 1 and (SUPPORT_KINDS[c.kind] or FAILURE_KINDS[c.kind]) then
+		if c.fs <= 1 and (STABILITY_KINDS[c.kind] or FAILURE_KINDS[c.kind]) then
 			local k = pkey(c.pos)
 			if not triggered[k] or t - triggered[k] > TRIGGER_COOLDOWN then
 				triggered[k] = t
-				if SUPPORT_KINDS[c.kind] then collapse.queue_support_check(c.pos)
+				if STABILITY_KINDS[c.kind] then collapse.queue_stability_check(c.pos)
 				else collapse.queue_failure_check(c.pos) end
 				n = n + 1
 				if n >= TRIGGER_MAX then break end

@@ -1,5 +1,5 @@
 dofile((debug.getinfo(1, "S").source:match("^@(.*[/\\])") or "./") .. "helper.lua")
-local support = load_module("support")
+local stability = load_module("stability")
 
 local AIR, ROCK, RUBBLE = 0, 1, 2
 
@@ -29,14 +29,14 @@ local function nb6(p)
 	}
 end
 
-describe("support 懸空判定", function()
+describe("stability 懸空判定", function()
 	it("獨立柱底部挖空：整根懸空", function()
 		-- 地面 y ≤ 0（碰到網格底部），柱 x=z=0、y 2..6，y=1 被挖掉
 		local g = make_grid(6, -4, 12, function(x, y, z)
 			if y <= 0 then return "r" end
 			if x == 0 and z == 0 and y >= 2 and y <= 6 then return "r" end
 		end)
-		local comps = support.find_unsupported(g, nb6({x = 0, y = 1, z = 0}))
+		local comps = stability.find_detached(g, nb6({x = 0, y = 1, z = 0}))
 		assert.are.equal(1, #comps)
 		assert.are.equal(5, #comps[1].cells)
 		assert.are.equal(2, comps[1].cells[1].y) -- 由低到高
@@ -48,7 +48,7 @@ describe("support 懸空判定", function()
 			if y <= 0 then return "r" end
 			if x == 0 and z == 0 and y >= 1 and y <= 6 then return "r" end
 		end)
-		local comps = support.find_unsupported(g, nb6({x = 1, y = 3, z = 0}))
+		local comps = stability.find_detached(g, nb6({x = 1, y = 3, z = 0}))
 		assert.are.equal(0, #comps)
 	end)
 
@@ -57,7 +57,7 @@ describe("support 懸空判定", function()
 			if math.abs(x) <= 1 and y >= 0 and y <= 2 then return nil end -- 沿 z 的隧道
 			return "r"
 		end)
-		local comps, stats = support.find_unsupported(g, nb6({x = 0, y = 2, z = 0}))
+		local comps, stats = stability.find_detached(g, nb6({x = 0, y = 2, z = 0}))
 		assert.are.equal(0, #comps)
 		assert.truthy(stats.visited < 60, "應很快往下找到邊界，實際展開 " .. stats.visited)
 	end)
@@ -68,7 +68,7 @@ describe("support 懸空判定", function()
 			if x <= -3 and y <= 8 then return "r" end              -- 岩壁
 			if x > -3 and x <= 1 and z == 0 and y == 6 then return "r" end -- 從牆伸出的懸臂
 		end)
-		local comps = support.find_unsupported(g, nb6({x = 1, y = 5, z = 0}))
+		local comps = stability.find_detached(g, nb6({x = 1, y = 5, z = 0}))
 		assert.are.equal(0, #comps)
 	end)
 
@@ -78,7 +78,7 @@ describe("support 懸空判定", function()
 			if x == 0 and z == 0 and y == 1 then return "b" end
 			if x == 0 and z == 0 and y >= 2 and y <= 6 then return "r" end
 		end)
-		local comps = support.find_unsupported(g, {{x = 0, y = 4, z = 0}})
+		local comps = stability.find_detached(g, {{x = 0, y = 4, z = 0}})
 		assert.are.equal(0, #comps)
 	end)
 
@@ -87,8 +87,8 @@ describe("support 懸空判定", function()
 			if y <= 0 then return "r" end
 			if math.abs(x) <= 3 and math.abs(z) <= 3 and y >= 3 and y <= 6 then return "r" end
 		end)
-		assert.are.equal(1, #support.find_unsupported(g, {{x = 0, y = 4, z = 0}}, 1000))
-		assert.are.equal(0, #support.find_unsupported(g, {{x = 0, y = 4, z = 0}}, 100))
+		assert.are.equal(1, #stability.find_detached(g, {{x = 0, y = 4, z = 0}}, 1000))
+		assert.are.equal(0, #stability.find_detached(g, {{x = 0, y = 4, z = 0}}, 100))
 	end)
 
 	it("多個起點屬於同一群只回報一次", function()
@@ -96,7 +96,7 @@ describe("support 懸空判定", function()
 			if y <= 0 then return "r" end
 			if math.abs(x) <= 1 and z == 0 and y >= 3 and y <= 4 then return "r" end
 		end)
-		local comps, stats = support.find_unsupported(g, {
+		local comps, stats = stability.find_detached(g, {
 			{x = -1, y = 3, z = 0}, {x = 1, y = 4, z = 0}, {x = 0, y = 3, z = 0},
 		})
 		assert.are.equal(1, #comps)
@@ -109,7 +109,7 @@ describe("support 懸空判定", function()
 			if y <= 0 then return "r" end
 			if (x == -3 or x == 3) and z == 0 and y >= 3 and y <= 4 then return "r" end
 		end)
-		local comps = support.find_unsupported(g, {{x = -3, y = 3, z = 0}, {x = 3, y = 4, z = 0}})
+		local comps = stability.find_detached(g, {{x = -3, y = 3, z = 0}, {x = 3, y = 4, z = 0}})
 		assert.are.equal(2, #comps)
 	end)
 
@@ -118,7 +118,7 @@ describe("support 懸空判定", function()
 			if y <= 0 then return "r" end
 			if x == 0 and z == 0 and y == 1 then return "b" end
 		end)
-		local comps, stats = support.find_unsupported(g, {{x = 0, y = 1, z = 0}, {x = 0, y = 3, z = 0}})
+		local comps, stats = stability.find_detached(g, {{x = 0, y = 1, z = 0}, {x = 0, y = 3, z = 0}})
 		assert.are.equal(0, #comps)
 		assert.are.equal(0, stats.searches)
 	end)

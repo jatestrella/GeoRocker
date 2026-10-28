@@ -239,7 +239,7 @@ local function neighbor_surface(x, z, ty, base)
     return nil
 end
 
--- 把 pos 的碎石設為 k 級（0 = 移除；移除會觸發 on_destruct：支撐判定、露出岩面的破壞檢查）
+-- 把 pos 的碎石設為 k 級（0 = 移除；移除會觸發 on_destruct：穩定判定、露出岩面的破壞檢查）
 local function set_rubble(pos, base, k)
     local name = rockmech.rubble_with_level(base, k)
     if name then core.swap_node(pos, {name = name}) else core.remove_node(pos) end
@@ -397,7 +397,7 @@ local function is_solid_at(p)
 end
 
 -- 碎石：下方懸空就落下，否則依安息角滑動。
--- 完整岩石：這裡不處理。是否懸空由支撐判定（support.lua，連通性）決定；
+-- 完整岩石：這裡不處理。是否懸空由穩定判定（stability.lua，連通性）決定；
 --           破壞由軸差破壞準則決定。
 check_stability_and_move = function(pos)
     local node = core.get_node_or_nil(pos)
@@ -473,7 +473,7 @@ local function build_cid_maps()
     end
 end
 
--- 讀取 [minp, maxp] 成為 failure.lua / support.lua 的網格格式。
+-- 讀取 [minp, maxp] 成為 failure.lua / stability.lua 的網格格式。
 -- 預設往上多讀 overburden_scan 公尺以累計柱狀荷重；no_overburden 時不多讀。
 function collapse.read_grid(minp, maxp, no_overburden)
     build_cid_maps()
@@ -903,19 +903,19 @@ function collapse.queue_failure_check(pos, prev, r, round)
     if not round and r == primary_radius() and collapse.queue_mass_check then collapse.queue_mass_check(p) end
 end
 
--- 8. 支撐判定（模型見 support.lua）
+-- 8. 穩定判定（模型見 stability.lua）
 -- 移除方塊 → 同一 tick 合併 → VoxelManip 一次讀取 → 純函式找懸空群 →
 -- 懸空群以原版 falling node 由下往上落下
-local scfg = cfg.support
-local pending_starts, support_scheduled = {}, false
-local support_changes = new_changes()
+local scfg = cfg.stability
+local pending_starts, stability_scheduled = {}, false
+local stability_changes = new_changes()
 
 -- 記下一批改變（爆破等以 VoxelManip 修改、不經過 on_destruct 者）：list = {{pos, name}...}
 function collapse.record_changes(list)
     for _, c in ipairs(list) do
         local p = vector.round(c.pos)
         collapse.mark_excavated(p)
-        add_change(support_changes, p, c.name, nil, primary_radius())
+        add_change(stability_changes, p, c.name, nil, primary_radius())
         add_change(queue_changes, p, c.name, nil, primary_radius())
     end
 end
@@ -1031,18 +1031,18 @@ function collapse.overhang_state(pos)
     return rockmech.overhang.cell_state(grid, collapse.overhang_params(), pos.x, pos.y, pos.z)
 end
 
-local function run_support_check()
-    support_scheduled = false
+local function run_stability_check()
+    stability_scheduled = false
     local starts = pending_starts
     pending_starts = {}
-    local changes = support_changes
-    support_changes = new_changes()
+    local changes = stability_changes
+    stability_changes = new_changes()
     if #starts == 0 or not scfg.enabled then return end
     local n_existing = 0
 
     local t0 = core.get_us_time()
     local ocfg = cfg.overhang
-    -- 讀取半徑：支撐判定與懸臂斷裂共用同一份網格，取兩者較大者
+    -- 讀取半徑：穩定判定與懸臂斷裂共用同一份網格，取兩者較大者
     local r = scfg.radius
     if ocfg.enabled and ocfg.radius > r then r = ocfg.radius end
     local rh = r
@@ -1079,7 +1079,7 @@ local function run_support_check()
         local grid = collapse.read_grid(
             {x = g.a.x - rh, y = g.a.y - r, z = g.a.z - rh},
             {x = g.b.x + rh, y = g.b.y + r, z = g.b.z + rh}, true)
-        local c, st = rockmech.support.find_unsupported(grid, g.starts, scfg.max_voxels)
+        local c, st = rockmech.stability.find_detached(grid, g.starts, scfg.max_voxels)
         stats.visited = stats.visited + st.visited
         local og = {}
         if ocfg.enabled then
@@ -1260,7 +1260,7 @@ local function run_support_check()
         -- 關鍵塊體：被節理與臨空面圍住的岩塊，以重力判斷落下／滑動
         if kcfg.enabled then
             local kp = collapse.keyblock_params()
-            -- 起點：支撐判定的起點，加上每個改變格周圍其影響範圍（玩家 6 m／物理延伸 3 m）內
+            -- 起點：穩定判定的起點，加上每個改變格周圍其影響範圍（玩家 6 m／物理延伸 3 m）內
             -- 有臨空面的岩格（完全被包在岩體裡的岩塊不可能滑出）
             local kstarts = {}
             for _, s in ipairs(g.starts) do kstarts[#kstarts + 1] = s end
@@ -1306,11 +1306,11 @@ local function run_support_check()
     end
     local ms = (core.get_us_time() - t0) / 1000
     if ms > scfg.budget_ms then
-        core.log("warning", ("[rockmech] 支撐判定 %.1f ms（預算 %g ms），起點 %d、展開 %d 格")
+        core.log("warning", ("[rockmech] 穩定判定 %.1f ms（預算 %g ms），起點 %d、展開 %d 格")
             :format(ms, scfg.budget_ms, #starts, stats.visited))
     end
     if n_existing > 0 then
-        core.log("action", ("[rockmech] 支撐判定：%d 群開挖前就會斷（0 < FS < 1），視為既有狀態不處理")
+        core.log("action", ("[rockmech] 穩定判定：%d 群開挖前就會斷（0 < FS < 1），視為既有狀態不處理")
             :format(n_existing))
     end
     if #comps == 0 and #slides == 0 then return end
@@ -1387,7 +1387,7 @@ local function run_support_check()
                 rest = nxt
                 local d2 = rockmech.rigidfall.drop_distance(rest, rfe.is_solid, 256)
                 if d2 and d2 >= 1 then
-                    core.log("action", ("[rockmech] 支撐判定：%d 格中有 %d 格坐在撐得住的岩體上而留下，其餘 %d 格斷開落下")
+                    core.log("action", ("[rockmech] 穩定判定：%d 格中有 %d 格坐在撐得住的岩體上而留下，其餘 %d 格斷開落下")
                         :format(#c.cells, #c.cells - #rest, #rest))
                     c.cells, dd = rest, d2
                     break
@@ -1465,10 +1465,10 @@ local function run_support_check()
         n = n + #cells
     end
     if n_merged > 0 then
-        core.log("action", ("[rockmech] 支撐判定：%d 次把下方懸空、撐不住的岩體一併帶下"):format(n_merged))
+        core.log("action", ("[rockmech] 穩定判定：%d 次把下方懸空、撐不住的岩體一併帶下"):format(n_merged))
     end
     if n_stuck > 0 then
-        core.log("action", ("[rockmech] 支撐判定：%d 群判定會掉但正下方被擋住、動不了，保留原位"):format(n_stuck))
+        core.log("action", ("[rockmech] 穩定判定：%d 群判定會掉但正下方被擋住、動不了，保留原位"):format(n_stuck))
     end
     -- 群上方若有碎石等，可能因此懸空
     for _, c in ipairs(comps) do
@@ -1477,7 +1477,7 @@ local function run_support_check()
         end
     end
     physics_updating = false
-    core.log("action", ("[rockmech] 支撐判定：%d 群落下（懸臂斷裂 %d 群；懸空直剪 %d 群；整塊落下 %d 群）、共 %d 格（%.1f ms，展開 %d 格）")
+    core.log("action", ("[rockmech] 穩定判定：%d 群落下（懸臂斷裂 %d 群；懸空直剪 %d 群；整塊落下 %d 群）、共 %d 格（%.1f ms，展開 %d 格）")
         :format(#comps, n_overhang, n_shear, n_rigid, n, ms, stats.visited))
 end
 
@@ -1508,26 +1508,26 @@ function collapse.check_cell(pos)
     physics_updating = prev
 end
 
--- 某格改變後：以其 6 個鄰格為起點排入支撐判定。
+-- 某格改變後：以其 6 個鄰格為起點排入穩定判定。
 -- prev：該格改變前的方塊名稱（省略時取目前的方塊；在 on_destruct 中即為被移除的方塊）
 -- 物理系統內部的移除（崩落、滑出、碎石移動）用延伸範圍，其餘（玩家）用玩家範圍
-function collapse.queue_support_check(pos, prev)
+function collapse.queue_stability_check(pos, prev)
     if not scfg.enabled then return end
     local p = vector.round(pos)
-    add_change(support_changes, p, prev or core.get_node(p).name, nil,
+    add_change(stability_changes, p, prev or core.get_node(p).name, nil,
         physics_updating and secondary_radius() or primary_radius())
     for _, d in ipairs(NB6) do
         pending_starts[#pending_starts + 1] = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
     end
-    if support_scheduled then return end
-    support_scheduled = true
-    core.after(0, run_support_check)
+    if stability_scheduled then return end
+    stability_scheduled = true
+    core.after(0, run_stability_check)
 end
 
 -- 挖掉非岩石（例如土）也可能讓上方岩石懸空；岩石本身由 on_destruct 觸發
 core.register_on_dignode(function(pos, oldnode)
     if physics_updating or is_rock(oldnode.name) then return end
-    collapse.queue_support_check(pos, oldnode.name)
+    collapse.queue_stability_check(pos, oldnode.name)
 end)
 
 -- 9. 掉落破碎：包裝原版 falling node entity
@@ -1602,16 +1602,16 @@ local function register_physics_events(name, intact)
             physics_updating = true
             update_affected_area(pos)
             physics_updating = false
-            -- 放上去的岩石增加懸臂自重、也可能懸空：同樣做支撐判定與懸臂斷裂
-            collapse.queue_support_check(pos, "air")
+            -- 放上去的岩石增加懸臂自重、也可能懸空：同樣做穩定判定與懸臂斷裂
+            collapse.queue_stability_check(pos, "air")
         end,
         on_destruct = function(pos)
             collapse.mark_excavated(pos)
-            -- 支撐判定不受防護限制：任何移除（包括物理系統把碎石移走、
+            -- 穩定判定不受防護限制：任何移除（包括物理系統把碎石移走、
             -- 落石離開原位）都可能讓上方岩石懸空。判定很便宜，且只會讓
             -- 懸空群落下，不會無限連鎖。
-            collapse.queue_support_check(pos)
-            -- 正上方若是碎石（不在支撐判定的鍵結範圍內），也要重新判定掉落／滑動
+            collapse.queue_stability_check(pos)
+            -- 正上方若是碎石（不在穩定判定的鍵結範圍內），也要重新判定掉落／滑動
             local above = {x = pos.x, y = pos.y + 1, z = pos.z}
             core.after(0, function()
                 if rockmech.is_rubble(core.get_node(above).name) then
@@ -1662,7 +1662,7 @@ end
 
 -- 11. 整體滑動（大型平面／楔形，見 keyblock.find_masses）
 -- 玩家造成的改變（挖掘、爆破、清碴）周圍排入檢查；同一秒內的觸發合併，最多每秒一次。
--- 讀取範圍較大（mass_radius），所以獨立於每次挖掘都會跑的支撐判定。
+-- 讀取範圍較大（mass_radius），所以獨立於每次挖掘都會跑的穩定判定。
 -- 滑出的岩體原地變成碎石，再由顆粒流往下攤開。
 do
     local mass_centers, mass_scheduled, mass_last = {}, false, 0

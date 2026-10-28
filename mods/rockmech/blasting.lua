@@ -5,7 +5,7 @@
 --   * 岩性方塊與碎石定義 on_blast（不做事），原版 TNT 就不會直接刪掉它們
 --   * 包裝 tnt.boom：原版爆炸結束後，依岩性強度處理半徑內的岩石：
 --       中心區炸飛（變成噴出的碎石物品）、外圍原地破碎成碎石
---   * 之後觸發支撐判定、懸臂斷裂、軸差破壞，以及碎石的掉落與滑動
+--   * 之後觸發穩定判定、懸臂斷裂、軸差破壞，以及碎石的掉落與滑動
 --     （原版 TNT 以 VoxelManip 刪除方塊，不會觸發 on_destruct）
 
 if not (core.get_modpath("tnt") and tnt and tnt.boom) then
@@ -127,11 +127,11 @@ function rockmech.blast_rock(center, R, floor_y)
 	for name, lv in pairs(ejected) do ejected[name] = math.floor(lv / rockmech.RUBBLE_LEVELS + 0.5) end
 	eject_items(center, ejected)
 
-	-- 觸發後續判定：爆炸範圍內的移除點（支撐判定、懸臂斷裂）與爆心（軸差破壞）
+	-- 觸發後續判定：爆炸範圍內的移除點（穩定判定、懸臂斷裂）與爆心（軸差破壞）
 	local col = rockmech.collapse
 	col.record_changes(changes)
-	col.queue_support_check(center)
-	for _, p in ipairs(removed) do col.queue_support_check(p) end
+	col.queue_stability_check(center)
+	for _, p in ipairs(removed) do col.queue_stability_check(p) end
 	col.queue_failure_check(center)
 	-- 碎石：懸空就落下、超過安息角就滑動（下一個 tick，等其他判定排定）
 	table.sort(rubbled, function(a, b) return a.y < b.y end)

@@ -145,8 +145,8 @@ config.fallbreak_defaults = {
 	break_height = 4.0,       -- 非岩性（如 default:stone）的破碎特徵高度 (m)
 }
 
--- 支撐判定（support.lua）；設定鍵為 rockmech_support_<key>
-config.support_defaults = {
+-- 穩定判定（stability.lua，與岩體是否相連）；設定鍵為 rockmech_stability_<key>
+config.stability_defaults = {
 	enabled = true,
 	radius = 12,              -- 搜尋範圍半徑 (m)；碰到範圍邊界視為連回大岩體
 	max_voxels = 2000,        -- 懸空群超過此格數保守視為穩定
@@ -399,11 +399,13 @@ function config.load(get)
 	end
 
 	-- 讀取一組 rockmech_<prefix>_<key> 設定
-	local function load_section(prefix, defaults)
+	-- legacy：改名前的前綴（舊設定鍵仍讀得到，新鍵優先）
+	local function load_section(prefix, defaults, legacy)
 		local t = copy(defaults)
 		for key, def in pairs(defaults) do
 			local name = "rockmech_" .. prefix .. "_" .. key
 			local raw = get(name)
+			if (raw == nil or raw == "") and legacy then raw = get("rockmech_" .. legacy .. "_" .. key) end
 			if type(def) == "boolean" then
 				local b = parse_bool(raw)
 				if b ~= nil then t[key] = b end
@@ -461,11 +463,11 @@ function config.load(get)
 	cfg.fallbreak = load_section("fallbreak", config.fallbreak_defaults)
 	cfg.fallbreak.break_height = math.max(0.01, cfg.fallbreak.break_height)
 
-	-- 支撐判定
-	cfg.support = load_section("support", config.support_defaults)
-	cfg.support.radius = math.max(2, math.floor(cfg.support.radius))
-	cfg.support.max_voxels = math.max(1, math.floor(cfg.support.max_voxels))
-	cfg.support.rigid_max = math.max(1, math.floor(cfg.support.rigid_max))
+	-- 穩定判定
+	cfg.stability = load_section("stability", config.stability_defaults, "support")
+	cfg.stability.radius = math.max(2, math.floor(cfg.stability.radius))
+	cfg.stability.max_voxels = math.max(1, math.floor(cfg.stability.max_voxels))
+	cfg.stability.rigid_max = math.max(1, math.floor(cfg.stability.rigid_max))
 
 	-- 爆破破碎
 	cfg.blast = load_section("blast", config.blast_defaults)

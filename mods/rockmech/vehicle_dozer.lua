@@ -114,10 +114,10 @@ local function push(self, pos, s)
 			local base = rockmech.rubble_base[n]
 			got[base] = (got[base] or 0) + k
 			-- 不用 remove_node：它會讓周圍 5 格的碎石重新流動，剛推出去的那堆會流回鏟刀前。
-			-- 只保留開挖記錄與支撐判定（推走撐住岩石的碎石，上面的岩石照樣會掉）
+			-- 只保留開挖記錄與穩定判定（推走撐住岩石的碎石，上面的岩石照樣會掉）
 			core.swap_node(c, {name = "air"})
 			collapse.mark_excavated(c)
-			collapse.queue_support_check(c, n)
+			collapse.queue_stability_check(c, n)
 		end
 	end
 	local ycap = y0 + PILE_H - 1

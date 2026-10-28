@@ -7,7 +7,7 @@
 --   左鍵：在指到的岩面前引爆一個 TNT（同原版 TNT 的爆炸，岩石依強度破碎，見 blasting.lua）
 --   右鍵：一鍵清碴：指到的格子附近（±2 格）所有碎石，以及與它們相連的碎石
 -- 只動碎石，不動岩石。以 VoxelManip 一次移除，再比照爆破觸發後續判定：
--- 記錄開挖（只算開挖造成的惡化）、緊貼岩石處的支撐判定與破壞檢查、
+-- 記錄開挖（只算開挖造成的惡化）、緊貼岩石處的穩定判定與破壞檢查、
 -- 周圍沒被清掉的碎石重新判定掉落／顆粒流。
 
 local MAX_FLOOD = 4096
@@ -110,7 +110,7 @@ local function clear(cells, p1, p2, pname, any)
 	vm:write_to_map(true)
 	if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
 
-	-- 鄰格：緊貼岩石（或其他實心非碎石）的移除點 → 支撐判定與破壞檢查；
+	-- 鄰格：緊貼岩石（或其他實心非碎石）的移除點 → 穩定判定與破壞檢查；
 	-- 沒被清掉的鄰近碎石 → 重新判定掉落／顆粒流
 	local touch, rest, rest_seen = {}, {}, {}
 	for i, p in ipairs(removed) do
@@ -139,7 +139,7 @@ local function clear(cells, p1, p2, pname, any)
 	local picked = {}
 	for _, c in ipairs(touch) do
 		local p = c.pos
-		col.queue_support_check(p, c.name)
+		col.queue_stability_check(p, c.name)
 		local k = key(math.floor(p.x / 3), math.floor(p.y / 3), math.floor(p.z / 3))
 		if not picked[k] then
 			picked[k] = true
@@ -270,7 +270,7 @@ core.register_tool("rockmech:blast_wand", {
 	end,
 })
 
--- 挖洞魔杖：左鍵直接移除以指到的格為中心的 3×3×3（任何可挖的方塊，算玩家開挖：記錄開挖、觸發破壞與支撐判定），
+-- 挖洞魔杖：左鍵直接移除以指到的格為中心的 3×3×3（任何可挖的方塊，算玩家開挖：記錄開挖、觸發破壞與穩定判定），
 -- 右鍵一鍵清碴（同爆破魔杖）
 core.register_tool("rockmech:dig_wand", {
 	description = "Dig wand (挖洞魔杖)\n左鍵：移除以指到的格為中心的 3×3×3（岩石、碎石等）\n右鍵：一鍵清碴（附近與相連的碎石）\n" ..
