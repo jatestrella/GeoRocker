@@ -10,6 +10,7 @@ local V = rockmech.vehicles
 local box_tex, update_hud = V.box_tex, V.update_hud
 
 local SEC_PER_M = 0.6       -- 鑽 1 m 的時間 (s)
+local RETRACT = 0.4         -- 鑽好後迴轉頭升回頂端的時間（鑽孔時間的幾倍）
 local MAST_FOOT = {x = 0, y = -1.5, z = 2.3}   -- 桅桿腳（孔口）在車身座標
 local MAST_TOP = 6.7        -- 桅桿頂（車身座標 y）
 local HEAD_TOP, HEAD_LOW = 6.0, -0.9   -- 迴轉頭在桅桿上的上下限
@@ -85,7 +86,8 @@ end
 
 function def.hud(self)
 	local s = ("\n孔深設定 %d m"):format(depth_setting(self))
-	if self.boring then s = s .. ("　鑽孔中 %.0f / %d m"):format(self.boring.t / SEC_PER_M, self.boring.depth) end
+	if self.boring and self.boring.up then s = s .. "　抽出鑽桿中"
+	elseif self.boring then s = s .. ("　鑽孔中 %.0f / %d m"):format(self.boring.t / SEC_PER_M, self.boring.depth) end
 	if self.msg then s = s .. "\n" .. self.msg end
 	return s .. "\nE 在桅桿下方往下鑽孔　空白鍵 設定孔深"
 end
@@ -120,6 +122,17 @@ function def.step(self, ctx)
 	if not b then return end
 	b.t = b.t + ctx.dtime
 	local total = b.depth * SEC_PER_M
+	if b.up then
+		-- 鑽好了：迴轉頭沿桅桿升回頂端（抽出鑽桿，比鑽的時候快）
+		local up = total * RETRACT
+		place_head(self, HEAD_LOW + (HEAD_TOP - HEAD_LOW) * math.min(1, b.t / up))
+		if b.t >= up then
+			self.boring = nil
+			place_head(self, HEAD_TOP)
+			update_hud(self)
+		end
+		return
+	end
 	place_head(self, HEAD_TOP - (HEAD_TOP - HEAD_LOW) * math.min(1, b.t / total))
 	local face = {x = b.above.x, y = b.above.y - 0.45, z = b.above.z}
 	core.add_particlespawner({
@@ -140,8 +153,7 @@ function def.step(self, ctx)
 		else
 			self.msg = "孔位被擋住了"
 		end
-		self.boring = nil
-		place_head(self, HEAD_TOP)
+		b.up, b.t = true, 0
 		update_hud(self)
 	end
 end
