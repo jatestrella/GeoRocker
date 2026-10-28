@@ -46,7 +46,7 @@
 --    sets 中穿過此格的組。params.detail = true 時不做前置篩選（顯示用）。
 --    params.axial == false 時不做軸差判定（只做弱面）。
 -- 7. 支護（grid.support，見 support.lua）：臨空面的法向應力 = 支護壓力 pᵢ（側面 σx／σz 和碎石側壓相加；
---    頂板 σy = pᵢ），等效圍壓讓 Hoek-Brown 的 σ3 與節理面的 σn 提高。
+--    頂板 σy = pᵢ），等效圍壓讓 Hoek-Brown 的 σ3 與節理面的 σn 提高；懸空直剪的每欄荷重扣掉底面的 pᵢ。
 --
 -- ## 網格格式（與 VoxelManip / VoxelArea 相同的扁平陣列）
 -- grid = {
@@ -709,10 +709,15 @@ local function shear_level(g, y, p)
 	if ly < 0 or ly >= g.ny then return lv end
 	local dist, Q, SRC = lv.dist, lv.Q, lv.src
 	local L, data = g.L, g.data
+	local spt = g.support
+	-- 柱狀荷重；底面有支護（support.lua）時扣掉 pᵢ × 1 m²（往上托）
 	local function load(j)
 		local k = j - 1
 		local c = cindex(g, g.ox + k % nx, y, g.oz + math.floor(k / gs))
-		return c and L[c] or 0
+		local v = c and L[c] or 0
+		local ps = spt and spt.face[j * 8 + 4]
+		if ps then v = math.max(0, v - ps * 1000) end
+		return v
 	end
 	local hang, frontier = {}, {}
 	for lz = z1, z2 do

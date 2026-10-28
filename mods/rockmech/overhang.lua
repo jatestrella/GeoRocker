@@ -23,6 +23,9 @@
 -- 節理面不傳張力。相鄰兩欄的介面上，被節理切過的面不算：
 --   * 根部斷面（懸空欄與有支撐欄之間）完好面數 t_eff：σb = 3γ·t·d²/t_eff²，
 --     即 L_max 變成 L_max·(t_eff/t)；t_eff = 0 → 張力為 0。
+-- ## 支護（grid.support，見 support.lua）
+-- 欄底面的支護壓力 pᵢ 往上托：每 m² 荷重 γt → γt − pᵢ，σb 等比例下降（FS × γt/(γt − pᵢ)），
+-- pᵢ ≥ γt 時整欄被托住。岩栓只有比該欄長（錨進上方水平節理以上的岩層）時才算。
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
 --     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
@@ -303,6 +306,17 @@ local function local_ctx(g, p)
 		end
 		r.lmax = lm
 		r.crit = crit
+		-- 底面的支護壓力（support.lua，kPa）：往上托，抵銷荷重。岩栓要比這一欄長（錨進上面的岩層）才算
+		local sup = g.support
+		if sup then
+			local tot = sup.face[ib * 8 + 4]
+			if tot then
+				local sc = sup.sc[ib * 8 + 4] or 0
+				local bolt = tot - sc
+				if r.t >= sup.L then bolt = 0 end
+				r.p_sup = (sc + bolt) * 1000
+			end
+		end
 		return r
 	end
 
@@ -495,12 +509,22 @@ end
 -- load：疊層的荷重倍數 m = q₁/(γt)（Obert & Duvall，≥ 1）：σb × m → FS ÷ m
 -- d = 0：坐在下層岩體上，由下層承擔 → FS = ∞
 -- beam：兩端支撐梁的 FS（未含疊層荷重），有就取兩者較大
+-- 支護（r.p_sup，kPa）：每 m² 荷重 γt → γt − pᵢ，FS × γt/(γt − pᵢ)；pᵢ ≥ γt → 整欄被托住（∞）
+local function support_factor(r)
+	local p = r.p_sup
+	if not p or p <= 0 then return 1 end
+	local q0 = r.crit.gamma * r.t
+	if p >= q0 then return math.huge end
+	return q0 / (q0 - p)
+end
 local function run_fs(r, d, rho, load, beam)
 	if d == 0 then return math.huge end
+	local sf = support_factor(r)
+	if sf == math.huge then return math.huge end
 	local f = d and (r.lmax * (rho or 1) / d) ^ 2 or 0
 	if beam and beam > f then f = beam end
 	if load and load > 1 then f = f / load end
-	return f
+	return f * sf
 end
 overhang.run_fs = run_fs
 
@@ -611,6 +635,7 @@ function overhang.cell_state(g, p, x, y, z)
 	if d0 and rho0 and rho0 > 0 then
 		-- σb = 3γ·t·d²/t_eff² × m（疊層荷重倍數），t_eff = rho·t
 		sigma_b = 3 * r0.crit.gamma * d0 * d0 * r0.t * math.max(1, load0) / (r0.t * r0.t * rho0 * rho0) / 1000
+			/ support_factor(r0)
 	end
 	local out = {
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,

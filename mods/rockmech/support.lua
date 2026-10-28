@@ -10,6 +10,10 @@
 --   failure.cell_state：臨空面的法向應力 = pᵢ（側面：σx／σz；頂板：σy），Hoek-Brown 的 σ3 與節理面的 σn 跟著提高。
 --   keyblock：岩塊臨空面上的噴凝土 p_sc × 面積；穿過岩塊、錨固段打進岩塊外岩體的岩栓 T。
 --     兩者都是作用在面上、指向岩體的力，抵抗把岩塊往外推出該面的運動。
+--   頂板（底面的 pᵢ 往上托，抵銷懸空岩體的自重）：
+--     懸臂（overhang.lua）：每 m² 荷重 γt → γt − pᵢ，σb 等比例下降；pᵢ ≥ γt 整欄被托住。
+--       岩栓只有比該欄（到上方水平節理為止）長、錨進上面的岩層時才算（懸吊作用）。
+--     懸空直剪（failure.shear_state）：每欄的柱狀荷重扣掉底面的 pᵢ × 1 m²。
 --
 -- support.scan(g, ids, prm) → sup 或 nil（範圍內沒有支護）
 --   g：failure／keyblock 的網格（data、p2、ox..nz、bonded_of）
@@ -41,7 +45,7 @@ function support.scan(g, ids, prm)
 	local p_sc = (prm.p_sc or 0) / N
 	local T = (prm.T or 0) / N
 	local nb = math.max(1, math.ceil(prm.L or 1))
-	local sup = {face = {}, sc = {}, bolts = {}}
+	local sup = {face = {}, sc = {}, bolts = {}, L = prm.L or 1}
 	local any = false
 	local function idx(x, y, z)
 		if x < 0 or y < 0 or z < 0 or x >= nx or y >= ny or z >= nz then return nil end

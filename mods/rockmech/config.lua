@@ -158,7 +158,7 @@ config.stability_defaults = {
 -- 支護（support.lua、groundsupport.lua）：換算成臨空面上的等效圍壓 pᵢ；設定鍵為 rockmech_support_<key>
 -- （和岩體強度一樣除以相似比 N）
 config.support_defaults = {
-	shotcrete_p = 0.2,        -- 噴凝土的支護壓力 p_sc (MPa)（約 5～10 cm 噴凝土）
+	shotcrete_p = 0.05,       -- 噴凝土的支護壓力 p_sc (MPa)：托頂板時約等於 2 m 岩層（γ ≈ 25 kN/m³），防小塊與表層剝落
 	bolt_t = 100,             -- 岩栓錨定力 T (kN)；平均分給周圍 3×3 m² 的岩面，間距 s 的格狀岩栓 ≈ T/s²
 	bolt_l = 2.4,             -- 岩栓長度 L (m)；關鍵塊體要錨進岩塊外的岩體才有效
 }

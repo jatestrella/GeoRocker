@@ -138,3 +138,79 @@ describe("support 關鍵塊體", function()
 		assert.near(9 * 0.1 * 1000 / W, b.fs, 1e-9)
 	end)
 end)
+
+describe("support 頂板：往上托抵銷自重", function()
+	local overhang = load_module("overhang")
+	local SH = 1
+	-- 地面 y ≤ 0、x = 0 的岩柱 y 1..8，柱頂往 +x 伸出長 L、厚 t 的頁岩懸臂（σt 2 MPa、γ 25）
+	local function cantilever(L, t)
+		local x0, x1, y0, y1, z0, z1 = -3, L + 3, -2, 12, -2, 2
+		local g = {ox = x0, oy = y0, oz = z0, nx = x1 - x0 + 1, ny = y1 - y0 + 1, nz = z1 - z0 + 1, data = {},
+			bonded_of = {[SH] = true}, solid_of = {[SH] = true, [9] = true}, lith_of = {[SH] = "shale"}}
+		for z = z0, z1 do for y = y0, y1 do for x = x0, x1 do
+			local v = AIR
+			if y <= 0 then v = 9
+			elseif z == 0 and x == 0 and y <= 8 then v = SH
+			elseif z == 0 and x >= 1 and x <= L and y > 8 - t and y <= 8 then v = SH end
+			g.data[1 + (x - x0) + (y - y0) * g.nx + (z - z0) * g.nx * g.ny] = v
+		end end end
+		g.req = {x1 = x0 + 1, x2 = x1 - 1, y1 = y0 + 1, y2 = y1 - 1, z1 = z0 + 1, z2 = z1 - 1}
+		return g
+	end
+	local OP = {lithologies = {shale = {gamma = 25, tensile = 2}}, scale = 1, max_voxels = 2000}
+	-- 懸臂每一欄底面（−y）的支護：sc（噴凝土）、bolt（岩栓攤到的）MPa
+	local function under(g, L, t, sc, bolt)
+		local sup = {face = {}, sc = {}, bolts = {}, L = 2.4}
+		for x = 1, L do
+			local i = gi(g, x, 8 - t + 1, 0)
+			sup.face[i * 8 + 4] = sc + bolt
+			if sc > 0 then sup.sc[i * 8 + 4] = sc end
+		end
+		g.support = sup
+	end
+
+	it("懸臂：FS × γt/(γt − pᵢ)", function()
+		local g = cantilever(6, 1)
+		local bare = overhang.cell_state(g, OP, 6, 8, 0).fs
+		assert.is_true(bare < 1)
+		under(g, 6, 1, 0.02, 0)            -- 20 kPa，γt = 25 kPa → × 5
+		assert.near(bare * 5, overhang.cell_state(g, OP, 6, 8, 0).fs, 1e-9)
+	end)
+
+	it("懸臂：pᵢ ≥ γt 整欄被托住", function()
+		local g = cantilever(6, 1)
+		under(g, 6, 1, 0.03, 0)
+		assert.are.equal(math.huge, overhang.cell_state(g, OP, 6, 8, 0).fs)
+		assert.are.equal(0, #(overhang.find_failing_local(g, OP, {{x = 6, y = 8, z = 0}})))
+	end)
+
+	it("懸臂：岩栓比這一欄短（沒錨進上面的岩層）不算", function()
+		local g = cantilever(6, 3)                  -- 3 m 厚 > L 2.4
+		local bare = overhang.cell_state(g, OP, 6, 8, 0).fs
+		under(g, 6, 3, 0, 0.05)
+		assert.near(bare, overhang.cell_state(g, OP, 6, 8, 0).fs, 1e-12)
+	end)
+
+	it("懸空直剪：每欄荷重扣掉底面的 pᵢ", function()
+		-- 地下開口 x −4..4、y −22..−20；頂板懸空格 y = −19（L = 19γ），x = 5 是支撐處
+		local n = 41
+		local g = {ox = -20, oy = -30, oz = -2, nx = 41, ny = 30, nz = 5, data = {},
+			solid_of = {[ROCK] = true}, weight_of = {[ROCK] = GAMMA}, lith_of = {[ROCK] = "rock"}}
+		for z = -2, 2 do for y = -30, -1 do for x = -20, 20 do
+			g.data[failure.index(g, x, y, z)] = (x >= -4 and x <= 4 and y >= -22 and y <= -20) and AIR or ROCK
+		end end end
+		local p = {surface_y = 0, k0 = 0.5, window = 4, strength_scale = 1,
+			lithologies = {rock = {gamma = GAMMA, ucs = 30, tensile = 1}},
+			shear = {k = 2, max_span = 32, max_section = 64}, cell_jointed = function(_, y) return y >= -17 end}
+		local s0 = failure.shear_state(g, 0, -19, 0, p)
+		assert.near(5 * 19 * GAMMA, s0.Q, 1e-9)
+		local g2 = {}
+		for k, v in pairs(g) do g2[k] = v end
+		g2.L, g2.sup, g2.shear_lv, g2.sup_L = nil, nil, nil, nil
+		g2.support = {face = {}, sc = {}, bolts = {}, L = 2.4}
+		for x = -4, 4 do for z = -2, 2 do g2.support.face[failure.index(g2, x, -19, z) * 8 + 4] = 0.1 end end
+		local s1 = failure.shear_state(g2, 0, -19, 0, p)
+		assert.near(5 * 19 * GAMMA - 5 * 100, s1.Q, 1e-9)
+		assert.is_true(s1.fs > s0.fs)
+	end)
+end)
