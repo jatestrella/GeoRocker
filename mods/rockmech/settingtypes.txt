@@ -278,8 +278,6 @@ rockmech_support_shotcrete_p (Shotcrete support pressure) float 0.05 0 10
 # Rock bolt capacity T (kN), spread over the 3×3 faces around the bolt (pattern bolting at spacing s ≈ T/s²).
 rockmech_support_bolt_t (Rock bolt capacity) float 100 0 10000
 
-# Rock bolt length L (m). For key blocks a bolt only counts if it anchors in rock beyond the block.
-rockmech_support_bolt_l (Rock bolt length) float 2.4 1 20
 
 [Blasting]
 
@@ -333,6 +331,10 @@ rockmech_blast_anfo_radius (ANFO segment radius) float 2.5 0.1 10
 
 # ANFO: stemming length left uncharged at the collar (m).
 rockmech_blast_anfo_stemming (ANFO stemming) float 1.5 0 10
+
+# Hand rock drill: keep holding on a drill hole to deepen it 1 m per drill time, up to this depth (m).
+# Rock bolts are as long as the hole they are installed in.
+rockmech_blast_hand_max_depth (Hand drill max hole depth) int 4 1 20
 
 [Overhang]
 

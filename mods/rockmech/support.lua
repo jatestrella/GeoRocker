@@ -18,9 +18,10 @@
 -- support.scan(g, ids, prm) → sup 或 nil（範圍內沒有支護）
 --   g：failure／keyblock 的網格（data、p2、ox..nz、bonded_of）
 --   ids = {lining = {[cid] = true}, bolt = {[cid] = true}}
---   prm = {p_sc (MPa), T (kN), L (m), N}
+--   prm = {p_sc (MPa), T (kN), L (m，沒有 bolt_len 時的岩栓長度), N, bolt_len(x, y, z) → 該岩栓的長度 (m)（世界座標）}
 --   sup.face[i·8 + k] = pᵢ (MPa)：岩格 i（網格索引）往 AX[k] 方向的面
 --   sup.sc[i·8 + k]   = 只有噴凝土的 p_sc (MPa)
+--   sup.bf[i·8 + k]   = 岩栓攤到這一面的 {{p (MPa), L (m)}...}（懸臂判定看岩栓夠不夠長）
 --   sup.bolts = {{i = 岩栓穿過的第一格, path = {往岩體裡的後續各格}, k = 墊板那一面的方向, T = kN}...}
 
 local support = {}
@@ -44,8 +45,7 @@ function support.scan(g, ids, prm)
 	local N = prm.N or 1
 	local p_sc = (prm.p_sc or 0) / N
 	local T = (prm.T or 0) / N
-	local nb = math.max(1, math.ceil(prm.L or 1))
-	local sup = {face = {}, sc = {}, bolts = {}, L = prm.L or 1}
+	local sup = {face = {}, sc = {}, bolts = {}, bf = {}}
 	local any = false
 	local function idx(x, y, z)
 		if x < 0 or y < 0 or z < 0 or x >= nx or y >= ny or z >= nz then return nil end
@@ -76,6 +76,8 @@ function support.scan(g, ids, prm)
 				local d = WALL[(g.p2 and g.p2[i] or 0) % 8] or WALL[1]
 				local kout = k_of(-d[1], -d[2], -d[3])
 				local i0 = idx(x + d[1], y + d[2], z + d[3])
+				local Lb = prm.bolt_len and prm.bolt_len(g.ox + x, g.oy + y, g.oz + z) or prm.L or 1
+				local nb = math.max(1, math.ceil(Lb - 1e-6))
 				if i0 and bonded_of[data[i0]] then
 					-- 錨定力分給同一面 3×3 格（前方是開口、後面是岩石的面）
 					for u = -1, 1 do for v = -1, 1 do
@@ -86,7 +88,11 @@ function support.scan(g, ids, prm)
 						local j = idx(x + d[1] + ox, y + d[2] + oy, z + d[3] + oz)
 						local jo = idx(x + ox, y + oy, z + oz)
 						if j and jo and bonded_of[data[j]] and not bonded_of[data[jo]] then
-							add(sup.face, j * 8 + kout, T / 9 / 1000)
+							local key = j * 8 + kout
+							add(sup.face, key, T / 9 / 1000)
+							local l = sup.bf[key] or {}
+							l[#l + 1] = {T / 9 / 1000, Lb}
+							sup.bf[key] = l
 						end
 					end end
 					local path = {}

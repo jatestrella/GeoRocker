@@ -495,8 +495,14 @@ function collapse.read_grid(minp, maxp, no_overburden)
     -- 支護（噴凝土、岩栓）→ 臨空面的等效圍壓（support.lua）
     if rockmech.support_ids then
         local sc = cfg.support
+        -- 岩栓長度 = 孔深（裝岩栓的鑽孔 meta depth，沒有就是 hole_depth）
+        local hd = cfg.blast.hole_depth
         g.support = rockmech.support.scan(g, rockmech.support_ids,
-            {p_sc = sc.shotcrete_p, T = sc.bolt_t, L = sc.bolt_l, N = cfg.model_scale})
+            {p_sc = sc.shotcrete_p, T = sc.bolt_t, L = hd, N = cfg.model_scale,
+             bolt_len = function(x, y, z)
+                local v = core.get_meta({x = x, y = y, z = z}):get_float("depth")
+                return v > 0 and v or hd
+             end})
     end
     return g
 end

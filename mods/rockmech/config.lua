@@ -160,7 +160,7 @@ config.stability_defaults = {
 config.support_defaults = {
 	shotcrete_p = 0.05,       -- 噴凝土的支護壓力 p_sc (MPa)：托頂板時約等於 2 m 岩層（γ ≈ 25 kN/m³），防小塊與表層剝落
 	bolt_t = 100,             -- 岩栓錨定力 T (kN)；平均分給周圍 3×3 m² 的岩面，間距 s 的格狀岩栓 ≈ T/s²
-	bolt_l = 2.4,             -- 岩栓長度 L (m)；關鍵塊體要錨進岩塊外的岩體才有效
+	-- 岩栓長度 = 裝進去的鑽孔孔深（關鍵塊體要錨進岩塊外的岩體、懸臂要比該欄長才有效）
 }
 
 -- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
@@ -182,6 +182,7 @@ config.blast_defaults = {
 	hole_interval = 0.1,      -- 起爆器各孔依序起爆的間隔（段發）(s)
 	anfo_radius = 2.5,        -- ANFO 柱狀裝藥每 1.5 m 一段的爆炸半徑 (m)（一段約 7 kg，比一條乳膠炸藥多很多）
 	anfo_stemming = 1.5,      -- ANFO 孔口填塞長度 (m)
+	hand_max_depth = 4,       -- 手動鑿岩機（手持風鑽）對鑽孔繼續按住加深，最深幾公尺 (m)
 }
 
 -- 警戒裂紋（fsmask.lua）：1 < FS < max 的岩格加上裂紋；設定鍵為 rockmech_fswarn_<key>
@@ -481,7 +482,6 @@ function config.load(get)
 	cfg.support = load_section("support", config.support_defaults)
 	cfg.support.shotcrete_p = math.max(0, cfg.support.shotcrete_p)
 	cfg.support.bolt_t = math.max(0, cfg.support.bolt_t)
-	cfg.support.bolt_l = math.max(1, cfg.support.bolt_l)
 
 	-- 爆破破碎
 	cfg.blast = load_section("blast", config.blast_defaults)

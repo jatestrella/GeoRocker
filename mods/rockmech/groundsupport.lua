@@ -2,8 +2,9 @@
 -- 支護：岩栓、噴凝土（隧道與邊坡都能用）。力學見 support.lua：換算成臨空面上的等效圍壓 pᵢ，
 -- 進到軸差（Hoek-Brown σ3）、節理弱面（σn）與關鍵塊體／整體滑動的判定。參數在設定 rockmech_support_*。
 --   岩栓：先用鑿岩機鑽孔，再拿岩栓對著鑽孔按右鍵裝進去（孔口一塊墊板）。
+--   岩栓長度 = 裝進去的鑽孔孔深（手動鑿岩機對孔繼續按住可以加深，見 drilling.lua）。
 --   噴凝土：對岩面按右鍵，噴這一面 3×3 格（用掉一袋）；噴到的空氣格變成一層薄噴凝土，這格周圍的岩面都算噴到。
---     噴凝土不擋視線，可以隔著它挖、鑽孔（鑽孔的那格噴凝土會被孔取代）。
+--     可以挖掉（不退還）；鑿岩機對著噴凝土鑽就是鑽後面的岩面（那格噴凝土會被孔取代）。
 --   支護後面的岩石沒了（挖掉、爆破、坍塌）就跟著消失；爆炸會直接炸掉。
 
 local scfg = rockmech.cfg.support
@@ -41,8 +42,8 @@ do
 		},
 		connects_to = {"group:rockmech_rock"},
 		tiles = {tex},
-		walkable = false, pointable = false, buildable_to = true, is_ground_content = false,
-		drop = "", groups = {not_in_creative_inventory = 1},
+		walkable = false, buildable_to = true, is_ground_content = false,
+		drop = "", groups = {cracky = 3, not_in_creative_inventory = 1},
 	})
 end
 
@@ -65,7 +66,7 @@ end
 
 -- 岩栓：對鑽孔按右鍵裝進去
 core.register_craftitem(BOLT_ITEM, {
-	description = ("岩栓 Rock bolt\n對鑽孔按右鍵裝進去（長 %.1f m、錨定力 %d kN）"):format(scfg.bolt_l, scfg.bolt_t),
+	description = ("岩栓 Rock bolt\n對鑽孔按右鍵裝進去（長度 = 孔深、錨定力 %d kN）"):format(scfg.bolt_t),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x11:7,1:#a8a8a4^[fill:8x2:4,12:#6a6a66^[fill:4x2:6,10:#8a8a86",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
@@ -76,7 +77,10 @@ core.register_craftitem(BOLT_ITEM, {
 			return itemstack
 		end
 		core.swap_node(p, {name = BOLT, param2 = node.param2})
-		core.get_meta(p):set_string("infotext", ("岩栓（長 %.1f m、錨定力 %d kN）"):format(scfg.bolt_l, scfg.bolt_t))
+		local meta = core.get_meta(p)
+		local len = meta:get_float("depth")
+		if len <= 0 then len = rockmech.cfg.blast.hole_depth end
+		meta:set_string("infotext", ("岩栓（長 %g m、錨定力 %d kN）"):format(len, scfg.bolt_t))
 		if not creative(placer) then itemstack:take_item() end
 		return itemstack
 	end,
@@ -91,7 +95,10 @@ core.register_craftitem(SHOTCRETE, {
 		-- 岩面 rock 與往外的法向 n：指著岩石就是那一面；指著鑽孔、岩栓就是它貼著的岩面
 		local rock, n = pointed.under, vector.subtract(pointed.above, pointed.under)
 		local un = core.get_node(rock)
-		if not is_rock(un.name) then
+		if un.name == LINING then
+			-- 指著已經噴過的那層：噴它後面的岩面
+			rock = vector.subtract(rock, n)
+		elseif not is_rock(un.name) then
 			local def = core.registered_nodes[un.name]
 			if def and def.paramtype2 == "wallmounted" then
 				local d = core.wallmounted_to_dir(un.param2)

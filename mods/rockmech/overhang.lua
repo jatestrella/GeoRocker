@@ -309,13 +309,11 @@ local function local_ctx(g, p)
 		-- 底面的支護壓力（support.lua，kPa）：往上托，抵銷荷重。岩栓要比這一欄長（錨進上面的岩層）才算
 		local sup = g.support
 		if sup then
-			local tot = sup.face[ib * 8 + 4]
-			if tot then
-				local sc = sup.sc[ib * 8 + 4] or 0
-				local bolt = tot - sc
-				if r.t >= sup.L then bolt = 0 end
-				r.p_sup = (sc + bolt) * 1000
+			local p = sup.sc[ib * 8 + 4] or 0
+			for _, e in ipairs(sup.bf[ib * 8 + 4] or {}) do
+				if e[2] > r.t then p = p + e[1] end
 			end
+			if p > 0 then r.p_sup = p * 1000 end
 		end
 		return r
 	end

@@ -289,7 +289,20 @@ end
 -- 鑽孔：拿著鑿岩機按住左鍵（像挖礦）、一直指著同一個岩面 drill_time 秒。伺服器每一步看玩家的按鍵與視線；
 -- 放開或指到別處就重來。鑿岩機有 on_use，按左鍵不會把岩石挖掉
 local DRILL = "rockmech:rock_drill"
-local drilling = {}   -- 玩家名 → {key, under, above, t, hud}
+local drilling = {}   -- 玩家名 → {key, under, above, t, hud, deepen}
+local LINING = "rockmech:shotcrete_lining"
+-- 加深：對著已經鑽好的孔繼續按住，每 drill_time 秒多 1 m，最深 hand_max_depth。回傳孔、下一公尺的岩格與現在孔深；
+-- 不能加深回傳 nil
+local function deepen_site(hole)
+	local node = core.get_node(hole)
+	if node.name ~= HOLE then return nil end
+	local d = core.wallmounted_to_dir(node.param2)
+	local n = math.floor(hole_len(hole) + 0.5)
+	if n >= bcfg.hand_max_depth then return nil end
+	local nxt = vector.add(hole, vector.multiply(d, n + 1))
+	if not rockmech.lith_of_node[core.get_node(nxt).name] then return nil end
+	return n
+end
 local function drill_hud(player, st, text)
 	if st.hud then player:hud_change(st.hud, "text", text)
 	else
@@ -313,6 +326,12 @@ core.register_globalstep(function(dtime)
 				if pt.type == "node" then hit = pt; break end
 			end
 		end
+		if hit and core.get_node(hit.under).name == LINING then
+			-- 指著噴凝土：鑽它後面的岩面（那格噴凝土會被孔取代）
+			local back = vector.subtract(hit.under, hit.above)
+			hit = {under = vector.add(hit.under, back), above = hit.under}
+		end
+		local deep = hit and core.get_node(hit.under).name == HOLE and deepen_site(hit.under)
 		if not hit then
 			if drilling[name] then drill_stop(pl, name) end
 		else
@@ -323,7 +342,22 @@ core.register_globalstep(function(dtime)
 				st = {key = key, under = hit.under, above = hit.above, t = 0}
 				drilling[name] = st
 			end
-			if cannot_drill(st.under, st.above) then
+			if deep then
+				-- 加深鑽孔
+				st.t = st.t + dtime
+				local frac = math.min(1, st.t / bcfg.drill_time)
+				local bars = math.floor(frac * 10 + 0.5)
+				drill_hud(pl, st, ("加深 %d → %d m "):format(deep, deep + 1) .. ("■"):rep(bars) .. ("□"):rep(10 - bars))
+				if st.t >= bcfg.drill_time then
+					local meta = core.get_meta(st.under)
+					meta:set_float("depth", deep + 1)
+					meta:set_string("infotext", ("鑽孔（深 %d m）"):format(deep + 1))
+					st.t = 0   -- 繼續按住就再加深一公尺
+				end
+			elseif core.get_node(hit.under).name == HOLE then
+				-- 鑽到最深了（或後面不是岩石）
+				drill_hud(pl, st, ("孔深 %d m（最深）"):format(math.floor(hole_len(hit.under) + 0.5)))
+			elseif cannot_drill(st.under, st.above) then
 				-- 鑽不了（碎石、孔口被擋住）：什麼都不顯示
 				if st.hud then pl:hud_remove(st.hud); st.hud = nil end
 			else
@@ -343,7 +377,10 @@ core.register_globalstep(function(dtime)
 					texture = "[fill:4x4:#9a9088",
 				})
 				if st.t >= bcfg.drill_time then
-					rockmech.make_hole(st.under, st.above)
+					if rockmech.make_hole(st.under, st.above) then
+						core.get_meta(st.above):set_string("infotext", ("鑽孔（深 %d m）\n繼續按住可以加深（最深 %d m）")
+							:format(bcfg.hole_depth, bcfg.hand_max_depth))
+					end
 					drill_stop(pl, name)
 				end
 			end
@@ -450,7 +487,8 @@ function rockmech.fire_round(pos, player)
 end
 
 core.register_tool(DRILL, {
-	description = "鑿岩機 Rock drill\n對岩面按住左鍵鑽孔（" .. bcfg.drill_time .. " 秒）",
+	description = ("鑿岩機 Rock drill\n對岩面按住左鍵鑽孔（%g 秒、%d m）；對鑽孔繼續按住每 %g 秒加深 1 m（最深 %d m）")
+		:format(bcfg.drill_time, bcfg.hole_depth, bcfg.drill_time, bcfg.hand_max_depth),
 	inventory_image = "[fill:16x16:#00000000^[fill:9x5:2,5:#d0a020^[fill:5x1:11,7:#b0b0b0^[fill:3x5:3,10:#404040^[fill:2x1:15,7:#e0e0e0",
 	-- 有 on_use 的物品按左鍵只會「使用」、不會挖方塊（只有 groupcaps 空的話會改用手挖，創造模式的手什麼都挖得動）。
 	-- 鑽孔看的是左鍵有沒有按住（上面的 globalstep），這裡什麼都不做
