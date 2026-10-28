@@ -77,11 +77,13 @@ core.register_entity(PART, {
 		physical = false, collide_with_objects = false, pointable = false, static_save = false,
 		visual = "cube", textures = V.box_tex("#808080"), backface_culling = true,
 	},
-	on_activate = function(self)
-		-- 沒有掛在載具上的零件（例如載具已經卸載）自己消失
-		core.after(1, function()
-			if self.object:get_pos() and not self.object:get_attach() then self.object:remove() end
-		end)
+	-- 沒有掛在載具上的零件自己消失：載具卸載、重新載入或被收起來時，引擎可能先把零件拆下來
+	-- （載具就找不到它們），留在原地像壞掉、重疊的車。每 0.5 s 檢查一次（生成時同一步就掛上去了）
+	on_step = function(self, dtime)
+		self.t_check = (self.t_check or 0) + dtime
+		if self.t_check < 0.5 then return end
+		self.t_check = 0
+		if not self.object:get_attach() then self.object:remove() end
 	end,
 })
 local function remove_parts(self)
@@ -89,17 +91,23 @@ local function remove_parts(self)
 		local e = c:get_luaentity()
 		if e and e.name == PART then c:remove() end
 	end
+	-- 已經被拆下來（不在 children 裡）的也一起清掉
+	for _, o in ipairs(self.part_list or {}) do
+		if o:get_pos() then o:remove() end
+	end
+	self.part_list = nil
 end
 -- parts：{id（可選，存到 self.parts[id]）, pos（m）, size, tex, rot（可選）}
 local function spawn_parts(self, parts)
 	remove_parts(self)
-	self.parts = {}
+	self.parts, self.part_list = {}, {}
 	for _, pt in ipairs(parts) do
 		local o = core.add_entity(self.object:get_pos(), PART)
 		if o then
 			o:set_properties({visual_size = pt.size, textures = pt.tex})
 			o:set_attach(self.object, "", {x = pt.pos.x * 10, y = pt.pos.y * 10, z = pt.pos.z * 10}, pt.rot or {x = 0, y = 0, z = 0})
 			if pt.id then self.parts[pt.id] = o end
+			self.part_list[#self.part_list + 1] = o
 		end
 	end
 end
@@ -659,6 +667,22 @@ function V.register(kind, def)
 			local pos = obj:get_pos()
 			local yaw = obj:get_yaw()
 			local vel = obj:get_velocity()
+			-- 零件被引擎拆掉了（見 PART 的 on_step）：每秒檢查一次，少了就整組重新生成
+			if self.part_list then
+				self.t_parts = (self.t_parts or 0) + dtime
+				if self.t_parts >= 1 then
+					self.t_parts = 0
+					for _, o in ipairs(self.part_list) do
+						local par = o:get_pos() and o:get_attach()
+						if par ~= obj then
+							spawn_parts(self, def.parts)
+							if def.on_spawn then def.on_spawn(self) end
+							V.refresh(self)
+							break
+						end
+					end
+				end
+			end
 			local d = self.driver and core.get_player_by_name(self.driver)
 			if self.driver and not d then self.driver = nil; hud_clear(self, nil) end
 			-- 駕駛已經不在這台車上（換到別台、被傳送、死亡等）：不再聽他的
