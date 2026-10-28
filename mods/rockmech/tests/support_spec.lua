@@ -206,6 +206,18 @@ describe("support 頂板：往上托抵銷自重", function()
 		assert.are.equal(math.huge, overhang.cell_state(g, OP, 2, 8, 0).fs)
 	end)
 
+	it("整段共用平均支護壓力：只打一支也讓整段的 FS 提高", function()
+		local g = cantilever(4, 1)                  -- 4 m² 懸空、γh = 25 kPa
+		local bare = overhang.cell_state(g, OP, 4, 8, 0)
+		local sup = {face = {}, sc = {}, bolts = {}}
+		sup.face[gi(g, 2, 8, 0) * 8 + 4] = 0.04     -- 只有一欄 40 kPa → 整段平均 10 kPa
+		g.support = sup
+		local tip = overhang.cell_state(g, OP, 4, 8, 0)
+		assert.near(10, tip.p_sup, 1e-9)
+		assert.near(bare.fs * 25 / 15, tip.fs, 1e-9)
+		assert.near(bare.group_fs * 25 / 15, tip.group_fs, 1e-9)
+	end)
+
 	it("懸空直剪：每欄荷重扣掉底面的 pᵢ", function()
 		-- 地下開口 x −4..4、y −22..−20；頂板懸空格 y = −19（L = 19γ），x = 5 是支撐處
 		local n = 41

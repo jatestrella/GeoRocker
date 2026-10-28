@@ -524,18 +524,19 @@ local function load_height(r, d)
 end
 overhang.load_height = load_height
 -- 支護（r.p_sup，kPa）：每 m² 荷重 γh → γh − pᵢ，FS × γh/(γh − pᵢ)；pᵢ ≥ γh → 整欄被托住（∞）
-local function support_factor(r, d)
-	local p = r.p_sup
+-- p：這一段頂板的平均支護壓力（省略 → 這一欄自己的）
+local function support_factor(r, d, p)
+	p = p or r.p_sup
 	if not p or p <= 0 then return 1 end
 	local q0 = r.crit.gamma * load_height(r, d)
 	if p >= q0 then return math.huge end
 	return q0 / (q0 - p)
 end
--- hr：這一段的水力半徑（省略 → 用 d）
-local function run_fs(r, d, rho, load, beam, hr)
+-- hr：這一段的水力半徑（省略 → 用 d）；pseg：這一段的平均支護壓力 (kPa)
+local function run_fs(r, d, rho, load, beam, hr, pseg)
 	if d == 0 then return math.huge end
 	local span = d and (hr or d)
-	local sf = support_factor(r, span)
+	local sf = support_factor(r, span, pseg)
 	if sf == math.huge then return math.huge end
 	local f = span and (r.lmax * (rho or 1) / span) ^ 2 * (r.t / load_height(r, span)) or 0
 	if beam and beam > f then f = beam end
@@ -566,17 +567,21 @@ local function segments(res)
 end
 
 -- 一段的水力半徑 HR = 懸空面積（欄數）／有支撐的周長；沒有有支撐的周長回傳 nil（用 d）
+-- 同時回傳這一段的平均支護壓力 pseg = 底面的支護托力總和／懸空面積 (kPa)：頂板整片當成板，
+-- 岩栓、噴凝土托住的是整段（和 HR 一樣以段為單位），每多一支岩栓整段都受益
 local function seg_hr(res, sg)
 	local area, perim = {}, {}
-	local na, np = 0, 0
+	local na, np, ps = 0, 0, 0
 	for _, r in ipairs(sg) do
 		local key = r.lx * 65536 + r.lz
 		if not area[key] then area[key] = true; na = na + 1 end
 		local n = res.nsup and res.nsup[r] or 0
 		if n > (perim[key] or 0) then np = np + n - (perim[key] or 0); perim[key] = n end
+		ps = ps + (r.p_sup or 0)
 	end
-	if np == 0 then return nil, na, 0 end
-	return na / np, na, np
+	local pseg = na > 0 and ps / na or 0
+	if np == 0 then return nil, na, 0, pseg end
+	return na / np, na, np, pseg
 end
 overhang.seg_hr = seg_hr
 
@@ -584,9 +589,9 @@ overhang.seg_hr = seg_hr
 -- 回傳 falls, fs（段內最小 FS）, crit（最小 FS 的 run）
 local function judge_segment(res, sg)
 	local minf, crit, fail = math.huge, sg[1], false
-	local hr = seg_hr(res, sg)
+	local hr, _, _, pseg = seg_hr(res, sg)
 	for _, r in ipairs(sg) do
-		local f = run_fs(r, res.d[r], res.rho[r], res.load and res.load[r], res.beam and res.beam[r] and res.beam[r].fs, hr)
+		local f = run_fs(r, res.d[r], res.rho[r], res.load and res.load[r], res.beam and res.beam[r] and res.beam[r].fs, hr, pseg)
 		if f < minf then minf, crit = f, r end
 		if f < 1 then fail = true end
 	end
@@ -664,23 +669,23 @@ function overhang.cell_state(g, p, x, y, z)
 	local d0, rho0 = res.d[r0], res.rho[r0]
 	local load0 = res.load and res.load[r0] or 1
 	local segs, seg_of = segments(res)
-	local hr0, area0, perim0 = seg_hr(res, seg_of[r0])
+	local hr0, area0, perim0, pseg0 = seg_hr(res, seg_of[r0])
 	local span0 = d0 and d0 > 0 and (hr0 or d0) or d0
 	local sigma_b = math.huge
 	if span0 and span0 > 0 and rho0 and rho0 > 0 then
 		-- σb = 3γ·h·HR²/t_eff² × m（疊層荷重倍數），t_eff = rho·t、h = 1:2 拱的荷重高度
 		sigma_b = 3 * r0.crit.gamma * span0 * span0 * load_height(r0, span0) * math.max(1, load0) / (r0.t * r0.t * rho0 * rho0) / 1000
-			/ support_factor(r0, span0)
+			/ support_factor(r0, span0, pseg0)
 	end
 	local out = {
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
 		hr = hr0, area = area0, perim = perim0,   -- 這一段的水力半徑 = 懸空面積／有支撐的周長
 		h = load_height(r0, span0),   -- 1:2 拱的荷重高度 (m)
-		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0, res.beam and res.beam[r0] and res.beam[r0].fs, hr0),
+		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0, res.beam and res.beam[r0] and res.beam[r0].fs, hr0, pseg0),
 		n_cells = res.n_cells, edge = res.edge,
 		beam = res.beam and res.beam[r0] or nil,
 		load = load0,
-		p_sup = r0.p_sup,   -- 底面往上托的支護壓力 (kPa)
+		p_sup = pseg0 and pseg0 > 0 and pseg0 or nil,   -- 這一段底面往上托的平均支護壓力 (kPa)
 	}
 	local cut_cells = 0
 	local _, gfs, cr = judge_segment(res, seg_of[r0])
