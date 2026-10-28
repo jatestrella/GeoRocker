@@ -90,6 +90,7 @@ local function rgb_of(name)
 	elseif base then h = "#6a6058"
 	elseif name == "rockmech:drill_hole" then h = "#e0d8c8"                                   -- 鑽孔：孔口一圈淺色岩粉
 	elseif name == "rockmech:charged_hole" or name == "rockmech:surface_charge" then h = "#e8c070"   -- 裝藥：黃點
+	elseif name == "rockmech:anfo_hole" or name == "rockmech:anfo_primed" then h = "#e890b0"         -- ANFO：粉紅點
 	else
 		local g = (core.registered_nodes[name] or {}).groups or {}
 		h = name:find("grass") and "#5a8a38" or g.leaves and "#356a28" or g.tree and "#6b5030"
