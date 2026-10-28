@@ -122,7 +122,16 @@ do
 
 	local def = {desc = "鑽堡 Drill jumbo", color = "#d86a18", cap = 0,
 		item_desc = "右鍵上車；E 依爆破孔設計圖在前方工作面鑽孔、空白鍵 編輯設計圖"}
-	def.inv_image = V.inv_icon(def.color, "^[fill:7x2:9,5:#b0b0b0^[fill:7x2:9,9:#b0b0b0^[fill:4x5:2,4:#9fd0ff")
+	do   -- 圖示：輪式車身、護頂、往前伸的兩支鑽臂
+		local c, r = def.color, {}
+		r[#r + 1] = {2, 16, 19, 8, c}; r[#r + 1] = {2, 8, 9, 2, c}
+		r[#r + 1] = {3, 10, 1, 6, "#3a3a3a"}; r[#r + 1] = {9, 10, 1, 6, "#3a3a3a"}
+		r[#r + 1] = {16, 9, 4, 10, "#3a3a3a"}
+		r[#r + 1] = {18, 10, 13, 2, "#b0b0b0"}; r[#r + 1] = {18, 15, 13, 2, "#b0b0b0"}
+		r[#r + 1] = {29, 9, 2, 4, "#e0e0e0"}; r[#r + 1] = {29, 14, 2, 4, "#e0e0e0"}
+		V.icon_wheel(r, 7, 26, 4); V.icon_wheel(r, 17, 26, 4)
+		def.inv_image = V.icon(r)
+	end
 	local steel = box_tex("#3a3a3a")
 	carrier(def, {
 		{id = "boom1", pos = {x = 0, y = 0, z = 0}, size = {x = 0.3, y = 1, z = 0.3}, tex = box_tex(def.color)},
@@ -337,7 +346,15 @@ do
 
 	local def = {desc = "裝藥台車 Charging unit", color = "#2a7ac0", cap = 0,
 		item_desc = "右鍵上車；E 把前方工作面的鑽孔裝藥（空孔跳過）、空白鍵 設定每孔幾條"}
-	def.inv_image = V.inv_icon(def.color, "^[fill:5x5:10,3:#e8c070^[fill:6x5:2,4:#e8e8e0^[fill:1x4:9,5:#606060")
+	do   -- 圖示：輪式車身、後面的炸藥罐、吊臂與工作籃
+		local c, r = def.color, {}
+		r[#r + 1] = {2, 17, 19, 7, c}; r[#r + 1] = {2, 10, 8, 7, "#e8e8e0"}; r[#r + 1] = {2, 13, 8, 1, c}
+		V.icon_line(r, 16, 16, 24, 8, 2, c)
+		r[#r + 1] = {22, 3, 9, 1, "#e8c020"}; r[#r + 1] = {22, 8, 9, 1, "#e8c020"}
+		r[#r + 1] = {22, 3, 1, 6, "#e8c020"}; r[#r + 1] = {30, 3, 1, 6, "#e8c020"}
+		V.icon_wheel(r, 7, 26, 4); V.icon_wheel(r, 17, 26, 4)
+		def.inv_image = V.icon(r)
+	end
 	local rail = "[fill:16x16:#00000000^[fill:16x2:0,0:#e8c020^[fill:2x16:0,0:#e8c020^[fill:2x16:14,0:#e8c020^[fill:16x6:0,10:#e8c020"
 	local tank = "[fill:16x16:#e8e8e0^[fill:16x3:0,6:" .. def.color
 	carrier(def, {

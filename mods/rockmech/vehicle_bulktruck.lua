@@ -28,7 +28,16 @@ local def = {desc = "ANFO 裝藥車 Bulk explosives truck", color = "#3a8a50", c
 		hfov = math.rad(80), vfov = math.rad(48), w = 56, h = 31},
 	store = {{ANFO, 40, "ANFO（袋）"}, {EMULSION, 40, "乳膠炸藥（條）"}},
 	item_desc = "右鍵上車；空白鍵 儲槽裝 ANFO 與乳膠炸藥、E 把吊臂範圍內往下的鑽孔灌 ANFO＋起爆藥包"}
-def.inv_image = V.inv_icon(def.color, "^[fill:10x4:3,3:#9fd0ff^[fill:12x5:2,9:#e8e8e0^[fill:12x1:2,11:#e890b0")
+do   -- 圖示：白色儲槽（綠、粉紅條紋）、槽頂的黃色吊臂、駕駛室、三軸
+	local c, r = def.color, {}
+	r[#r + 1] = {2, 12, 20, 10, "#e8e8e0"}; r[#r + 1] = {2, 12, 1, 10, "#c8c8c0"}
+	r[#r + 1] = {2, 17, 20, 2, c}; r[#r + 1] = {2, 19, 20, 1, "#e890b0"}
+	r[#r + 1] = {4, 10, 3, 2, "#4a4a4a"}; r[#r + 1] = {5, 8, 17, 2, "#d8b020"}
+	r[#r + 1] = {2, 22, 27, 2, "#2a2a2a"}
+	r[#r + 1] = {23, 11, 7, 12, c}; r[#r + 1] = {25, 13, 4, 5, "#9fd0ff"}
+	V.icon_wheel(r, 26, 26, 3); V.icon_wheel(r, 7, 26, 3); V.icon_wheel(r, 14, 26, 3)
+	def.inv_image = V.icon(r)
+end
 
 do
 	local c = def.color

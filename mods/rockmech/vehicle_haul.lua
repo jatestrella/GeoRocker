@@ -14,7 +14,14 @@ local def = {desc = "礦卡 Haul truck", short = "礦卡", color = "#d89818", ca
 	mirror = {x = 2.45, y = 1.3, z = 2.2}, rearcam = {x = 0, y = 1.4, z = -7.7},
 	tilt = {front = 1.0, rear = -4.6, side_z = -4.6, side_x = 1.7}, max_grade = math.rad(12),   -- 重載礦卡約 20%
 	item_desc = "右鍵上車；空白鍵把車斗倒在車尾（載量 36 m³）"}
-def.inv_image = V.inv_icon(def.color, "^[fill:6x4:2,3:#9fd0ff^[fill:16x2:0,0:#8a6a10")   -- 駕駛室窗、遮罩
+do   -- 圖示：大車斗（前端的遮罩蓋到駕駛室上方）、大輪胎
+	local c, r = def.color, {}
+	r[#r + 1] = {1, 9, 22, 10, c}; r[#r + 1] = {1, 7, 30, 2, "#8a6a10"}
+	r[#r + 1] = {23, 10, 7, 9, c}; r[#r + 1] = {25, 11, 4, 4, "#9fd0ff"}
+	r[#r + 1] = {3, 19, 26, 3, "#2a2a2a"}
+	V.icon_wheel(r, 8, 25, 5); V.icon_wheel(r, 24, 25, 5)
+	def.inv_image = V.icon(r)
+end
 
 local WHEEL, TREAD = V.WHEEL, V.TREAD
 local c = def.color

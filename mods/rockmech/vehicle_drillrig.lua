@@ -25,7 +25,16 @@ local def = {desc = "露天鑽機 Surface drill rig", color = "#d8b020", cap = 0
 	cam = {o = {x = 2.6, y = 1.8, z = 5.2}, target = MAST_FOOT, holes = 8,
 		hfov = math.rad(75), vfov = math.rad(46), w = 56, h = 31},
 	item_desc = "右鍵上車；E 在桅桿下方往下鑽一個垂直孔、空白鍵 設定孔深（露天台階爆破，孔裡倒 ANFO）"}
-def.inv_image = V.inv_icon(def.color, "^[fill:2x13:12,0:#3a3a3a^[fill:3x2:11,3:#808080^[fill:4x4:2,4:#9fd0ff")
+do   -- 圖示：履帶、車身、駕駛室、車頭前的高桅桿與迴轉頭
+	local c, r = def.color, {}
+	V.icon_track(r, 2, 24, 20, 7)
+	r[#r + 1] = {3, 16, 17, 8, c}; r[#r + 1] = {11, 13, 8, 3, "#3a3a3a"}
+	r[#r + 1] = {3, 9, 7, 8, c}; r[#r + 1] = {5, 10, 4, 5, "#9fd0ff"}
+	r[#r + 1] = {19, 18, 4, 2, c}
+	r[#r + 1] = {23, 1, 3, 29, "#3a3a3a"}; r[#r + 1] = {23, 12, 3, 1, c}; r[#r + 1] = {23, 22, 3, 1, c}
+	r[#r + 1] = {22, 4, 5, 4, c}; r[#r + 1] = {21, 29, 7, 2, "#5a5a5a"}
+	def.inv_image = V.icon(r)
+end
 
 do
 	local c = def.color

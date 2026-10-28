@@ -186,7 +186,14 @@ local truck = {desc = "卡車 Dump truck", short = "卡車", color = "#c84020", 
 	rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	max_grade = math.rad(17),   -- 重載砂石車約 30%
 	item_desc = "右鍵上車；空白鍵把車斗倒在車尾（載量 12 m³）"}
-truck.inv_image = V.inv_icon(truck.color, "^[fill:10x4:3,3:#9fd0ff")   -- 擋風玻璃
+do   -- 圖示：車斗、駕駛室、三軸
+	local c, r = truck.color, {}
+	r[#r + 1] = {2, 12, 19, 10, c}; r[#r + 1] = {2, 12, 19, 2, "#8a2a10"}
+	r[#r + 1] = {2, 22, 27, 2, "#2a2a2a"}
+	r[#r + 1] = {22, 11, 8, 12, c}; r[#r + 1] = {24, 13, 5, 5, "#9fd0ff"}
+	V.icon_wheel(r, 26, 26, 3); V.icon_wheel(r, 7, 26, 3); V.icon_wheel(r, 14, 26, 3)
+	truck.inv_image = V.icon(r)
+end
 do
 	local c = truck.color
 	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)

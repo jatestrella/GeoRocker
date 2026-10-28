@@ -16,7 +16,14 @@ local def = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2
 	tilt = {front = 1.3, rear = -2.1, side_z = -0.4, side_x = 1.1}, max_grade = math.rad(30),   -- 履帶推土機
 	stepheight = 0.3,   -- 放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
 	item_desc = "右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走"}
-def.inv_image = V.inv_icon(def.color, "^[fill:16x5:0,11:#3a3a3a")   -- 推土鏟
+do   -- 圖示：履帶、車身、駕駛室、前面的推土鏟、後面的松土器
+	local c, r = def.color, {}
+	V.icon_track(r, 3, 23, 21, 7)
+	r[#r + 1] = {6, 15, 17, 8, c}; r[#r + 1] = {6, 7, 9, 8, c}; r[#r + 1] = {8, 9, 5, 4, "#9fd0ff"}
+	r[#r + 1] = {22, 20, 4, 2, "#3a3a3a"}; r[#r + 1] = {26, 13, 3, 17, "#3a3a3a"}
+	r[#r + 1] = {1, 21, 2, 8, "#3a3a3a"}; r[#r + 1] = {1, 21, 5, 2, "#3a3a3a"}
+	def.inv_image = V.icon(r)
+end
 
 -- 外觀（原點在 3×3×3 碰撞箱中心；車頭 z +1.5、鏟刀到 +2.5、車尾 −2.5；車底 y −1.5）：
 -- 兩側履帶、車架、前方引擎蓋、中後段駕駛艙、車尾配重、排氣管；鏟刀由兩側推臂（繞車架上的樞軸轉）

@@ -10,6 +10,19 @@ local V = rockmech.vehicles
 local TYPES, NLEV = V.TYPES, V.NLEV
 local h2v, v2h, lerp, lerp_angle, atan2 = V.h2v, V.v2h, V.lerp, V.lerp_angle, V.atan2
 local box_tex, seg_attach, to_local = V.box_tex, V.seg_attach, V.to_local
+
+-- 圖示：履帶、上部結構、駕駛室、動臂＋斗桿＋鏟斗（big：礦用，配重與鏟斗比較大、有欄杆）
+local function excavator_icon(c, big)
+	local r = {}
+	V.icon_track(r, 2, 24, 21, 6)
+	r[#r + 1] = {4, 17, 18, 7, c}; r[#r + 1] = {2, big and 15 or 17, 5, big and 9 or 6, "#3a3a3a"}
+	r[#r + 1] = {13, 10, 7, 8, c}; r[#r + 1] = {15, 11, 4, 5, "#9fd0ff"}
+	if big then r[#r + 1] = {4, 15, 9, 1, "#e0e0e0"} end
+	V.icon_line(r, 18, 15, 24, 3, 3, c)
+	V.icon_line(r, 25, 3, 28, 17, 2, c)
+	if big then r[#r + 1] = {23, 17, 8, 7, "#505050"} else r[#r + 1] = {25, 17, 6, 5, "#505050"} end
+	return V.icon(r)
+end
 local load_total, update_hud = V.load_total, V.update_hud
 local TRACK = V.TRACK
 
@@ -391,7 +404,7 @@ do
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4},
 		tilt = {front = 1.3, rear = -1.3, side_z = 0, side_x = 1.25}, max_grade = math.rad(35),   -- 履帶挖土機約 70%
 		item_desc = "右鍵上車；E 挖滑鼠指的位置（鏟斗 4 m³）、空白鍵倒在滑鼠指的位置（指著卡車就倒進卡車）"}
-	def.inv_image = V.inv_icon(def.color, "^[fill:12x5:2,8:#505050^[fill:2x6:7,2:#404040")   -- 鏟斗與手臂
+	def.inv_image = excavator_icon(def.color, false)
 	excavator("excavator", {
 		def = def,
 		body = {
@@ -421,7 +434,7 @@ do
 		mirror = {x = 2.8, y = 2.4, z = 1.6},
 		tilt = {front = 3.0, rear = -3.0, side_z = 0, side_x = 2.6}, max_grade = math.rad(35),
 		item_desc = "右鍵上車；E 挖滑鼠指的位置（鏟斗 12 m³，手臂約 15 m）、空白鍵倒在滑鼠指的位置（指著礦卡就倒進車斗）"}
-	def.inv_image = V.inv_icon(def.color, "^[fill:14x6:1,7:#505050^[fill:3x7:9,0:" .. def.color .. "^[fill:4x4:1,2:#9fd0ff")
+	def.inv_image = excavator_icon(def.color, true)
 	local c = def.color
 	local y = ("[fill:16x16:%s"):format(c)
 	local grille = ("[fill:16x16:%s^[fill:12x6:2,5:#2a2a2a^[fill:12x1:2,7:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)

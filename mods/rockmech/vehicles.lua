@@ -43,9 +43,28 @@ function V.box_tex(c, front)
 	local t = ("[fill:16x16:%s"):format(c)
 	return {t, t, t, t, front or t, t}
 end
--- 物品圖示：車身色、底部履帶／輪，再疊上 extra
-function V.inv_icon(c, extra)
-	return ("[fill:16x16:%s^[fill:16x3:0,13:#2a2a2a"):format(c) .. extra
+-- 物品圖示：32×32 透明底的側面剪影（車頭朝右）。r = {{x, y, w, h, 顏色}, …}，後面的蓋前面的。
+-- 下面的 icon_* 把輪子、履帶、斜的手臂加進 r
+function V.icon(r)
+	local t = {"[fill:32x32:#00000000"}
+	for _, q in ipairs(r) do t[#t + 1] = ("^[fill:%dx%d:%d,%d:%s"):format(q[3], q[4], q[1], q[2], q[5]) end
+	return table.concat(t)
+end
+function V.icon_wheel(r, cx, cy, rad)   -- 輪子（切角的方塊近似圓）＋輪轂
+	r[#r + 1] = {cx - rad + 1, cy - rad, 2 * rad - 2, 2 * rad, "#1c1c1c"}
+	r[#r + 1] = {cx - rad, cy - rad + 1, 2 * rad, 2 * rad - 2, "#1c1c1c"}
+	r[#r + 1] = {cx - 1, cy - 1, 2, 2, "#9a9a9a"}
+end
+function V.icon_track(r, x, y, w, h)   -- 履帶（圓角長條＋負重輪）
+	r[#r + 1] = {x + 1, y, w - 2, h, "#2a2a2a"}
+	r[#r + 1] = {x, y + 1, w, h - 2, "#2a2a2a"}
+	for k = x + 2, x + w - 4, 4 do r[#r + 1] = {k, y + math.floor(h / 2) - 1, 2, 2, "#5a5a5a"} end
+end
+function V.icon_line(r, x0, y0, x1, y1, w, c)   -- 斜的手臂：從 (x0, y0) 到 (x1, y1)、粗 w
+	local n = math.max(math.abs(x1 - x0), math.abs(y1 - y0), 1)
+	for i = 0, n do
+		r[#r + 1] = {math.floor(x0 + (x1 - x0) * i / n + 0.5), math.floor(y0 + (y1 - y0) * i / n + 0.5), w, w, c}
+	end
 end
 V.TRACK = "[fill:16x16:#2a2a2a^[fill:16x2:0,0:#454545^[fill:16x2:0,14:#454545^[fill:2x12:3,2:#383838^[fill:2x12:9,2:#383838"
 
