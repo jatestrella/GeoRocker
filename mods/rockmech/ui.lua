@@ -113,9 +113,9 @@ function rockmech.overhang_line(o)
 	end
 	-- 支護：底面往上托的 pᵢ（≥ γt 整欄被托住）
 	local sup = ""
-	if o.p_sup then sup = ("；支護往上托 %.0f kPa（γt %.0f kPa）"):format(o.p_sup, o.gamma * o.t) end
-	return ("懸臂 d %d m、t %d m%s：σb=3γ·t·d²/t_eff² %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
-		o.d, o.t, root, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax * (o.rho or 1), fs_str(o.group_fs), c.x, c.z,
+	if o.p_sup then sup = ("；支護往上托 %.0f kPa（荷重 γh %.0f kPa）"):format(o.p_sup, o.gamma * (o.h or o.t)) end
+	return ("懸臂 d %d m、t %d m、荷重高 h %d m（1:2 拱）%s：σb=3γ·h·d²/t_eff² %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
+		o.d, o.t, o.h or o.t, root, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax * (o.rho or 1), fs_str(o.group_fs), c.x, c.z,
 		o.edge and ("（懸空群超出 ±%d m 檢查範圍，FS 可能高估）"):format((rockmech.collapse.overhang_radius())) or "")
 		.. ((o.cut_cells or 0) > 0 and ("；相鄰有 %d 格被節理切離、會掉落"):format(o.cut_cells) or "") .. sup
 end

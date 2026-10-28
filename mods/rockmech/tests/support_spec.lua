@@ -184,13 +184,25 @@ describe("support 頂板：往上托抵銷自重", function()
 		assert.are.equal(0, #(overhang.find_failing_local(g, OP, {{x = 6, y = 8, z = 0}})))
 	end)
 
-	it("懸臂：厚岩層裡的岩栓也算（加固拱）：FS × γt/(γt − pᵢ)", function()
-		local g = cantilever(6, 3)                  -- γt = 75 kPa
+	it("懸臂：厚岩層裡的岩栓也算（加固拱）：FS × γh/(γh − pᵢ)", function()
+		local g = cantilever(6, 3)                  -- 尖端 d = 6：h = min(3, 12) = 3，γh = 75 kPa
 		local bare = overhang.cell_state(g, OP, 6, 8, 0).fs
 		under(g, 6, 3, 0, 0.05)                     -- 50 kPa → × 3
 		assert.near(bare * 3, overhang.cell_state(g, OP, 6, 8, 0).fs, 1e-9)
 		under(g, 6, 3, 0, 0.1)                      -- 100 kPa ≥ 75 → 托住
 		assert.are.equal(math.huge, overhang.cell_state(g, OP, 6, 8, 0).fs)
+	end)
+
+	it("1:2 拱：厚岩層的懸臂荷重高度 h = min(t, 2d)", function()
+		local g = cantilever(2, 6)                  -- 6 m 厚、伸出 2 m
+		local s1 = overhang.cell_state(g, OP, 1, 8, 0)
+		local s2 = overhang.cell_state(g, OP, 2, 8, 0)
+		assert.are.equal(2, s1.h)                   -- d = 1 → 2 m
+		assert.are.equal(4, s2.h)                   -- d = 2 → 4 m
+		-- FS = (L_max·ρ/d)² × t/h
+		assert.near((s2.lmax / 2) ^ 2 * 6 / 4, s2.fs, 1e-9)
+		under(g, 2, 6, 0, 0.1)                      -- 100 kPa ≥ γh = 25 × 4 → 托住
+		assert.are.equal(math.huge, overhang.cell_state(g, OP, 2, 8, 0).fs)
 	end)
 
 	it("懸空直剪：每欄荷重扣掉底面的 pᵢ", function()

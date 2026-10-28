@@ -23,9 +23,12 @@
 -- 節理面不傳張力。相鄰兩欄的介面上，被節理切過的面不算：
 --   * 根部斷面（懸空欄與有支撐欄之間）完好面數 t_eff：σb = 3γ·t·d²/t_eff²，
 --     即 L_max 變成 L_max·(t_eff/t)；t_eff = 0 → 張力為 0。
+-- ## 荷重高度（1:2 拱，局部版 find_failing_local）
+-- 從根部往上以 2（垂直）：1（水平）畫線，線以上的岩石靠拱作用傳回岩壁；壓在懸臂上的只有線以下的三角形：
+-- 離根部 d 的欄荷重高度 h = min(t, 2d)，抗彎厚度仍是 t → σb = 3γ·h·d²/t_eff²。
 -- ## 支護（grid.support，見 support.lua）
--- 欄底面的支護壓力 pᵢ 往上托：每 m² 荷重 γt → γt − pᵢ，σb 等比例下降（FS × γt/(γt − pᵢ)），
--- pᵢ ≥ γt 時整欄被托住。岩栓不論長短都算：比岩層長是懸吊作用；在厚岩層裡是系統岩栓的加固拱（Lang）
+-- 欄底面的支護壓力 pᵢ 往上托：每 m² 荷重 γh → γh − pᵢ，σb 等比例下降（FS × γh/(γh − pᵢ)），
+-- pᵢ ≥ γh 時整欄被托住。岩栓不論長短都算：比岩層長是懸吊作用；在厚岩層裡是系統岩栓的加固拱（Lang）
 -- 分擔荷重——兩者都用同一個 pᵢ 表示。
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
@@ -503,19 +506,26 @@ end
 -- load：疊層的荷重倍數 m = q₁/(γt)（Obert & Duvall，≥ 1）：σb × m → FS ÷ m
 -- d = 0：坐在下層岩體上，由下層承擔 → FS = ∞
 -- beam：兩端支撐梁的 FS（未含疊層荷重），有就取兩者較大
--- 支護（r.p_sup，kPa）：每 m² 荷重 γt → γt − pᵢ，FS × γt/(γt − pᵢ)；pᵢ ≥ γt → 整欄被托住（∞）
-local function support_factor(r)
+-- 荷重高度（1:2 拱）：從根部（有支撐的岩壁邊）往上以 2（垂直）：1（水平）畫線，線以上的岩石靠拱作用
+-- 傳回岩壁，壓在懸臂上的只有線以下的三角形：離根部 d 的欄荷重高度 h = min(t, 2d)，抗彎厚度仍是 t。
+--   σb = 3γ·h·d²/t_eff² → FS 再 × t/h。碰不到支撐（d = nil）的整欄都壓著：h = t
+local function load_height(r, d)
+	return d and math.min(r.t, 2 * d) or r.t
+end
+overhang.load_height = load_height
+-- 支護（r.p_sup，kPa）：每 m² 荷重 γh → γh − pᵢ，FS × γh/(γh − pᵢ)；pᵢ ≥ γh → 整欄被托住（∞）
+local function support_factor(r, d)
 	local p = r.p_sup
 	if not p or p <= 0 then return 1 end
-	local q0 = r.crit.gamma * r.t
+	local q0 = r.crit.gamma * load_height(r, d)
 	if p >= q0 then return math.huge end
 	return q0 / (q0 - p)
 end
 local function run_fs(r, d, rho, load, beam)
 	if d == 0 then return math.huge end
-	local sf = support_factor(r)
+	local sf = support_factor(r, d)
 	if sf == math.huge then return math.huge end
-	local f = d and (r.lmax * (rho or 1) / d) ^ 2 or 0
+	local f = d and (r.lmax * (rho or 1) / d) ^ 2 * (r.t / load_height(r, d)) or 0
 	if beam and beam > f then f = beam end
 	if load and load > 1 then f = f / load end
 	return f * sf
@@ -627,12 +637,13 @@ function overhang.cell_state(g, p, x, y, z)
 	local load0 = res.load and res.load[r0] or 1
 	local sigma_b = math.huge
 	if d0 and rho0 and rho0 > 0 then
-		-- σb = 3γ·t·d²/t_eff² × m（疊層荷重倍數），t_eff = rho·t
-		sigma_b = 3 * r0.crit.gamma * d0 * d0 * r0.t * math.max(1, load0) / (r0.t * r0.t * rho0 * rho0) / 1000
-			/ support_factor(r0)
+		-- σb = 3γ·h·d²/t_eff² × m（疊層荷重倍數），t_eff = rho·t、h = 1:2 拱的荷重高度
+		sigma_b = 3 * r0.crit.gamma * d0 * d0 * load_height(r0, d0) * math.max(1, load0) / (r0.t * r0.t * rho0 * rho0) / 1000
+			/ support_factor(r0, d0)
 	end
 	local out = {
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
+		h = load_height(r0, d0),   -- 1:2 拱的荷重高度 (m)
 		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0, res.beam and res.beam[r0] and res.beam[r0].fs),
 		n_cells = res.n_cells, edge = res.edge,
 		beam = res.beam and res.beam[r0] or nil,
