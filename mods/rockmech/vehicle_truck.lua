@@ -51,30 +51,6 @@ local function place_bed(self, alpha)
 	end
 end
 
--- 車斗那段（車身座標 z −rear..−half）卡進實心方塊的檢查點數（車底往上 bed.overlap_dy 的高度，
--- 更低的小台階、碎石讓碰撞箱自己爬）
-local function bed_overlap(p, yaw, def)
-	local c, sn = math.cos(yaw), math.sin(yaw)
-	local bottom = p.y - def.half
-	local n_hit = 0
-	for lz = -def.rear + 0.05, -def.half - 0.25, 0.5 do   -- 從車尾最末端開始
-		for _, lx in ipairs(def.bed.overlap_lat) do
-			local wx, wz = p.x + lx * c - lz * sn, p.z + lx * sn + lz * c
-			for _, dy in ipairs(def.bed.overlap_dy) do
-				local n = core.get_node({x = math.floor(wx + 0.5), y = math.floor(bottom + dy + 0.5), z = math.floor(wz + 0.5)}).name
-				local nd = core.registered_nodes[n]
-				if n ~= "air" and (not nd or nd.walkable ~= false) then n_hit = n_hit + 1 end
-			end
-		end
-	end
-	return n_hit
-end
--- 從 (p, yaw) 動到 (p2, yaw2) 會不會讓車斗撞得更多（已經卡住時，不會更糟的動作照樣允許，才能脫困）
-local function bed_blocked(p, yaw, p2, yaw2, def)
-	local after = bed_overlap(p2, yaw2, def)
-	if after == 0 then return false end
-	return after > bed_overlap(p, yaw, def)
-end
 
 -- 車斗中心上方（挖土機倒進來的位置，世界座標）
 function V.bed_target(e)
@@ -108,6 +84,7 @@ local function hauler(def, spec)
 	bed.fill_hmax = S.y - BED_T - 0.1
 	bed.fills = spec.fills or {{id = "bedfill", z = S.z / 2, len = S.z - 2 * BED_T - 0.1, y0 = BED_T}}
 	def.bed = bed
+	def.tail_lat, def.tail_dy = spec.overlap_lat, spec.overlap_dy   -- 車斗那段的倒車、轉彎檢查（V.tail_guard）
 	def.look_limit = def.look_limit or math.rad(75)   -- 駕駛只看車頭前方 150°（不會轉頭看到自己的車斗）
 	-- 零件：車斗以外的部分、車斗各片（位置由 place_bed 擺）、車斗裡的碎石
 	local parts = {}
@@ -133,31 +110,12 @@ local function hauler(def, spec)
 	function def.hud() return "\n空白鍵 把車斗倒在車尾" end
 	-- 車斗那段會撞到（或正在倒土）：不轉
 	function def.can_turn(self, pos, yaw, yaw2)
-		return not (self.tip or bed_blocked(pos, yaw, pos, yaw2, def)
-			or V.objects_in(self, pos, yaw2, -def.half, def.half, -def.rear, -def.half))
+		return not self.tip and V.tail_can_turn(self, pos, yaw, yaw2, def)
 	end
-	-- 前進時車斗跟著駕駛艙走過的路，不必檢查；倒車看後面一點（全速 0.1 s 走的距離）；倒土時不動。
-	-- 伺服器卡頓時一步會退很遠、預判擋不住：倒車後車斗撞得比上一步多，就退回上一步的位置
+	-- 倒土時不動；倒車檢查車斗那段（V.tail_guard）
 	function def.move(self, ctx)
-		local pos, dir = ctx.pos, ctx.dir
-		if self.bed_safe then
-			local safe = self.bed_safe
-			self.bed_safe = nil
-			if bed_overlap(pos, ctx.yaw, def) > safe.n then
-				ctx.obj:set_pos(safe.pos)
-				ctx.speed = 0
-				return
-			end
-		end
-		if ctx.speed == 0 then return end
-		local la = ctx.speed * 0.1
-		local p2 = {x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}
-		if self.tip or (ctx.speed < 0 and (bed_blocked(pos, ctx.yaw, p2, ctx.yaw, def)
-				or V.objects_in(self, p2, ctx.yaw, -def.half, def.half, -def.rear, -def.half))) then
-			ctx.speed = 0
-		elseif ctx.speed < 0 then
-			self.bed_safe = {pos = vector.copy(pos), n = bed_overlap(pos, ctx.yaw, def)}
-		end
+		if self.tip then ctx.speed = 0; return end
+		V.tail_guard(self, def, ctx)
 	end
 	function def.step(self, ctx)
 		-- 倒土：車斗抬起 TIP_UP 秒到 TIP_ANGLE → 倒在車尾 → 停 TIP_HOLD 秒 → 放下 TIP_DOWN 秒

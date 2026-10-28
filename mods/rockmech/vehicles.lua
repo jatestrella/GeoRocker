@@ -18,7 +18,7 @@ rockmech.vehicles = V
 -- desc、color；cap：載量（級）；speed：m/s；half：碰撞箱半邊長；lat：車頭外一排的橫向位置（相對中心）；
 -- eye_up／eye_fwd／eye_side：相機在車身中心上方、沿視線往前、往右（負 = 左）的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
--- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
+-- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長；tail_lat／tail_dy 是倒車、轉彎檢查點，見 V.tail_guard）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
 -- overhangs：伸出碰撞箱那段擋人的範圍（見 V.overhang_push）；overhangs_now(self)：會動的擋人範圍（挖土機鏟斗）；max_grade：最大爬坡角（rad；行進方向整台車長的平均坡度）；
 -- top_speed／accel：直線前進時從 speed 加速到 top_speed（m/s、m/s²）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
 -- 各車的行為（都可省略）：parts（零件清單）、on_spawn(self)（零件生成後）、on_load(self, data)／on_save(self, data)、
@@ -355,6 +355,60 @@ end
 -- 車身在 pos、朝向 yaw 時，車身座標的長方形範圍 x0..x1、z0..z1（高度在車底到車頂之間）裡有沒有
 -- 沒在車上的玩家（半徑 0.3）或別台車（碰撞箱半邊長當半徑）。碰撞箱只蓋到車身那段，
 -- 伸出去的車斗、鏟刀、車尾移動前用這個檢查人和車（方塊另外檢查）
+-- 長車尾（車身座標 z −rear..−half：卡車車斗、鑽堡後段）不在碰撞箱裡，倒車、轉彎前自己檢查。
+-- def.tail_lat／tail_dy：檢查點的橫向位置與離車底高度（更低的小台階、碎石讓碰撞箱自己爬）。
+-- 回傳車尾卡進實心方塊的檢查點數
+local function tail_overlap(p, yaw, def)
+	local c, sn = math.cos(yaw), math.sin(yaw)
+	local bottom = p.y - def.half
+	local n_hit = 0
+	for lz = -def.rear + 0.05, -def.half - 0.25, 0.5 do   -- 從車尾最末端開始
+		for _, lx in ipairs(def.tail_lat) do
+			local wx, wz = p.x + lx * c - lz * sn, p.z + lx * sn + lz * c
+			for _, dy in ipairs(def.tail_dy) do
+				local n = core.get_node({x = math.floor(wx + 0.5), y = math.floor(bottom + dy + 0.5), z = math.floor(wz + 0.5)}).name
+				local nd = core.registered_nodes[n]
+				if n ~= "air" and (not nd or nd.walkable ~= false) then n_hit = n_hit + 1 end
+			end
+		end
+	end
+	return n_hit
+end
+-- 從 (p, yaw) 動到 (p2, yaw2) 會不會讓車尾撞得更多（已經卡住時，不會更糟的動作照樣允許，才能脫困）
+local function tail_blocked(p, yaw, p2, yaw2, def)
+	local after = tail_overlap(p2, yaw2, def)
+	if after == 0 then return false end
+	return after > tail_overlap(p, yaw, def)
+end
+-- 轉彎：車尾會撞到方塊、人或車就不轉
+function V.tail_can_turn(self, pos, yaw, yaw2, def)
+	return not (tail_blocked(pos, yaw, pos, yaw2, def)
+		or V.objects_in(self, pos, yaw2, -def.half, def.half, -def.rear, -def.half))
+end
+-- 倒車：看後面一點（全速 0.1 s 走的距離）；前進時車尾跟著車頭走過的路，不必檢查。
+-- 伺服器卡頓時一步會退很遠、預判擋不住：倒車後車尾撞得比上一步多，就退回上一步的位置
+function V.tail_guard(self, def, ctx)
+	local pos, dir = ctx.pos, ctx.dir
+	if self.tail_safe then
+		local safe = self.tail_safe
+		self.tail_safe = nil
+		if tail_overlap(pos, ctx.yaw, def) > safe.n then
+			ctx.obj:set_pos(safe.pos)
+			ctx.speed = 0
+			return
+		end
+	end
+	if ctx.speed >= 0 then return end
+	local la = ctx.speed * 0.1
+	local p2 = {x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}
+	if tail_blocked(pos, ctx.yaw, p2, ctx.yaw, def)
+			or V.objects_in(self, p2, ctx.yaw, -def.half, def.half, -def.rear, -def.half) then
+		ctx.speed = 0
+	else
+		self.tail_safe = {pos = vector.copy(pos), n = tail_overlap(pos, ctx.yaw, def)}
+	end
+end
+
 function V.objects_in(self, pos, yaw, x0, x1, z0, z1)
 	local def = TYPES[self.vkind]
 	local c, sn = math.cos(yaw), math.sin(yaw)
