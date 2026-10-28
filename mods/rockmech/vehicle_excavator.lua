@@ -11,16 +11,27 @@ local TYPES, NLEV = V.TYPES, V.NLEV
 local h2v, v2h, lerp, lerp_angle, atan2 = V.h2v, V.v2h, V.lerp, V.lerp_angle, V.atan2
 local box_tex, seg_attach, to_local = V.box_tex, V.seg_attach, V.to_local
 
--- 圖示：履帶、上部結構、駕駛室、動臂＋斗桿＋鏟斗（big：礦用，配重與鏟斗比較大、有欄杆）
+-- 圖示：履帶、上部結構、駕駛室、動臂＋斗桿＋鏟斗。一般的畫小一點（佔圖示下半）；
+-- big：礦用，撐滿整個圖示，駕駛室架高、有欄杆與爬梯、配重高、鏟斗大
 local function excavator_icon(c, big)
 	local r = {}
-	V.icon_track(r, 2, 24, 21, 6)
-	r[#r + 1] = {4, 17, 18, 7, c}; r[#r + 1] = {2, big and 15 or 17, 5, big and 9 or 6, "#3a3a3a"}
-	r[#r + 1] = {13, 10, 7, 8, c}; r[#r + 1] = {15, 11, 4, 5, "#9fd0ff"}
-	if big then r[#r + 1] = {4, 15, 9, 1, "#e0e0e0"} end
-	V.icon_line(r, 18, 15, 24, 3, 3, c)
-	V.icon_line(r, 25, 3, 28, 17, 2, c)
-	if big then r[#r + 1] = {23, 17, 8, 7, "#505050"} else r[#r + 1] = {25, 17, 6, 5, "#505050"} end
+	if not big then
+		V.icon_track(r, 5, 26, 16, 5)
+		r[#r + 1] = {6, 21, 15, 5, c}; r[#r + 1] = {5, 21, 3, 4, "#3a3a3a"}
+		r[#r + 1] = {13, 16, 6, 5, c}; r[#r + 1] = {14, 17, 4, 3, "#9fd0ff"}
+		V.icon_line(r, 17, 20, 22, 12, 2, c)
+		V.icon_line(r, 23, 12, 25, 21, 2, c)
+		r[#r + 1] = {23, 22, 5, 4, "#505050"}
+		return V.icon(r)
+	end
+	V.icon_track(r, 1, 24, 24, 8)
+	r[#r + 1] = {3, 15, 20, 9, c}; r[#r + 1] = {1, 11, 6, 13, "#3a3a3a"}
+	r[#r + 1] = {13, 4, 8, 11, c}; r[#r + 1] = {14, 5, 6, 5, "#9fd0ff"}
+	r[#r + 1] = {3, 12, 10, 1, "#e0e0e0"}; r[#r + 1] = {3, 12, 1, 3, "#e0e0e0"}; r[#r + 1] = {12, 12, 1, 3, "#e0e0e0"}
+	for y = 16, 22, 2 do r[#r + 1] = {10, y, 3, 1, "#3a3a3a"} end   -- 爬梯
+	V.icon_line(r, 19, 13, 25, 0, 4, c)
+	V.icon_line(r, 27, 0, 28, 13, 3, c)
+	r[#r + 1] = {22, 14, 10, 10, "#505050"}; r[#r + 1] = {22, 23, 10, 1, "#808080"}
 	return V.icon(r)
 end
 local load_total, update_hud = V.load_total, V.update_hud
