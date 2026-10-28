@@ -42,7 +42,7 @@ local function cockpit_tex(kind)
 		-- 後照鏡（左上、右上）：支架 + 鏡框；鏡面 24×14（x 18／118、y 11 起）上面再疊後照鏡畫面
 		"^[fill:6x2:12,17:#303030", "^[fill:26x16:17,10:#151515", "^[fill:24x14:18,11:#7f9fb8",
 		"^[fill:6x2:142,17:#303030", "^[fill:26x16:117,10:#151515", "^[fill:24x14:118,11:#7f9fb8",
-		TYPES[kind].rearcam and "^[fill:38x23:61,9:#151515^[fill:2x1:79,32:#303030" or "",   -- 倒車攝影機螢幕
+		(TYPES[kind].rearcam or TYPES[kind].cam) and "^[fill:38x23:61,9:#151515^[fill:2x1:79,32:#303030" or "",   -- 倒車／作業攝影機螢幕
 	})
 end
 
@@ -66,6 +66,11 @@ local function views_of(kind)
 	if def.rearcam then
 		v[3] = {o = def.rearcam, dir = 0, down = math.rad(24), hfov = math.rad(80), vfov = math.rad(42),
 			w = 40, h = 22, hud = REARCAM_HUD}
+	elseif def.cam then
+		-- 作業攝影機（例如露天鑽機看鑽孔處）：對準 def.cam.target、不鏡像、中央畫紅色十字
+		local c = def.cam
+		v[3] = {o = c.o, target = c.target, hfov = c.hfov, vfov = c.vfov, flip = true, crosshair = true,
+			w = 40, h = 22, hud = REARCAM_HUD}
 	end
 	return v
 end
@@ -83,6 +88,8 @@ local function rgb_of(name)
 	if lith then h = lith.color
 	elseif base == rockmech.RUBBLE_GRANITE then h = rockmech.cfg.lithologies.granite.color
 	elseif base then h = "#6a6058"
+	elseif name == "rockmech:drill_hole" then h = "#e0d8c8"                                   -- 鑽孔：孔口一圈淺色岩粉
+	elseif name == "rockmech:charged_hole" or name == "rockmech:surface_charge" then h = "#e8c070"   -- 裝藥：黃點
 	else
 		local g = (core.registered_nodes[name] or {}).groups or {}
 		h = name:find("grass") and "#5a8a38" or g.leaves and "#356a28" or g.tree and "#6b5030"
@@ -192,7 +199,9 @@ local function box_color(bx, eye, dir, t, axis, sgn)
 	return hex_rgb(tex_color(t6, u, v)), {x = bx.ax[axis].x * sgn, y = bx.ax[axis].y * sgn, z = bx.ax[axis].z * sgn}
 end
 
--- 畫一個畫面（view 見 views_of）。看往後方，和照後鏡一樣：畫面左邊 = 車身左側（−X），上 = 上
+-- 畫一個畫面（view 見 views_of）。看往後方，和照後鏡一樣：畫面左邊 = 車身左側（−X），上 = 上。
+-- view.target：對準這一點（車身座標，自動算 dir、down）；view.flip：一般攝影機（往前看時左右不鏡像）；
+-- view.crosshair：畫面中央畫紅色十字
 local function render_view(self, view)
 	local p, yaw = self.object:get_pos(), self.object:get_yaw()
 	local psi = view.swing and self.swing or 0
@@ -202,6 +211,13 @@ local function render_view(self, view)
 		return {x = l.x * cy - l.z * sy, y = l.y, z = l.x * sy + l.z * cy}
 	end
 	local eye = vector.add(p, world(view.o))
+	local vdir, vdown = view.dir, view.down
+	if view.target then
+		local dx, dy, dz = view.target.x - view.o.x, view.target.y - view.o.y, view.target.z - view.o.z
+		vdir = V.atan2(dx, -dz)
+		vdown = -V.atan2(dy, math.sqrt(dx * dx + dz * dz))
+	end
+	local hsign = view.flip and -1 or 1
 	-- 附近的車輛（含自己）與沒在車上的玩家：每台車（或玩家）一組箱子與外接球（射線先比外接球，碰不到整組跳過）
 	local groups = {}
 	for _, o in ipairs(core.get_objects_inside_radius(eye, MIRROR_RANGE + 8)) do
@@ -226,7 +242,7 @@ local function render_view(self, view)
 	local W, H = view.w, view.h
 	local out = {("[fill:%dx%d:#%02x%02x%02x"):format(W, H, SKY[1], SKY[2], SKY[3])}
 	for v = 0, H - 1 do
-		local b = -view.down + (0.5 - (v + 0.5) / H) * view.vfov
+		local b = -vdown + (0.5 - (v + 0.5) / H) * view.vfov
 		local cb, sb = math.cos(b), math.sin(b)
 		local run, run_x = nil, 0
 		local function flush(u)
@@ -234,7 +250,7 @@ local function render_view(self, view)
 		end
 		for u = 0, W - 1 do
 			local col
-			local a = view.dir + ((u + 0.5) / W - 0.5) * view.hfov
+			local a = vdir + hsign * ((u + 0.5) / W - 0.5) * view.hfov
 			local dw = world({x = math.sin(a) * cb, y = sb, z = -math.cos(a) * cb})
 			local hit = core.raycast(eye, vector.add(eye, vector.multiply(dw, MIRROR_RANGE)), false, false):next()
 			local c, n, dist
@@ -267,6 +283,10 @@ local function render_view(self, view)
 			if hx ~= run then flush(u); run, run_x = hx, u end
 		end
 		flush(W)
+	end
+	if view.crosshair then
+		local cx, cy = math.floor(W / 2), math.floor(H / 2)
+		out[#out + 1] = ("^[fill:5x1:%d,%d:#ff3030^[fill:1x5:%d,%d:#ff3030"):format(cx - 2, cy, cx, cy - 2)
 	end
 	return table.concat(out)
 end

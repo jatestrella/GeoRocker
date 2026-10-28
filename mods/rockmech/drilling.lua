@@ -197,6 +197,7 @@ do
 	def.selection_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.3, 0.3, -0.38, 0.3}}}
 	def.tiles = {RING_TOP, RING_SIDE, RING_SIDE, RING_SIDE, RING_SIDE, RING_SIDE}
 	def.drop = ""
+	def.diggable = false   -- 孔是岩石上的洞，挖不掉（後面的岩石沒了才會消失）
 	core.register_node(HOLE, def)
 end
 -- 裝了炸藥的鑽孔：孔口露出一截藥卷與起爆線
@@ -209,7 +210,7 @@ do
 	def.tiles = {top, RING_SIDE, side, side, side, side}
 	def.groups.rockmech_charge = 1
 	def.drop = ""
-	def.on_dig = dig_charge
+	def.diggable = false   -- 裝好的藥不能隨手掏出來；拒爆的孔要再起爆（補起爆藥包）
 	def.on_ignite = ignite
 	def.on_blast = function(pos) core.after(0.05, detonate, pos) end   -- 殉爆
 	core.register_node(CHARGED, def)
