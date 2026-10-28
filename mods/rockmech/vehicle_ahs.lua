@@ -2,25 +2,37 @@
 -- 無人運輸（AHS，像 Komatsu FrontRunner／Cat MineStar Command）：有車斗的車（卡車、礦卡）沿教過的路線自己往返。
 -- 由 vehicles.lua 載入，vehicle_truck.lua 的 hauler 接上（E 設定畫面、每一步、存檔）。
 --   教路線：坐在車上按 E →「設為裝載點並開始錄製」→ 開到倒土的地方 →「設為傾倒點」（每 REC_STEP m 記一個路線點）。
---   啟動後下車：在裝載點等裝滿 → 沿路線開到傾倒點 → 原地掉頭（車尾朝外）→ 抬斗倒在車尾 → 沿路線開回裝載點 → 再等。
+--   啟動後下車：在裝載點等裝滿 → 沿路線開到傾倒點 → 開到這一趟分配的傾倒位置前方的待命點 → 轉成車尾朝外
+--   → 倒車進傾倒位置 → 抬斗倒在車尾 → 開回待命點 → 沿傾倒線開回路線 → 沿路線開回裝載點 → 再等。
+--   傾倒區：沿傾倒點左右排成一排（中、左、右、更左、更右…，間距一個車寬＋1 m，共 DUMP_SPOTS 個），碎石都倒在
+--   這條傾倒線外側，不會倒在進出的路上（像真的調度系統每趟分配不同的傾倒位置、倒車進位置）。位置被土堆佔住就跳過；
+--   倒不乾淨就換下一個位置再倒，連兩個位置都倒不完就帶著剩下的開回去；全滿就在傾倒點等（推土機推平後在設定畫面重設）。
 --   前方有人或車就停（障礙偵測）；有人上車駕駛就暫停。爬坡限制、車尾碰撞照常。
 --   只在玩家附近（引擎執行的區塊內）會動，跑太遠會停住，等玩家靠近才繼續。
 
 local V = rockmech.vehicles
-local TYPES = V.TYPES
 
 local REC_STEP = 3          -- 錄製路線點的間距 (m)
 local TURN_ONLY = 0.6       -- 方向差超過這個角度 (rad) 就停下來原地轉
 local DEAD = 0.08           -- 方向差小於這個角度就不轉
 local LOOK = 6              -- 障礙偵測：車頭前方幾公尺
+local LATERAL = {0, 1, -1, 2, -2, 3, -3, 4, -4}   -- 傾倒位置的橫向順序（車寬＋1 m 為單位）
+local DUMP_SPOTS = #LATERAL
+local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾公尺
 
 local AHS = {}
 V.ahs = AHS
 
-local PHASE = {wait = "在裝載點等裝滿", to_dump = "前往傾倒點", dumping = "倒土", to_load = "回裝載點"}
+local PHASE = {wait = "在裝載點等裝滿", to_dump = "前往傾倒點", to_spot = "前往傾倒位置", align = "對準傾倒位置",
+	back_in = "倒車進傾倒位置", dumping = "倒土", pull_out = "離開傾倒位置", to_route = "倒完，回到路線",
+	to_load = "回裝載點", full = "傾倒區滿了（推平後在設定畫面重設）"}
 
 local function flat_dist(a, b) return math.sqrt((a.x - b.x) ^ 2 + (a.z - b.z) ^ 2) end
 local function round(p) return {x = math.floor(p.x * 10 + 0.5) / 10, y = math.floor(p.y * 10 + 0.5) / 10, z = math.floor(p.z * 10 + 0.5) / 10} end
+-- 方向差（rad，−π..π）：從 yaw 轉到朝向水平向量 (hx, hz)
+local function heading_diff(yaw, hx, hz)
+	return (V.atan2(-hx, hz) - yaw + math.pi) % (2 * math.pi) - math.pi
+end
 
 -- 名牌上的無人駕駛狀態
 function AHS.status(self)
@@ -36,6 +48,65 @@ local function set_phase(self, phase)
 	V.refresh(self)
 end
 
+-- 開進傾倒點的方向（水平單位向量）：倒的時候車尾朝這邊
+local function dir_in(a)
+	local p, q = a.route[#a.route - 1], a.route[#a.route]
+	local dx, dz = q.x - p.x, q.z - p.z
+	local l = math.sqrt(dx * dx + dz * dz)
+	if l < 1e-6 then return {x = 0, z = 1} end
+	return {x = dx / l, z = dz / l}
+end
+-- 第 i 個傾倒位置（0 起算；超出傾倒區回傳 nil）
+local function spot_pos(a, def, i)
+	if i >= DUMP_SPOTS then return nil end
+	local d = dir_in(a)
+	local lat = LATERAL[i + 1] * (2 * def.half + 1)
+	return {x = a.dump.x - d.z * lat, y = a.dump.y, z = a.dump.z + d.x * lat}
+end
+-- 往回程方向退 k 公尺的點
+local function standoff(a, p, k)
+	local d = dir_in(a)
+	return {x = p.x - d.x * k, y = p.y, z = p.z - d.z * k}
+end
+-- 傾倒位置能不能用：車停的地方地面上沒有碎石，車尾後面的土堆還沒超過 3 格高
+local function spot_free(a, def, sp)
+	local y0 = V.ground_y(sp, def.half)
+	local c = {x = math.floor(sp.x + 0.5), y = y0, z = math.floor(sp.z + 0.5)}
+	if not V.passable(core.get_node(c).name) then return false end
+	local d = dir_in(a)
+	local back = def.rear + 1
+	local q = {x = math.floor(sp.x + d.x * back + 0.5), y = y0 + 2, z = math.floor(sp.z + d.z * back + 0.5)}
+	return V.passable(core.get_node(q).name)
+end
+-- 從 a.spot 起找下一個能用的傾倒位置
+local function next_spot(a, def)
+	while true do
+		local sp = spot_pos(a, def, a.spot or 0)
+		if not sp then return nil end
+		if spot_free(a, def, sp) then return sp end
+		a.spot = (a.spot or 0) + 1
+	end
+end
+
+-- 朝 target 開（方向差大就原地轉，否則邊開邊修正；前方有人或車就停；卡住會顯示）。ap 是這一步的操作
+local function drive_to(self, def, ctx, a, ap, target)
+	local pos = ctx.pos
+	local diff = heading_diff(ctx.yaw, target.x - pos.x, target.z - pos.z)
+	if diff > DEAD then ap.left = true elseif diff < -DEAD then ap.right = true end
+	if math.abs(diff) >= TURN_ONLY then return end
+	local h = def.half
+	if V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK) then
+		if a.wait_msg ~= "前方有障礙，等待中" then a.wait_msg = "前方有障礙，等待中"; V.refresh(self) end
+		return
+	end
+	ap.up = true
+	-- 卡住偵測：一直想往前卻 8 秒沒前進
+	local moved = a.last_pos and flat_dist(pos, a.last_pos) or 1
+	a.stuck_t = moved < 0.05 * ctx.dtime * def.speed and (a.stuck_t or 0) + ctx.dtime or 0
+	local msg = a.stuck_t > 8 and "卡住了（路上有東西或坡太陡）" or nil
+	if msg ~= a.wait_msg then a.wait_msg = msg; V.refresh(self) end
+end
+
 -- 每一步：錄製路線點；無人駕駛時決定下一步的操作（self.autopilot）
 function AHS.step(self, def, ctx)
 	local a = self.ahs
@@ -48,56 +119,106 @@ function AHS.step(self, def, ctx)
 	if not a.on then return end
 	if ctx.d then self.autopilot = nil; return end   -- 有人駕駛：暫停
 	local ap = {}
+	local reach = def.half + 1
 	if a.phase == "wait" then
 		if V.load_total(self) >= def.cap then
 			a.idx = 2
 			set_phase(self, "to_dump")
 		end
-	elseif a.phase == "dumping" then
-		-- 先原地掉頭（車頭朝回程、車尾朝外，像礦卡倒車進傾倒點），碎石才不會倒在回程的路上
-		local back = a.route[#a.route - 1]
-		local want = V.atan2(-(back.x - pos.x), back.z - pos.z)
-		local diff = (want - ctx.yaw + math.pi) % (2 * math.pi) - math.pi
-		if not self.tip and V.load_total(self) == 0 then
-			a.idx = #a.route - 1
-			set_phase(self, "to_load")
-		elseif not self.tip and math.abs(diff) > 0.15 then
-			if diff > 0 then ap.left = true else ap.right = true end
-		elseif not self.tip then
-			ap.jump = true
-		end
-	else
+	elseif a.phase == "to_dump" or a.phase == "to_load" then
 		local fwd = a.phase == "to_dump"
 		local target = a.route[a.idx]
-		local reach = def.half + 1
 		if target and flat_dist(pos, target) < reach then
 			a.idx = a.idx + (fwd and 1 or -1)
 			target = a.route[a.idx]
 		end
-		if not target then
-			-- 到了路線終點
-			set_phase(self, fwd and "dumping" or "wait")
+		if target then
+			drive_to(self, def, ctx, a, ap, target)
+		elseif fwd then
+			-- 到了傾倒點：找這一趟的傾倒位置
+			a.fails = 0
+			a.target = next_spot(a, def)
+			set_phase(self, a.target and "to_spot" or "full")
 		else
-			-- 朝下一個路線點：方向差大就原地轉，否則邊開邊修正
-			local dx, dz = target.x - pos.x, target.z - pos.z
-			local want = V.atan2(-dx, dz)
-			local diff = (want - ctx.yaw + math.pi) % (2 * math.pi) - math.pi
-			if diff > DEAD then ap.left = true elseif diff < -DEAD then ap.right = true end
-			if math.abs(diff) < TURN_ONLY then
-				-- 障礙偵測：前方有人或車就停
-				local h = def.half
-				if V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK) then
-					if a.wait_msg ~= "前方有障礙，等待中" then a.wait_msg = "前方有障礙，等待中"; V.refresh(self) end
-				else
-					ap.up = true
-					-- 卡住偵測：一直想往前卻 8 秒沒前進
-					local moved = a.last_pos and flat_dist(pos, a.last_pos) or 1
-					a.stuck_t = moved < 0.05 * ctx.dtime * def.speed and (a.stuck_t or 0) + ctx.dtime or 0
-					local msg = a.stuck_t > 8 and "卡住了（路上有東西或坡太陡）" or nil
-					if msg ~= a.wait_msg then a.wait_msg = msg; V.refresh(self) end
-				end
-			end
+			set_phase(self, "wait")
 		end
+	elseif a.phase == "to_spot" then
+		-- 先到傾倒位置前方的待命點
+		local sp = standoff(a, a.target, STANDOFF)
+		if flat_dist(pos, sp) < 1.0 then set_phase(self, "align")
+		else drive_to(self, def, ctx, a, ap, sp) end
+	elseif a.phase == "align" then
+		-- 原地轉成車頭朝回程、車尾朝外
+		local d = dir_in(a)
+		local diff = heading_diff(ctx.yaw, -d.x, -d.z)
+		if math.abs(diff) > 0.12 then
+			if diff > 0 then ap.left = true else ap.right = true end
+		else
+			a.stuck_t = 0
+			set_phase(self, "back_in")
+		end
+	elseif a.phase == "back_in" then
+		-- 倒車進傾倒位置；到了、或車尾頂到東西 3 秒沒動，就在這裡倒
+		local d = dir_in(a)
+		local left = (a.target.x - pos.x) * d.x + (a.target.z - pos.z) * d.z   -- 還要往外倒車多遠
+		local moved = a.last_pos and flat_dist(pos, a.last_pos) or 1
+		a.stuck_t = moved < 0.01 and (a.stuck_t or 0) + ctx.dtime or 0
+		if left < 0.3 or a.stuck_t > 3 then
+			set_phase(self, "dumping")
+		else
+			ap.down = true
+			local diff = heading_diff(ctx.yaw, -d.x, -d.z)
+			if diff > DEAD then ap.left = true elseif diff < -DEAD then ap.right = true end
+		end
+	elseif a.phase == "dumping" then
+		if self.tip then
+			a.tipped = true
+		elseif a.tipped then
+			-- 倒完一次：這個位置用掉了；倒乾淨就離開，倒不乾淨換下一個位置，連兩個都倒不完就帶著剩下的回去
+			a.tipped = nil
+			a.spot = (a.spot or 0) + 1
+			if V.load_total(self) == 0 then
+				set_phase(self, "pull_out")
+			else
+				a.fails = (a.fails or 0) + 1
+				local nxt = a.fails < 2 and next_spot(a, def)
+				set_phase(self, "pull_out")
+				if nxt then a.next_target = nxt else a.wait_msg = "傾倒區滿了，帶著剩下的回去" end
+			end
+		else
+			ap.jump = true
+		end
+	elseif a.phase == "pull_out" then
+		-- 往前開回待命點，再去下一個位置或回路線
+		local sp = standoff(a, a.target, STANDOFF)
+		if flat_dist(pos, sp) < 1.0 then
+			if a.next_target then
+				a.target, a.next_target = a.next_target, nil
+				set_phase(self, "to_spot")
+			else
+				set_phase(self, "to_route")
+			end
+		else
+			drive_to(self, def, ctx, a, ap, sp)
+		end
+	elseif a.phase == "to_route" then
+		-- 沿傾倒線前方回到傾倒點前的待命點，接上路線
+		local sp = standoff(a, a.dump, STANDOFF)
+		if flat_dist(pos, sp) < reach then
+			local best, bi = math.huge, #a.route
+			for i = #a.route, 1, -1 do
+				local dd = flat_dist(sp, a.route[i])
+				if dd < best then best, bi = dd, i end
+			end
+			a.idx = math.max(1, bi - 1)
+			set_phase(self, "to_load")
+		else
+			drive_to(self, def, ctx, a, ap, sp)
+		end
+	elseif a.phase == "full" then
+		-- 等重設；重設後找得到位置就繼續
+		a.target = next_spot(a, def)
+		if a.target then set_phase(self, "to_spot") end
 	end
 	a.last_pos = vector.copy(pos)
 	self.autopilot = ap
@@ -109,21 +230,23 @@ local function fmt(p) return p and ("(%d, %d, %d)"):format(math.floor(p.x + 0.5)
 local function formspec(self)
 	local a = self.ahs or {}
 	local st = a.rec and "錄製路線中（開到傾倒點後按「設為傾倒點」）"
-		or a.on and (PHASE[a.phase] or "") or "停止"
+		or a.on and (a.wait_msg or PHASE[a.phase] or "") or "停止"
 	return table.concat({
-		"formspec_version[6]size[9,7.6]",
+		"formspec_version[6]size[9,8.4]",
 		"label[0.5,0.6;無人駕駛（AHS）]",
 		("label[0.5,1.2;裝載點：%s]"):format(fmt(a.load)),
 		("label[0.5,1.7;傾倒點：%s]"):format(fmt(a.dump)),
-		("label[0.5,2.2;路線：%d 個點]"):format(a.route and #a.route or 0),
+		("label[0.5,2.2;路線：%d 個點　傾倒區：已用 %d / %d 個位置]"):format(a.route and #a.route or 0,
+			math.min(a.spot or 0, DUMP_SPOTS), DUMP_SPOTS),
 		("label[0.5,2.7;狀態：%s]"):format(st),
 		"button[0.5,3.2;8,0.8;rec;設為裝載點並開始錄製路線（目前位置）]",
 		"button[0.5,4.1;8,0.8;dump;設為傾倒點（結束錄製）]",
 		"button[0.5,5.0;3.9,0.8;start;啟動（啟動後請下車）]",
 		"button[4.6,5.0;3.9,0.8;stop;停止]",
 		"button[0.5,5.9;3.9,0.8;go;立即出發（不等裝滿）]",
-		"button_exit[4.6,5.9;3.9,0.8;ok;關閉]",
-		"label[0.5,7.1;裝載點等裝滿 → 沿路線開到傾倒點倒土 → 開回裝載點；前方有人或車會停]",
+		"button[4.6,5.9;3.9,0.8;reset;重設傾倒區]",
+		"button_exit[4.6,6.8;3.9,0.8;ok;關閉]",
+		"label[0.5,7.9;裝滿 → 沿路線到傾倒線，倒車進這趟的位置倒土 → 開回裝載點；前方有人或車會停]",
 	})
 end
 function AHS.open(self, player)
@@ -141,7 +264,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local pos = self.object:get_pos()
 	local msg
 	if fields.rec then
-		a.load, a.dump, a.route, a.rec, a.on = round(pos), nil, {round(pos)}, true, false
+		a.load, a.dump, a.route, a.rec, a.on, a.spot = round(pos), nil, {round(pos)}, true, false, 0
 		msg = "開始錄製：開到倒土的地方"
 	elseif fields.dump then
 		if not a.rec then msg = "要先設裝載點並開始錄製"
@@ -161,6 +284,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				if dd < best then best, bi = dd, i end
 			end
 			if bi == 1 then a.phase = "wait" else a.phase, a.idx = "to_load", bi end
+			a.wait_msg = nil
 			msg = "已啟動：請下車"
 		end
 	elseif fields.stop then
@@ -169,6 +293,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		msg = "已停止"
 	elseif fields.go then
 		if a.on and a.phase == "wait" then a.idx = 2; a.phase = "to_dump"; msg = "出發" end
+	elseif fields.reset then
+		a.spot = 0
+		msg = "傾倒區重設：從第一個位置開始"
 	end
 	if msg then core.chat_send_player(name, "[無人駕駛] " .. msg) end
 	V.refresh(self)
@@ -184,3 +311,4 @@ function AHS.load(self, data)
 		self.ahs.rec = false
 	end
 end
+rockmech.ahs_spot_pos = spot_pos   -- 測試用
