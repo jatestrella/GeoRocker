@@ -311,7 +311,8 @@ local function local_ctx(g, p)
 		if sup then
 			local p = sup.sc[ib * 8 + 4] or 0
 			for _, e in ipairs(sup.bf[ib * 8 + 4] or {}) do
-				if e[2] > r.t then p = p + e[1] end
+				if e[2] > r.t then p = p + e[1]
+				else r.bolt_short = math.max(r.bolt_short or 0, e[2]) end   -- 太短、沒有懸吊作用（顯示用）
 			end
 			if p > 0 then r.p_sup = p * 1000 end
 		end
@@ -641,6 +642,7 @@ function overhang.cell_state(g, p, x, y, z)
 		n_cells = res.n_cells, edge = res.edge,
 		beam = res.beam and res.beam[r0] or nil,
 		load = load0,
+		p_sup = r0.p_sup, bolt_short = r0.bolt_short,   -- 底面往上托的支護壓力 (kPa)；沒算到的岩栓最長幾 m
 	}
 	local segs, seg_of = segments(res)
 	local cut_cells = 0

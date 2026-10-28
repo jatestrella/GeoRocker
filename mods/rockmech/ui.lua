@@ -111,10 +111,16 @@ function rockmech.overhang_line(o)
 	if o.rho and o.rho < 1 then
 		root = ("、根部斷面被節理切過，完好 %.0f%%"):format(o.rho * 100)
 	end
+	-- 支護：底面往上托的 pᵢ；岩栓比這一欄短（沒穿過上方的水平節理）沒有懸吊作用
+	local sup = ""
+	if o.p_sup then sup = ("；支護往上托 %.0f kPa（γt %.0f kPa）"):format(o.p_sup, o.gamma * o.t) end
+	if o.bolt_short then
+		sup = sup .. ("；岩栓 %g m 比這層岩石（%d m，到上方水平節理或地表）短，沒有懸吊作用"):format(o.bolt_short, o.t)
+	end
 	return ("懸臂 d %d m、t %d m%s：σb=3γ·t·d²/t_eff² %.3f / σt %.2f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
 		o.d, o.t, root, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax * (o.rho or 1), fs_str(o.group_fs), c.x, c.z,
 		o.edge and ("（懸空群超出 ±%d m 檢查範圍，FS 可能高估）"):format((rockmech.collapse.overhang_radius())) or "")
-		.. ((o.cut_cells or 0) > 0 and ("；相鄰有 %d 格被節理切離、會掉落"):format(o.cut_cells) or "")
+		.. ((o.cut_cells or 0) > 0 and ("；相鄰有 %d 格被節理切離、會掉落"):format(o.cut_cells) or "") .. sup
 end
 
 -- 關鍵塊體的一行說明。kb = collapse.keyblock_state 的結果

@@ -2,7 +2,7 @@
 -- 支護：岩栓、噴凝土（隧道與邊坡都能用）。力學見 support.lua：換算成臨空面上的等效圍壓 pᵢ，
 -- 進到軸差（Hoek-Brown σ3）、節理弱面（σn）與關鍵塊體／整體滑動的判定。參數在設定 rockmech_support_*。
 --   岩栓：先用鑿岩機鑽孔，再拿岩栓對著鑽孔按右鍵裝進去（孔口一塊墊板）。
---   岩栓長度 = 裝進去的鑽孔孔深（手動鑿岩機對孔繼續按住可以加深，見 drilling.lua）。
+--   岩栓長度 = 裝進去的鑽孔孔深（手動鑿岩機對孔繼續按住可以加深，見 drilling.lua）。挖掉岩栓 → 變回鑽孔、岩栓退還。
 --   噴凝土：對岩面按右鍵，噴這一面 3×3 格（用掉一袋）；噴到的空氣格變成一層薄噴凝土，這格周圍的岩面都算噴到。
 --     可以挖掉（不退還）；鑿岩機對著噴凝土鑽就是鑽後面的岩面（那格噴凝土會被孔取代）。
 --   支護後面的岩石沒了（挖掉、爆破、坍塌）就跟著消失；爆炸會直接炸掉。
@@ -59,8 +59,20 @@ do
 		}},
 		selection_box = {type = "fixed", fixed = {{-0.25, -0.5, -0.25, 0.25, -0.34, 0.25}}},
 		tiles = {steel, plate, plate, plate, plate, plate},
-		walkable = false, is_ground_content = false, diggable = false,
-		drop = "", groups = {not_in_creative_inventory = 1},
+		walkable = false, is_ground_content = false,
+		drop = "", groups = {dig_immediate = 2, not_in_creative_inventory = 1},
+		-- 拆掉：變回鑽孔（孔深不變），岩栓還給玩家
+		on_dig = function(pos, node, digger)
+			core.swap_node(pos, {name = HOLE, param2 = node.param2})
+			local meta = core.get_meta(pos)
+			local len = meta:get_float("depth")
+			meta:set_string("infotext", ("鑽孔（深 %g m）"):format(len > 0 and len or rockmech.cfg.blast.hole_depth))
+			if digger and digger:is_player() and not creative(digger) then
+				local left = digger:get_inventory():add_item("main", ItemStack(BOLT_ITEM))
+				if not left:is_empty() then core.add_item(pos, left) end
+			end
+			return true
+		end,
 	})
 end
 
