@@ -355,8 +355,11 @@ core.register_globalstep(function(dtime)
 					st.t = 0   -- 繼續按住就再加深一公尺
 				end
 			elseif core.get_node(hit.under).name == HOLE then
-				-- 鑽到最深了（或後面不是岩石）
-				drill_hud(pl, st, ("孔深 %d m（最深）"):format(math.floor(hole_len(hit.under) + 0.5)))
+				-- 不能再加深：手持風鑽到最深了，或再往前不是岩石（鑽穿到空洞、地表、碎石）
+				local n = math.floor(hole_len(hit.under) + 0.5)
+				drill_hud(pl, st, n >= bcfg.hand_max_depth
+					and ("孔深 %d m（手持風鑽最深 %d m）"):format(n, bcfg.hand_max_depth)
+					or ("孔深 %d m（再往前不是岩石，鑽不下去）"):format(n))
 			elseif cannot_drill(st.under, st.above) then
 				-- 鑽不了（碎石、孔口被擋住）：什麼都不顯示
 				if st.hud then pl:hud_remove(st.hud); st.hud = nil end
