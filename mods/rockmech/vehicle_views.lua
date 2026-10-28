@@ -67,10 +67,10 @@ local function views_of(kind)
 		v[3] = {o = def.rearcam, dir = 0, down = math.rad(24), hfov = math.rad(80), vfov = math.rad(42),
 			w = 40, h = 22, hud = REARCAM_HUD}
 	elseif def.cam then
-		-- 作業攝影機（例如露天鑽機看鑽孔處）：對準 def.cam.target、不鏡像、中央畫紅色十字
+		-- 作業攝影機（例如露天鑽機從側面看桅桿與孔位）：對準 def.cam.target、不鏡像、在 def.cam.mark 畫紅色十字
 		local c = def.cam
-		v[3] = {o = c.o, target = c.target, hfov = c.hfov, vfov = c.vfov, flip = true, crosshair = true,
-			w = 40, h = 22, hud = REARCAM_HUD}
+		v[3] = {o = c.o, target = c.target, hfov = c.hfov, vfov = c.vfov, flip = true, mark = c.mark, holes = c.holes,
+			w = c.w or 40, h = c.h or 22, hud = REARCAM_HUD}
 	end
 	return v
 end
@@ -202,7 +202,9 @@ end
 
 -- 畫一個畫面（view 見 views_of）。看往後方，和照後鏡一樣：畫面左邊 = 車身左側（−X），上 = 上。
 -- view.target：對準這一點（車身座標，自動算 dir、down）；view.flip：一般攝影機（往前看時左右不鏡像）；
--- view.crosshair：畫面中央畫紅色十字
+-- view.mark：在這一點（車身座標）畫紅色十字；view.holes：這個距離內的鑽孔、裝藥畫成明顯的色點（太小、射線常打不到）
+-- 有 target 的鏡頭可以在車外：鏡頭和 target 之間有岩石擋住就往 target 拉近
+local HOLE_NODES = {"rockmech:drill_hole", "rockmech:charged_hole", "rockmech:anfo_hole", "rockmech:anfo_primed"}
 local function render_view(self, view)
 	local p, yaw = self.object:get_pos(), self.object:get_yaw()
 	local psi = view.swing and self.swing or 0
@@ -217,6 +219,13 @@ local function render_view(self, view)
 		local dx, dy, dz = view.target.x - view.o.x, view.target.y - view.o.y, view.target.z - view.o.z
 		vdir = V.atan2(dx, -dz)
 		vdown = -V.atan2(dy, math.sqrt(dx * dx + dz * dz))
+		local tp = vector.add(p, world(vector.add(view.target, {x = 0, y = 0.6, z = 0})))
+		for hit in core.raycast(tp, eye, false, false) do
+			if hit.type == "node" and not V.passable(core.get_node(hit.under).name) then
+				eye = vector.add(hit.intersection_point, vector.multiply(vector.direction(eye, tp), 0.3))
+				break
+			end
+		end
 	end
 	local hsign = view.flip and -1 or 1
 	-- 附近的車輛（含自己）與沒在車上的玩家：每台車（或玩家）一組箱子與外接球（射線先比外接球，碰不到整組跳過）
@@ -255,9 +264,11 @@ local function render_view(self, view)
 			local dw = world({x = math.sin(a) * cb, y = sb, z = -math.cos(a) * cb})
 			local hit = core.raycast(eye, vector.add(eye, vector.multiply(dw, MIRROR_RANGE)), false, false):next()
 			local c, n, dist
+			local grid = 1   -- 方塊棋盤格明暗（看得出一格一格、遠近與地面起伏）
 			if hit and hit.type == "node" then
 				c, n = rgb_of(core.get_node(hit.under).name), hit.intersection_normal
 				dist = vector.distance(eye, hit.intersection_point)
+				if (hit.under.x + hit.under.y + hit.under.z) % 2 == 1 then grid = 0.88 end
 			end
 			local best, bt, bax, bsg = nil, dist or MIRROR_RANGE, nil, nil
 			for _, g in ipairs(groups) do
@@ -271,11 +282,11 @@ local function render_view(self, view)
 				end
 			end
 			if best then
-				dist = bt
+				dist, grid = bt, 1
 				c, n = box_color(best, eye, dw, bt, bax, bsg)
 			end
 			if c then
-				local shade = n.y > 0.5 and 1 or n.y < -0.5 and 0.55 or math.abs(n.x) > math.abs(n.z) and 0.82 or 0.7
+				local shade = (n.y > 0.5 and 1 or n.y < -0.5 and 0.55 or math.abs(n.x) > math.abs(n.z) and 0.82 or 0.7) * grid
 				local t = 0.6 * dist / MIRROR_RANGE
 				col = {c[1] * shade * (1 - t) + SKY[1] * t, c[2] * shade * (1 - t) + SKY[2] * t,
 					c[3] * shade * (1 - t) + SKY[3] * t}
@@ -285,9 +296,33 @@ local function render_view(self, view)
 		end
 		flush(W)
 	end
-	if view.crosshair then
-		local cx, cy = math.floor(W / 2), math.floor(H / 2)
-		out[#out + 1] = ("^[fill:5x1:%d,%d:#ff3030^[fill:1x5:%d,%d:#ff3030"):format(cx - 2, cy, cx, cy - 2)
+	-- 世界座標的點 → 畫面上的像素（看不到回傳 nil）
+	local function project(q)
+		local d = vector.subtract(q, eye)
+		local lx, lz = d.x * cy + d.z * sy, -d.x * sy + d.z * cy
+		local a = (V.atan2(lx, -lz) - vdir + math.pi) % (2 * math.pi) - math.pi
+		local b = V.atan2(d.y, math.sqrt(lx * lx + lz * lz))
+		local u = math.floor(((hsign * a) / view.hfov + 0.5) * W)
+		local v = math.floor((0.5 - (b + vdown) / view.vfov) * H)
+		if u >= 0 and u < W and v >= 0 and v < H then return u, v end
+	end
+	if view.holes and not view.swing then
+		local c0 = vector.add(p, world(view.mark or view.target))
+		for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(c0, view.holes), vector.add(c0, view.holes), HOLE_NODES)) do
+			local u, v = project(hp)
+			-- 被擋住的不畫：從鏡頭打到孔口那格，中間先碰到別的方塊就是看不到
+			local hit = u and core.raycast(eye, hp, false, false):next()
+			if u and (not hit or vector.equals(hit.under, hp)) then
+				local c = rgb_of(core.get_node(hp).name)
+				out[#out + 1] = ("^[fill:2x2:%d,%d:#%02x%02x%02x"):format(math.min(u, W - 2), math.min(v, H - 2), c[1], c[2], c[3])
+			end
+		end
+	end
+	if view.mark then
+		local u, v = project(vector.add(p, world(view.mark)))
+		if u then
+			out[#out + 1] = ("^[fill:5x1:%d,%d:#ff3030^[fill:1x5:%d,%d:#ff3030"):format(u - 2, v, u, v - 2)
+		end
 	end
 	return table.concat(out)
 end
