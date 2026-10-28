@@ -193,14 +193,15 @@ describe("support 頂板：往上托抵銷自重", function()
 		assert.are.equal(math.huge, overhang.cell_state(g, OP, 6, 8, 0).fs)
 	end)
 
-	it("1:2 拱：厚岩層的懸臂荷重高度 h = min(t, 2d)", function()
+	it("1:2 拱：厚岩層的懸臂鬆動帶 h = min(t, 2d)（荷重與抗彎厚度）", function()
 		local g = cantilever(2, 6)                  -- 6 m 厚、伸出 2 m
 		local s1 = overhang.cell_state(g, OP, 1, 8, 0)
 		local s2 = overhang.cell_state(g, OP, 2, 8, 0)
 		assert.are.equal(2, s1.h)                   -- d = 1 → 2 m
 		assert.are.equal(4, s2.h)                   -- d = 2 → 4 m
-		-- FS = (L_max·ρ/d)² × t/h
-		assert.near((s2.lmax / 2) ^ 2 * 6 / 4, s2.fs, 1e-9)
+		-- FS = (L_max·ρ/d)² × h/t = σt·h/(3γd²)
+		assert.near((s2.lmax / 2) ^ 2 * 4 / 6, s2.fs, 1e-9)
+		assert.near(2000 * 4 / (3 * 25 * 4), s2.fs, 1e-9)
 		under(g, 2, 6, 0, 0.1)                      -- 100 kPa ≥ γh = 25 × 4 → 托住
 		assert.are.equal(math.huge, overhang.cell_state(g, OP, 2, 8, 0).fs)
 	end)
