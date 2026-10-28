@@ -685,6 +685,7 @@ function V.register(kind, def)
 					end
 					d:set_camera({mode = "first"})
 					set_seated(d, true)
+					update_hud(self)   -- 追蹤相機時收起駕駛艙框與後照鏡，回到車上再顯示
 				end
 				self.zoom_held = ctrl.zoom
 			end
