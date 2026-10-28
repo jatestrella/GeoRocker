@@ -455,7 +455,10 @@ local hud_clear, update_hud, update_mirrors = V.hud_clear, V.update_hud, V.updat
 
 -- 駕駛的姿勢（有 player_api 時）：上車坐著、下車恢復
 local function set_seated(player, on)
-	if not (player_api and player) then return end
+	if not player then return end
+	-- 開車時收起快捷欄與手上拿的東西（不擋駕駛艙畫面），下車再顯示
+	player:hud_set_flags({hotbar = not on, wielditem = not on})
+	if not player_api then return end
 	local name = player:get_player_name()
 	player_api.player_attached[name] = on or nil
 	player_api.set_animation(player, on and "sit" or "stand")
