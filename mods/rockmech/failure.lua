@@ -45,6 +45,8 @@
 --    （每組需有 n_eff = 向上單位法向，與 name）；params.joints_at(x,y,z, sets) 回傳
 --    sets 中穿過此格的組。params.detail = true 時不做前置篩選（顯示用）。
 --    params.axial == false 時不做軸差判定（只做弱面）。
+-- 7. 支護（grid.support，見 support.lua）：臨空面的法向應力 = 支護壓力 pᵢ（側面 σx／σz 和碎石側壓相加；
+--    頂板 σy = pᵢ），等效圍壓讓 Hoek-Brown 的 σ3 與節理面的 σn 提高。
 --
 -- ## 網格格式（與 VoxelManip / VoxelArea 相同的扁平陣列）
 -- grid = {
@@ -329,14 +331,17 @@ function failure.cell_state(g, x, y, z, p)
 	local ex_p, ex_n = is_open(g, x + 1, y, z), is_open(g, x - 1, y, z)
 	local ez_p, ez_n = is_open(g, x, y, z + 1), is_open(g, x, y, z - 1)
 	local ex, ez = ex_p or ex_n, ez_p or ez_n
-	-- 臨空面上的法向壓力：空氣 0、碎石 K·γ_r·h_r；同一軸兩側都臨空取小者
+	-- 臨空面上的法向壓力：空氣 0、碎石 K·γ_r·h_r，再加支護壓力 pᵢ（support.lua：噴凝土、岩栓）；
+	-- 同一軸兩側都臨空取小者
 	local px, pz = 0, 0
-	if g.rubble_of and (ex or ez) then
-		local function side(open, xx, zz)
-			return open and rubble_pressure(g, xx, y, zz, p) or math.huge
+	local sup = g.support
+	if (g.rubble_of or sup) and (ex or ez) then
+		local function side(open, xx, zz, k)
+			if not open then return math.huge end
+			return rubble_pressure(g, xx, y, zz, p) + (sup and sup.face[i * 8 + k] or 0)
 		end
-		if ex then px = math.min(side(ex_p, x + 1, z), side(ex_n, x - 1, z)) end
-		if ez then pz = math.min(side(ez_p, x, z + 1), side(ez_n, x, z - 1)) end
+		if ex then px = math.min(side(ex_p, x + 1, z, 1), side(ex_n, x - 1, z, 2)) end
+		if ez then pz = math.min(side(ez_p, x, z + 1, 5), side(ez_n, x, z - 1, 6)) end
 	end
 	-- 平滑後的坡面外法向（側向臨空時）：自由面條件與節理運動學共用
 	local fn = (ex or ez) and failure.face_normal(g, x, y, z) or nil
@@ -370,7 +375,9 @@ function failure.cell_state(g, x, y, z, p)
 	else
 		sx, sz = sxx_c, szz_c
 	end
-	local sy = e_down and 0 or sv
+	-- 頂板（下方臨空）：σy = 頂板上的支護壓力（沒有支護就是 0）
+	local p_roof = e_down and sup and sup.face[i * 8 + 4] or 0
+	local sy = e_down and p_roof or sv
 
 	local s1, s3 = stress.principal(sx, sy, sz, sxz)
 	local q = s1 - s3
@@ -464,6 +471,7 @@ function failure.cell_state(g, x, y, z, p)
 		fails_axial = fails_axial, fails_slip = fails_slip,
 		exposed_x = ex, exposed_z = ez, exposed_up = e_up, exposed_down = e_down,
 		exposed = exposed,
+		p_support = math.max(ex and px or 0, ez and pz or 0, p_roof),   -- 臨空面上最大的法向壓力 (MPa)（顯示用）
 		fails = fails_axial or fails_slip,
 	}
 end

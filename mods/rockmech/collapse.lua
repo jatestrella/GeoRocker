@@ -483,7 +483,7 @@ function collapse.read_grid(minp, maxp, no_overburden)
     local data = vm:get_data()
     local p2 = vm:get_param2_data()   -- 岩性格的 param2 1..100 = 該格的 GSI（rockmass.lua）
     vm:close()
-    return {
+    local g = {
         data = data, p2 = p2,
         ox = emin.x, oy = emin.y, oz = emin.z,
         nx = emax.x - emin.x + 1, ny = emax.y - emin.y + 1, nz = emax.z - emin.z + 1,
@@ -492,6 +492,13 @@ function collapse.read_grid(minp, maxp, no_overburden)
         -- 實際需要的範圍（failure.compute_loads 只算這些欄）
         req = {x1 = minp.x, x2 = maxp.x, z1 = minp.z, z2 = maxp.z, y1 = minp.y, y2 = maxp.y},
     }
+    -- 支護（噴凝土、岩栓）→ 臨空面的等效圍壓（support.lua）
+    if rockmech.support_ids then
+        local sc = cfg.support
+        g.support = rockmech.support.scan(g, rockmech.support_ids,
+            {p_sc = sc.shotcrete_p, T = sc.bolt_t, L = sc.bolt_l, N = cfg.model_scale})
+    end
+    return g
 end
 
 -- 開挖前的初始應力：往上掃描 pos 正上方的柱子，最高的天然實心格（鍵結：岩石、土、礦）

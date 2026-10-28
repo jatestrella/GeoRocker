@@ -61,6 +61,9 @@ local function compass_report(pos, nodename)
 				fs.sv0, fs.sv, fs.factor, fs.exposed and "（臨空）" or "")
 			lines[#lines + 1] = ("  σxx=%.3f（×%.2f）σyy=%.3f σzz=%.3f（×%.2f）σxz=%.3f → σ1=%.3f σ3=%.3f MPa"):format(
 				fs.sx, fs.fx, fs.sy, fs.sz, fs.fz, fs.sxz, fs.s1, fs.s3)
+			if (fs.p_support or 0) > 0 then
+				lines[#lines + 1] = ("  臨空面的法向壓力（支護 pᵢ、碎石側壓）%.3f MPa"):format(fs.p_support)
+			end
 			local verdict
 			if fs.fails_axial then
 				verdict = core.colorize("#ff6060", "破壞")

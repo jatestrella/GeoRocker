@@ -276,7 +276,8 @@ end
 -- 能不能在這個岩面鑽孔（under 是岩石、above 是空的）：回傳 nil 或不能的原因
 local function cannot_drill(under, above)
 	if not rockmech.lith_of_node[core.get_node(under).name] then return "只能在岩石上鑽孔（碎石鑽不了）" end
-	if core.get_node(above).name ~= "air" then return "孔口前面要是空的" end
+	local an = core.get_node(above).name
+	if an ~= "air" and an ~= "rockmech:shotcrete_lining" then return "孔口前面要是空的" end   -- 噴凝土可以鑽穿（那格換成孔）
 end
 -- 鑽好一個孔
 function rockmech.make_hole(under, above)

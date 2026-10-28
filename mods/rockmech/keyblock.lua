@@ -23,6 +23,8 @@
 --       兩面的正向力 N_k、N_l 由 W·g⊥ = N_k ν_k + N_l ν_l 求出，皆須 ≥ 0。
 --       FS = (N_k tanφ + N_l tanφ + c·A_k + c·A_l + Σ c·A(平行於 m 的其他面)) / (W g·m)
 --   都不可行 → 卡住（FS = ∞）。
+--   支護（grid.support，見 support.lua）：岩塊臨空面上的噴凝土、穿過岩塊且錨進岩塊外岩體的岩栓，
+--   對把岩塊推出該面的運動 m 提供抵抗 Σ F·(面外法向·m)，加進各模式的抗力。
 --
 -- ## 應力夾持（Unwedge 式的現地應力，含應力釋放係數）
 -- 每個節理接觸面的夾持力 C = λ·σn·A（σn = ν·σ·ν，σ 取塊體這一側格子的局部應力，
@@ -197,13 +199,27 @@ local function contacts(ctx, block)
 			end
 		end
 	end
-	return W, planes, n_free
+	local S = g.support and g.support.forces(g, g.support, block.cells, block.set)
+	return W, planes, n_free, S
 end
 
 -- 運動學與安全係數。回傳 {fs, mode = "fall"|"plane"|"wedge"|nil, dir = m, planes = {k,l}}
-function keyblock.analyze(W, planes, tanphi)
+-- S：支護力（support.forces 的 6 桶，可省略）
+function keyblock.analyze(W, planes, tanphi, S)
 	local gv = {x = 0, y = -1, z = 0}
 	local best = {fs = math.huge}
+	local function sres(m)
+		if not S then return 0 end
+		local r = 0
+		for k = 1, 6 do
+			if S[k] > 0 then
+				local a = AX[k]
+				local d = a[1] * m.x + a[2] * m.y + a[3] * m.z
+				if d > 0 then r = r + S[k] * d end
+			end
+		end
+		return r
+	end
 	local function admissible(m, skip1, skip2)
 		for idx, pl in ipairs(planes) do
 			if idx ~= skip1 and idx ~= skip2 and dot(pl.nu, m) > 1e-3 then return false end
@@ -223,7 +239,7 @@ function keyblock.analyze(W, planes, tanphi)
 	local function clamp_of(k) return (planes[k].clamp or 0) * tanphi end
 	-- 落下
 	if admissible(gv) then
-		local fs = parallel_coh(gv) / W
+		local fs = (parallel_coh(gv) + sres(gv)) / W
 		if fs < best.fs then best = {fs = fs, mode = "fall", dir = gv} end
 	end
 	-- 平面滑動
@@ -235,7 +251,7 @@ function keyblock.analyze(W, planes, tanphi)
 			if tl > 1e-3 then
 				local m = {x = t.x / tl, y = t.y / tl, z = t.z / tl}
 				if admissible(m, k) then
-					local R = W * gn * tanphi + pl.c * pl.area + clamp_of(k) + parallel_coh(m, k)
+					local R = W * gn * tanphi + pl.c * pl.area + clamp_of(k) + parallel_coh(m, k) + sres(m)
 					local fs = R / (W * tl)
 					if fs < best.fs then best = {fs = fs, mode = "plane", dir = m, planes = {k}} end
 				end
@@ -260,7 +276,7 @@ function keyblock.analyze(W, planes, tanphi)
 						local Nb = (fb - ab * fa) / det
 						if Na >= 0 and Nb >= 0 then
 							local R = (Na + Nb) * tanphi + planes[k].c * planes[k].area + planes[l].c * planes[l].area
-								+ clamp_of(k) + clamp_of(l) + parallel_coh(line, k, l)
+								+ clamp_of(k) + clamp_of(l) + parallel_coh(line, k, l) + sres(line)
 							local fs = R / (W * gl)
 							if fs < best.fs then best = {fs = fs, mode = "wedge", dir = line, planes = {k, l}} end
 						end
@@ -284,11 +300,11 @@ function keyblock.find_blocks(g, p, starts)
 			local b = grow(ctx, lx, ly, lz)
 			if b and not done[b] then
 				done[b] = true
-				local W, planes, n_free = contacts(ctx, b)
-				local r = keyblock.analyze(W, planes, p.tanphi)
+				local W, planes, n_free, S = contacts(ctx, b)
+				local r = keyblock.analyze(W, planes, p.tanphi, S)
 				if r.fs < 1 and (p.clamp or 0) > 0 then
 					add_clamp(ctx, planes, p.clamp)
-					r = keyblock.analyze(W, planes, p.tanphi)
+					r = keyblock.analyze(W, planes, p.tanphi, S)
 				end
 				local cells = {}
 				for _, c in ipairs(b.cells) do
@@ -497,10 +513,11 @@ function keyblock.find_masses(g, p, starts)
 							for _, pl in ipairs(planes) do pl.c = pl.area > 0 and pl.ca / pl.area or 0 end
 							if not (bridged and not p.bridge_c) then
 								stats.evaluated = stats.evaluated + 1
-								local r = keyblock.analyze(W, planes, p.tanphi)
+								local S = g.support and g.support.forces(g, g.support, cells, set)
+								local r = keyblock.analyze(W, planes, p.tanphi, S)
 								if r.fs < 1 and (p.mass_clamp or 0) > 0 then
 									add_clamp(ctx, planes, p.mass_clamp)
-									r = keyblock.analyze(W, planes, p.tanphi)
+									r = keyblock.analyze(W, planes, p.tanphi, S)
 								end
 								if r.fs < 1 or p.collect_all then
 									local wc = {}
@@ -537,11 +554,11 @@ function keyblock.analyze_group(g, p, cells)
 		block.cells[#block.cells + 1] = {lx, ly, lz}
 		block.set[1 + lx + ly * sy + lz * sz] = true
 	end
-	local W, planes = contacts(ctx, block)
-	local r = keyblock.analyze(W, planes, p.tanphi)
+	local W, planes, _, S = contacts(ctx, block)
+	local r = keyblock.analyze(W, planes, p.tanphi, S)
 	if r.fs < 1 and (p.clamp or 0) > 0 then
 		add_clamp(ctx, planes, p.clamp)
-		r = keyblock.analyze(W, planes, p.tanphi)
+		r = keyblock.analyze(W, planes, p.tanphi, S)
 	end
 	r.W = W
 	return r

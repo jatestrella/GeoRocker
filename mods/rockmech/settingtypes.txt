@@ -269,6 +269,18 @@ rockmech_stability_rigid_max (Max rigid block size) int 128 1 2000
 # Log a warning when one stability check takes longer than this (ms).
 rockmech_stability_budget_ms (Stability check time budget) float 5 0.1 1000
 
+[Ground support]
+
+# Shotcrete support pressure on the covered rock faces (MPa), applied as an equivalent
+# confining pressure (Hoek-Brown σ3, joint σn, key block resistance). Divided by the model scale N.
+rockmech_support_shotcrete_p (Shotcrete support pressure) float 0.2 0 10
+
+# Rock bolt capacity T (kN), spread over the 3×3 faces around the bolt (pattern bolting at spacing s ≈ T/s²).
+rockmech_support_bolt_t (Rock bolt capacity) float 100 0 10000
+
+# Rock bolt length L (m). For key blocks a bolt only counts if it anchors in rock beyond the block.
+rockmech_support_bolt_l (Rock bolt length) float 2.4 1 20
+
 [Blasting]
 
 # TNT explosions fragment rock: within r_out = R * (ucs_ref / UCS)^(1/3) of the blast centre rock

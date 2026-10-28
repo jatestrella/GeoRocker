@@ -155,6 +155,14 @@ config.stability_defaults = {
 	budget_ms = 5,            -- 單次判定超過此時間就記 log
 }
 
+-- 支護（support.lua、groundsupport.lua）：換算成臨空面上的等效圍壓 pᵢ；設定鍵為 rockmech_support_<key>
+-- （和岩體強度一樣除以相似比 N）
+config.support_defaults = {
+	shotcrete_p = 0.2,        -- 噴凝土的支護壓力 p_sc (MPa)（約 5～10 cm 噴凝土）
+	bolt_t = 100,             -- 岩栓錨定力 T (kN)；平均分給周圍 3×3 m² 的岩面，間距 s 的格狀岩栓 ≈ T/s²
+	bolt_l = 2.4,             -- 岩栓長度 L (m)；關鍵塊體要錨進岩塊外的岩體才有效
+}
+
 -- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
 config.blast_defaults = {
 	enabled = true,
@@ -468,6 +476,12 @@ function config.load(get)
 	cfg.stability.radius = math.max(2, math.floor(cfg.stability.radius))
 	cfg.stability.max_voxels = math.max(1, math.floor(cfg.stability.max_voxels))
 	cfg.stability.rigid_max = math.max(1, math.floor(cfg.stability.rigid_max))
+
+	-- 支護
+	cfg.support = load_section("support", config.support_defaults)
+	cfg.support.shotcrete_p = math.max(0, cfg.support.shotcrete_p)
+	cfg.support.bolt_t = math.max(0, cfg.support.bolt_t)
+	cfg.support.bolt_l = math.max(1, cfg.support.bolt_l)
 
 	-- 爆破破碎
 	cfg.blast = load_section("blast", config.blast_defaults)

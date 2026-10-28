@@ -171,6 +171,7 @@ local function fmt_report_lines(r, header, pname)
 	local s = r.local_state
 	if s then
 		lines[#lines + 1] = ("應力 σv %.3f｜σ1 %.3f　σ3 %.3f MPa"):format(i.sv, s.s1, s.s3)
+			.. ((s.p_support or 0) > 0 and ("　支護 pᵢ %.3f MPa"):format(s.p_support) or "")
 	else
 		lines[#lines + 1] = ("初始應力 σv %.3f　σH %.3f　σh %.3f MPa"):format(i.sv, i.sH, i.shmin)
 		return lines
@@ -426,6 +427,7 @@ local function tab_stress(name)
 			{"局部 σzz（×集中）", ("%.3f MPa（×%.2f）"):format(s.sz, s.fz)},
 			{"局部 σxz", ("%.3f MPa"):format(s.sxz)},
 			{"主應力 σ1 / σ3", ("%.3f / %.3f MPa"):format(s.s1, s.s3)},
+			{"臨空面的法向壓力（支護 pᵢ、碎石側壓）", ("%.3f MPa"):format(s.p_support or 0)},
 			{"岩體強度", rockmech.rockmass_line(s.rm)},
 			{"q = σ1 − σ3 / 岩體強度 q_f(σ3)", ("%.3f / %.3f MPa"):format(s.q, s.strength)},
 			{"軸差 FS", ("%.2f"):format(s.fs_axial)},
