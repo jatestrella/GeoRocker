@@ -67,9 +67,10 @@ local function views_of(kind)
 		v[3] = {o = def.rearcam, dir = 0, down = math.rad(24), hfov = math.rad(80), vfov = math.rad(42),
 			w = 40, h = 22, hud = REARCAM_HUD}
 	elseif def.cam then
-		-- 作業攝影機（例如露天鑽機從側面看桅桿與孔位）：對準 def.cam.target、不鏡像、在 def.cam.mark 畫紅色十字
+		-- 作業攝影機（例如露天鑽機看桅桿腳）：對準 def.cam.target、不鏡像（flip = false → 和倒車攝影機一樣鏡像）、
+		-- 在 def.cam.mark 畫紅色十字、def.cam.holes 公尺內的孔畫色點
 		local c = def.cam
-		v[3] = {o = c.o, target = c.target, hfov = c.hfov, vfov = c.vfov, flip = true, mark = c.mark, holes = c.holes,
+		v[3] = {o = c.o, target = c.target, hfov = c.hfov, vfov = c.vfov, flip = c.flip ~= false, mark = c.mark, holes = c.holes,
 			w = c.w or 40, h = c.h or 22, hud = REARCAM_HUD}
 	end
 	return v

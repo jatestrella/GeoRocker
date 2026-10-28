@@ -453,6 +453,54 @@ end
 dofile(rockmech.modpath .. "/vehicle_views.lua")
 local hud_clear, update_hud, update_mirrors = V.hud_clear, V.update_hud, V.update_mirrors
 
+-- 車上存放：def.store = {{物品, 容量, 名稱}, …}，self.store[物品] = 數量（跟著車存檔，收車時還給玩家）。
+-- V.open_store 打開存放畫面：「裝滿」從背包拿（創造模式直接裝滿）、「卸下」放回背包；作業時用 V.store_take 消耗
+function V.store_count(self, item) return self.store[item] or 0 end
+function V.store_take(self, item, n)
+	local have = self.store[item] or 0
+	n = math.min(n, have)
+	self.store[item] = have - n
+	return n
+end
+local store_open = {}
+local function store_formspec(self)
+	local list = TYPES[self.vkind].store
+	local fs = {("formspec_version[6]size[8.2,%.1f]"):format(1.5 + #list * 1.2)}
+	for i, s in ipairs(list) do
+		local y = 0.4 + (i - 1) * 1.2
+		fs[#fs + 1] = ("item_image[0.4,%.1f;0.9,0.9;%s]label[1.5,%.2f;%s　%d / %d]button[4.5,%.1f;1.6,0.9;fill_%d;裝滿]button[6.2,%.1f;1.6,0.9;out_%d;卸下]")
+			:format(y, s[1], y + 0.45, s[3], V.store_count(self, s[1]), s[2], y, i, y, i)
+	end
+	fs[#fs + 1] = ("button_exit[5.8,%.1f;2,0.7;ok;完成]"):format(0.5 + #list * 1.2)
+	return table.concat(fs)
+end
+function V.open_store(self, player)
+	store_open[player:get_player_name()] = self
+	core.show_formspec(player:get_player_name(), "rockmech:store", store_formspec(self))
+end
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= "rockmech:store" then return end
+	local name = player:get_player_name()
+	local self = store_open[name]
+	if not self or not self.object:get_pos() then return true end
+	local inv = player:get_inventory()
+	for i, s in ipairs(TYPES[self.vkind].store) do
+		local item, cap = s[1], s[2]
+		local have = V.store_count(self, item)
+		if fields["fill_" .. i] and have < cap then
+			local got = core.is_creative_enabled(name) and cap - have
+				or inv:remove_item("main", ItemStack(item .. " " .. (cap - have))):get_count()
+			self.store[item] = have + got
+		elseif fields["out_" .. i] and have > 0 then
+			self.store[item] = inv:add_item("main", ItemStack(item .. " " .. have)):get_count()
+		end
+	end
+	if fields.quit or fields.ok then store_open[name] = nil
+	else core.show_formspec(name, "rockmech:store", store_formspec(self)) end
+	update_hud(self)
+	return true
+end)
+
 -- 駕駛的姿勢（有 player_api 時）：上車坐著、下車恢復
 local function set_seated(player, on)
 	if not player then return end
@@ -515,10 +563,11 @@ function V.register(kind, def)
 		},
 		vkind = kind,
 		on_activate = function(self, staticdata)
-			self.load = {}
+			self.load, self.store = {}, {}
 			local data = staticdata ~= "" and core.deserialize(staticdata) or nil
 			if data then
 				self.load = data.load or {}
+				self.store = data.store or {}
 				if data.yaw then self.object:set_yaw(data.yaw) end
 			end
 			if def.on_load then def.on_load(self, data or {}) end
@@ -540,7 +589,7 @@ function V.register(kind, def)
 			drop_chase(self)
 		end,
 		get_staticdata = function(self)
-			local data = {load = self.load, yaw = self.object:get_yaw()}
+			local data = {load = self.load, store = self.store, yaw = self.object:get_yaw()}
 			if def.on_save then def.on_save(self, data) end
 			return core.serialize(data)
 		end,
@@ -574,6 +623,12 @@ function V.register(kind, def)
 				if n > 0 then
 					local l2 = inv:add_item("main", ItemStack(base .. " " .. n))
 					if not l2:is_empty() then core.add_item(self.object:get_pos(), l2) end
+				end
+			end
+			for item, n in pairs(self.store) do
+				if n > 0 then
+					local l3 = inv:add_item("main", ItemStack(item .. " " .. n))
+					if not l3:is_empty() then core.add_item(self.object:get_pos(), l3) end
 				end
 			end
 			remove_parts(self)
@@ -726,3 +781,4 @@ dofile(rockmech.modpath .. "/vehicle_haul.lua")
 dofile(rockmech.modpath .. "/vehicle_dozer.lua")
 dofile(rockmech.modpath .. "/vehicle_jumbo.lua")
 dofile(rockmech.modpath .. "/vehicle_drillrig.lua")
+dofile(rockmech.modpath .. "/vehicle_bulktruck.lua")
