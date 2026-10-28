@@ -302,11 +302,17 @@ end
 function V.update_hud(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
 	if not d then return end
-	if not self.hud_cockpit then
+	-- 追蹤相機（第三人稱）時不顯示駕駛艙框、後照鏡與倒車攝影機畫面
+	if self.chase then
+		if self.hud_cockpit then d:hud_remove(self.hud_cockpit); self.hud_cockpit = nil end
+		for _, id in ipairs(self.hud_mirror or {}) do d:hud_remove(id) end
+		self.hud_mirror = nil
+	end
+	if not self.hud_cockpit and not self.chase then
 		self.hud_cockpit = d:hud_add({type = "image", position = {x = 0.5, y = 0.5}, alignment = {x = 0, y = 0},
 			scale = {x = -100, y = -100}, text = cockpit_tex(self.vkind), z_index = -10})
 	end
-	if not self.hud_mirror then
+	if not self.hud_mirror and not self.chase then
 		self.hud_mirror, self.mirror_last, self.mirror_t = {}, {}, nil
 		for i, view in ipairs(views_of(self.vkind)) do
 			local r = view.hud
