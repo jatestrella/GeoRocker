@@ -11,6 +11,7 @@
 --             沿孔每 1.5 m 一段、每段半徑 anfo_radius（再乘夾制／自由面）；ANFO 對雷管不敏感，孔裡要有一條乳膠炸藥
 --             當起爆藥包，沒有就拒爆（留在原地）。孔深記在鑽孔的 meta depth（沒有就是 hole_depth）。
 --             外觀：孔裡是粉紅色的 ANFO（anfo_hole）；放了起爆藥包多一條起爆線（anfo_primed）。
+--             破碎不超過孔底（孔底 = 底板），台階炸完是平的。
 --   裝藥被別的爆炸波及會殉爆。參數在設定 rockmech_blast_*。
 
 if not rockmech.blast_charge then return end   -- 沒有 tnt mod
@@ -111,7 +112,9 @@ local function detonate(pos)
 			core.log("action", "[rockmech] 拒爆（ANFO 沒有起爆藥包）" .. core.pos_to_string(pos))
 			return
 		end
-		-- 柱狀裝藥：孔口留填塞，往下每 1.5 m 一段；夾制／自由面整根孔一起算
+		-- 柱狀裝藥：孔口留填塞，往下每 1.5 m 一段；夾制／自由面整根孔一起算。
+		-- 底板：孔底那一格以下不破碎（實際台階孔會超鑽到底板以下，炸完底板就在孔底附近）
+		local floor_y = math.floor(pos.y - depth + 0.5)
 		local R = bcfg.anfo_radius
 		local bottom = vector.add(pos, vector.multiply(dir, depth))
 		local B = burden(bottom, dir, R, depth)
@@ -123,7 +126,7 @@ local function detonate(pos)
 		local last
 		repeat
 			last = vector.add(pos, vector.multiply(dir, math.min(t, depth)))
-			rockmech.blast_charge(last, R * f)
+			rockmech.blast_charge(last, R * f, floor_y)
 			t = t + 1.5
 		until t > depth + 0.5
 		R = R * f + depth

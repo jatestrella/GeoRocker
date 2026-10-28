@@ -55,7 +55,8 @@ local function eject_items(center, counts)
 end
 
 -- 處理以 center 為中心、爆炸半徑 R 的岩石破碎。回傳 炸飛格數, 碎石化格數
-function rockmech.blast_rock(center, R)
+-- floor_y：只破碎這一層以上（台階爆破的底板 = 孔底）；nil 不限
+function rockmech.blast_rock(center, R, floor_y)
 	build_maps()
 	local fmax = 1
 	for _, l in pairs(cfg.lithologies) do
@@ -65,6 +66,8 @@ function rockmech.blast_rock(center, R)
 	local rr = math.ceil(R * fmax)
 	local c0 = vector.round(center)   -- 掃描用整數格點（爆心可以不在格點上，距離照實際爆心算）
 	local p1, p2 = vector.subtract(c0, rr), vector.add(c0, rr)
+	if floor_y then p1.y = math.max(p1.y, floor_y) end
+	if p1.y > p2.y then return 0, 0 end
 	local vm = core.get_voxel_manip()
 	local e1, e2 = vm:read_from_map(p1, p2)
 	local area = VoxelArea(e1, e2)
@@ -156,10 +159,10 @@ local orig_boom = tnt.boom
 
 -- 炸藥（鑽孔裝藥、貼面裝藥，drilling.lua）：爆心 center（可以在岩石裡、可以不在格點上）、岩石破碎半徑 R（m，可為小數）。
 -- 原版爆炸照常（聲音、粒子、傷害、炸掉附近非岩石方塊與殉爆；在最近的格點），岩石的破碎用 center 與 R
-function rockmech.blast_charge(center, R)
+function rockmech.blast_charge(center, R, floor_y)
 	orig_boom(vector.round(center), {radius = math.max(1, math.floor(R + 0.5)), explode_center = true})
 	if bcfg.enabled and R > 0 then
-		rockmech.blast_rock(center, R)
+		rockmech.blast_rock(center, R, floor_y)
 	end
 end
 
