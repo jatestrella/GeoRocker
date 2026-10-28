@@ -1,6 +1,7 @@
 -- rockmech/vehicle_truck.lua
 -- 有車斗的車（hauler）共用的車斗、倒土、車斗段碰撞，與卡車（十輪砂石車）。由 vehicles.lua 載入。
 --   空白鍵：車斗以後端下緣為軸抬起、把碎石倒在車尾再放下；名牌與車斗裡的碎石顯示載量。
+--   E：無人駕駛設定（vehicle_ahs.lua：教路線、裝滿自己去倒）。
 --   碰撞箱是駕駛艙那段（half），車斗那段（往後到 −rear）倒車、轉彎前自己檢查。挖土機可以倒進車斗
 
 local V = rockmech.vehicles
@@ -101,13 +102,16 @@ local function hauler(def, spec)
 	function def.on_spawn(self) self.fill_key = nil; place_bed(self, 0) end
 	function def.refresh(self)
 		local t, cap = load_total(self), def.cap
+		local st = V.ahs.status(self)
 		self.object:set_properties({
-			nametag = ("載量 %d / %d 級（%.1f / %.0f m³）"):format(t, cap, t / NLEV, cap / NLEV),
+			nametag = ("載量 %d / %d 級（%.1f / %.0f m³）"):format(t, cap, t / NLEV, cap / NLEV) .. (st and ("\n" .. st) or ""),
 			nametag_color = t >= cap and "#ff8060" or "#ffffff",
 		})
 		if not self.tip then place_bed(self, 0) end
 	end
-	function def.hud() return "\n空白鍵 把車斗倒在車尾" end
+	function def.hud(self) return "\n空白鍵 把車斗倒在車尾　E 無人駕駛設定" end
+	function def.on_save(self, data) V.ahs.save(self, data) end
+	function def.on_load(self, data) V.ahs.load(self, data) end
 	-- 車斗那段會撞到（或正在倒土）：不轉
 	function def.can_turn(self, pos, yaw, yaw2)
 		return not self.tip and V.tail_can_turn(self, pos, yaw, yaw2, def)
@@ -154,11 +158,15 @@ local function hauler(def, spec)
 				V.refresh(self)
 			end
 		end
+		V.ahs.step(self, def, ctx)   -- 無人駕駛（錄製路線、往返）
 	end
 	function def.action(self, ctx)
 		if ctx.ctrl.jump and load_total(self) > 0 and not self.tip then
 			self.t_act = TIP_TOTAL + 0.1
 			self.tip = {t = 0}
+		elseif ctx.ctrl.aux1 and ctx.d then
+			self.t_act = 0.5
+			V.ahs.open(self, ctx.d)
 		end
 	end
 	return def

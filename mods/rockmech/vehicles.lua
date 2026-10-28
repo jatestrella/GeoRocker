@@ -717,6 +717,7 @@ function V.register(kind, def)
 end
 
 dofile(rockmech.modpath .. "/vehicle_excavator.lua")
+dofile(rockmech.modpath .. "/vehicle_ahs.lua")
 dofile(rockmech.modpath .. "/vehicle_truck.lua")
 dofile(rockmech.modpath .. "/vehicle_haul.lua")
 dofile(rockmech.modpath .. "/vehicle_dozer.lua")
