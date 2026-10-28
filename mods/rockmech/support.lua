@@ -93,7 +93,8 @@ function support.scan(g, ids, prm)
 					local path = {}
 					for s = 2, nb do
 						local j = idx(x + d[1] * s, y + d[2] * s, z + d[3] * s)
-						if not j then break end
+						-- 中間被挖空（岩栓被挖斷）：後面那截跟墊板分開了，不算錨固
+						if not j or not bonded_of[data[j]] then break end
 						path[#path + 1] = j
 					end
 					sup.bolts[#sup.bolts + 1] = {i = i0, path = path, k = kout, T = T}
