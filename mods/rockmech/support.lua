@@ -12,7 +12,7 @@
 --     兩者都是作用在面上、指向岩體的力，抵抗把岩塊往外推出該面的運動。
 --   頂板（底面的 pᵢ 往上托，抵銷懸空岩體的自重）：
 --     懸臂（overhang.lua）：每 m² 荷重 γt → γt − pᵢ，σb 等比例下降；pᵢ ≥ γt 整欄被托住。
---       岩栓只有比該欄（到上方水平節理為止）長、錨進上面的岩層時才算（懸吊作用）。
+--       岩栓不論長短都算：穿過分離面是懸吊作用；在厚岩層裡是系統岩栓的加固拱（Lang）分擔荷重。
 --     懸空直剪（failure.shear_state）：每欄的柱狀荷重扣掉底面的 pᵢ × 1 m²。
 --
 -- support.scan(g, ids, prm) → sup 或 nil（範圍內沒有支護）
@@ -21,7 +21,6 @@
 --   prm = {p_sc (MPa), T (kN), L (m，沒有 bolt_len 時的岩栓長度), N, bolt_len(x, y, z) → 該岩栓的長度 (m)（世界座標）}
 --   sup.face[i·8 + k] = pᵢ (MPa)：岩格 i（網格索引）往 AX[k] 方向的面
 --   sup.sc[i·8 + k]   = 只有噴凝土的 p_sc (MPa)
---   sup.bf[i·8 + k]   = 岩栓攤到這一面的 {{p (MPa), L (m)}...}（懸臂判定看岩栓夠不夠長）
 --   sup.bolts = {{i = 岩栓穿過的第一格, path = {往岩體裡的後續各格}, k = 墊板那一面的方向, T = kN}...}
 
 local support = {}
@@ -45,7 +44,7 @@ function support.scan(g, ids, prm)
 	local N = prm.N or 1
 	local p_sc = (prm.p_sc or 0) / N
 	local T = (prm.T or 0) / N
-	local sup = {face = {}, sc = {}, bolts = {}, bf = {}}
+	local sup = {face = {}, sc = {}, bolts = {}}
 	local any = false
 	local function idx(x, y, z)
 		if x < 0 or y < 0 or z < 0 or x >= nx or y >= ny or z >= nz then return nil end
@@ -88,11 +87,7 @@ function support.scan(g, ids, prm)
 						local j = idx(x + d[1] + ox, y + d[2] + oy, z + d[3] + oz)
 						local jo = idx(x + ox, y + oy, z + oz)
 						if j and jo and bonded_of[data[j]] and not bonded_of[data[jo]] then
-							local key = j * 8 + kout
-							add(sup.face, key, T / 9 / 1000)
-							local l = sup.bf[key] or {}
-							l[#l + 1] = {T / 9 / 1000, Lb}
-							sup.bf[key] = l
+							add(sup.face, j * 8 + kout, T / 9 / 1000)
 						end
 					end end
 					local path = {}

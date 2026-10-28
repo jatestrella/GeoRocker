@@ -158,14 +158,13 @@ describe("support 頂板：往上托抵銷自重", function()
 		return g
 	end
 	local OP = {lithologies = {shale = {gamma = 25, tensile = 2}}, scale = 1, max_voxels = 2000}
-	-- 懸臂每一欄底面（−y）的支護：sc（噴凝土）、bolt（長 blen 的岩栓攤到的）MPa
-	local function under(g, L, t, sc, bolt, blen)
-		local sup = {face = {}, sc = {}, bolts = {}, bf = {}}
+	-- 懸臂每一欄底面（−y）的支護：sc（噴凝土）、bolt（岩栓攤到的）MPa
+	local function under(g, L, t, sc, bolt)
+		local sup = {face = {}, sc = {}, bolts = {}}
 		for x = 1, L do
 			local i = gi(g, x, 8 - t + 1, 0)
 			sup.face[i * 8 + 4] = sc + bolt
 			if sc > 0 then sup.sc[i * 8 + 4] = sc end
-			if bolt > 0 then sup.bf[i * 8 + 4] = {{bolt, blen or 2.4}} end
 		end
 		g.support = sup
 	end
@@ -185,17 +184,13 @@ describe("support 頂板：往上托抵銷自重", function()
 		assert.are.equal(0, #(overhang.find_failing_local(g, OP, {{x = 6, y = 8, z = 0}})))
 	end)
 
-	it("懸臂：岩栓比這一欄長（錨進上面的岩層）才算", function()
-		local g = cantilever(6, 3)
-		under(g, 6, 3, 0, 0.1, 4)                   -- 4 m 岩栓、100 kPa ≥ γt = 75 kPa → 托住
-		assert.are.equal(math.huge, overhang.cell_state(g, OP, 6, 8, 0).fs)
-	end)
-
-	it("懸臂：岩栓比這一欄短（沒錨進上面的岩層）不算", function()
-		local g = cantilever(6, 3)                  -- 3 m 厚 > L 2.4
+	it("懸臂：厚岩層裡的岩栓也算（加固拱）：FS × γt/(γt − pᵢ)", function()
+		local g = cantilever(6, 3)                  -- γt = 75 kPa
 		local bare = overhang.cell_state(g, OP, 6, 8, 0).fs
-		under(g, 6, 3, 0, 0.05)
-		assert.near(bare, overhang.cell_state(g, OP, 6, 8, 0).fs, 1e-12)
+		under(g, 6, 3, 0, 0.05)                     -- 50 kPa → × 3
+		assert.near(bare * 3, overhang.cell_state(g, OP, 6, 8, 0).fs, 1e-9)
+		under(g, 6, 3, 0, 0.1)                      -- 100 kPa ≥ 75 → 托住
+		assert.are.equal(math.huge, overhang.cell_state(g, OP, 6, 8, 0).fs)
 	end)
 
 	it("懸空直剪：每欄荷重扣掉底面的 pᵢ", function()
@@ -214,7 +209,7 @@ describe("support 頂板：往上托抵銷自重", function()
 		local g2 = {}
 		for k, v in pairs(g) do g2[k] = v end
 		g2.L, g2.sup, g2.shear_lv, g2.sup_L = nil, nil, nil, nil
-		g2.support = {face = {}, sc = {}, bolts = {}, bf = {}}
+		g2.support = {face = {}, sc = {}, bolts = {}}
 		for x = -4, 4 do for z = -2, 2 do g2.support.face[failure.index(g2, x, -19, z) * 8 + 4] = 0.1 end end
 		local s1 = failure.shear_state(g2, 0, -19, 0, p)
 		assert.near(5 * 19 * GAMMA - 5 * 100, s1.Q, 1e-9)

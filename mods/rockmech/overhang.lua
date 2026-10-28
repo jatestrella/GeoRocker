@@ -25,7 +25,8 @@
 --     即 L_max 變成 L_max·(t_eff/t)；t_eff = 0 → 張力為 0。
 -- ## 支護（grid.support，見 support.lua）
 -- 欄底面的支護壓力 pᵢ 往上托：每 m² 荷重 γt → γt − pᵢ，σb 等比例下降（FS × γt/(γt − pᵢ)），
--- pᵢ ≥ γt 時整欄被托住。岩栓只有比該欄長（錨進上方水平節理以上的岩層）時才算。
+-- pᵢ ≥ γt 時整欄被托住。岩栓不論長短都算：比岩層長是懸吊作用；在厚岩層裡是系統岩栓的加固拱（Lang）
+-- 分擔荷重——兩者都用同一個 pᵢ 表示。
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
 --     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
@@ -306,16 +307,10 @@ local function local_ctx(g, p)
 		end
 		r.lmax = lm
 		r.crit = crit
-		-- 底面的支護壓力（support.lua，kPa）：往上托，抵銷荷重。岩栓要比這一欄長（錨進上面的岩層）才算
+		-- 底面的支護壓力（support.lua，kPa）：往上托，抵銷荷重（噴凝土；岩栓的懸吊與加固拱作用）
 		local sup = g.support
-		if sup then
-			local p = sup.sc[ib * 8 + 4] or 0
-			for _, e in ipairs(sup.bf[ib * 8 + 4] or {}) do
-				if e[2] > r.t then p = p + e[1]
-				else r.bolt_short = math.max(r.bolt_short or 0, e[2]) end   -- 太短、沒有懸吊作用（顯示用）
-			end
-			if p > 0 then r.p_sup = p * 1000 end
-		end
+		local p = sup and sup.face[ib * 8 + 4]
+		if p and p > 0 then r.p_sup = p * 1000 end
 		return r
 	end
 
@@ -642,7 +637,7 @@ function overhang.cell_state(g, p, x, y, z)
 		n_cells = res.n_cells, edge = res.edge,
 		beam = res.beam and res.beam[r0] or nil,
 		load = load0,
-		p_sup = r0.p_sup, bolt_short = r0.bolt_short,   -- 底面往上托的支護壓力 (kPa)；沒算到的岩栓最長幾 m
+		p_sup = r0.p_sup,   -- 底面往上托的支護壓力 (kPa)
 	}
 	local segs, seg_of = segments(res)
 	local cut_cells = 0
