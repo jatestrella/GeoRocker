@@ -537,7 +537,9 @@ describe("overhang 碰到範圍上緣的欄", function()
 		local st = overhang.cell_state(g, p, 6, 6, 0)
 		assert.are.equal(14, st.t)                      -- 20 − 6
 		assert.are.equal(6, st.d)
-		assert.near((overhang.lmax(4, 24, 14) / 6) ^ 2 * 14 / 12, st.fs, 1e-9)   -- 1:2 拱：h = min(14, 2·6) = 12
+		-- Terzaghi：k 0.35（GSI 不明取 50）、B = 2·6、淨高 5 → h = 0.35 × 17 = 5.95
+		assert.near(5.95, st.h, 1e-9)
+		assert.near((overhang.lmax(4, 24, 14) / 6) ^ 2 * 14 / 5.95, st.fs, 1e-9)
 	end)
 end)
 

@@ -232,6 +232,12 @@ config.overhang_defaults = {
 	radius = 16,              -- 檢查範圍半徑 (m)；懸空群碰到範圍邊界時保守地不處理
 	max_voxels = 30000,       -- 懸空群超過此格數保守地不處理（以欄為單位搜尋，大空間的頂板也要能判定）
 	joints = true,            -- 節理切過的介面不傳張力（根部斷面 t_eff；完全切開則分離成獨立的塊）
+	-- Terzaghi 鬆弛區 H_p = k·(B + H_t) 的 k(GSI)：三個點之間線性內插，兩端取端點
+	terzaghi_gsi_a = 85,      -- 完整岩體：GSI ≥ 此值 k = 0（沒有岩石荷重）
+	terzaghi_gsi_b = 50,      -- 中度塊狀
+	terzaghi_k_b = 0.35,
+	terzaghi_gsi_c = 25,      -- 破碎
+	terzaghi_k_c = 1.10,
 }
 
 -- 懸空格的直剪（failure.shear_state）；設定鍵為 rockmech_shear_<key>

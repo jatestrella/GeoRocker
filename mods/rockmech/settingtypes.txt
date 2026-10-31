@@ -360,6 +360,15 @@ rockmech_overhang_max_voxels (Max overhang size) int 30000 1 200000
 # (L_max scales with intact/total), and a block cut off completely by joints falls.
 rockmech_overhang_joints (Joints cut overhangs) bool true
 
+# Terzaghi rock load: loosened height Hp = k * (B + Ht), B = 2 * hydraulic radius, Ht = opening height.
+# Roof load height = min(thickness, Hp); a rock bolt must be at least that long to count.
+# k follows GSI: 0 at or above GSI a, k_b at GSI b, k_c at or below GSI c, linear in between.
+rockmech_overhang_terzaghi_gsi_a (Terzaghi: GSI with k = 0) float 85 0 100
+rockmech_overhang_terzaghi_gsi_b (Terzaghi: middle GSI) float 50 0 100
+rockmech_overhang_terzaghi_k_b (Terzaghi: k at middle GSI) float 0.35 0 10
+rockmech_overhang_terzaghi_gsi_c (Terzaghi: low GSI) float 25 0 100
+rockmech_overhang_terzaghi_k_c (Terzaghi: k at low GSI) float 1.1 0 10
+
 [Direct shear of hanging rock]
 
 # Rock with air below hangs on the nearest supported rock along +-x / +-z.

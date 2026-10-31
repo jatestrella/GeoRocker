@@ -11,8 +11,8 @@
 --   keyblock：岩塊臨空面上的噴凝土 p_sc × 面積；穿過岩塊、錨固段打進岩塊外岩體的岩栓 T。
 --     兩者都是作用在面上、指向岩體的力，抵抗把岩塊往外推出該面的運動。
 --   頂板（底面的 pᵢ 往上托，抵銷懸空岩體的自重）：
---     懸臂（overhang.lua）：每 m² 荷重 γt → γt − pᵢ，σb 等比例下降；pᵢ ≥ γt 整欄被托住。
---       岩栓不論長短都算：穿過分離面是懸吊作用；在厚岩層裡是系統岩栓的加固拱（Lang）分擔荷重。
+--     懸臂（overhang.lua）：每 m² 荷重 γh → γh − pᵢ（h = Terzaghi 鬆弛區的荷重高度），σb 等比例下降；
+--       pᵢ ≥ γh 被托住。岩栓要穿過鬆弛區（有效長度 L ≥ h）才算（sup.bf 記每支攤到的壓力與長度）。
 --     懸空直剪（failure.shear_state）：每欄的柱狀荷重扣掉底面的 pᵢ × 1 m²。
 --
 -- support.scan(g, ids, prm) → sup 或 nil（範圍內沒有支護）
@@ -21,6 +21,7 @@
 --   prm = {p_sc (MPa), T (kN), L (m，沒有 bolt_len 時的岩栓長度), N, bolt_len(x, y, z) → 該岩栓的長度 (m)（世界座標）}
 --   sup.face[i·8 + k] = pᵢ (MPa)：岩格 i（網格索引）往 AX[k] 方向的面
 --   sup.sc[i·8 + k]   = 只有噴凝土的 p_sc (MPa)
+--   sup.bf[i·8 + k]   = 岩栓攤到這一面的 {{p (MPa), 有效長度 L (m)}...}（被挖斷只算到斷點）
 --   sup.bolts = {{i = 岩栓穿過的第一格, path = {往岩體裡的後續各格}, k = 墊板那一面的方向, T = kN}...}
 
 local support = {}
@@ -44,7 +45,7 @@ function support.scan(g, ids, prm)
 	local N = prm.N or 1
 	local p_sc = (prm.p_sc or 0) / N
 	local T = (prm.T or 0) / N
-	local sup = {face = {}, sc = {}, bolts = {}}
+	local sup = {face = {}, sc = {}, bolts = {}, bf = {}}
 	local any = false
 	local function idx(x, y, z)
 		if x < 0 or y < 0 or z < 0 or x >= nx or y >= ny or z >= nz then return nil end
@@ -78,6 +79,14 @@ function support.scan(g, ids, prm)
 				local Lb = prm.bolt_len and prm.bolt_len(g.ox + x, g.oy + y, g.oz + z) or prm.L or 1
 				local nb = math.max(1, math.ceil(Lb - 1e-6))
 				if i0 and bonded_of[data[i0]] then
+					local path = {}
+					for s = 2, nb do
+						local j = idx(x + d[1] * s, y + d[2] * s, z + d[3] * s)
+						-- 中間被挖空（岩栓被挖斷）：後面那截跟墊板分開了，不算錨固
+						if not j or not bonded_of[data[j]] then break end
+						path[#path + 1] = j
+					end
+					local Leff = math.min(Lb, 1 + #path)
 					-- 錨定力分給同一面 3×3 格（前方是開口、後面是岩石的面）
 					for u = -1, 1 do for v = -1, 1 do
 						local ox, oy, oz
@@ -87,16 +96,13 @@ function support.scan(g, ids, prm)
 						local j = idx(x + d[1] + ox, y + d[2] + oy, z + d[3] + oz)
 						local jo = idx(x + ox, y + oy, z + oz)
 						if j and jo and bonded_of[data[j]] and not bonded_of[data[jo]] then
-							add(sup.face, j * 8 + kout, T / 9 / 1000)
+							local key = j * 8 + kout
+							add(sup.face, key, T / 9 / 1000)
+							local l = sup.bf[key] or {}
+							l[#l + 1] = {T / 9 / 1000, Leff}
+							sup.bf[key] = l
 						end
 					end end
-					local path = {}
-					for s = 2, nb do
-						local j = idx(x + d[1] * s, y + d[2] * s, z + d[3] * s)
-						-- 中間被挖空（岩栓被挖斷）：後面那截跟墊板分開了，不算錨固
-						if not j or not bonded_of[data[j]] then break end
-						path[#path + 1] = j
-					end
 					sup.bolts[#sup.bolts + 1] = {i = i0, path = path, k = kout, T = T}
 				end
 			end

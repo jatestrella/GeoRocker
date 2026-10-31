@@ -158,13 +158,14 @@ describe("support 頂板：往上托抵銷自重", function()
 		return g
 	end
 	local OP = {lithologies = {shale = {gamma = 25, tensile = 2}}, scale = 1, max_voxels = 2000}
-	-- 懸臂每一欄底面（−y）的支護：sc（噴凝土）、bolt（岩栓攤到的）MPa
-	local function under(g, L, t, sc, bolt)
-		local sup = {face = {}, sc = {}, bolts = {}}
+	-- 懸臂每一欄底面（−y）的支護：sc（噴凝土）、bolt（長 blen 的岩栓攤到的）MPa
+	local function under(g, L, t, sc, bolt, blen)
+		local sup = {face = {}, sc = {}, bolts = {}, bf = {}}
 		for x = 1, L do
 			local i = gi(g, x, 8 - t + 1, 0)
 			sup.face[i * 8 + 4] = sc + bolt
 			if sc > 0 then sup.sc[i * 8 + 4] = sc end
+			if bolt > 0 then sup.bf[i * 8 + 4] = {{bolt, blen or 4}} end
 		end
 		g.support = sup
 	end
@@ -184,33 +185,94 @@ describe("support 頂板：往上托抵銷自重", function()
 		assert.are.equal(0, #(overhang.find_failing_local(g, OP, {{x = 6, y = 8, z = 0}})))
 	end)
 
-	it("懸臂：厚岩層裡的岩栓也算（加固拱）：FS × γh/(γh − pᵢ)", function()
-		local g = cantilever(6, 3)                  -- 尖端 d = 6：h = min(3, 12) = 3，γh = 75 kPa
-		local bare = overhang.cell_state(g, OP, 6, 8, 0).fs
-		under(g, 6, 3, 0, 0.05)                     -- 50 kPa → × 3
-		assert.near(bare * 3, overhang.cell_state(g, OP, 6, 8, 0).fs, 1e-9)
-		under(g, 6, 3, 0, 0.1)                      -- 100 kPa ≥ 75 → 托住
-		assert.are.equal(math.huge, overhang.cell_state(g, OP, 6, 8, 0).fs)
-	end)
-
-	it("1:2 拱：厚岩層的懸臂荷重高度 h = min(t, 2d)", function()
-		local g = cantilever(2, 6)                  -- 6 m 厚、伸出 2 m
+	it("Terzaghi：h = min(t, k·(B + H_t))，B = 2·HR、H_t = 淨高", function()
+		local g = cantilever(2, 6)                  -- 6 m 厚、伸出 2 m、底下淨高 2 m
 		local s1 = overhang.cell_state(g, OP, 1, 8, 0)
 		local s2 = overhang.cell_state(g, OP, 2, 8, 0)
-		assert.near(2, s2.hr, 1e-12)                -- 單邊伸出 2 m：HR = 2
-		assert.are.equal(4, s1.h)                   -- 整段 h = min(6, 2·HR) = 4
-		assert.are.equal(4, s2.h)
-		-- FS = (L_max·ρ/d)² × t/h
-		assert.near((s2.lmax / 2) ^ 2 * 6 / 4, s2.fs, 1e-9)
-		under(g, 2, 6, 0, 0.1)                      -- 100 kPa ≥ γh = 25 × 4 → 托住
+		assert.near(2, s2.hr, 1e-12)
+		assert.near(2, s2.ht, 1e-12)
+		assert.near(0.35, s2.k, 1e-12)              -- GSI 不明取 50
+		assert.near(2.1, s1.h, 1e-9)                -- 0.35 × (4 + 2)，整段共用
+		assert.near(2.1, s2.h, 1e-9)
+		-- FS = (L_max·ρ/HR)² × t/h
+		assert.near((s2.lmax / 2) ^ 2 * 6 / 2.1, s2.fs, 1e-9)
+	end)
+
+	it("Terzaghi：k 依 GSI；完整岩體 k = 0 沒有荷重", function()
+		local function with_gsi(v)
+			local p = {}
+			for k, x in pairs(OP) do p[k] = x end
+			p.gsi_at = function() return v end
+			return p
+		end
+		local g = cantilever(2, 6)
+		assert.are.equal(math.huge, overhang.cell_state(g, with_gsi(90), 2, 8, 0).fs)
+		local poor = overhang.cell_state(g, with_gsi(25), 2, 8, 0)
+		assert.near(1.1, poor.k, 1e-12)
+		assert.near(6, poor.h, 1e-9)                -- 1.1 × 6 = 6.6 > t = 6
+		assert.near((poor.lmax / 2) ^ 2, poor.fs, 1e-9)
+	end)
+
+	it("k(GSI) 內插，兩端取端點", function()
+		assert.near(0, overhang.terzaghi_k(100), 1e-12)
+		assert.near(0, overhang.terzaghi_k(85), 1e-12)
+		assert.near(0.175, overhang.terzaghi_k(67.5), 1e-12)
+		assert.near(0.35, overhang.terzaghi_k(50), 1e-12)
+		assert.near(0.725, overhang.terzaghi_k(37.5), 1e-12)
+		assert.near(1.1, overhang.terzaghi_k(25), 1e-12)
+		assert.near(1.1, overhang.terzaghi_k(10), 1e-12)
+		assert.near(0.35, overhang.terzaghi_k(nil), 1e-12)
+		assert.near(0.5, overhang.terzaghi_k(60, {{80, 0}, {40, 1}}), 1e-12)
+	end)
+
+	it("懸臂：岩栓要穿過鬆弛區（L ≥ h）才算", function()
+		local g = cantilever(2, 6)                  -- h = 2.1 m、γh = 52.5 kPa
+		local bare = overhang.cell_state(g, OP, 2, 8, 0).fs
+		under(g, 2, 6, 0, 0.03, 3)                  -- 3 m 岩栓、30 kPa
+		local st = overhang.cell_state(g, OP, 2, 8, 0)
+		assert.near(bare * 52.5 / 22.5, st.fs, 1e-9)
+		assert.is_nil(st.bolt_short)
+		under(g, 2, 6, 0, 0.03, 2)                  -- 2 m 岩栓：沒穿過
+		local sh = overhang.cell_state(g, OP, 2, 8, 0)
+		assert.near(bare, sh.fs, 1e-12)
+		assert.are.equal(2, sh.bolt_short)
+		under(g, 2, 6, 0, 0.06, 3)                  -- 60 kPa ≥ 52.5 → 托住
 		assert.are.equal(math.huge, overhang.cell_state(g, OP, 2, 8, 0).fs)
+	end)
+
+	it("鑽穿到地表的岩栓：L = t 也算（h 被 t 截斷）", function()
+		local g = cantilever(6, 3)                  -- 尖端的 H_p 很高，h = t = 3
+		local bare = overhang.cell_state(g, OP, 6, 8, 0).fs
+		under(g, 6, 3, 0, 0.05, 3)                  -- 50 kPa，γh = 75 → × 3
+		assert.near(bare * 3, overhang.cell_state(g, OP, 6, 8, 0).fs, 1e-9)
+	end)
+
+	it("噴凝土不看長度", function()
+		local g = cantilever(2, 6)
+		local bare = overhang.cell_state(g, OP, 2, 8, 0).fs
+		under(g, 2, 6, 0.03, 0)
+		assert.near(bare * 52.5 / 22.5, overhang.cell_state(g, OP, 2, 8, 0).fs, 1e-9)
+	end)
+
+	it("被挖斷的岩栓有效長度只算到斷點", function()
+		local g = grid(function(x, y, z)
+			if y >= 1 and not (x == 0 and y == 2 and z == 0) then return ROCK end
+			return (x == 0 and y == 0 and z == 0) and BOLT or AIR
+		end, function() return 0 end)
+		local sup = support.scan(g, IDS, {p_sc = 0.2, T = 90, N = 1, bolt_len = function() return 4 end})
+		local e = sup.bf[gi(g, 0, 1, 0) * 8 + 4]
+		assert.are.equal(1, #e)
+		assert.near(0.01, e[1][1], 1e-12)
+		assert.are.equal(1, e[1][2])
+		assert.are.equal(0, #sup.bolts[1].path)
 	end)
 
 	it("整段共用平均支護壓力：只打一支也讓整段的 FS 提高", function()
 		local g = cantilever(4, 1)                  -- 4 m² 懸空、γh = 25 kPa
 		local bare = overhang.cell_state(g, OP, 4, 8, 0)
-		local sup = {face = {}, sc = {}, bolts = {}}
+		local sup = {face = {}, sc = {}, bolts = {}, bf = {}}
 		sup.face[gi(g, 2, 8, 0) * 8 + 4] = 0.04     -- 只有一欄 40 kPa → 整段平均 10 kPa
+		sup.bf[gi(g, 2, 8, 0) * 8 + 4] = {{0.04, 4}}
 		g.support = sup
 		local tip = overhang.cell_state(g, OP, 4, 8, 0)
 		assert.near(10, tip.p_sup, 1e-9)
@@ -234,7 +296,7 @@ describe("support 頂板：往上托抵銷自重", function()
 		local g2 = {}
 		for k, v in pairs(g) do g2[k] = v end
 		g2.L, g2.sup, g2.shear_lv, g2.sup_L = nil, nil, nil, nil
-		g2.support = {face = {}, sc = {}, bolts = {}}
+		g2.support = {face = {}, sc = {}, bolts = {}, bf = {}}
 		for x = -4, 4 do for z = -2, 2 do g2.support.face[failure.index(g2, x, -19, z) * 8 + 4] = 0.1 end end
 		local s1 = failure.shear_state(g2, 0, -19, 0, p)
 		assert.near(5 * 19 * GAMMA - 5 * 100, s1.Q, 1e-9)

@@ -977,6 +977,13 @@ function collapse.overhang_params()
     return {
         lithologies = cfg.lithologies, scale = ocfg.scale, tensile_at = tensile_at,
         surface_y = cfg.surface_y,
+        -- Terzaghi 鬆弛區的 k(GSI)
+        gsi_at = function(g, i, key)
+            local ly = math.floor((i - 1) / g.nx) % g.ny
+            return rock.at(key, g.oy + ly, g.p2 and g.p2[i]).gsi
+        end,
+        terzaghi = {{ocfg.terzaghi_gsi_a, 0}, {ocfg.terzaghi_gsi_b, ocfg.terzaghi_k_b},
+            {ocfg.terzaghi_gsi_c, ocfg.terzaghi_k_c}},
         tensile_at_y = function(key, y)
             if not key then return cfg.overhang.tensile_other / model_n end
             return rock.at(key, y).sigt
