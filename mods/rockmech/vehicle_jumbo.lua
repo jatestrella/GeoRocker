@@ -448,8 +448,8 @@ do
 			end
 			local loaded = 0
 			for _ = 1, n do
-				local hn = core.get_node(p).name
-				if hn == HOLE or hn == HOLE_SC or hn == "rockmech:charged_hole" then
+				local hn = rockmech.hole_kind(core.get_node(p).name)
+				if hn == HOLE or hn == "rockmech:charged_hole" then
 					if rockmech.load_charge(p, p, nil) then loaded = loaded + 1 end
 				end
 			end

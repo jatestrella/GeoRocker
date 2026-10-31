@@ -7,7 +7,8 @@
 --   噴凝土：對岩面按右鍵，噴這一面 3×3 格（用掉一袋）；噴到的空氣格變成一層薄噴凝土，這格周圍的岩面都算噴到。
 --     可以挖掉（不退還）；鑿岩機對著噴凝土鑽就是鑽後面的岩面（那格噴凝土會被孔取代）。
 --   噴凝土岩栓：同一格同時是岩栓與噴凝土。對岩栓噴凝土、或把岩栓裝進噴凝土鑽孔就是這個方塊。
---   噴凝土鑽孔（drilling.lua）：功能同鑽孔，這格也算噴凝土。對鑽孔噴凝土、或鑽穿噴凝土就是這個方塊。
+--   噴過凝土的孔（drilling.lua）：鑽孔、裝藥鑽孔、ANFO 鑽孔都有，功能同一般的孔，這格也算噴凝土。
+--     對孔噴凝土、或鑽穿噴凝土就是這些方塊；之後裝藥、裝岩栓都維持噴過凝土。
 --   支護後面的岩石沒了（挖掉、爆破、坍塌）就跟著消失；爆炸會直接炸掉。
 
 local scfg = rockmech.cfg.support
@@ -135,11 +136,13 @@ do
 	local steel, plate = "[fill:16x16:#8a8a86^[fill:4x4:6,6:#6a6a66", "[fill:16x16:#7a7a76"
 	local PLATE = {-0.22, -0.5, -0.22, 0.22, -0.45, 0.22}
 	local NUT = {-0.07, -0.45, -0.07, 0.07, -0.36, 0.07}
-	local sprayed = "[fill:16x16:#a4a29c^[fill:2x2:3,4:#8e8c86^[fill:2x2:10,2:#b4b2ac^[fill:7x7:4,4:#7a7a76^[fill:3x3:6,6:#6a6a66"
+	local lining = "[fill:16x16:#a4a29c^[fill:2x2:3,4:#8e8c86^[fill:2x2:10,2:#b4b2ac^[fill:2x2:6,11:#8e8c86^[fill:2x2:12,9:#b4b2ac"
+	local sprayed_top = lining .. "^[fill:10x10:3,3:#8a8a86^[fill:4x4:6,6:#6a6a66"    -- 墊板與螺帽同岩栓
+	local sprayed_side = lining .. "^[fill:16x2:0,13:#7a7a76"
 	for _, v in ipairs({
 		{BOLT, "岩栓 Rock bolt (installed)", {PLATE, NUT}, {steel, plate, plate, plate, plate, plate}},
 		{BOLT_SC, "噴凝土岩栓 Rock bolt with shotcrete", {{-0.5, -0.5, -0.5, 0.5, -0.44, 0.5}, {-0.22, -0.44, -0.22, 0.22, -0.4, 0.22},
-			{-0.07, -0.4, -0.07, 0.07, -0.32, 0.07}}, {sprayed}},
+			{-0.07, -0.4, -0.07, 0.07, -0.32, 0.07}}, {sprayed_top, lining, sprayed_side, sprayed_side, sprayed_side, sprayed_side}},
 	}) do
 		core.register_node(v[1], {
 			description = v[2],
@@ -236,7 +239,7 @@ core.register_craftitem(SHOTCRETE, {
 			local r = vector.add(rock, off)
 			local a = vector.add(r, n)
 			local an = core.get_node(a)
-			-- 這一面的岩栓、鑽孔換成噴過凝土的方塊
+			-- 這一面的岩栓、鑽孔、裝藥換成噴過凝土的方塊
 			local faces_r = an.param2 and vector.equals(core.wallmounted_to_dir(an.param2), vector.multiply(n, -1))
 			if is_rock(core.get_node(r).name) then
 				if an.name == "air" then
@@ -245,8 +248,8 @@ core.register_craftitem(SHOTCRETE, {
 				elseif an.name == BOLT and faces_r then
 					core.swap_node(a, {name = BOLT_SC, param2 = an.param2})
 					count = count + 1
-				elseif an.name == HOLE and faces_r then
-					core.swap_node(a, {name = HOLE_SC, param2 = an.param2})
+				elseif rockmech.sprayed_hole and rockmech.sprayed_hole[an.name] and faces_r then
+					core.swap_node(a, {name = rockmech.sprayed_hole[an.name], param2 = an.param2})
 					count = count + 1
 				end
 			end
@@ -291,7 +294,8 @@ core.register_abm({
 -- 判定用的方塊 id（collapse.read_grid 讀網格時找支護）
 core.register_on_mods_loaded(function()
 	rockmech.support_ids = {
-		lining = {[core.get_content_id(LINING)] = true, [core.get_content_id(BOLT_SC)] = true, [core.get_content_id(HOLE_SC)] = true},
+		lining = {[core.get_content_id(LINING)] = true, [core.get_content_id(BOLT_SC)] = true},
 		bolt = {[core.get_content_id(BOLT)] = true, [core.get_content_id(BOLT_SC)] = true},
 	}
+	for _, name in pairs(rockmech.sprayed_hole or {}) do rockmech.support_ids.lining[core.get_content_id(name)] = true end
 end)
