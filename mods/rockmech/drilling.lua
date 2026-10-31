@@ -287,9 +287,21 @@ do
 			def.description = ("噴凝土 %d 層 "):format(n) .. def.description
 			table.insert(def.node_box.fixed, 1, {-0.5, -0.5, -0.5, 0.5, top, 0.5})
 			local sel = def.selection_box.fixed[1]
+			sel[1], sel[3], sel[4], sel[6] = -0.5, -0.5, 0.5, 0.5        -- 整面噴凝土都點得到
 			sel[5] = math.max(sel[5], top + 0.02)
 			for i, t in ipairs(def.tiles) do def.tiles[i] = LINING_TEX .. "^(" .. t .. ")" end
 			def.groups.shotcrete = n
+			-- 敲噴凝土：和噴凝土層一樣整格的層數一起敲掉（不退還），孔與裝藥留著
+			def.groups.dig_immediate = nil
+			def.groups.cracky = 3
+			def.groups.shotcrete_hole = 1
+			def.diggable = true
+			def.node_dig_prediction = ""
+			def.on_dig = function(pos, node)
+				core.swap_node(pos, {name = kind, param2 = node.param2})
+				if rockmech.cfg.fem.drive then rockmech.fem_queue(pos, 1) end
+				return true
+			end
 			core.register_node(name, def)
 		end
 	end

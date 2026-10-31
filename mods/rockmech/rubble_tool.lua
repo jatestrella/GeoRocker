@@ -90,7 +90,7 @@ local function clear(cells, p1, p2, pname, any)
 		if not name and any and data[vi] ~= c_air then
 			local nn = core.get_name_from_content_id(data[vi])
 			local def = core.registered_nodes[nn]
-			if def and nn ~= "ignore" and def.diggable ~= false and not (def.groups and def.groups.unbreakable) then
+			if def and nn ~= "ignore" and def.diggable ~= false and not (def.groups and (def.groups.unbreakable or def.groups.shotcrete_hole)) then
 				name = nn
 			end
 		end
