@@ -15,6 +15,7 @@ local box_tex, seg_attach, to_local, update_hud = V.box_tex, V.seg_attach, V.to_
 
 local REACH = 3            -- 孔位從車頭外第一排往前找岩面最多幾格
 local HOLE = "rockmech:drill_hole"
+local HOLE_SC = "rockmech:drill_hole_sprayed"
 local EMULSION = "rockmech:emulsion"
 
 -- 底盤：外觀零件（不含車頭作業裝置）與共用的設定
@@ -383,7 +384,7 @@ do
 	local function hole_list(self, pos, s)
 		local list = {}
 		scan_face(pos, s, def.half, 7, 7, function(i, j, p, prev, n)
-			if n == HOLE then
+			if n == HOLE or n == HOLE_SC then
 				if core.get_meta(p):get_string("plan") ~= "r" then list[#list + 1] = p end
 				return true
 			end
@@ -447,7 +448,8 @@ do
 			end
 			local loaded = 0
 			for _ = 1, n do
-				if core.get_node(p).name == HOLE or core.get_node(p).name == "rockmech:charged_hole" then
+				local hn = core.get_node(p).name
+				if hn == HOLE or hn == HOLE_SC or hn == "rockmech:charged_hole" then
 					if rockmech.load_charge(p, p, nil) then loaded = loaded + 1 end
 				end
 			end

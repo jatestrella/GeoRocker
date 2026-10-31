@@ -6,11 +6,13 @@
 --   岩栓經過的岩石被挖掉時，露出的岩面上看得到岩栓的斷面（小黑點），看得出岩栓打多深。
 --   噴凝土：對岩面按右鍵，噴這一面 3×3 格（用掉一袋）；噴到的空氣格變成一層薄噴凝土，這格周圍的岩面都算噴到。
 --     可以挖掉（不退還）；鑿岩機對著噴凝土鑽就是鑽後面的岩面（那格噴凝土會被孔取代）。
---   噴凝土岩栓：同一格同時是岩栓與噴凝土。對岩栓噴凝土、或把岩栓裝進噴過的孔（孔的 meta sprayed）就是這個方塊。
+--   噴凝土岩栓：同一格同時是岩栓與噴凝土。對岩栓噴凝土、或把岩栓裝進噴凝土鑽孔就是這個方塊。
+--   噴凝土鑽孔（drilling.lua）：功能同鑽孔，這格也算噴凝土。對鑽孔噴凝土、或鑽穿噴凝土就是這個方塊。
 --   支護後面的岩石沒了（挖掉、爆破、坍塌）就跟著消失；爆炸會直接炸掉。
 
 local scfg = rockmech.cfg.support
 local HOLE = "rockmech:drill_hole"
+local HOLE_SC = "rockmech:drill_hole_sprayed"
 local LINING = "rockmech:shotcrete_lining"
 local BOLT = "rockmech:rock_bolt_set"       -- 裝好的岩栓（方塊）
 local BOLT_SC = "rockmech:rock_bolt_sprayed"  -- 噴了凝土的岩栓
@@ -147,12 +149,11 @@ do
 			tiles = v[4],
 			walkable = false, is_ground_content = false,
 			drop = "", groups = {dig_immediate = 2, not_in_creative_inventory = 1},
-			-- 拆掉：變回鑽孔（孔深不變；噴過的孔記著，再裝一樣是噴凝土岩栓），岩栓還給玩家
+			-- 拆掉：變回鑽孔（孔深不變；噴凝土岩栓變回噴凝土鑽孔），岩栓還給玩家
 			on_dig = function(pos, node, digger)
 				rods_remove(pos, node.param2, bolt_len(pos))
-				core.swap_node(pos, {name = HOLE, param2 = node.param2})
+				core.swap_node(pos, {name = node.name == BOLT_SC and HOLE_SC or HOLE, param2 = node.param2})
 				local meta = core.get_meta(pos)
-				if node.name == BOLT_SC then meta:set_int("sprayed", 1) end
 				local len = meta:get_float("depth")
 				meta:set_string("infotext", ("鑽孔（深 %g m）"):format(len > 0 and len or rockmech.cfg.blast.hole_depth))
 				if digger and digger:is_player() and not creative(digger) then
@@ -191,12 +192,12 @@ core.register_craftitem(BOLT_ITEM, {
 		if pointed.type ~= "node" then return itemstack end
 		local p = pointed.under
 		local node = core.get_node(p)
-		if node.name ~= HOLE then
+		if node.name ~= HOLE and node.name ~= HOLE_SC then
 			tell(placer, "岩栓要裝進鑽孔（先用鑿岩機鑽孔，再對孔按右鍵）")
 			return itemstack
 		end
+		core.swap_node(p, {name = node.name == HOLE_SC and BOLT_SC or BOLT, param2 = node.param2})
 		local meta = core.get_meta(p)
-		core.swap_node(p, {name = meta:get_int("sprayed") == 1 and BOLT_SC or BOLT, param2 = node.param2})
 		local len = meta:get_float("depth")
 		if len <= 0 then len = rockmech.cfg.blast.hole_depth end
 		meta:set_string("infotext", ("岩栓（長 %g m、錨定力 %d kN）"):format(len, capacity(len)))
@@ -235,7 +236,7 @@ core.register_craftitem(SHOTCRETE, {
 			local r = vector.add(rock, off)
 			local a = vector.add(r, n)
 			local an = core.get_node(a)
-			-- 這一面的岩栓換成噴凝土岩栓；孔記著噴過了，之後裝的岩栓也是
+			-- 這一面的岩栓、鑽孔換成噴過凝土的方塊
 			local faces_r = an.param2 and vector.equals(core.wallmounted_to_dir(an.param2), vector.multiply(n, -1))
 			if is_rock(core.get_node(r).name) then
 				if an.name == "air" then
@@ -244,8 +245,8 @@ core.register_craftitem(SHOTCRETE, {
 				elseif an.name == BOLT and faces_r then
 					core.swap_node(a, {name = BOLT_SC, param2 = an.param2})
 					count = count + 1
-				elseif an.name == HOLE and faces_r and core.get_meta(a):get_int("sprayed") == 0 then
-					core.get_meta(a):set_int("sprayed", 1)
+				elseif an.name == HOLE and faces_r then
+					core.swap_node(a, {name = HOLE_SC, param2 = an.param2})
 					count = count + 1
 				end
 			end
@@ -290,7 +291,7 @@ core.register_abm({
 -- 判定用的方塊 id（collapse.read_grid 讀網格時找支護）
 core.register_on_mods_loaded(function()
 	rockmech.support_ids = {
-		lining = {[core.get_content_id(LINING)] = true, [core.get_content_id(BOLT_SC)] = true},
+		lining = {[core.get_content_id(LINING)] = true, [core.get_content_id(BOLT_SC)] = true, [core.get_content_id(HOLE_SC)] = true},
 		bolt = {[core.get_content_id(BOLT)] = true, [core.get_content_id(BOLT_SC)] = true},
 	}
 end)

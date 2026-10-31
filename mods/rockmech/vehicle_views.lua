@@ -89,7 +89,7 @@ local function rgb_of(name)
 	if lith then h = lith.color
 	elseif base == rockmech.RUBBLE_GRANITE then h = rockmech.cfg.lithologies.granite.color
 	elseif base then h = "#6a6058"
-	elseif name == "rockmech:drill_hole" then h = "#e0d8c8"                                   -- 鑽孔：孔口一圈淺色岩粉
+	elseif name == "rockmech:drill_hole" or name == "rockmech:drill_hole_sprayed" then h = "#e0d8c8"                                   -- 鑽孔：孔口一圈淺色岩粉
 	elseif name == "rockmech:charged_hole" or name == "rockmech:surface_charge" then h = "#e8c070"   -- 裝藥：黃點
 	elseif name == "rockmech:anfo_hole" or name == "rockmech:anfo_primed" then h = "#e890b0"         -- ANFO：粉紅點
 	else
@@ -205,7 +205,7 @@ end
 -- view.target：對準這一點（車身座標，自動算 dir、down）；view.flip：一般攝影機（往前看時左右不鏡像）；
 -- view.mark：在這一點（車身座標）畫紅色十字；view.holes：這個距離內的鑽孔、裝藥畫成明顯的色點（太小、射線常打不到）
 -- 有 target 的鏡頭可以在車外：鏡頭和 target 之間有岩石擋住就往 target 拉近
-local HOLE_NODES = {"rockmech:drill_hole", "rockmech:charged_hole", "rockmech:anfo_hole", "rockmech:anfo_primed"}
+local HOLE_NODES = {"rockmech:drill_hole", "rockmech:drill_hole_sprayed", "rockmech:charged_hole", "rockmech:anfo_hole", "rockmech:anfo_primed"}
 local function render_view(self, view)
 	local p, yaw = self.object:get_pos(), self.object:get_yaw()
 	local psi = view.swing and self.swing or 0

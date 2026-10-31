@@ -18,13 +18,15 @@ if not rockmech.blast_charge then return end   -- 沒有 tnt mod
 
 local bcfg = rockmech.cfg.blast
 local HOLE = "rockmech:drill_hole"
+local HOLE_SC = "rockmech:drill_hole_sprayed"   -- 噴過凝土的孔：功能同鑽孔，這格也算噴凝土
+local function is_hole(name) return name == HOLE or name == HOLE_SC end
 local CHARGED = "rockmech:charged_hole"
 local SURFACE = "rockmech:surface_charge"
 local EMULSION = "rockmech:emulsion"
 local ANFO = "rockmech:anfo"
 local ANFO_HOLE = "rockmech:anfo_hole"       -- 倒了 ANFO、還沒有起爆藥包
 local ANFO_PRIMED = "rockmech:anfo_primed"   -- ANFO ＋ 起爆藥包（meta n 條乳膠炸藥）
-local ALL = {HOLE, CHARGED, SURFACE, ANFO_HOLE, ANFO_PRIMED}   -- 爆完要清掉的孔與裝藥
+local ALL = {HOLE, HOLE_SC, CHARGED, SURFACE, ANFO_HOLE, ANFO_PRIMED}   -- 爆完要清掉的孔與裝藥
 -- 鑽孔的孔深（m）：鑽機鑽的垂直孔記在 meta depth，其他是 hole_depth
 local function hole_len(pos)
 	local d = core.get_meta(pos):get_float("depth")
@@ -88,7 +90,7 @@ local function burden(center, dir, R, depth)
 	end end end
 	-- 空孔：沿孔軸每 0.5 m 取一點
 	local reach = r + math.max(depth or 0, bcfg.hole_depth)
-	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(c0, reach), vector.add(c0, reach), {HOLE})) do
+	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(c0, reach), vector.add(c0, reach), {HOLE, HOLE_SC})) do
 		local hd = core.wallmounted_to_dir(core.get_node(hp).param2)
 		for s = 0.5, hole_len(hp), 0.5 do
 			take(dist(hp.x + hd.x * s, hp.y + hd.y * s, hp.z + hd.z * s))
@@ -207,6 +209,14 @@ do
 	def.drop = ""
 	def.diggable = false   -- 孔是岩石上的洞，挖不掉（後面的岩石沒了才會消失）
 	core.register_node(HOLE, def)
+
+	local sc = node_base("噴凝土鑽孔 Drill hole in shotcrete")
+	sc.node_box = {type = "fixed", fixed = {{-0.5, -0.5, -0.5, 0.5, -0.44, 0.5}, {-0.25, -0.44, -0.25, 0.25, -0.4, 0.25}}}
+	sc.selection_box = def.selection_box
+	sc.tiles = {"[fill:16x16:#a4a29c^[fill:2x2:3,4:#8e8c86^[fill:2x2:10,2:#b4b2ac^[fill:8x6:4,5:#4a443c^[fill:6x8:5,4:#4a443c"}
+	sc.drop = ""
+	sc.diggable = false
+	core.register_node(HOLE_SC, sc)
 end
 -- 裝了炸藥的鑽孔：孔口露出一截藥卷與起爆線
 do
@@ -283,8 +293,7 @@ end
 function rockmech.make_hole(under, above)
 	if cannot_drill(under, above) then return false end
 	local sprayed = core.get_node(above).name == "rockmech:shotcrete_lining"
-	core.set_node(above, {name = HOLE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
-	if sprayed then core.get_meta(above):set_int("sprayed", 1) end   -- 之後裝的岩栓是噴凝土岩栓
+	core.set_node(above, {name = sprayed and HOLE_SC or HOLE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
 	return true
 end
 
@@ -297,7 +306,7 @@ local LINING = "rockmech:shotcrete_lining"
 -- 不能加深回傳 nil
 local function deepen_site(hole)
 	local node = core.get_node(hole)
-	if node.name ~= HOLE then return nil end
+	if not is_hole(node.name) then return nil end
 	local d = core.wallmounted_to_dir(node.param2)
 	local n = math.floor(hole_len(hole) + 0.5)
 	if n >= bcfg.hand_max_depth then return nil end
@@ -333,7 +342,7 @@ core.register_globalstep(function(dtime)
 			local back = vector.subtract(hit.under, hit.above)
 			hit = {under = vector.add(hit.under, back), above = hit.under}
 		end
-		local deep = hit and core.get_node(hit.under).name == HOLE and deepen_site(hit.under)
+		local deep = hit and is_hole(core.get_node(hit.under).name) and deepen_site(hit.under)
 		if not hit then
 			if drilling[name] then drill_stop(pl, name) end
 		else
@@ -356,7 +365,7 @@ core.register_globalstep(function(dtime)
 					meta:set_string("infotext", ("鑽孔（深 %d m）"):format(deep + 1))
 					st.t = 0   -- 繼續按住就再加深一公尺
 				end
-			elseif core.get_node(hit.under).name == HOLE then
+			elseif is_hole(core.get_node(hit.under).name) then
 				-- 不能再加深：手持風鑽到最深了，或再往前不是岩石（鑽穿到空洞、地表、碎石）
 				local n = math.floor(hole_len(hit.under) + 0.5)
 				drill_hud(pl, st, n >= bcfg.hand_max_depth
@@ -397,8 +406,8 @@ core.register_on_leaveplayer(function(player) drilling[player:get_player_name()]
 -- 裝藥：pointed 是鑽孔 → 裝進去；已裝藥 → 加一條；沒有鑽孔的實心面 → 貼面裝藥。回傳 true 表示用掉一條
 function rockmech.load_charge(under, above, player)
 	local node = core.get_node(under)
-	if node.name == HOLE or node.name == ANFO_HOLE then
-		core.swap_node(under, {name = node.name == HOLE and CHARGED or ANFO_PRIMED, param2 = node.param2})
+	if is_hole(node.name) or node.name == ANFO_HOLE then
+		core.swap_node(under, {name = is_hole(node.name) and CHARGED or ANFO_PRIMED, param2 = node.param2})
 		core.get_meta(under):set_int("n", 1)
 		set_info(under)
 		return true
@@ -432,7 +441,7 @@ function rockmech.pour_anfo(pos, player)
 		tell(player, "這個孔已經裝滿 ANFO 了")
 		return false
 	end
-	if node.name ~= HOLE and node.name ~= CHARGED then
+	if not is_hole(node.name) and node.name ~= CHARGED then
 		tell(player, "ANFO 要倒進鑽孔（露天鑽機鑽的往下的孔）")
 		return false
 	end
@@ -442,8 +451,8 @@ function rockmech.pour_anfo(pos, player)
 	end
 	local meta = core.get_meta(pos)
 	-- 空孔 → 只有 ANFO；先放了乳膠炸藥的孔 → 那條就是起爆藥包
-	core.swap_node(pos, {name = node.name == HOLE and ANFO_HOLE or ANFO_PRIMED, param2 = node.param2})
-	if node.name == HOLE then meta:set_int("n", 0) end
+	core.swap_node(pos, {name = is_hole(node.name) and ANFO_HOLE or ANFO_PRIMED, param2 = node.param2})
+	if is_hole(node.name) then meta:set_int("n", 0) end
 	set_info(pos)
 	if meta:get_int("n") < 1 then tell(player, "還沒有起爆藥包：放一條乳膠炸藥，否則會拒爆") end
 	return true
