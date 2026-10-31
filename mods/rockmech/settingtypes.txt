@@ -301,7 +301,7 @@ rockmech_fem_max_iter (Solver iteration limit) int 1500 10 20000
 
 # Shotcrete support pressure on the covered rock faces (MPa), applied as an equivalent
 # confining pressure (Hoek-Brown σ3, joint σn, key block resistance). Divided by the model scale N.
-rockmech_support_shotcrete_p (Shotcrete support pressure) float 0.05 0 10
+rockmech_support_shotcrete_p (Shotcrete support pressure) float 0.01 0 10
 
 # Rock bolt capacity T = min(grip * effective length, steel yield), spread over the 3x3 faces around the bolt
 # (pattern bolting at spacing s gives about T/s^2). Bolt length = hole depth; for key blocks only the part
