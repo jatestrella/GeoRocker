@@ -105,9 +105,6 @@ function rockmech.overhang_line(o)
 	-- 支護：底面往上托的 pᵢ（≥ γt 整欄被托住）
 	local sup = ""
 	if o.p_sup then sup = ("；支護往上托 %.0f kPa（荷重 γh %.0f kPa）"):format(o.p_sup, o.gamma * (o.h or o.t)) end
-	if o.bolt_short then
-		sup = sup .. ("；岩栓 %g m 比鬆弛區 h %.1f m 短，沒算"):format(o.bolt_short, o.h or o.t)
-	end
 	if o.fs_shear then sup = ("；剪力 FS %s"):format(fs_str(o.fs_shear)) .. sup end
 	return ("懸臂 %s、t %d m、鬆弛區 k %.2f、淨高 %.1f m、荷重高 h %.1f m%s：彎矩 %.0f kN·m/m，σb=6M/t_eff² %.3f / σt %.3f MPa  FS %s；整段最小 FS %s @ (%d,%d)%s"):format(
 		("懸空 %d m² ／ 有支撐周長 %d m"):format(o.area, o.perim),

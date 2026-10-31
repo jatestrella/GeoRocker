@@ -31,7 +31,7 @@ describe("support 支護壓力", function()
 			if y >= 1 or x >= 2 then return ROCK end
 			return (x == 1 and y == 0 and z == 0) and LINING or AIR
 		end)
-		local sup = support.scan(g, IDS, {p_sc = 0.2, T = 100, L = 2.4, N = 2})
+		local sup = support.scan(g, IDS, {p_sc = 0.2, grip = 50, yield = 200, L = 2, N = 2})
 		assert.near(0.1, support.at(sup, gi(g, 1, 1, 0), 4), 1e-12)   -- 頂板的下面（−y）
 		assert.near(0.1, support.at(sup, gi(g, 2, 0, 0), 2), 1e-12)   -- 牆的 −x 面
 		assert.near(0, support.at(sup, gi(g, 0, 1, 0), 4), 1e-12)     -- 旁邊沒噴到
@@ -42,7 +42,7 @@ describe("support 支護壓力", function()
 			if y >= 1 then return ROCK end
 			return (x == 0 and y == 0 and z == 0) and BOLT or AIR
 		end, function() return 0 end)   -- param2 0 → 指向 +y（打進頂板）
-		local sup = support.scan(g, IDS, {p_sc = 0.2, T = 90, L = 2.4, N = 1})
+		local sup = support.scan(g, IDS, {p_sc = 0.2, grip = 45, yield = 1000, L = 2, N = 1})
 		for _, c in ipairs({{0, 0}, {1, 1}, {-1, 0}, {0, -1}}) do
 			assert.near(0.01, support.at(sup, gi(g, c[1], 1, c[2]), 4), 1e-12)
 		end
@@ -52,7 +52,7 @@ describe("support 支護壓力", function()
 
 	it("沒有支護方塊 → nil", function()
 		local g = grid(function(_, y) return y >= 1 and ROCK or AIR end)
-		assert.is_nil(support.scan(g, IDS, {p_sc = 0.2, T = 100, L = 2.4}))
+		assert.is_nil(support.scan(g, IDS, {p_sc = 0.2, grip = 50, L = 2}))
 	end)
 end)
 
@@ -65,7 +65,7 @@ describe("support 等效圍壓（failure.cell_state）", function()
 		end)
 		local bare = failure.cell_state(g, 0, 1, 0, P)
 		assert.near(0, bare.sy, 1e-12)
-		g.support = support.scan(g, IDS, {p_sc = 0.2, T = 100, L = 2.4, N = 1})
+		g.support = support.scan(g, IDS, {p_sc = 0.2, grip = 50, L = 2, N = 1})
 		local st = failure.cell_state(g, 0, 1, 0, P)
 		assert.near(0.2, st.sy, 1e-12)
 		assert.near(0.2, st.p_support, 1e-12)
@@ -77,7 +77,7 @@ describe("support 等效圍壓（failure.cell_state）", function()
 			if x >= 1 then return ROCK end
 			return (x == 0 and y == 0 and z == 0) and LINING or AIR
 		end)
-		g.support = support.scan(g, IDS, {p_sc = 0.3, T = 100, L = 2.4, N = 1})
+		g.support = support.scan(g, IDS, {p_sc = 0.3, grip = 50, L = 2, N = 1})
 		local st = failure.cell_state(g, 1, 0, 0, P)
 		assert.near(0.3, st.sx, 1e-12)
 	end)
@@ -113,10 +113,10 @@ describe("support 關鍵塊體", function()
 		assert.near(0, b.fs, 2e-3)
 	end)
 
-	it("岩栓錨進岩塊上方的岩體：FS = T / W", function()
+	it("岩栓打進岩塊外 2 m：FS = g·2 / W", function()
 		local g, p = roof(function(x, y, z) return (x == 0 and y == 0 and z == 0) and BOLT or AIR end,
 			function() return 0 end)
-		g.support = support.scan(g, IDS, {p_sc = 0.2, T = 500, N = 1, bolt_len = function() return 4 end})
+		g.support = support.scan(g, IDS, {p_sc = 0.2, grip = 250, yield = 1000, N = 1, bolt_len = function() return 4 end})
 		local b = keyblock.find_blocks(g, p, {{x = 0, y = 1, z = 0}})[1]
 		assert.near(500 / W, b.fs, 2e-3)
 	end)
@@ -124,16 +124,28 @@ describe("support 關鍵塊體", function()
 	it("岩栓比岩塊短（錨固段沒出岩塊）：沒有效果", function()
 		local g, p = roof(function(x, y, z) return (x == 0 and y == 0 and z == 0) and BOLT or AIR end,
 			function() return 0 end)
-		g.support = support.scan(g, IDS, {p_sc = 0.2, T = 500, L = 2, N = 1})
+		g.support = support.scan(g, IDS, {p_sc = 0.2, grip = 250, L = 2, N = 1})
 		local b = keyblock.find_blocks(g, p, {{x = 0, y = 1, z = 0}})[1]
 		assert.near(0, b.fs, 2e-3)
+	end)
+
+	it("岩栓打進岩塊外的長度越長越好，上限是鋼材降伏", function()
+		local function fs(L)
+			local g, p = roof(function(x, y, z) return (x == 0 and y == 0 and z == 0) and BOLT or AIR end,
+				function() return 0 end)
+			g.support = support.scan(g, IDS, {p_sc = 0, grip = 50, yield = 150, N = 1, bolt_len = function() return L end})
+			return keyblock.find_blocks(g, p, {{x = 0, y = 1, z = 0}})[1].fs
+		end
+		assert.near(50 / W, fs(3), 1e-9)            -- 岩塊厚 2 m：打出去 1 m
+		assert.near(100 / W, fs(4), 1e-9)
+		assert.near(150 / W, fs(6), 1e-9)           -- g·4 = 200 > T_y = 150
 	end)
 
 	it("噴凝土蓋住岩塊底面：FS = p_sc·A / W", function()
 		local g, p = roof(function(x, y, z)
 			return (y == 0 and math.abs(x) <= 1 and math.abs(z) <= 1) and LINING or AIR
 		end)
-		g.support = support.scan(g, IDS, {p_sc = 0.1, T = 100, L = 2.4, N = 1})
+		g.support = support.scan(g, IDS, {p_sc = 0.1, grip = 50, L = 2, N = 1})
 		local b = keyblock.find_blocks(g, p, {{x = 0, y = 1, z = 0}})[1]
 		assert.near(9 * 0.1 * 1000 / W, b.fs, 2e-3)
 	end)
@@ -158,14 +170,13 @@ describe("support 頂板：往上托抵銷自重", function()
 		return g
 	end
 	local OP = {lithologies = {shale = {gamma = 25, tensile = 2}}, scale = 1, max_voxels = 2000}
-	-- 懸臂每一欄底面（−y）的支護：sc（噴凝土）、bolt（長 blen 的岩栓攤到的）MPa
-	local function under(g, L, t, sc, bolt, blen)
-		local sup = {face = {}, sc = {}, bolts = {}, bf = {}}
+	-- 懸臂每一欄底面（−y）的支護：sc（噴凝土）、bolt（岩栓攤到的）MPa
+	local function under(g, L, t, sc, bolt)
+		local sup = {face = {}, sc = {}, bolts = {}}
 		for x = 1, L do
 			local i = gi(g, x, 8 - t + 1, 0)
 			sup.face[i * 8 + 4] = sc + bolt
 			if sc > 0 then sup.sc[i * 8 + 4] = sc end
-			if bolt > 0 then sup.bf[i * 8 + 4] = {{bolt, blen or 4}} end
 		end
 		g.support = sup
 	end
@@ -225,54 +236,43 @@ describe("support 頂板：往上托抵銷自重", function()
 		assert.near(0.5, overhang.terzaghi_k(60, {{80, 0}, {40, 1}}), 1e-12)
 	end)
 
-	it("懸臂：岩栓要穿過鬆弛區（L ≥ h）才算", function()
-		local g = cantilever(2, 6)                  -- h = 2.1 m、γh = 52.5 kPa
-		local bare = overhang.cell_state(g, OP, 2, 8, 0).fs
-		under(g, 2, 6, 0, 0.03, 3)                  -- 3 m 岩栓、30 kPa
-		local st = overhang.cell_state(g, OP, 2, 8, 0)
-		assert.near(bare * 52.5 / 22.5, st.fs, 2e-3)
-		assert.is_nil(st.bolt_short)
-		under(g, 2, 6, 0, 0.03, 2)                  -- 2 m 岩栓：沒穿過
-		local sh = overhang.cell_state(g, OP, 2, 8, 0)
-		assert.near(bare, sh.fs, 2e-3)
-		assert.are.equal(2, sh.bolt_short)
-		under(g, 2, 6, 0, 0.06, 3)                  -- 60 kPa ≥ 52.5 → 托住
-		assert.are.equal(math.huge, overhang.cell_state(g, OP, 2, 8, 0).fs)
+	it("岩栓錨定力 = min(握裹力 × 長度, 鋼材降伏)", function()
+		for _, c in ipairs({{2, 100}, {3, 150}, {4, 200}, {6, 200}}) do
+			local g = grid(function(x, y, z)
+				if y >= 1 then return ROCK end
+				return (x == 0 and y == 0 and z == 0) and BOLT or AIR
+			end, function() return 0 end)
+			local sup = support.scan(g, IDS, {p_sc = 0, grip = 50, yield = 200, N = 1, bolt_len = function() return c[1] end})
+			assert.near(c[2] / 9 / 1000, support.at(sup, gi(g, 0, 1, 0), 4), 1e-9)
+		end
 	end)
 
-	it("鑽穿到地表的岩栓：L = t 也算（h 被 t 截斷）", function()
-		local g = cantilever(6, 3)                  -- 尖端的 H_p 很高，h = t = 3
-		local bare = overhang.cell_state(g, OP, 6, 8, 0).fs
-		under(g, 6, 3, 0, 0.05, 3)                  -- 50 kPa，γh = 75 → × 3
-		assert.near(bare * 3, overhang.cell_state(g, OP, 6, 8, 0).fs, 2e-3)
-	end)
-
-	it("噴凝土不看長度", function()
-		local g = cantilever(2, 6)
-		local bare = overhang.cell_state(g, OP, 2, 8, 0).fs
-		under(g, 2, 6, 0.03, 0)
-		assert.near(bare * 52.5 / 22.5, overhang.cell_state(g, OP, 2, 8, 0).fs, 2e-3)
-	end)
-
-	it("被挖斷的岩栓有效長度只算到斷點", function()
+	it("被挖斷的岩栓：有效長度只算到斷點", function()
 		local g = grid(function(x, y, z)
-			if y >= 1 and not (x == 0 and y == 2 and z == 0) then return ROCK end
+			if y >= 1 and not (x == 0 and y == 3 and z == 0) then return ROCK end
 			return (x == 0 and y == 0 and z == 0) and BOLT or AIR
 		end, function() return 0 end)
-		local sup = support.scan(g, IDS, {p_sc = 0.2, T = 90, N = 1, bolt_len = function() return 4 end})
-		local e = sup.bf[gi(g, 0, 1, 0) * 8 + 4]
-		assert.are.equal(1, #e)
-		assert.near(0.01, e[1][1], 1e-12)
-		assert.are.equal(1, e[1][2])
-		assert.are.equal(0, #sup.bolts[1].path)
+		local sup = support.scan(g, IDS, {p_sc = 0, grip = 45, yield = 1000, N = 1, bolt_len = function() return 5 end})
+		assert.near(90 / 9 / 1000, support.at(sup, gi(g, 0, 1, 0), 4), 1e-9)   -- y = 1、2 → 2 m
+		assert.are.equal(1, #sup.bolts[1].path)
+	end)
+
+	it("噴凝土與岩栓都讓 FS 上升", function()
+		local g = cantilever(2, 6)                  -- h = 2.1 m、γh = 52.5 kPa
+		local bare = overhang.cell_state(g, OP, 2, 8, 0).fs
+		under(g, 2, 6, 0, 0.03)                     -- 30 kPa
+		assert.near(bare * 52.5 / 22.5, overhang.cell_state(g, OP, 2, 8, 0).fs, 2e-3)
+		under(g, 2, 6, 0.03, 0)
+		assert.near(bare * 52.5 / 22.5, overhang.cell_state(g, OP, 2, 8, 0).fs, 2e-3)
+		under(g, 2, 6, 0, 0.06)                     -- 60 kPa ≥ 52.5 → 托住
+		assert.are.equal(math.huge, overhang.cell_state(g, OP, 2, 8, 0).fs)
 	end)
 
 	it("支護只減少那一欄的荷重，效果靠均分擴散到整段", function()
 		local g = cantilever(4, 1)                  -- 4 m² 懸空、γh = 25 kPa
 		local bare = overhang.cell_state(g, OP, 4, 8, 0)
-		local sup = {face = {}, sc = {}, bolts = {}, bf = {}}
+		local sup = {face = {}, sc = {}, bolts = {}}
 		sup.face[gi(g, 2, 8, 0) * 8 + 4] = 0.04     -- 只有一欄 40 kPa → 整段平均 10 kPa
-		sup.bf[gi(g, 2, 8, 0) * 8 + 4] = {{0.04, 4}}
 		g.support = sup
 		local tip = overhang.cell_state(g, OP, 4, 8, 0)
 		assert.near(10, tip.p_sup, 1e-9)            -- 顯示：平均 10 kPa

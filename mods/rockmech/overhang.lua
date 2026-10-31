@@ -36,7 +36,6 @@
 -- k 依 GSI 對應 Terzaghi 岩體分級。荷重高度 h = min(t, H_p)，抗彎厚度仍是 t，q = γh。
 -- ## 支護（grid.support，見 support.lua）
 -- 欄底面的支護壓力 pᵢ 往上托：該欄的荷重 q = γh − pᵢ，效果靠均分擴散到整段（可以是負的：多的托力幫鄰欄）。
--- 岩栓要穿過鬆弛區（L ≥ h）才算；噴凝土不看長度。
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
 --     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
@@ -324,12 +323,9 @@ local function local_ctx(g, p)
 		while jb >= 1 and not solid_of[data[jb]] do gap = gap + 1; jb = jb - sy end
 		r.gap = gap
 		r.shear_k = p.shear_k
-		-- 底面的支護（support.lua）：噴凝土 kPa 與各支岩栓 {kPa, 長度}，段裡再看岩栓穿不穿過鬆弛區
+		-- 底面的支護壓力（support.lua，kPa）：噴凝土、岩栓
 		local sup = g.support
-		if sup then
-			r.sc_sup = (sup.sc[ib * 8 + 4] or 0) * 1000
-			r.bf = sup.bf[ib * 8 + 4]
-		end
+		r.p_sup = sup and (sup.face[ib * 8 + 4] or 0) * 1000 or 0
 		return r
 	end
 
@@ -626,7 +622,7 @@ local function spread(res, sg, s)
 end
 
 -- 一段頂板的統計（同一段只算一次）：hr、area、perim（HR = 懸空面積／有支撐的周長，沒有周長 → nil）、
--- k、ht（段內平均的 Terzaghi 係數與淨高）、q（每欄的荷重 kPa）、pseg（平均支護壓力）、short（太短沒算到的岩栓最長幾 m）、M、Vs
+-- k、ht（段內平均的 Terzaghi 係數與淨高）、q（每欄的荷重 kPa）、pseg（平均支護壓力）、M、Vs
 local function seg_stats(res, sg)
 	res.stats = res.stats or {}
 	local s = res.stats[sg]
@@ -642,18 +638,12 @@ local function seg_stats(res, sg)
 		sk, n_run = sk + r.k, n_run + 1
 	end
 	s = {hr = np > 0 and na / np or nil, area = na, perim = np, k = sk / n_run, ht = sg_h / na, q = {}}
-	local ps, short = 0, nil
+	local ps = 0
 	for _, r in ipairs(sg) do
-		local h = load_height(r, res.d[r], s)
-		local p = r.sc_sup or 0
-		for _, e in ipairs(r.bf or {}) do
-			if e[2] >= h - 1e-6 then p = p + e[1] * 1000
-			else short = math.max(short or 0, e[2]) end
-		end
-		ps = ps + p
-		s.q[r] = r.crit.gamma * h - p
+		ps = ps + r.p_sup
+		s.q[r] = r.crit.gamma * load_height(r, res.d[r], s) - r.p_sup
 	end
-	s.pseg, s.short = ps / na, short
+	s.pseg = ps / na
 	spread(res, sg, s)
 	res.stats[sg] = s
 	return s
@@ -754,7 +744,6 @@ function overhang.cell_state(g, p, x, y, z)
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
 		hr = s0.hr, area = s0.area, perim = s0.perim,   -- 水力半徑 = 懸空面積／有支撐的周長（鬆弛區的 B）
 		k = s0.k, ht = s0.ht, h = h0,   -- Terzaghi 係數、淨高、荷重高度 h = min(t, k·(B + H_t))
-		bolt_short = s0.short,          -- 比鬆弛區短、沒算到的岩栓最長幾 m
 		m = s0.M[r0],                   -- 彎矩 (kN·m/m)
 		-- 剪力的 FS（這一欄碰到支撐才有）；fs 已經是彎曲與剪力的較小者
 		fs_shear = r0.shear_k and (s0.Vs[r0] or 0) > 0 and te0 > 0

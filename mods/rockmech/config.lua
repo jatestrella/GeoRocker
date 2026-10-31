@@ -168,8 +168,10 @@ config.fem_defaults = {
 -- （和岩體強度一樣除以相似比 N）
 config.support_defaults = {
 	shotcrete_p = 0.05,       -- 噴凝土的支護壓力 p_sc (MPa)：托頂板時約等於 2 m 岩層（γ ≈ 25 kN/m³），防小塊與表層剝落
-	bolt_t = 100,             -- 岩栓錨定力 T (kN)；平均分給周圍 3×3 m² 的岩面，間距 s 的格狀岩栓 ≈ T/s²
-	-- 岩栓長度 = 裝進去的鑽孔孔深（關鍵塊體要錨進岩塊外的岩體、懸臂要比該欄長才有效）
+	-- 岩栓錨定力 T = min(握裹力 × 有效長度, 鋼材降伏)，長度 = 孔深；平均分給周圍 3×3 m² 的岩面（間距 s ≈ T/s²）。
+	-- 關鍵塊體只算打進岩塊外那一段的長度
+	bolt_grip = 50,           -- 握裹力 g (kN/m)
+	bolt_yield = 200,         -- 鋼材降伏 T_y (kN)
 }
 
 -- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
@@ -500,7 +502,8 @@ function config.load(get)
 	-- 支護
 	cfg.support = load_section("support", config.support_defaults)
 	cfg.support.shotcrete_p = math.max(0, cfg.support.shotcrete_p)
-	cfg.support.bolt_t = math.max(0, cfg.support.bolt_t)
+	cfg.support.bolt_grip = math.max(0, cfg.support.bolt_grip)
+	cfg.support.bolt_yield = math.max(0, cfg.support.bolt_yield)
 
 	-- 爆破破碎
 	cfg.blast = load_section("blast", config.blast_defaults)

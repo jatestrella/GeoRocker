@@ -29,6 +29,8 @@ local function bolt_len(pos)
 	local v = core.get_meta(pos):get_float("depth")
 	return v > 0 and v or rockmech.cfg.blast.hole_depth
 end
+-- 長度 L 的錨定力 (kN)：min(握裹力 × L, 鋼材降伏)
+local function capacity(L) return math.min(scfg.bolt_grip * L, scfg.bolt_yield) end
 local function along(pos, param2, s)
 	return vector.add(pos, vector.multiply(core.wallmounted_to_dir(param2), s))
 end
@@ -45,8 +47,8 @@ local function rods_update(pos, node)
 	if meta:get_int("eff") ~= eff + 1 then
 		meta:set_int("eff", eff + 1)
 		meta:set_string("infotext", eff < n
-			and ("岩栓（長 %g m，在 %d m 處被挖斷：只剩前 %d m 錨在岩石裡、錨定力 %d kN）"):format(bolt_len(pos), eff, eff, scfg.bolt_t)
-			or ("岩栓（長 %g m、錨定力 %d kN）"):format(bolt_len(pos), scfg.bolt_t))
+			and ("岩栓（長 %g m，在 %d m 處被挖斷：只剩前 %d m 錨在岩石裡、錨定力 %d kN）"):format(bolt_len(pos), eff, eff, capacity(eff))
+			or ("岩栓（長 %g m、錨定力 %d kN）"):format(bolt_len(pos), capacity(bolt_len(pos))))
 	end
 	for s = 1, n do
 		local c = along(pos, node.param2, s)
@@ -163,7 +165,8 @@ end
 
 -- 岩栓：對鑽孔按右鍵裝進去
 core.register_craftitem(BOLT_ITEM, {
-	description = ("岩栓 Rock bolt\n對鑽孔按右鍵裝進去（長度 = 孔深、錨定力 %d kN）"):format(scfg.bolt_t),
+	description = ("岩栓 Rock bolt\n對鑽孔按右鍵裝進去（長度 = 孔深；錨定力 = 握裹力 %d kN/m × 長度，上限 %d kN）")
+		:format(scfg.bolt_grip, scfg.bolt_yield),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x11:7,1:#a8a8a4^[fill:8x2:4,12:#6a6a66^[fill:4x2:6,10:#8a8a86",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
@@ -177,7 +180,7 @@ core.register_craftitem(BOLT_ITEM, {
 		local meta = core.get_meta(p)
 		local len = meta:get_float("depth")
 		if len <= 0 then len = rockmech.cfg.blast.hole_depth end
-		meta:set_string("infotext", ("岩栓（長 %g m、錨定力 %d kN）"):format(len, scfg.bolt_t))
+		meta:set_string("infotext", ("岩栓（長 %g m、錨定力 %d kN）"):format(len, capacity(len)))
 		if not creative(placer) then itemstack:take_item() end
 		return itemstack
 	end,
