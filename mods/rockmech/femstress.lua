@@ -200,9 +200,10 @@ local NEAR = 8
 local function find_failed(job, res, meta, center)
 	local n = job.nx
 	local a = meta.a
-	local failed, faces = {}, 0
+	local failed, faces, warned = {}, 0, {}
 	for z = 2, n - 3 do for y = 2, n - 3 do for x = 2, n - 3 do
 		if job.solid[1 + x + y * n + z * n * n] and meta.lith[1 + x + y * n + z * n * n] then
+			local low, lmode = math.huge, nil
 			for _, f in ipairs(FACES) do
 				local ax, ay, az = x + f[1], y + f[2], z + f[3]
 				local wx, wy, wz = a.x + ax, a.y + ay, a.z + az
@@ -210,16 +211,41 @@ local function find_failed(job, res, meta, center)
 						and ((center and math.max(math.abs(wx - center.x), math.abs(wy - center.y), math.abs(wz - center.z)) <= NEAR)
 							or rockmech.collapse.is_excavated({x = wx, y = wy, z = wz})) then
 					faces = faces + 1
-					if face_fs(job, res, meta, x, y, z, f) < 1 then
-						failed[#failed + 1] = {x = a.x + x, y = a.y + y, z = a.z + z}
-						break
-					end
+					local fs, mode = face_fs(job, res, meta, x, y, z, f)
+					if fs < low then low, lmode = fs, mode end
 				end
+			end
+			if low < 1 then
+				failed[#failed + 1] = {x = a.x + x, y = a.y + y, z = a.z + z}
+			elseif low < cfg.fswarn.max then
+				warned[#warned + 1] = {pos = {x = a.x + x, y = a.y + y, z = a.z + z}, fs = low, mode = lmode}
 			end
 		end
 	end end end
 	table.sort(failed, function(u, v) return u.y > v.y end)
-	return failed, faces
+	return failed, faces, warned
+end
+
+-- 警戒裂紋：每次解完，範圍內判定過的面裡 1 ≤ FS < fswarn.max 的格（換掉這個範圍原本的記錄）
+local cracks = {}
+local function update_cracks(meta, n, warned)
+	local x1, y1, z1 = meta.a.x + 2, meta.a.y + 2, meta.a.z + 2
+	local x2, y2, z2 = meta.a.x + n - 3, meta.a.y + n - 3, meta.a.z + n - 3
+	for k, c in pairs(cracks) do
+		local p = c.pos
+		if p.x >= x1 and p.x <= x2 and p.y >= y1 and p.y <= y2 and p.z >= z1 and p.z <= z2 then cracks[k] = nil end
+	end
+	for _, c in ipairs(warned) do cracks[core.pos_to_string(c.pos)] = c end
+end
+
+-- a..b 內有裂紋的格：{{pos, fs, mode}...}
+function rockmech.fem_warned(a, b)
+	local out = {}
+	for _, c in pairs(cracks) do
+		local p = c.pos
+		if p.x >= a.x and p.x <= b.x and p.y >= a.y and p.y <= b.y and p.z >= a.z and p.z <= b.z then out[#out + 1] = c end
+	end
+	return out
 end
 
 -- 回報：點的那一格與範圍內臨空格最小的 FS
@@ -338,7 +364,9 @@ local function pump()
 	local cur = table.remove(pending, 1)
 	rockmech.fem_run(cur.pos, function(job, res, meta, ms, t_build)
 		local t0 = core.get_us_time()
-		local failed, faces = find_failed(job, res, meta, not cur.far and cur.pos or nil)
+		local failed, faces, warned = find_failed(job, res, meta, not cur.far and cur.pos or nil)
+		update_cracks(meta, job.nx, warned)
+		if rockmech.fswarn_refresh then rockmech.fswarn_refresh(cur.pos) end
 		local t_eval = (core.get_us_time() - t0) / 1000
 		core.log("action", ("[rockmech] 應力解驅動 %s 第 %d 輪：%d 輪迭代、解 %.0f ms、組工作 %.1f ms、判定 %.1f ms（%d 面）、總 %.0f ms → %d 格破壞")
 			:format(core.pos_to_string(cur.pos), cur.round, res.iters, res.ms, t_build, t_eval, faces, ms, #failed))
@@ -368,6 +396,21 @@ function rockmech.fem_queue(pos, round, far)
 	pending[#pending + 1] = {pos = p, round = round, far = far}
 	core.after(0, pump)
 end
+-- 玩家走到附近有開挖、但還沒解過的地方（例如重開遊戲）：解一次，裂紋才看得到
+local WATCH_MOVE, WATCH_R = 6, 10
+local watched
+function rockmech.fem_watch(center)
+	if not fcfg.drive or (watched and vector.distance(watched, center) <= WATCH_MOVE) then return end
+	watched = vector.round(center)
+	local is_excavated = rockmech.collapse.is_excavated
+	for dz = -WATCH_R, WATCH_R, 2 do for dy = -WATCH_R, WATCH_R, 2 do for dx = -WATCH_R, WATCH_R, 2 do
+		if is_excavated({x = watched.x + dx, y = watched.y + dy, z = watched.z + dz}) then
+			rockmech.fem_queue(watched, 1, true)
+			return
+		end
+	end end end
+end
+
 if fcfg.drive then
 	local collapse = rockmech.collapse
 	local orig = collapse.queue_failure_check

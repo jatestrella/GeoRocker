@@ -2,7 +2,7 @@
 -- FS < 1 遮罩（除錯／檢視用，不修改地圖）：
 --   /rockmech_fsmask [半徑] [秒數]   在玩家周圍標出「若被觸發就會破壞」的岩格
 --   /rockmech_fsmask on | off        即時模式（每個玩家各自設定、會記住；也可在資訊頁／物品欄勾選）
---   /rockmech_fswarn on | off        警戒裂紋：玩家周圍 1 < FS < 1.5 的岩格加上裂紋（預設開啟）
+--   /rockmech_fswarn on | off        警戒裂紋：玩家周圍 1 < FS < 2 的岩格加上裂紋（預設開啟；應力解決定崩落時，來源是應力解的面 FS）
 -- 標示方式：
 --   * 半透明發光方塊（實體）套在格子外：紅 = 節理滑動、橙 = 軸差破壞、紫 = 懸臂斷裂／被節理切離、
 --     黃 = 關鍵塊體（被節理圍住、會因重力滑出或落下）
@@ -235,6 +235,15 @@ scan_parts[4] = function(st)
 	end
 end
 
+-- 5. 應力解：最近幾次解判定過的面（femstress.lua），與崩落判定同一個 FS
+scan_parts[5] = function(st)
+	if not cfg.fem.drive then return end
+	rockmech.fem_watch(vector.divide(vector.add(st.a, st.b), 2))
+	for _, c in ipairs(rockmech.fem_warned(st.a, st.b)) do
+		st.put(c.pos, c.fs, c.mode == "拉" and "fem_tension" or "fem_shear")
+	end
+end
+
 -- 一次算完。回傳 {{pos, fs, kind = "slip"|"axial"|"overhang"|"keyblock"|"mass"}...}, ms
 function rockmech.fs_scan(center, r, fs_max)
 	local t0 = core.get_us_time()
@@ -349,6 +358,7 @@ end
 local WARN_LABEL = {
 	slip = "節理滑動", axial = "軸差破壞", overhang = "懸臂斷裂", keyblock = "關鍵塊體",
 	mass = "整體滑動（稜柱）", shear = "節理受剪（只警示，不會因此掉落）",
+	fem_tension = "應力解：拉力破壞", fem_shear = "應力解：剪力破壞",
 }
 
 -- 玩家看到的某格裂紋：回傳 {kind, label, fs} 或 nil
@@ -483,6 +493,13 @@ collapse.queue_stability_check = function(pos, prev)
 	end
 end
 
+-- 應力解完：附近的即時顯示重新掃描
+function rockmech.fswarn_refresh(pos)
+	for _, a in pairs(active) do
+		if a.center and vector.distance(pos, a.center) <= LIVE_R + cfg.fem.radius then a.dirty = true end
+	end
+end
+
 -- 從 cells（這次掃描：玩家周圍 ±LIVE_R、FS < 門檻者）挑出要顯示裂紋的：1 < FS < 門檻
 local function select_warned(cells)
 	local out = {}
@@ -577,7 +594,7 @@ core.register_chatcommand("rockmech_fsmask", {
 
 core.register_chatcommand("rockmech_fswarn", {
 	params = "on | off",
-	description = "警戒裂紋：受開挖影響、FS 下降到 1 < FS < 門檻（預設 1.5）的岩格加上裂紋，"
+	description = "警戒裂紋：受開挖影響、FS 下降到 1 < FS < 門檻（預設 2）的岩格加上裂紋，"
 		.. "FS 越接近 1 裂得越嚴重（預設開啟）",
 	func = function(name, param)
 		local player = core.get_player_by_name(name)

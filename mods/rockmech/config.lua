@@ -200,7 +200,7 @@ config.blast_defaults = {
 
 -- 警戒裂紋（fsmask.lua）：1 < FS < max 的岩格加上裂紋；設定鍵為 rockmech_fswarn_<key>
 config.fswarn_defaults = {
-	max = 1.5,                -- FS 低於此值（且 > 1）就顯示裂紋
+	max = 2.0,                -- FS 低於此值（且 > 1）就顯示裂紋
 }
 
 -- 關鍵塊體（keyblock.lua）；設定鍵為 rockmech_keyblock_<key>
