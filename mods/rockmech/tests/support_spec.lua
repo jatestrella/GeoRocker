@@ -63,6 +63,18 @@ describe("support 支護壓力", function()
 		assert.are.equal(1, #sup.bolts)
 	end)
 
+	it("噴凝土 3 層：壓力照層數累加，關鍵塊體用的也是", function()
+		local L3 = 5
+		local ids = {lining = {[L3] = 3}, bolt = {}}
+		local g = grid(function(x, y, z)
+			if y >= 1 then return ROCK end
+			return (x == 0 and y == 0 and z == 0) and L3 or AIR
+		end)
+		local sup = support.scan(g, ids, {p_sc = 0.01, grip = 200, yield = 360, L = 4, N = 1})
+		assert.near(0.03, support.at(sup, gi(g, 0, 1, 0), 4), 1e-12)
+		assert.near(0.03, sup.sc[gi(g, 0, 1, 0) * 8 + 4], 1e-12)
+	end)
+
 	it("沒有支護方塊 → nil", function()
 		local g = grid(function(_, y) return y >= 1 and ROCK or AIR end)
 		assert.is_nil(support.scan(g, IDS, {p_sc = 0.2, grip = 50, L = 2}))

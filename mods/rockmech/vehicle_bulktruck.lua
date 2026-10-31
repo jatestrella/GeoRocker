@@ -88,7 +88,7 @@ local function hole_list(self)
 	local list = {}
 	for _, p in ipairs(core.find_nodes_in_area({x = r.x - BOOM_LEN, y = r.y - 7, z = r.z - BOOM_LEN},
 			{x = r.x + BOOM_LEN, y = r.y, z = r.z + BOOM_LEN},
-			{HOLE, CHARGED, ANFO_HOLE, HOLE .. "_sprayed", CHARGED .. "_sprayed", ANFO_HOLE .. "_sprayed"})) do
+ rockmech.with_sprayed({HOLE, CHARGED, ANFO_HOLE}))) do
 		local dx, dz = p.x - r.x, p.z - r.z
 		if dx * dx + dz * dz <= BOOM_LEN * BOOM_LEN and core.wallmounted_to_dir(core.get_node(p).param2).y < 0 then
 			list[#list + 1] = p

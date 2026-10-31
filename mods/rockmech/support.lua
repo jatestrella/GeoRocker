@@ -1,7 +1,7 @@
 -- rockmech/support.lua
 -- 支護（岩栓、噴凝土）換算成臨空岩面上的等效圍壓 pᵢ（支護壓力，同 RocSupport／地盤反應曲線的概念）。
 -- 純函式，不依賴引擎。支護方塊放在岩面前方的空氣格：
---   噴凝土層（lining）：這格相鄰的每個岩面都得到 p_sc。
+--   噴凝土層（lining）：這格相鄰的每個岩面都得到 層數 × p_sc（最多 3 層，3 層仍比單支岩栓弱）。
 --   岩栓（bolt，貼壁方塊，param2 指向岩面）：錨定力 T = min(握裹力 g × 有效長度 L, 鋼材降伏 T_y)，
 --     平均分給以它為中心、同一面上 3×3 格的岩面（每面 T/9 kN/m²）→ 間距 s 的格狀岩栓約等於 T/s²。
 --     有效長度：從孔口往裡連續在岩石裡的長度（被挖斷只算到斷點）。
@@ -17,7 +17,7 @@
 --
 -- support.scan(g, ids, prm) → sup 或 nil（範圍內沒有支護）
 --   g：failure／keyblock 的網格（data、p2、ox..nz、bonded_of）
---   ids = {lining = {[cid] = true}, bolt = {[cid] = true}}
+--   ids = {lining = {[cid] = 層數（true = 1 層）}, bolt = {[cid] = true}}
 --   prm = {p_sc (MPa), grip（握裹力 g，kN/m）, yield（鋼材降伏 T_y，kN）, L (m，沒有 bolt_len 時的岩栓長度), N,
 --          bolt_len(x, y, z) → 該岩栓的長度 (m)（世界座標）}
 --   sup.face[i·8 + k] = pᵢ (MPa)：岩格 i（網格索引）往 AX[k] 方向的面
@@ -62,13 +62,14 @@ function support.scan(g, ids, prm)
 			local y = r % ny
 			local z = (r - y) / ny
 			if lin and p_sc > 0 then
+				local p = p_sc * (lin == true and 1 or lin)
 				for k = 1, 6 do
 					local a = AX[k]
 					local j = idx(x + a[1], y + a[2], z + a[3])
 					if j and bonded_of[data[j]] then
 						local key = j * 8 + k_of(-a[1], -a[2], -a[3])
-						add(sup.face, key, p_sc)
-						add(sup.sc, key, p_sc)
+						add(sup.face, key, p)
+						add(sup.sc, key, p)
 					end
 				end
 			end

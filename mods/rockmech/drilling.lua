@@ -14,6 +14,9 @@
 --             破碎不超過孔底（孔底 = 底板），台階炸完是平的。
 --   裝藥被別的爆炸波及會殉爆。參數在設定 rockmech_blast_*。
 
+rockmech.SHOTCRETE_LAYERS = 3     -- 噴凝土最多幾層
+rockmech.spray_next = {}          -- 方塊 → 再噴一層之後的方塊（這裡是孔，groundsupport.lua 加上噴凝土層與岩栓）
+
 if not rockmech.blast_charge then return end   -- 沒有 tnt mod
 
 local bcfg = rockmech.cfg.blast
@@ -24,20 +27,37 @@ local EMULSION = "rockmech:emulsion"
 local ANFO = "rockmech:anfo"
 local ANFO_HOLE = "rockmech:anfo_hole"       -- 倒了 ANFO、還沒有起爆藥包
 local ANFO_PRIMED = "rockmech:anfo_primed"   -- ANFO ＋ 起爆藥包（meta n 條乳膠炸藥）
--- 噴過凝土的孔：每種狀態一個方塊，功能同一般的孔、外觀是同樣的圖案疊在噴凝土上，這格也算噴凝土
-local SPRAY = {[HOLE] = HOLE .. "_sprayed", [CHARGED] = CHARGED .. "_sprayed",
-	[ANFO_HOLE] = ANFO_HOLE .. "_sprayed", [ANFO_PRIMED] = ANFO_PRIMED .. "_sprayed"}
-local PLAIN = {}
-for k, v in pairs(SPRAY) do PLAIN[v] = k end
+-- 噴過凝土的孔：每種狀態、每個層數一個方塊，功能同一般的孔、外觀是同樣的圖案疊在噴凝土上，這格也算噴凝土
+local VAR = {}          -- 狀態 → {[層數] = 方塊}
+local PLAIN, LAYERS = {}, {}
+for _, kind in ipairs({HOLE, CHARGED, ANFO_HOLE, ANFO_PRIMED}) do
+	VAR[kind] = {}
+	for n = 1, rockmech.SHOTCRETE_LAYERS do
+		local name = kind .. "_sprayed" .. (n > 1 and ("_" .. n) or "")
+		VAR[kind][n] = name
+		PLAIN[name], LAYERS[name] = kind, n
+		rockmech.spray_next[n > 1 and VAR[kind][n - 1] or kind] = name
+	end
+end
 local function kind_of(name) return PLAIN[name] or name end
 local function is_hole(name) return kind_of(name) == HOLE end
--- 換成狀態 kind，噴過凝土的維持噴過
+-- 換成狀態 kind，層數不變
 local function become(pos, node, kind)
-	core.swap_node(pos, {name = PLAIN[node.name] and SPRAY[kind] or kind, param2 = node.param2})
+	local n = LAYERS[node.name]
+	core.swap_node(pos, {name = n and VAR[kind][n] or kind, param2 = node.param2})
 end
-local HOLES = {HOLE, SPRAY[HOLE]}
-local CHARGES = {CHARGED, SURFACE, ANFO_HOLE, ANFO_PRIMED, SPRAY[CHARGED], SPRAY[ANFO_HOLE], SPRAY[ANFO_PRIMED]}
-local ALL = {HOLE, SPRAY[HOLE], unpack(CHARGES)}   -- 爆完要清掉的孔與裝藥
+-- list 加上每個狀態噴過凝土的方塊
+local function with_sprayed(list)
+	local all = {}
+	for _, kind in ipairs(list) do
+		all[#all + 1] = kind
+		for _, name in ipairs(VAR[kind] or {}) do all[#all + 1] = name end
+	end
+	return all
+end
+local HOLES = with_sprayed({HOLE})
+local CHARGES = with_sprayed({CHARGED, SURFACE, ANFO_HOLE, ANFO_PRIMED})
+local ALL = with_sprayed({HOLE, CHARGED, SURFACE, ANFO_HOLE, ANFO_PRIMED})   -- 爆完要清掉的孔與裝藥
 -- 鑽孔的孔深（m）：鑽機鑽的垂直孔記在 meta depth，其他是 hole_depth
 local function hole_len(pos)
 	local d = core.get_meta(pos):get_float("depth")
@@ -260,13 +280,18 @@ end
 -- 噴過凝土的版本：同樣的方塊與貼圖，底下多一層噴凝土（孔口圓環埋在裡面，圖案畫在表面）
 do
 	local LINING_TEX = "[fill:16x16:#a4a29c^[fill:2x2:3,4:#8e8c86^[fill:2x2:10,2:#b4b2ac^[fill:2x2:6,11:#8e8c86^[fill:2x2:12,9:#b4b2ac"
-	local SHEET = {-0.5, -0.5, -0.5, 0.5, -0.44, 0.5}
-	for plain, sprayed in pairs(SPRAY) do
-		local def = table.copy(core.registered_nodes[plain])
-		def.description = "噴凝土 " .. def.description
-		table.insert(def.node_box.fixed, 1, SHEET)
-		for i, t in ipairs(def.tiles) do def.tiles[i] = LINING_TEX .. "^(" .. t .. ")" end
-		core.register_node(sprayed, def)
+	for kind, names in pairs(VAR) do
+		for n, name in ipairs(names) do
+			local def = table.copy(core.registered_nodes[kind])
+			local top = -0.5 + 0.06 * n
+			def.description = ("噴凝土 %d 層 "):format(n) .. def.description
+			table.insert(def.node_box.fixed, 1, {-0.5, -0.5, -0.5, 0.5, top, 0.5})
+			local sel = def.selection_box.fixed[1]
+			sel[5] = math.max(sel[5], top + 0.02)
+			for i, t in ipairs(def.tiles) do def.tiles[i] = LINING_TEX .. "^(" .. t .. ")" end
+			def.groups.shotcrete = n
+			core.register_node(name, def)
+		end
 	end
 end
 -- 舊版存檔：ANFO 記在 charged_hole 的 meta anfo，換成新方塊
@@ -305,13 +330,13 @@ end
 local function cannot_drill(under, above)
 	if not rockmech.lith_of_node[core.get_node(under).name] then return "只能在岩石上鑽孔（碎石鑽不了）" end
 	local an = core.get_node(above).name
-	if an ~= "air" and an ~= "rockmech:shotcrete_lining" then return "孔口前面要是空的" end   -- 噴凝土可以鑽穿（那格換成孔）
+	if an ~= "air" and core.get_item_group(an, "shotcrete_lining") == 0 then return "孔口前面要是空的" end   -- 噴凝土可以鑽穿（那格換成孔）
 end
 -- 鑽好一個孔
 function rockmech.make_hole(under, above)
 	if cannot_drill(under, above) then return false end
-	local sprayed = core.get_node(above).name == "rockmech:shotcrete_lining"
-	core.set_node(above, {name = sprayed and SPRAY[HOLE] or HOLE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
+	local n = core.get_item_group(core.get_node(above).name, "shotcrete_lining")
+	core.set_node(above, {name = n > 0 and VAR[HOLE][n] or HOLE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
 	return true
 end
 
@@ -319,7 +344,6 @@ end
 -- 放開或指到別處就重來。鑿岩機有 on_use，按左鍵不會把岩石挖掉
 local DRILL = "rockmech:rock_drill"
 local drilling = {}   -- 玩家名 → {key, under, above, t, hud, deepen}
-local LINING = "rockmech:shotcrete_lining"
 -- 加深：對著已經鑽好的孔繼續按住，每 drill_time 秒多 1 m，最深 hand_max_depth。回傳孔、下一公尺的岩格與現在孔深；
 -- 不能加深回傳 nil
 local function deepen_site(hole)
@@ -355,7 +379,7 @@ core.register_globalstep(function(dtime)
 				if pt.type == "node" then hit = pt; break end
 			end
 		end
-		if hit and core.get_node(hit.under).name == LINING then
+		if hit and core.get_item_group(core.get_node(hit.under).name, "shotcrete_lining") > 0 then
 			-- 指著噴凝土：鑽它後面的岩面（那格噴凝土會被孔取代）
 			local back = vector.subtract(hit.under, hit.above)
 			hit = {under = vector.add(hit.under, back), above = hit.under}
@@ -479,7 +503,8 @@ function rockmech.pour_anfo(pos, player)
 end
 
 rockmech.hole_kind = kind_of        -- 噴過凝土的孔 → 同狀態的一般孔
-rockmech.sprayed_hole = SPRAY       -- 一般孔 → 噴過凝土的版本
+rockmech.with_sprayed = with_sprayed
+function rockmech.hole_variant(kind, n) return n > 0 and VAR[kind][n] or kind end    -- 狀態 kind、噴了 n 層的方塊
 
 -- 起爆器：range 內所有裝藥倒數後依序起爆。回傳裝藥數
 function rockmech.fire_round(pos, player)
