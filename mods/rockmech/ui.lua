@@ -1,7 +1,7 @@
 -- rockmech/ui.lua
 -- 介面（引擎端）：
 --   /rockmech        完整資訊頁（總覽、岩性、節理、應力、開關）
---   現地應力 HUD     畫面左側持續顯示所指岩石（或腳下位置）的應力；/rockmech_hud 開關
+--   現地應力 HUD     手上拿著地質羅盤、指著岩石時，畫面左側顯示岩性、應力與最低的 FS；/rockmech_hud 開關
 
 local cfg = rockmech.cfg
 local joints = rockmech.joints
@@ -160,62 +160,35 @@ local function fs_short(f)
 	return ("%.2f"):format(f)
 end
 
--- HUD 的精簡報告（4 行）。詳細數值在資訊頁（/rockmech）與羅盤
-local function fmt_report_lines(r, header, pname)
-	local p, i = r.pos, r.init
-	local lines = {}
-	lines[#lines + 1] = ("%s (%d,%d,%d) %s%s　上覆 %d m%s"):format(header, p.x, p.y, p.z,
-		r.lith.description:gsub("\n.*", ""), r.is_rock and "" or "（非岩石）", i.h,
-		r.local_state and r.local_state.rm and ("　GSI %d"):format(r.local_state.rm.gsi) or "")
+-- HUD 的精簡報告：岩性、應力、最低的 FS 與它的機制。詳細數值在資訊頁（/rockmech）與羅盤（蹲下＋右鍵）
+local function fmt_report_lines(r, pname)
+	local i = r.init
 	local s = r.local_state
-	if s then
-		lines[#lines + 1] = ("應力 σv %.3f｜σ1 %.3f　σ3 %.3f MPa"):format(i.sv, s.s1, s.s3)
-			.. ((s.p_support or 0) > 0 and ("　支護 pᵢ %.3f MPa"):format(s.p_support) or "")
-	else
-		lines[#lines + 1] = ("初始應力 σv %.3f　σH %.3f　σh %.3f MPa"):format(i.sv, i.sH, i.shmin)
-		return lines
-	end
-	-- 四種機制的 FS
-	local parts = {"軸差 " .. fs_short(s.fs_axial)}
-	if cfg.weakness.enabled then
-		parts[#parts + 1] = "節理 " .. (s.slip_set and (fs_short(s.fs_joint) .. " " .. s.slip_set.name
-			.. (s.slip_set2 and ("∩" .. s.slip_set2.name) or "")) or "—")
+	local lines = {}
+	lines[#lines + 1] = ("%s%s　上覆 %d m"):format(r.lith.description:gsub("\n.*", ""),
+		s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", i.h)
+	if not s then return lines end
+	lines[#lines + 1] = ("σ1 %.2f　σ3 %.2f MPa"):format(s.s1, s.s3)
+	-- 最低的 FS
+	local best, what = s.fs_axial, "軸差"
+	local function take(f, name) if f and f < best then best, what = f, name end end
+	if cfg.weakness.enabled and s.slip_set then
+		take(s.fs_joint, "節理 " .. s.slip_set.name .. (s.slip_set2 and ("∩" .. s.slip_set2.name) or ""))
 	end
 	local o = r.overhang
-	if cfg.overhang.enabled then
-		local v = "—"
-		if o and o.supported then v = "∞"
-		elseif o and o.group_fs then v = fs_short(o.group_fs) end
-		parts[#parts + 1] = "懸臂 " .. v
-	end
+	if cfg.overhang.enabled and o and not o.supported then take(o.group_fs, "懸臂") end
 	local kb = r.keyblock
-	if cfg.keyblock.enabled then
-		local v = "—"
-		if kb then
-			local mode = ({fall = "落下", plane = "平面", wedge = "楔形"})[kb.mode]
-			v = mode and (fs_short(kb.fs) .. " " .. mode) or "卡住"
-		end
-		parts[#parts + 1] = "塊體 " .. v
-	end
-	lines[#lines + 1] = "FS　" .. table.concat(parts, "｜")
+	if cfg.keyblock.enabled and kb and kb.mode then take(kb.fs, "塊體") end
+	lines[#lines + 1] = best == math.huge and "FS ∞" or ("FS %s（%s）"):format(fs_short(best), what)
 	-- 這格有警戒裂紋：是哪種破壞、FS 多少
-	local w = pname and rockmech.fswarn_at and rockmech.fswarn_at(pname, p)
+	local w = pname and rockmech.fswarn_at and rockmech.fswarn_at(pname, r.pos)
 	if w then
 		lines[#lines + 1] = core.colorize("#ffb040", ("裂紋：%s　FS %s"):format(w.label,
 			w.kind == "shear" and w.fs <= 1.011 and "≤ 1" or fs_short(w.fs)))
 	end
-	-- 周圍最低
-	local nb = r.nearby
-	if nb then
-		local best, what, at = math.huge, nil, nil
-		if nb.joint and nb.joint.fs < best then best, what, at = nb.joint.fs, "節理 " .. nb.joint.set.name, nb.joint end
-		if nb.axial and nb.axial.fs < best then best, what, at = nb.axial.fs, "軸差", nb.axial end
-		if what then
-			lines[#lines + 1] = ("周圍最低 FS %s　%s @(%d,%d,%d)"):format(fs_short(best), what, at.x, at.y, at.z)
-		end
-	end
 	return lines
 end
+rockmech.hud_lines = fmt_report_lines   -- 測試用
 
 ---------------------------------------------------------------------------
 -- HUD
@@ -263,25 +236,23 @@ core.register_globalstep(function(dtime)
 	local dt = hud_timer
 	hud_timer = 0
 	for _, player in ipairs(core.get_connected_players()) do
-		if hud_enabled(player) then
+		-- 只有手上拿著地質羅盤、指著岩石才顯示
+		local pos = hud_enabled(player) and player:get_wielded_item():get_name() == "rockmech:compass"
+			and pointed_node_pos(player, 8)
+		if pos and rockmech.lith_of_node[core.get_node(pos).name] then
 			local name = player:get_player_name()
 			local h = huds[name]
-			local pos = pointed_node_pos(player, 8)
-			local target = pos
-			if not (pos and rockmech.lith_of_node[core.get_node(pos).name]) then
-				target = vector.round(player:get_pos())
-			end
-			local key = core.pos_to_string(target)
+			local key = core.pos_to_string(pos)
 			-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
 			if not h or h.key ~= key or h.t > 2 then
-				local lines = fmt_report_lines(rockmech.stress_report(target),
-					target == pos and "[rockmech]" or "[rockmech 腳下]", name)
-				hud_set(player, table.concat(lines, "\n"))
+				hud_set(player, table.concat(fmt_report_lines(rockmech.stress_report(pos), name), "\n"))
 				huds[name].key = key
 				huds[name].t = 0
 			else
 				h.t = h.t + dt
 			end
+		else
+			hud_remove(player)
 		end
 	end
 end)
