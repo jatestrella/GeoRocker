@@ -6,12 +6,14 @@
 --   岩栓經過的岩石被挖掉時，露出的岩面上看得到岩栓的斷面（小黑點），看得出岩栓打多深。
 --   噴凝土：對岩面按右鍵，噴這一面 3×3 格（用掉一袋）；噴到的空氣格變成一層薄噴凝土，這格周圍的岩面都算噴到。
 --     可以挖掉（不退還）；鑿岩機對著噴凝土鑽就是鑽後面的岩面（那格噴凝土會被孔取代）。
+--   噴凝土岩栓：同一格同時是岩栓與噴凝土。對岩栓噴凝土、或把岩栓裝進噴過的孔（孔的 meta sprayed）就是這個方塊。
 --   支護後面的岩石沒了（挖掉、爆破、坍塌）就跟著消失；爆炸會直接炸掉。
 
 local scfg = rockmech.cfg.support
 local HOLE = "rockmech:drill_hole"
 local LINING = "rockmech:shotcrete_lining"
 local BOLT = "rockmech:rock_bolt_set"       -- 裝好的岩栓（方塊）
+local BOLT_SC = "rockmech:rock_bolt_sprayed"  -- 噴了凝土的岩栓
 local BOLT_ITEM = "rockmech:rock_bolt"
 local SHOTCRETE = "rockmech:shotcrete"
 local function is_rock(name)
@@ -35,6 +37,7 @@ local function along(pos, param2, s)
 	return vector.add(pos, vector.multiply(core.wallmounted_to_dir(param2), s))
 end
 local function is_rock_at(p) return is_rock(core.get_node(p).name) end
+local function is_bolt(name) return name == BOLT or name == BOLT_SC end
 -- 岩栓經過、已經挖空的格子：前後（沿岩栓）在岩栓範圍內還是岩石的那一面畫斷面；拆掉岩栓時一起清掉
 local function rods_update(pos, node)
 	local n = math.ceil(bolt_len(pos) - 1e-6)
@@ -79,7 +82,7 @@ local function section_owned(pos, node)
 		for s = 1, 20 do
 			local b = along(pos, p2, -s)
 			local bn = core.get_node(b)
-			if bn.name == BOLT and (bn.param2 == node.param2 or bn.param2 == opposite(node.param2))
+			if is_bolt(bn.name) and (bn.param2 == node.param2 or bn.param2 == opposite(node.param2))
 					and vector.equals(along(b, bn.param2, s), pos) and bolt_len(b) > s - 1e-6 then
 				return true
 			end
@@ -128,32 +131,39 @@ end
 -- 裝好的岩栓：孔口的方形墊板與螺帽（貼壁，param2 指向岩面）
 do
 	local steel, plate = "[fill:16x16:#8a8a86^[fill:4x4:6,6:#6a6a66", "[fill:16x16:#7a7a76"
-	core.register_node(BOLT, {
-		description = "岩栓 Rock bolt (installed)",
-		drawtype = "nodebox", paramtype = "light", paramtype2 = "wallmounted", sunlight_propagates = true,
-		node_box = {type = "fixed", fixed = {
-			{-0.22, -0.5, -0.22, 0.22, -0.45, 0.22},      -- 墊板
-			{-0.07, -0.45, -0.07, 0.07, -0.36, 0.07},     -- 螺帽
-		}},
-		selection_box = {type = "fixed", fixed = {{-0.25, -0.5, -0.25, 0.25, -0.34, 0.25}}},
-		tiles = {steel, plate, plate, plate, plate, plate},
-		walkable = false, is_ground_content = false,
-		drop = "", groups = {dig_immediate = 2, not_in_creative_inventory = 1},
-		-- 拆掉：變回鑽孔（孔深不變），岩栓還給玩家
-		on_dig = function(pos, node, digger)
-			rods_remove(pos, node.param2, bolt_len(pos))
-			core.swap_node(pos, {name = HOLE, param2 = node.param2})
-			local meta = core.get_meta(pos)
-			local len = meta:get_float("depth")
-			meta:set_string("infotext", ("鑽孔（深 %g m）"):format(len > 0 and len or rockmech.cfg.blast.hole_depth))
-			if digger and digger:is_player() and not creative(digger) then
-				local left = digger:get_inventory():add_item("main", ItemStack(BOLT_ITEM))
-				if not left:is_empty() then core.add_item(pos, left) end
-			end
-			resolve(pos)
-			return true
-		end,
-	})
+	local PLATE = {-0.22, -0.5, -0.22, 0.22, -0.45, 0.22}
+	local NUT = {-0.07, -0.45, -0.07, 0.07, -0.36, 0.07}
+	local sprayed = "[fill:16x16:#a4a29c^[fill:2x2:3,4:#8e8c86^[fill:2x2:10,2:#b4b2ac^[fill:7x7:4,4:#7a7a76^[fill:3x3:6,6:#6a6a66"
+	for _, v in ipairs({
+		{BOLT, "岩栓 Rock bolt (installed)", {PLATE, NUT}, {steel, plate, plate, plate, plate, plate}},
+		{BOLT_SC, "噴凝土岩栓 Rock bolt with shotcrete", {{-0.5, -0.5, -0.5, 0.5, -0.44, 0.5}, {-0.22, -0.44, -0.22, 0.22, -0.4, 0.22},
+			{-0.07, -0.4, -0.07, 0.07, -0.32, 0.07}}, {sprayed}},
+	}) do
+		core.register_node(v[1], {
+			description = v[2],
+			drawtype = "nodebox", paramtype = "light", paramtype2 = "wallmounted", sunlight_propagates = true,
+			node_box = {type = "fixed", fixed = v[3]},
+			selection_box = {type = "fixed", fixed = {{-0.25, -0.5, -0.25, 0.25, -0.3, 0.25}}},
+			tiles = v[4],
+			walkable = false, is_ground_content = false,
+			drop = "", groups = {dig_immediate = 2, not_in_creative_inventory = 1},
+			-- 拆掉：變回鑽孔（孔深不變；噴過的孔記著，再裝一樣是噴凝土岩栓），岩栓還給玩家
+			on_dig = function(pos, node, digger)
+				rods_remove(pos, node.param2, bolt_len(pos))
+				core.swap_node(pos, {name = HOLE, param2 = node.param2})
+				local meta = core.get_meta(pos)
+				if node.name == BOLT_SC then meta:set_int("sprayed", 1) end
+				local len = meta:get_float("depth")
+				meta:set_string("infotext", ("鑽孔（深 %g m）"):format(len > 0 and len or rockmech.cfg.blast.hole_depth))
+				if digger and digger:is_player() and not creative(digger) then
+					local left = digger:get_inventory():add_item("main", ItemStack(BOLT_ITEM))
+					if not left:is_empty() then core.add_item(pos, left) end
+				end
+				resolve(pos)
+				return true
+			end,
+		})
+	end
 end
 
 -- 岩栓斷面（岩面上的小黑點）：貼壁方塊，點畫在貼著的那一面；SEC2 對面也有一點
@@ -185,8 +195,8 @@ core.register_craftitem(BOLT_ITEM, {
 			tell(placer, "岩栓要裝進鑽孔（先用鑿岩機鑽孔，再對孔按右鍵）")
 			return itemstack
 		end
-		core.swap_node(p, {name = BOLT, param2 = node.param2})
 		local meta = core.get_meta(p)
+		core.swap_node(p, {name = meta:get_int("sprayed") == 1 and BOLT_SC or BOLT, param2 = node.param2})
 		local len = meta:get_float("depth")
 		if len <= 0 then len = rockmech.cfg.blast.hole_depth end
 		meta:set_string("infotext", ("岩栓（長 %g m、錨定力 %d kN）"):format(len, capacity(len)))
@@ -224,9 +234,20 @@ core.register_craftitem(SHOTCRETE, {
 			local off = n.x ~= 0 and {x = 0, y = u, z = v} or n.y ~= 0 and {x = u, y = 0, z = v} or {x = u, y = v, z = 0}
 			local r = vector.add(rock, off)
 			local a = vector.add(r, n)
-			if is_rock(core.get_node(r).name) and core.get_node(a).name == "air" then
-				core.set_node(a, {name = LINING})
-				count = count + 1
+			local an = core.get_node(a)
+			-- 這一面的岩栓換成噴凝土岩栓；孔記著噴過了，之後裝的岩栓也是
+			local faces_r = an.param2 and vector.equals(core.wallmounted_to_dir(an.param2), vector.multiply(n, -1))
+			if is_rock(core.get_node(r).name) then
+				if an.name == "air" then
+					core.set_node(a, {name = LINING})
+					count = count + 1
+				elseif an.name == BOLT and faces_r then
+					core.swap_node(a, {name = BOLT_SC, param2 = an.param2})
+					count = count + 1
+				elseif an.name == HOLE and faces_r and core.get_meta(a):get_int("sprayed") == 0 then
+					core.get_meta(a):set_int("sprayed", 1)
+					count = count + 1
+				end
 			end
 		end end
 		if count == 0 then
@@ -243,9 +264,9 @@ core.register_craftitem(SHOTCRETE, {
 -- 岩栓經過的格子被挖空 → 岩面上畫岩栓斷面；找不到自己的岩栓的斷面消失
 core.register_abm({
 	label = "rockmech: 支護跟著岩面消失",
-	nodenames = {LINING, BOLT, SEC1, SEC2}, interval = 2, chance = 1,
+	nodenames = {LINING, BOLT, BOLT_SC, SEC1, SEC2}, interval = 2, chance = 1,
 	action = function(pos, node)
-		if node.name == BOLT then
+		if is_bolt(node.name) then
 			if not is_rock(core.get_node(along(pos, node.param2, 1)).name) then
 				rods_remove(pos, node.param2, bolt_len(pos))
 				core.remove_node(pos)
@@ -269,7 +290,7 @@ core.register_abm({
 -- 判定用的方塊 id（collapse.read_grid 讀網格時找支護）
 core.register_on_mods_loaded(function()
 	rockmech.support_ids = {
-		lining = {[core.get_content_id(LINING)] = true},
-		bolt = {[core.get_content_id(BOLT)] = true},
+		lining = {[core.get_content_id(LINING)] = true, [core.get_content_id(BOLT_SC)] = true},
+		bolt = {[core.get_content_id(BOLT)] = true, [core.get_content_id(BOLT_SC)] = true},
 	}
 end)

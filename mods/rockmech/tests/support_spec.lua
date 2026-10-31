@@ -50,6 +50,19 @@ describe("support 支護壓力", function()
 		assert.are.equal(1, #sup.bolts)
 	end)
 
+	it("噴凝土岩栓：同一格同時是兩種，孔口那一面 = p_sc + T/9", function()
+		local SPRAYED = 4
+		local ids = {lining = {[LINING] = true, [SPRAYED] = true}, bolt = {[BOLT] = true, [SPRAYED] = true}}
+		local g = grid(function(x, y, z)
+			if y >= 1 then return ROCK end
+			return (x == 0 and y == 0 and z == 0) and SPRAYED or AIR
+		end, function() return 0 end)
+		local sup = support.scan(g, ids, {p_sc = 0.01, grip = 200, yield = 360, L = 4, N = 1})
+		assert.near(0.01 + 0.04, support.at(sup, gi(g, 0, 1, 0), 4), 1e-12)
+		assert.near(0.04, support.at(sup, gi(g, 1, 1, 0), 4), 1e-12)     -- 旁邊只有岩栓分到的
+		assert.are.equal(1, #sup.bolts)
+	end)
+
 	it("沒有支護方塊 → nil", function()
 		local g = grid(function(_, y) return y >= 1 and ROCK or AIR end)
 		assert.is_nil(support.scan(g, IDS, {p_sc = 0.2, grip = 50, L = 2}))

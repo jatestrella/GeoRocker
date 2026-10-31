@@ -282,7 +282,9 @@ end
 -- 鑽好一個孔
 function rockmech.make_hole(under, above)
 	if cannot_drill(under, above) then return false end
+	local sprayed = core.get_node(above).name == "rockmech:shotcrete_lining"
 	core.set_node(above, {name = HOLE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
+	if sprayed then core.get_meta(above):set_int("sprayed", 1) end   -- 之後裝的岩栓是噴凝土岩栓
 	return true
 end
 
