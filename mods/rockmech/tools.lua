@@ -115,7 +115,7 @@ local compass_img = "[fill:16x16:#00000000" ..
 	"^[fill:2x5:7,3:#d02020^[fill:2x4:7,8:#303030"
 
 core.register_tool("rockmech:compass", {
-	description = "Geological compass (地質羅盤)\n右鍵岩面：岩性、深度、初始應力、六面節理",
+	description = "Geological compass (地質羅盤)\n右鍵岩面：應力與安全係數\n蹲下＋右鍵：完整資料（岩性、初始應力、六面節理）",
 	inventory_image = compass_img,
 	stack_max = 1,
 	on_place = function(itemstack, placer, pointed_thing)
@@ -123,9 +123,14 @@ core.register_tool("rockmech:compass", {
 		if pointed_thing.type ~= "node" then return end
 		local pos = pointed_thing.under
 		local node = core.get_node(pos)
-		core.chat_send_player(placer:get_player_name(), compass_report(pos, node.name))
-		if rockmech.lith_of_node[node.name] and rockmech.fem_request then
-			rockmech.fem_request(pos, placer:get_player_name())
+		local name = placer:get_player_name()
+		-- 平常只回應力與 FS；蹲下才看完整資料（應力解關閉時也一樣）
+		if placer:get_player_control().sneak or not rockmech.cfg.fem.enabled then
+			core.chat_send_player(name, compass_report(pos, node.name))
+		elseif rockmech.lith_of_node[node.name] then
+			rockmech.fem_request(pos, name)
+		else
+			core.chat_send_player(name, core.colorize("#80d0ff", "[羅盤] ") .. "這裡不是岩石")
 		end
 		return nil
 	end,

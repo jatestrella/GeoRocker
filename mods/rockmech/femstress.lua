@@ -1,7 +1,7 @@
 -- rockmech/femstress.lua
 -- 開挖周圍彈性應力場的原型（fem.lua）：只顯示，不影響任何崩落判定。
--- 地質羅盤點一格 → 以該格為中心讀 ±radius 的地圖，丟到背景執行緒解應力，解完回報：
---   這一格的 σ1、σ3、莫爾庫倫型的 FS（強度用現有的 Hoek-Brown 岩體強度，加張力截斷），以及範圍內臨空格最小的 FS。
+-- 地質羅盤點一格 → 以該格為中心讀 ±radius 的地圖，丟到背景執行緒解應力，解完用一兩行回報：
+--   這一格的 σ1、σ3、FS（強度用現有的 Hoek-Brown 岩體強度，加張力截斷），以及範圍內臨空格最小的 FS。
 -- 應力取周圍 1 格內岩石格的平均（消掉方塊角點的應力奇異）。
 -- 目前不含節理與支護：岩體是均質彈性體。
 -- 參數在設定 rockmech_fem_*。
@@ -96,11 +96,11 @@ local function report(pos, job, res, meta)
 	local lines = {}
 	local x0, y0, z0 = pos.x - a.x, pos.y - a.y, pos.z - a.z
 	local fs, s1, s3, mode = cell_fs(job, res, meta, x0, y0, z0)
-	lines[#lines + 1] = core.colorize("#80d0ff", "[應力解] ") ..
-		("%s 半徑 %d：%d 輪、殘差 %.1e、%.0f ms（只顯示、不影響崩落；不含節理與支護）"):format(
-			core.pos_to_string(pos), meta.r, res.iters, res.res, res.ms)
+	core.log("action", ("[rockmech] 應力解 %s 半徑 %d：%d 輪、殘差 %.1e、%.0f ms"):format(
+		core.pos_to_string(pos), meta.r, res.iters, res.res, res.ms))
 	if fs then
-		lines[#lines + 1] = ("  這一格 σ1 %.3f、σ3 %.3f MPa → FS %s（%s）"):format(s1, s3, fs_text(fs), mode)
+		lines[#lines + 1] = core.colorize("#80d0ff", "[羅盤] ") ..
+			("σ1 %.2f　σ3 %.2f MPa　FS %s（%s）"):format(s1, s3, fs_text(fs), mode)
 	end
 	local best, bp, bs1, bs3, bm
 	local cnt, fails = 0, 0
@@ -120,9 +120,9 @@ local function report(pos, job, res, meta)
 			end
 		end
 	end end end
-	if best then
-		lines[#lines + 1] = ("  範圍內臨空格 %d 格，FS < 1 的 %d 格；最小 FS %s（%s）@ %s：σ1 %.3f、σ3 %.3f MPa"):format(
-			cnt, fails, fs_text(best), bm, core.pos_to_string(bp), bs1, bs3)
+	-- 周圍有明顯比這一格更危險的才顯示
+	if best and (not fs or best < 0.95 * fs) then
+		lines[#lines + 1] = ("周圍最低 FS %s（%s）@ %s"):format(fs_text(best), bm, core.pos_to_string(bp))
 	end
 	return table.concat(lines, "\n"), {fs = fs, s1 = s1, s3 = s3, mode = mode, min = best, min_pos = bp, fails = fails, count = cnt}
 end
@@ -145,9 +145,7 @@ end
 
 -- 羅盤點一格：解完送訊息給玩家
 function rockmech.fem_request(pos, name)
-	if not fcfg.enabled then return end
-	rockmech.fem_run(pos, function(job, res, meta, ms)
-		local text = report(pos, job, res, meta)
-		core.chat_send_player(name, text .. ("\n  從送出到算完 %.0f ms"):format(ms))
+	rockmech.fem_run(pos, function(job, res, meta)
+		core.chat_send_player(name, (report(pos, job, res, meta)))
 	end)
 end
