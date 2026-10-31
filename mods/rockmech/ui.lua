@@ -1,7 +1,7 @@
 -- rockmech/ui.lua
 -- 介面（引擎端）：
 --   /rockmech        完整資訊頁（總覽、岩性、節理、應力、開關）
---   現地應力 HUD     手上拿著地質羅盤、指著岩石時，畫面左側顯示岩性、應力與最低的 FS；/rockmech_hud 開關
+--   現地應力 HUD     指著岩石時，畫面左側顯示岩性、應力與最低的 FS；/rockmech_hud 開關
 
 local cfg = rockmech.cfg
 local joints = rockmech.joints
@@ -236,9 +236,8 @@ core.register_globalstep(function(dtime)
 	local dt = hud_timer
 	hud_timer = 0
 	for _, player in ipairs(core.get_connected_players()) do
-		-- 只有手上拿著地質羅盤、指著岩石才顯示
-		local pos = hud_enabled(player) and player:get_wielded_item():get_name() == "rockmech:compass"
-			and pointed_node_pos(player, 8)
+		-- 指著岩石才顯示
+		local pos = hud_enabled(player) and pointed_node_pos(player, 8)
 		if pos and rockmech.lith_of_node[core.get_node(pos).name] then
 			local name = player:get_player_name()
 			local h = huds[name]
