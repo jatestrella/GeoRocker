@@ -309,7 +309,7 @@ rockmech_support_shotcrete_p (Shotcrete support pressure) float 0.01 0 10
 rockmech_support_bolt_grip (Rock bolt grip) float 200 0 1000
 
 # Steel yield capacity of a rock bolt (kN).
-rockmech_support_bolt_yield (Rock bolt steel yield) float 200 0 10000
+rockmech_support_bolt_yield (Rock bolt steel yield) float 360 0 10000
 
 [Blasting]
 

@@ -174,7 +174,7 @@ config.support_defaults = {
 	-- 岩栓錨定力 T = min(握裹力 × 有效長度, 鋼材降伏)，長度 = 孔深；平均分給周圍 3×3 m² 的岩面（間距 s ≈ T/s²）。
 	-- 關鍵塊體只算打進岩塊外那一段的長度
 	bolt_grip = 200,          -- 握裹力 g (kN/m)：全長灌漿岩栓，約 1 m 就達到鋼材降伏
-	bolt_yield = 200,         -- 鋼材降伏 T_y (kN)
+	bolt_yield = 360,         -- 鋼材降伏 T_y (kN)：約 32 mm 鋼棒（450 MPa）
 }
 
 -- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
