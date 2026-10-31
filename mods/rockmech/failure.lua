@@ -11,7 +11,7 @@
 --      這是開口原本要承擔、必須轉給周圍實心格的重量。
 -- 3. 荷重擴散（水平窗格 (2w+1)²，同一高程）：
 --      σy = Σ窗格(實心格取 L + D) / 窗格內實心格數
---      D = 轉來的頂板荷重（failure.compute_deposits）：每個底下是空的懸空格，其柱狀荷重 L 沿直剪的
+--      D = 轉來的頂板荷重（failure.compute_deposits）：每個底下是空的懸空格，其柱狀荷重 L 沿懸空格的
 --      最短路徑轉給它的支撐處，再沿支撐處那一欄往下傳到地面（從屬面積，總荷重守恆）。
 --      params.deposits == false 時用舊規則：空氣格取 R（只算窗格內的開口）。
 --    → 平地：σy = γh；坡趾：分攤後方高柱 → 集中；礦柱：分攤頂板 → 集中。
@@ -23,11 +23,7 @@
 --      params.rock（rockmass.new 的查詢器）：Hoek-Brown 岩體強度 q ≥ q_f(σ3) = σci·(mb·σ3/σci + s)^a
 --      （GSI 取該格 param2，或依岩性的深度剖面；強度已除以相似比 N）
 --      沒有 params.rock：q = σ1 − σ3 ≥ UCS × strength_scale
--- 5c. 懸空格的直剪（failure.shear_state）：底下懸空的岩格在同一高程沿懸空岩格找最短路徑到有支撐的岩格
---      （支撐處：往下一路實心到地面／碎石堆，坐在懸空岩石上的不算）。剪力 Q = 本格與路徑上懸空格的柱狀荷重 L 之和（每格 1 m² 柱，kN）；
---      支撐處斷面 = 支撐格往上到第一個有節理的格為止（支撐格本身一定算），
---      抗剪 R = Σ τ0·1 m²，τ0 = k·σt（Griffith：k = 2；σt 為該格岩體張力強度）。
---      FS = R / Q（最短路徑；步數相同時取 Q 較小者）。
+-- 5c. 懸空頂板會不會掉由 overhang.lua 判定（同一段頂板的彎曲與剪力）；這裡只算頂板荷重轉給支撐處（第 3 點）。
 -- 6. 弱面（Jaeger single plane of weakness）：穿過此格的每組節理面（法向 n）
 --      σn = n·σ·n、τ = |σ·n − σn·n|，τ ≥ cj + σn·tan φj → 沿節理滑動。
 --    運動學（daylight）：只有上方臨空不算。下方臨空（頂板／懸垂）：沒有側向限制時任何節理都可釋放；
@@ -46,7 +42,7 @@
 --    sets 中穿過此格的組。params.detail = true 時不做前置篩選（顯示用）。
 --    params.axial == false 時不做軸差判定（只做弱面）。
 -- 7. 支護（grid.support，見 support.lua）：臨空面的法向應力 = 支護壓力 pᵢ（側面 σx／σz 和碎石側壓相加；
---    頂板 σy = pᵢ），等效圍壓讓 Hoek-Brown 的 σ3 與節理面的 σn 提高；懸空直剪的每欄荷重扣掉底面的 pᵢ。
+--    頂板 σy = pᵢ），等效圍壓讓 Hoek-Brown 的 σ3 與節理面的 σn 提高。
 --
 -- ## 網格格式（與 VoxelManip / VoxelArea 相同的扁平陣列）
 -- grid = {
@@ -665,15 +661,11 @@ function failure.min_fs_in_box(g, p, box)
 	return out
 end
 
--- 懸空格的直剪（見檔頭 5c）。p 需有 lithologies、rock（可選）、surface_y、
--- cell_jointed(x, y, z)（該格是否被任一組節理切過）、shear = {k, max_span, max_section}、tensile_other。
+-- 懸空格到支撐處的路徑（給 compute_deposits 轉移頂板荷重）。p 需有 shear = {max_span}。
 -- 路徑：同一高程上只經過懸空的鍵結格（可以轉彎），到最近的支撐處（最短路徑，步數相同時取 Q 較小者）。
--- 每一層高程算一次（從所有支撐處同時往外擴散），快取在網格上；支撐處的斷面強度用到時才算。
--- 回傳 nil（不是底下懸空的岩格）或
---   {fs, Q (kN), R (kN), n（到支撐處的步數）, hs（斷面格數）, ax, az（支撐格）}
--- 範圍內（max_span 步、網格內）找不到支撐處 → 不判定：fs = ∞、isolated = true
--- （例如頂板下倒掛的尖柱：掛在上方岩石上靠張力，交給懸臂／關鍵塊體判定；或支撐處在範圍外）
-local SHEAR_NB = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+-- 每一層高程算一次（從所有支撐處同時往外擴散），快取在網格上。
+-- 範圍內（max_span 步、網格內）找不到支撐處的不轉。
+local HANG_NB = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 
 -- (xx, yy, zz) 往下一路實心到網格底部（地面、碎石堆）→ 有支撐；中途碰到非實心 → 懸空（快取 g.sup）
 local function supported(g, xx, yy, zz)
@@ -695,7 +687,7 @@ local function supported(g, xx, yy, zz)
 end
 
 -- 一層高程的最短路徑：dist（步數）、Q（路徑荷重和）、src（支撐格索引）。範圍：g.req（沒有時整個網格）
-local function shear_level(g, y, p)
+local function hang_level(g, y, p)
 	local bonded = g.bonded_of or g.weight_of
 	local max_span = (p.shear or {}).max_span or 32
 	local nx, gs = g.nx, g.nx * g.ny
@@ -705,19 +697,14 @@ local function shear_level(g, y, p)
 		z1 = math.max(0, g.req.z1 - g.oz); z2 = math.min(g.nz - 1, g.req.z2 - g.oz)
 	end
 	local ly = y - g.oy
-	local lv = {dist = {}, Q = {}, src = {}, sec = {}}
+	local lv = {dist = {}, Q = {}, src = {}}
 	if ly < 0 or ly >= g.ny then return lv end
 	local dist, Q, SRC = lv.dist, lv.Q, lv.src
 	local L, data = g.L, g.data
-	local spt = g.support
-	-- 柱狀荷重；底面有支護（support.lua）時扣掉 pᵢ × 1 m²（往上托）
 	local function load(j)
 		local k = j - 1
 		local c = cindex(g, g.ox + k % nx, y, g.oz + math.floor(k / gs))
-		local v = c and L[c] or 0
-		local ps = spt and spt.face[j * 8 + 4]
-		if ps then v = math.max(0, v - ps * 1000) end
-		return v
+		return c and L[c] or 0
 	end
 	local hang, frontier = {}, {}
 	for lz = z1, z2 do
@@ -741,7 +728,7 @@ local function shear_level(g, y, p)
 			local lx, lz = jk % nx, math.floor(jk / gs)
 			local Qj, srcj = 0, j
 			if k > 0 then Qj, srcj = Q[j], SRC[j] end
-			for _, d in ipairs(SHEAR_NB) do
+			for _, d in ipairs(HANG_NB) do
 				local ax, az = lx + d[1], lz + d[2]
 				if ax >= x1 and ax <= x2 and az >= z1 and az <= z2 then
 					local n = 1 + ax + ly * nx + az * gs
@@ -765,72 +752,6 @@ local function shear_level(g, y, p)
 	return lv
 end
 
--- 支撐格 j（第 y 層）往上的斷面抗剪：支撐格本身一定算，往上到第一個有節理的格為止。回傳 R (kN), hs
-local function shear_section(g, y, j, p)
-	local bonded = g.bonded_of or g.weight_of
-	local sp = p.shear or {}
-	local k_tau = sp.k or 2
-	local max_section = sp.max_section or 64
-	local k = j - 1
-	local ax, az = g.ox + k % g.nx, g.oz + math.floor(k / (g.nx * g.ny))
-	local jc = g.jointed_cache
-	if not jc then jc = {}; g.jointed_cache = jc end
-	local R, hs = 0, 0
-	for yy = y, y + max_section - 1 do
-		local jj = index(g, ax, yy, az)
-		if not jj or not bonded[g.data[jj]] then break end
-		if yy > y then
-			local v = jc[jj]
-			if v == nil then
-				v = p.cell_jointed and p.cell_jointed(ax, yy, az) or false
-				jc[jj] = v
-			end
-			if v then break end
-		end
-		local key = g.lith_of[g.data[jj]]
-		local st
-		if key and p.rock then
-			st = p.rock.at(key, yy, g.p2 and g.p2[jj]).sigt
-		elseif key and p.lithologies[key] then
-			st = (p.lithologies[key].tensile or 0) * (p.strength_scale or 1)
-		else
-			st = p.tensile_other or 2
-		end
-		R = R + k_tau * st * 1000
-		hs = hs + 1
-	end
-	return R, hs, ax, az
-end
-
-function failure.shear_state(g, x, y, z, p)
-	local i = index(g, x, y, z)
-	if not i then return nil end
-	local bonded = g.bonded_of or g.weight_of
-	if not bonded[g.data[i]] or not g.lith_of[g.data[i]] then return nil end
-	if is_solid(g, x, y - 1, z) or not index(g, x, y - 1, z) then return nil end
-	if not g.L then failure.compute_loads(g, p) end
-	-- 快取跟著 g.L（網格改過、荷重重算時一併失效）
-	if g.sup_L ~= g.L then g.sup, g.shear_lv, g.sup_L = {}, {}, g.L end
-	local lv = g.shear_lv[y]
-	if not lv then
-		lv = shear_level(g, y, p)
-		g.shear_lv[y] = lv
-	end
-	local d = lv.dist[i]
-	if not d then
-		local c = cindex(g, x, y, z)
-		return {fs = math.huge, Q = c and g.L[c] or 0, R = 0, n = 0, hs = 0, isolated = true}
-	end
-	local src = lv.src[i]
-	local sec = lv.sec[src]
-	if not sec then
-		sec = {shear_section(g, y, src, p)}
-		lv.sec[src] = sec
-	end
-	local Q = lv.Q[i]
-	return {fs = Q > 0 and sec[1] / Q or math.huge, Q = Q, R = sec[1], n = d, hs = sec[2], ax = sec[3], az = sec[4]}
-end
-
 -- 轉來的頂板荷重 D（kPa，與 g.L 同樣的緊湊陣列）：每個底下是空的懸空格，其柱狀荷重 L 沿直剪的
 -- 最短路徑轉給它的支撐處，再加到支撐處那一欄往下（一路實心）的每一格。只算底下直接是空的格
 -- （它的 L 已含上方整欄，上面幾層不重複算）；找不到支撐處的不轉（交給懸臂／關鍵塊體）。
@@ -839,7 +760,7 @@ function failure.compute_deposits(g, p)
 	local D = {}
 	for c = 1, g.cW * g.cH * g.cD do D[c] = 0 end
 	g.D, g.D_L = D, g.L
-	if g.sup_L ~= g.L then g.sup, g.shear_lv, g.sup_L = {}, {}, g.L end
+	if g.sup_L ~= g.L then g.sup, g.hang_lv, g.sup_L = {}, {}, g.L end
 	local bonded = g.bonded_of or g.weight_of
 	local solid_of, data = g.solid_of, g.data
 	local nx, gs = g.nx, g.nx * g.ny
@@ -854,10 +775,10 @@ function failure.compute_deposits(g, p)
 			if any then break end
 		end
 		if any then
-			local lv = g.shear_lv[y]
+			local lv = g.hang_lv[y]
 			if not lv then
-				lv = shear_level(g, y, p)
-				g.shear_lv[y] = lv
+				lv = hang_level(g, y, p)
+				g.hang_lv[y] = lv
 			end
 			for j, s in pairs(lv.src) do
 				local k = j - 1

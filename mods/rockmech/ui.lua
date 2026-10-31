@@ -43,7 +43,6 @@ function rockmech.stress_report(pos)
 		r.overhang = rockmech.collapse.overhang_state(pos)
 		r.nearby = rockmech.collapse.nearby_min_fs(pos, NEARBY_R)
 		if cfg.keyblock.enabled then r.keyblock = rockmech.collapse.keyblock_state(pos) end
-		if cfg.shear.enabled then r.shear = rockmech.collapse.shear_state(pos) end
 	end
 	return r
 end
@@ -63,14 +62,6 @@ function rockmech.rockmass_line(rm)
 	local n = rockmech.collapse.rock.N
 	return ("GSI %d（mb %.3f  s %.2e  a %.3f）σci %.3g → 臨空單軸 %.3g、σt %.3g MPa%s"):format(
 		rm.gsi, rm.mb, rm.s, rm.a, rm.sigci, rm.ucs_m, rm.sigt, n ~= 1 and ("（已 ÷ N=%g）"):format(n) or "")
-end
-
--- 懸空格直剪的一行說明。sh = collapse.shear_state 的結果
-function rockmech.shear_line(sh)
-	if not sh then return "—（底下不是空的）" end
-	if sh.isolated then return "範圍內找不到支撐處（倒掛的尖柱由懸臂／關鍵塊體判定，或支撐處在範圍外）" end
-	return ("最短路徑 %d 步到支撐處 (%d, %d)：Q = 柱狀荷重和 %.0f kN；斷面 %d 格（到第一個有節理的格）R = Σ%g·σt = %.0f kN → FS %.2f"):format(
-		sh.n, sh.ax, sh.az, sh.Q, sh.hs, cfg.shear.k, sh.R, sh.fs)
 end
 
 -- 弱面滑動的一行說明（HUD、資訊頁、羅盤共用）
@@ -117,6 +108,7 @@ function rockmech.overhang_line(o)
 	if o.bolt_short then
 		sup = sup .. ("；岩栓 %g m 比鬆弛區 h %.1f m 短，沒算"):format(o.bolt_short, o.h or o.t)
 	end
+	if o.fs_shear then sup = ("；剪力 FS %s"):format(fs_str(o.fs_shear)) .. sup end
 	return ("懸臂 %s、t %d m、鬆弛區 k %.2f、淨高 %.1f m、荷重高 h %.1f m%s：σb=3γ·h·HR²/t_eff² %.3f / σt %.3f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
 		o.hr and ("水力半徑 HR %.2f m（懸空 %d m² ／ 有支撐周長 %d m）"):format(o.hr, o.area, o.perim) or ("d %d m"):format(o.d),
 		o.t, o.k or 0, o.ht or 0, o.h or o.t, root, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax * (o.rho or 1), fs_str(o.group_fs), c.x, c.z,
@@ -195,9 +187,6 @@ local function fmt_report_lines(r, header, pname)
 		if o and o.supported then v = "∞"
 		elseif o and o.group_fs then v = fs_short(o.group_fs) end
 		parts[#parts + 1] = "懸臂 " .. v
-	end
-	if r.shear then
-		parts[#parts + 1] = "直剪 " .. (r.shear.isolated and "—" or fs_short(r.shear.fs))
 	end
 	local kb = r.keyblock
 	if cfg.keyblock.enabled then
@@ -440,7 +429,6 @@ local function tab_stress(name)
 			{"軸差 FS", ("%.2f"):format(s.fs_axial)},
 			{"節理弱面", rockmech.slip_line(s)},
 			{"懸臂", rockmech.overhang_line(r.overhang)},
-			{"懸空直剪", rockmech.shear_line(r.shear)},
 			{"周圍臨空格", rockmech.nearby_line(r.nearby)},
 			{"關鍵塊體", rockmech.keyblock_line(r.keyblock)},
 			{"臨空面", (s.exposed_x and "東西 " or "") .. (s.exposed_z and "南北 " or "") ..

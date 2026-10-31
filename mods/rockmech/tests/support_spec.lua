@@ -280,26 +280,35 @@ describe("support 頂板：往上托抵銷自重", function()
 		assert.near(bare.group_fs * 25 / 15, tip.group_fs, 1e-9)
 	end)
 
-	it("懸空直剪：每欄荷重扣掉底面的 pᵢ", function()
-		-- 地下開口 x −4..4、y −22..−20；頂板懸空格 y = −19（L = 19γ），x = 5 是支撐處
-		local n = 41
-		local g = {ox = -20, oy = -30, oz = -2, nx = 41, ny = 30, nz = 5, data = {},
-			solid_of = {[ROCK] = true}, weight_of = {[ROCK] = GAMMA}, lith_of = {[ROCK] = "rock"}}
-		for z = -2, 2 do for y = -30, -1 do for x = -20, 20 do
-			g.data[failure.index(g, x, y, z)] = (x >= -4 and x <= 4 and y >= -22 and y <= -20) and AIR or ROCK
-		end end end
-		local p = {surface_y = 0, k0 = 0.5, window = 4, strength_scale = 1,
-			lithologies = {rock = {gamma = GAMMA, ucs = 30, tensile = 1}},
-			shear = {k = 2, max_span = 32, max_section = 64}, cell_jointed = function(_, y) return y >= -17 end}
-		local s0 = failure.shear_state(g, 0, -19, 0, p)
-		assert.near(5 * 19 * GAMMA, s0.Q, 1e-9)
-		local g2 = {}
-		for k, v in pairs(g) do g2[k] = v end
-		g2.L, g2.sup, g2.shear_lv, g2.sup_L = nil, nil, nil, nil
-		g2.support = {face = {}, sc = {}, bolts = {}, bf = {}}
-		for x = -4, 4 do for z = -2, 2 do g2.support.face[failure.index(g2, x, -19, z) * 8 + 4] = 0.1 end end
-		local s1 = failure.shear_state(g2, 0, -19, 0, p)
-		assert.near(5 * 19 * GAMMA - 5 * 100, s1.Q, 1e-9)
-		assert.is_true(s1.fs > s0.fs)
+	it("同一段頂板也檢查剪力：FS = k·σt·t_eff / (q·HR)，取彎曲與剪力較小者", function()
+		local g = cantilever(1, 7)                  -- 7 m 厚、伸出 1 m、淨高 1 m：t > 6·HR，剪力控制
+		local p = {}
+		for k, v in pairs(OP) do p[k] = v end
+		local bend = overhang.cell_state(g, OP, 1, 8, 0)
+		assert.is_nil(bend.fs_shear)
+		p.shear_k = 2
+		local st = overhang.cell_state(g, p, 1, 8, 0)
+		local h = 0.35 * (2 + 1)
+		assert.near(h, st.h, 1e-9)
+		assert.near(2 * 2000 * 7 / (25 * h * 1), st.fs_shear, 1e-9)
+		assert.near(st.fs_shear, st.fs, 1e-9)
+		assert.is_true(st.fs < bend.fs)
+		-- FS_剪/FS_彎 = 6·HR/t_eff
+		assert.near(6 * 1 / 7, st.fs_shear / bend.fs, 1e-9)
+		-- 支護對兩者同比例：q = γh − pᵢ
+		under(g, 1, 7, 0.01, 0)
+		local gh = 25 * h
+		assert.near(st.fs * gh / (gh - 10), overhang.cell_state(g, p, 1, 8, 0).fs, 1e-9)
+	end)
+
+	it("一般跨度由彎曲控制", function()
+		local g = cantilever(4, 2)
+		local p = {}
+		for k, v in pairs(OP) do p[k] = v end
+		local a = overhang.cell_state(g, OP, 4, 8, 0)
+		p.shear_k = 2
+		local b = overhang.cell_state(g, p, 4, 8, 0)
+		assert.near(a.fs, b.fs, 1e-12)
+		assert.is_true(b.fs_shear > b.fs)
 	end)
 end)

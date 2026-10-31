@@ -369,22 +369,17 @@ rockmech_overhang_terzaghi_k_b (Terzaghi: k at middle GSI) float 0.35 0 10
 rockmech_overhang_terzaghi_gsi_c (Terzaghi: low GSI) float 25 0 100
 rockmech_overhang_terzaghi_k_c (Terzaghi: k at low GSI) float 1.1 0 10
 
-[Direct shear of hanging rock]
+[Shear of hanging roofs]
 
-# Rock with air below hangs on the nearest supported rock along +-x / +-z.
-# Shear force Q = sum of the column loads of the hanging cells on the way;
-# resisting section = the supporting cell and the cells above it up to the first jointed cell,
-# R = sum of tau0 * 1 m2 with tau0 = k * sigma_t (Griffith: k = 2). FS = R / Q.
-rockmech_shear_enabled (Direct shear of hanging rock) bool true
+# A hanging roof segment is also checked in shear along its supported perimeter, with the same load as bending:
+# V = (gamma * h - p) * HR per metre of perimeter, R = k * sigma_t * t_eff. The lower of the two FS governs.
+rockmech_shear_enabled (Shear check of hanging roofs) bool true
 
 # tau0 = k * sigma_t (Griffith k = 2).
 rockmech_shear_k (Shear strength factor k) float 2 0 20
 
-# How far (m) to search for the supporting rock.
-rockmech_shear_max_span (Shear search span) int 32 1 64
-
-# Maximum height (m) of the resisting section.
-rockmech_shear_max_section (Shear section height) int 64 1 256
+# How far (m) roof load searches for the supporting rock when it is passed on to the pillars.
+rockmech_shear_max_span (Roof load transfer span) int 32 1 64
 
 [Fall breakage]
 

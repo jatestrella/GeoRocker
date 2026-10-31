@@ -13,7 +13,6 @@
 --   頂板（底面的 pᵢ 往上托，抵銷懸空岩體的自重）：
 --     懸臂（overhang.lua）：每 m² 荷重 γh → γh − pᵢ（h = Terzaghi 鬆弛區的荷重高度），σb 等比例下降；
 --       pᵢ ≥ γh 被托住。岩栓要穿過鬆弛區（有效長度 L ≥ h）才算（sup.bf 記每支攤到的壓力與長度）。
---     懸空直剪（failure.shear_state）：每欄的柱狀荷重扣掉底面的 pᵢ × 1 m²。
 --
 -- support.scan(g, ids, prm) → sup 或 nil（範圍內沒有支護）
 --   g：failure／keyblock 的網格（data、p2、ox..nz、bonded_of）

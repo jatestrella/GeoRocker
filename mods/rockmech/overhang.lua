@@ -27,6 +27,10 @@
 -- 鬆弛區高度 H_p = k·(B + H_t)：B = 2·HR、H_t = 頂板下方的平均淨高、k 依 GSI 對應 Terzaghi 岩體分級。
 -- 荷重高度 h = min(t, H_p)，抗彎厚度仍是 t → σb = 3γ·h·HR²/t_eff²。
 -- Terzaghi 算的是支撐要扛的荷重、不是破壞準則：要不要支護仍由 σb 對 σt 判定，這裡只取它的荷重高度。
+-- ## 彎曲與剪力（同一段頂板、同一個荷重 q = γh − pᵢ）
+-- 沿有支撐的周長：彎矩 M = q·HR²/2 → σb = 3q·HR²/t_eff²；剪力 V = q·HR（每 m 周長），
+-- 抗剪 R = k·σt·t_eff（Griffith：k = 2）。FS 取兩者較小；k = 2 時 FS_剪/FS_彎 = 6·HR/t_eff，
+-- 只有 t_eff > 6·HR（厚岩層、跨度很小）才由剪力控制。
 -- ## 支護（grid.support，見 support.lua）
 -- 欄底面的支護壓力 pᵢ 往上托：每 m² 荷重 γh → γh − pᵢ，σb 等比例下降（FS × γh/(γh − pᵢ)），
 -- pᵢ ≥ γh 時整段被托住。岩栓要穿過鬆弛區（L ≥ h）才算；噴凝土不看長度。
@@ -316,6 +320,7 @@ local function local_ctx(g, p)
 		local gap, jb = 0, ib - sy
 		while jb >= 1 and not solid_of[data[jb]] do gap = gap + 1; jb = jb - sy end
 		r.gap = gap
+		r.shear_k = p.shear_k
 		-- 底面的支護（support.lua）：噴凝土 kPa 與各支岩栓 {kPa, 長度}，段裡再看岩栓穿不穿過鬆弛區
 		local sup = g.support
 		if sup then
@@ -538,6 +543,10 @@ local function support_factor(r, h, p)
 	if p >= q0 then return math.huge end
 	return q0 / (q0 - p)
 end
+-- 剪力的安全係數（未含疊層倍數與支護）：R/V = k·σt·t_eff / (γh·span)
+local function shear_fs(r, span, rho, h)
+	return r.shear_k * r.crit.tensile * 1000 * (rho or 1) * r.t / (r.crit.gamma * h * span)
+end
 -- s：這一段的統計（seg_stats）：跨度 s.hr（沒有 → 用 d）、鬆弛區、平均支護壓力
 local function run_fs(r, d, rho, load, beam, s)
 	if d == 0 then return math.huge end
@@ -548,6 +557,7 @@ local function run_fs(r, d, rho, load, beam, s)
 	if sf == math.huge then return math.huge end
 	local f = span and (r.lmax * (rho or 1) / span) ^ 2 * (r.t / h) or 0
 	if beam and beam > f then f = beam end
+	if span and r.shear_k then f = math.min(f, shear_fs(r, span, rho, h)) end
 	if load and load > 1 then f = f / load end
 	return f * sf
 end
@@ -705,6 +715,9 @@ function overhang.cell_state(g, p, x, y, z)
 		hr = s0.hr, area = s0.area, perim = s0.perim,   -- 這一段的水力半徑 = 懸空面積／有支撐的周長
 		k = s0.k, ht = s0.ht, h = h0,   -- Terzaghi 係數、淨高、荷重高度 h = min(t, k·(B + H_t))
 		bolt_short = s0.short,          -- 比鬆弛區短、沒算到的岩栓最長幾 m
+		-- 剪力的 FS（含疊層倍數與支護）；fs 已經是彎曲與剪力的較小者
+		fs_shear = span0 and span0 > 0 and h0 > 0 and r0.shear_k
+			and shear_fs(r0, span0, rho0, h0) / math.max(1, load0) * support_factor(r0, h0, s0.pseg) or nil,
 		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0, res.beam and res.beam[r0] and res.beam[r0].fs, s0),
 		n_cells = res.n_cells, edge = res.edge,
 		beam = res.beam and res.beam[r0] or nil,

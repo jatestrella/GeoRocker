@@ -77,9 +77,6 @@ local function compass_report(pos, nodename)
 				fs.q, fs.strength, fs.fs_axial, verdict)
 			lines[#lines + 1] = "  " .. rockmech.slip_line(fs)
 			lines[#lines + 1] = "  " .. rockmech.overhang_line(rockmech.collapse.overhang_state(pos))
-			if cfg.shear.enabled then
-				lines[#lines + 1] = "  懸空直剪：" .. rockmech.shear_line(rockmech.collapse.shear_state(pos))
-			end
 			if cfg.keyblock.enabled then
 				lines[#lines + 1] = "  " .. rockmech.keyblock_line(rockmech.collapse.keyblock_state(pos))
 			end
