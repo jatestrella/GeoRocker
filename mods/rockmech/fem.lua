@@ -315,6 +315,37 @@ function fem.cell_principal(job, res, x, y, z, r)
 	return fem.principal(sum[1] / n, sum[2] / n, sum[3] / n, sum[4] / n, sum[5] / n, sum[6] / n)
 end
 
+-- 格 (x, y, z) 內一點（xi, eta, zeta ∈ 0..1）的總應力（壓為正，kPa）：回傳 sxx, syy, szz, sxy, syz, szx。
+-- 格中心看不到一格厚的梁的彎曲，取臨空面上的點才有
+function fem.point_stress(job, res, x, y, z, xi, eta, zeta)
+	local nx, ny = job.nx, job.ny
+	local sy, sz = nx + 1, (nx + 1) * (ny + 1)
+	local nu = job.nu or 0.25
+	local lam = E * nu / ((1 + nu) * (1 - 2 * nu))
+	local mu = E / (2 * (1 + nu))
+	local u = res.u
+	local exx, eyy, ezz, gxy, gyz, gzx = 0, 0, 0, 0, 0, 0
+	for a = 0, 7 do
+		local i, j, k = a % 2, math.floor(a / 2) % 2, math.floor(a / 4)
+		local fx, dx = i == 1 and xi or 1 - xi, i == 1 and 1 or -1
+		local fy, dy = j == 1 and eta or 1 - eta, j == 1 and 1 or -1
+		local fz, dz = k == 1 and zeta or 1 - zeta, k == 1 and 1 or -1
+		local gx, gy, gz = dx * fy * fz, fx * dy * fz, fx * fy * dz
+		local n3 = ((x + i) + (y + j) * sy + (z + k) * sz) * 3
+		local ux, uy, uz = u[n3 + 1], u[n3 + 2], u[n3 + 3]
+		exx = exx + gx * ux
+		eyy = eyy + gy * uy
+		ezz = ezz + gz * uz
+		gxy = gxy + gy * ux + gx * uy
+		gyz = gyz + gz * uy + gy * uz
+		gzx = gzx + gx * uz + gz * ux
+	end
+	local c = 1 + x + y * nx + z * nx * ny
+	local tr = lam * (exx + eyy + ezz)
+	return job.sxx[c] - (tr + 2 * mu * exx), job.syy[c] - (tr + 2 * mu * eyy), job.szz[c] - (tr + 2 * mu * ezz),
+		-mu * gxy, -mu * gyz, job.sxz[c] - mu * gzx
+end
+
 -- 背景執行緒（core.register_async_dofile）裡用 core.rockmech_fem 取得
 if core then core.rockmech_fem = fem end
 

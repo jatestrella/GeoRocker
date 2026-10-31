@@ -165,15 +165,17 @@ local function fmt_report_lines(r, pname)
 	lines[#lines + 1] = ("%s%s　上覆 %d m"):format(r.lith.description:gsub("\n.*", ""),
 		s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", i.h)
 	if not s then return lines end
-	lines[#lines + 1] = ("σ1 %.2f　σ3 %.2f MPa"):format(s.s1, s.s3)
+	-- 應力解決定崩落時，應力與 FS 看應力解（這一格還沒解過就先用現有估算）
+	local fc = rockmech.fem_cell and rockmech.fem_cell(r.pos)
+	lines[#lines + 1] = ("σ1 %.2f　σ3 %.2f MPa"):format(fc and fc.s1 or s.s1, fc and fc.s3 or s.s3)
 	-- 最低的 FS
-	local best, what = s.fs_axial, "軸差"
+	local best, what = fc and fc.fs or s.fs_axial, fc and "應力解" or "軸差"
 	local function take(f, name) if f and f < best then best, what = f, name end end
 	if cfg.weakness.enabled and s.slip_set then
 		take(s.fs_joint, "節理 " .. s.slip_set.name .. (s.slip_set2 and ("∩" .. s.slip_set2.name) or ""))
 	end
 	local o = r.overhang
-	if cfg.overhang.enabled and o and not o.supported then take(o.group_fs, "懸臂") end
+	if cfg.overhang.enabled and not cfg.fem.drive and o and not o.supported then take(o.group_fs, "懸臂") end
 	local kb = r.keyblock
 	if cfg.keyblock.enabled and kb and kb.mode then take(kb.fs, "塊體") end
 	lines[#lines + 1] = best == math.huge and "FS ∞" or ("FS %s（%s）"):format(fs_short(best), what)

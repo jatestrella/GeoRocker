@@ -275,6 +275,10 @@ rockmech_stability_budget_ms (Stability check time budget) float 5 0.1 1000
 # is used. Display only: it does not change any failure check. Homogeneous rock: no joints or support.
 rockmech_fem_enabled (Stress solver prototype) bool true
 
+# Let the stress solver decide collapses: after an excavation, exposed rock fails cell by cell in tension or shear,
+# replacing the hanging roof and axial checks. Joint slip, key blocks and the connectivity check stay as they are.
+rockmech_fem_drive (Stress solver drives collapses) bool true
+
 # Solved region: +- this many cells around the pointed cell.
 rockmech_fem_radius (Solver radius) int 12 4 32
 

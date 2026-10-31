@@ -158,6 +158,7 @@ config.stability_defaults = {
 -- 開挖周圍彈性應力場的原型（fem.lua、femstress.lua，只顯示）；設定鍵為 rockmech_fem_<key>
 config.fem_defaults = {
 	enabled = true,           -- 地質羅盤點一格時，背景解應力並回報
+	drive = true,             -- 由應力解決定崩落：取代懸空頂板與軸差破壞（節理弱面、關鍵塊體、穩定判定照舊）
 	radius = 12,              -- 解的範圍（以點的格為中心 ±radius 格）
 	nu = 0.25,                -- 帕松比
 	tol = 0.001,              -- 共軛梯度法的相對殘差

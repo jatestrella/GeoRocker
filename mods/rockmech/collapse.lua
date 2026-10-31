@@ -613,7 +613,7 @@ function collapse.failure_params(detail)
         tensile_other = cfg.overhang.tensile_other / model_n,
         detail = detail,
         joint_sets = weak_sets(),
-        axial = fcfg.enabled,
+        axial = fcfg.enabled and not cfg.fem.drive,
         weakness = wcfg.enabled and {c = wcfg.c / model_n, tanphi = math.tan(math.rad(wcfg.phi)),
             daylight = wcfg.daylight, wedge = wcfg.wedge, lat_cos = math.cos(math.rad(wcfg.lateral_limit))} or nil,
         joints_at = joints_at,
@@ -774,6 +774,7 @@ local excavated = {}
 for k in pairs(ex_storage:to_table().fields) do
     if k:sub(1, #EX_PREFIX) == EX_PREFIX then excavated[k:sub(#EX_PREFIX + 1)] = true end
 end
+function collapse.is_excavated(p) return excavated[pos_key(p)] == true end
 function collapse.mark_excavated(p)
     local k = pos_key(vector.round(p))
     if not excavated[k] then
@@ -1083,7 +1084,7 @@ local function run_stability_check()
         local c, st = rockmech.stability.find_detached(grid, g.starts, scfg.max_voxels)
         stats.visited = stats.visited + st.visited
         local og = {}
-        if ocfg.enabled then
+        if ocfg.enabled and not cfg.fem.drive then
             og = rockmech.overhang.find_failing_local(grid, oparams, g.starts)
             -- 被節理切離（FS 0）的群：節理不傳張力，但可能被周圍岩塊卡住、或被現地應力夾住。
             -- 交給塊體分析（含應力夾持）：卡住或 FS ≥ 1 就留在原位
