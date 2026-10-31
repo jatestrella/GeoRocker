@@ -67,6 +67,46 @@ describe("fem 子模型", function()
 		assert.is_true(p[2] == 3)
 	end)
 
+	it("支護 press：頂板受向上的壓力，下緣正應力接近 p，頂板往下的位移變小", function()
+		local function room()
+			return job(21, 21, 21, function(x, y, z) return not (x >= 6 and x <= 14 and z >= 6 and z <= 14 and y >= 6 and y <= 8) end, 40, 1)
+		end
+		local bare = room()
+		local r0 = fem.solve(bare)
+		local j = room()
+		j.press = {}
+		for x = 6, 14 do for z = 6, 14 do
+			local m = #j.press
+			j.press[m + 1], j.press[m + 2], j.press[m + 3] = 1 + x + 9 * 21 + z * 441, 4, 200
+		end end
+		local r1 = fem.solve(j)
+		local _, s0 = fem.point_stress(bare, r0, 10, 9, 10, 0.5, 0, 0.5)
+		local _, s1 = fem.point_stress(j, r1, 10, 9, 10, 0.5, 0, 0.5)
+		assert.near(200, s1 - s0, 30)
+		local n = (10 + 9 * 22 + 10 * 484) * 3 + 2
+		assert.is_true(r1.u[n] > r0.u[n])
+	end)
+
+	it("剪力減積分：Ke 仍對稱，剛體平移沒有力，同一根梁比全積分軟", function()
+		local K = fem.element_stiffness(0.25, 0.1)
+		for a = 0, 7 do
+			for p = 1, 3 do for q = 1, 3 do
+				local sum = 0
+				for b = 0, 7 do
+					assert.near(K[a][b][(p - 1) * 3 + q], K[b][a][(q - 1) * 3 + p], 1e-6)
+					sum = sum + K[a][b][(p - 1) * 3 + q]
+				end
+				assert.near(0, sum, 1e-6)
+			end end
+		end
+		local function beam(blend)
+			local j = job(11, 7, 3, function(x, y) return y == 3 or x == 0 or x == 10 end, 6)
+			j.blend, j.tol = blend, 1e-6
+			return fem.solve(j).u[(5 + 3 * 12 + 1 * 12 * 8) * 3 + 2]
+		end
+		assert.is_true(math.abs(beam(0.1)) > math.abs(beam(nil)))
+	end)
+
 	it("沒接到外緣的岩塊不算勁度：不會發散", function()
 		local j = job(11, 11, 11, function(x, y, z)
 			if x >= 4 and x <= 6 and y >= 4 and y <= 6 and z >= 4 and z <= 6 then return x == 5 and y == 5 and z == 5 end

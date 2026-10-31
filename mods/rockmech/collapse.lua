@@ -475,7 +475,7 @@ end
 
 -- 讀取 [minp, maxp] 成為 failure.lua / stability.lua 的網格格式。
 -- 預設往上多讀 overburden_scan 公尺以累計柱狀荷重；no_overburden 時不多讀。
-function collapse.read_grid(minp, maxp, no_overburden, no_support)
+function collapse.read_grid(minp, maxp, no_overburden)
     build_cid_maps()
     local vm = core.get_voxel_manip()
     local top = {x = maxp.x, y = maxp.y + (no_overburden and 0 or fcfg.overburden_scan), z = maxp.z}
@@ -493,7 +493,7 @@ function collapse.read_grid(minp, maxp, no_overburden, no_support)
         req = {x1 = minp.x, x2 = maxp.x, z1 = minp.z, z2 = maxp.z, y1 = minp.y, y2 = maxp.y},
     }
     -- 支護（噴凝土、岩栓）→ 臨空面的等效圍壓（support.lua）
-    if rockmech.support_ids and not no_support then
+    if rockmech.support_ids then
         local sc = cfg.support
         -- 岩栓長度 = 孔深（裝岩栓的鑽孔 meta depth，沒有就是 hole_depth）
         local hd = cfg.blast.hole_depth

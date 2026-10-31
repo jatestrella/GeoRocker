@@ -17,6 +17,7 @@
 -- {nx, ny, nz（格數）, solid（1 + x + y·nx + z·nx·ny → true/false）, sxx, syy, szz, sxz（σ0，kPa）,
 --  gamma（kN/m³）, nu, tol, max_iter, u0（可選，上次的 Δu，當初始值；外緣節點的值就是給定的位移）}
 -- 邊長 h 的元素：同一個單位立方體方程式，gamma 給 γ·h，解出來的 u 是 Δu / h。
+-- job.press（可選）= {格, 方向 k, p, ...}：支護。格往 k（1..6 = +x −x +y −y +z −z）那一面受壓力 p（kPa），指向岩體。
 -- ## 輸出
 -- {sxx, syy, szz, sxy, syz, szx（總應力，kPa）, u, iters, res（相對殘差）, ms}
 
@@ -25,7 +26,9 @@ local fem = {}
 local E = 1e6        -- kPa；應力與 E 無關，只影響 Δu 的尺度
 
 -- 單位立方體 8 節點元素的 Ke（節點 a = i + 2j + 4k；K[a][b] = {3×3 列展開}）
-local function element_stiffness(nu)
+-- blend（可選）：剪力項減積分。全積分的元素彎曲時有假的剪應變（剪力鎖定），一層元素太少時梁太硬；
+-- 剪力項改取格中心，留 blend 比例的全積分防止沙漏模態。
+local function element_stiffness(nu, blend)
 	local lam = E * nu / ((1 + nu) * (1 - 2 * nu))
 	local mu = E / (2 * (1 + nu))
 	local gp = {0.5 - 0.5 / math.sqrt(3), 0.5 + 0.5 / math.sqrt(3)}
@@ -41,15 +44,27 @@ local function element_stiffness(nu)
 		local fz, dz = k == 1 and z or 1 - z, k == 1 and 1 or -1
 		return {dx * fy * fz, fx * dy * fz, fx * fy * dz}
 	end
+	local g0 = {}
+	for a = 0, 7 do g0[a] = grad(a, 0.5, 0.5, 0.5) end
+	local w = blend or 1
+	-- 剪力項：S[p][q] = μ·g_a[q]·g_b[p]（p ≠ q）；μ·Σ_{r≠p} g_a[r]·g_b[r]（p = q）
+	local function shear(ga, gb, p, q)
+		if p ~= q then return mu * ga[q] * gb[p] end
+		local v = 0
+		for r = 1, 3 do
+			if r ~= p then v = v + ga[r] * gb[r] end
+		end
+		return mu * v
+	end
 	for _, x in ipairs(gp) do for _, y in ipairs(gp) do for _, z in ipairs(gp) do
 		local g = {}
 		for a = 0, 7 do g[a] = grad(a, x, y, z) end
 		for a = 0, 7 do for b = 0, 7 do
-			local dot = g[a][1] * g[b][1] + g[a][2] * g[b][2] + g[a][3] * g[b][3]
 			local t = K[a][b]
 			for p = 1, 3 do for q = 1, 3 do
-				local v = lam * g[a][p] * g[b][q] + mu * g[a][q] * g[b][p]
-				if p == q then v = v + mu * dot end
+				local v = lam * g[a][p] * g[b][q]
+				if p == q then v = v + 2 * mu * g[a][p] * g[b][p] end
+				v = v + w * shear(g[a], g[b], p, q) + (1 - w) * shear(g0[a], g0[b], p, q)
 				t[(p - 1) * 3 + q] = t[(p - 1) * 3 + q] + v / 8
 			end end
 		end end
@@ -133,7 +148,7 @@ function fem.solve(job)
 	local sy, sz = Nx, Nx * Ny
 	local nn = Nx * Ny * Nz
 	local nu = job.nu or 0.25
-	local Ke = element_stiffness(nu)
+	local Ke = element_stiffness(nu, job.blend)
 	local lam = E * nu / ((1 + nu) * (1 - 2 * nu))
 	local mu = E / (2 * (1 + nu))
 
@@ -192,6 +207,26 @@ function fem.solve(job)
 			end
 		end
 	end end end
+
+	-- 支護：面上的壓力平均分給面的 4 個節點，方向指向岩體
+	local press = job.press
+	if press then
+		for i = 1, #press, 3 do
+			local c, k, pr = press[i], press[i + 1], press[i + 2]
+			if solid[c] then
+				local r = c - 1
+				local cx, cy, cz = r % nx, math.floor(r / nx) % ny, math.floor(r / (nx * ny))
+				local axis, side = math.ceil(k / 2), k % 2      -- side 1：往正方向的面
+				for a = 1, 8 do
+					local cr = cs[a]
+					if cr[axis] == side then
+						local n3 = ((cx + cr[1]) + (cy + cr[2]) * sy + (cz + cr[3]) * sz) * 3
+						f[n3 + axis] = f[n3 + axis] + (side == 1 and -pr or pr) / 4
+					end
+				end
+			end
+		end
+	end
 
 	local function matvec(x, y)
 		for i = 1, na do

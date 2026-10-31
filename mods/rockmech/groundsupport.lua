@@ -114,7 +114,15 @@ do
 		tiles = {tex},
 		walkable = false, buildable_to = true, is_ground_content = false,
 		drop = "", groups = {cracky = 3, not_in_creative_inventory = 1},
+		after_dig_node = function(pos)
+			if rockmech.cfg.fem.drive then rockmech.fem_queue(pos, 1) end
+		end,
 	})
+end
+
+-- 支護變了：重新解應力
+local function resolve(pos)
+	if rockmech.cfg.fem.drive then rockmech.fem_queue(pos, 1) end
 end
 
 -- 裝好的岩栓：孔口的方形墊板與螺帽（貼壁，param2 指向岩面）
@@ -142,6 +150,7 @@ do
 				local left = digger:get_inventory():add_item("main", ItemStack(BOLT_ITEM))
 				if not left:is_empty() then core.add_item(pos, left) end
 			end
+			resolve(pos)
 			return true
 		end,
 	})
@@ -182,6 +191,7 @@ core.register_craftitem(BOLT_ITEM, {
 		if len <= 0 then len = rockmech.cfg.blast.hole_depth end
 		meta:set_string("infotext", ("岩栓（長 %g m、錨定力 %d kN）"):format(len, capacity(len)))
 		if not creative(placer) then itemstack:take_item() end
+		resolve(p)
 		return itemstack
 	end,
 })
@@ -224,6 +234,7 @@ core.register_craftitem(SHOTCRETE, {
 		elseif not creative(placer) then
 			itemstack:take_item()
 		end
+		if count > 0 then resolve(rock) end
 		return itemstack
 	end,
 })

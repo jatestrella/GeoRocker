@@ -4,7 +4,7 @@
 --   這一格的 σ1、σ3、FS（強度用現有的 Hoek-Brown 岩體強度，加張力截斷），以及範圍內臨空格最小的 FS。
 -- 有臨空面的格取面上的應力（和崩落判定同一個數），內部的格取周圍 1 格內岩石格的平均。
 -- 範圍外用粗網格（rockmech_fem_coarse）：先解大範圍的粗網格，它的位移當細網格的外緣，開口比範圍大也看得到。
--- 目前不含節理與支護：岩體是均質彈性體。
+-- 支護（岩栓、噴凝土）是面上的力，沿打設方向推進岩體。目前不含節理：岩體是均質彈性體。
 -- 參數在設定 rockmech_fem_*。
 -- drive（rockmech_fem_drive）：由應力解決定崩落。開挖後排一次求解（同時只有一個工作，附近的開挖併在一起），
 -- 解完檢查對著開挖空間的臨空面：取面上的應力（格中心看不到一格厚的梁的彎曲），與同一面相鄰的格平均以消掉角點奇異，
@@ -28,6 +28,29 @@ local function in_situ(job, c, sv)
 	job.sxz[c] = (sH - sh) * sc
 end
 
+-- 支護（support.lua）→ job.press：力沿打設方向作用在面上。to_cell(世界 x, y, z) → 格索引或 nil；
+-- scale = 1 m² 的力換成這個網格一面的壓力（粗網格 1/C²）
+local function set_press(job, g, to_cell, scale)
+	if not g.support then return end
+	local sum = {}
+	for key, p in pairs(g.support.face) do
+		local k = key % 8
+		local i = (key - k) / 8 - 1
+		local x = i % g.nx
+		local r = (i - x) / g.nx
+		local y = r % g.ny
+		local c = to_cell(g.ox + x, g.oy + y, g.oz + (r - y) / g.ny)
+		if c then sum[c * 8 + k] = (sum[c * 8 + k] or 0) + p * 1000 * scale end
+	end
+	local press, m = {}, 0
+	for key, p in pairs(sum) do
+		local k = key % 8
+		press[m + 1], press[m + 2], press[m + 3] = (key - k) / 8, k, p
+		m = m + 3
+	end
+	job.press = press
+end
+
 -- 粗網格（子模型的外圍）：同樣的格數，每格 C³ 公尺，一半以上是岩石就算實心。
 -- 原點對齊 C 的倍數，附近的開挖共用同一個粗網格，上次的解當初始值。
 -- 頂面對齊粗格（現地應力與重力才平衡，沒有開挖時 Δu = 0）。還沒生成的區塊：地表以下算岩石
@@ -37,9 +60,9 @@ local function make_coarse(pos)
 	local half = r * C + (C - 1) / 2
 	local function snap(v) return math.floor((v - half) / C + 0.5) * C end
 	local a = {x = snap(pos.x), y = snap(pos.y), z = snap(pos.z)}
-	local g = rockmech.collapse.read_grid(a, vector.add(a, n * C - 1), false, true)
+	local g = rockmech.collapse.read_grid(a, vector.add(a, n * C - 1))
 	local job = {nx = n, ny = n, nz = n, h = C, a = a, solid = {}, sxx = {}, syy = {}, szz = {}, sxz = {},
-		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter}
+		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, blend = fcfg.coarse_blend}
 	local sy, sz = g.nx, g.nx * g.ny
 	local data, bonded = g.data, g.bonded_of
 	local ignore, surf = core.CONTENT_IGNORE, cfg.surface_y or 0
@@ -77,6 +100,10 @@ local function make_coarse(pos)
 		end
 	end end
 	job.gamma = C * (gam_n > 0 and gam_sum / gam_n or 25)    -- 單位立方體的方程式：γ·h，解出 Δu / h
+	set_press(job, g, function(wx, wy, wz)
+		local x, y, z = math.floor((wx - a.x) / C), math.floor((wy - a.y) / C), math.floor((wz - a.z) / C)
+		if x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n then return 1 + x + y * n + z * n * n end
+	end, 1 / (C * C))
 	return job
 end
 
@@ -117,6 +144,10 @@ local function make_job(pos)
 		end
 	end end
 	if gam_n > 0 then job.gamma = gam_sum / gam_n end
+	set_press(job, g, function(wx, wy, wz)
+		local x, y, z = wx - a.x, wy - a.y, wz - a.z
+		if x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n then return 1 + x + y * n + z * n * n end
+	end, 1)
 	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石不算空）
 	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}}
 	for c = 1, n * n * n do
