@@ -269,6 +269,24 @@ rockmech_stability_rigid_max (Max rigid block size) int 128 1 2000
 # Log a warning when one stability check takes longer than this (ms).
 rockmech_stability_budget_ms (Stability check time budget) float 5 0.1 1000
 
+[Stress solver prototype]
+
+# Elastic stress field around an excavation, solved in a background thread when the geological compass
+# is used. Display only: it does not change any failure check. Homogeneous rock: no joints or support.
+rockmech_fem_enabled (Stress solver prototype) bool true
+
+# Solved region: +- this many cells around the pointed cell.
+rockmech_fem_radius (Solver radius) int 12 4 32
+
+# Poisson's ratio.
+rockmech_fem_nu (Poisson ratio) float 0.25 0 0.45
+
+# Conjugate gradient relative residual.
+rockmech_fem_tol (Solver tolerance) float 0.001 0.000001 0.1
+
+# Maximum conjugate gradient iterations.
+rockmech_fem_max_iter (Solver iteration limit) int 1500 10 20000
+
 [Ground support]
 
 # Shotcrete support pressure on the covered rock faces (MPa), applied as an equivalent

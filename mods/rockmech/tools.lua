@@ -124,6 +124,9 @@ core.register_tool("rockmech:compass", {
 		local pos = pointed_thing.under
 		local node = core.get_node(pos)
 		core.chat_send_player(placer:get_player_name(), compass_report(pos, node.name))
+		if rockmech.lith_of_node[node.name] and rockmech.fem_request then
+			rockmech.fem_request(pos, placer:get_player_name())
+		end
 		return nil
 	end,
 })

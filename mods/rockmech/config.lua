@@ -155,6 +155,15 @@ config.stability_defaults = {
 	budget_ms = 5,            -- 單次判定超過此時間就記 log
 }
 
+-- 開挖周圍彈性應力場的原型（fem.lua、femstress.lua，只顯示）；設定鍵為 rockmech_fem_<key>
+config.fem_defaults = {
+	enabled = true,           -- 地質羅盤點一格時，背景解應力並回報
+	radius = 12,              -- 解的範圍（以點的格為中心 ±radius 格）
+	nu = 0.25,                -- 帕松比
+	tol = 0.001,              -- 共軛梯度法的相對殘差
+	max_iter = 1500,          -- 最多迭代幾輪
+}
+
 -- 支護（support.lua、groundsupport.lua）：換算成臨空面上的等效圍壓 pᵢ；設定鍵為 rockmech_support_<key>
 -- （和岩體強度一樣除以相似比 N）
 config.support_defaults = {
@@ -482,6 +491,11 @@ function config.load(get)
 	cfg.stability.radius = math.max(2, math.floor(cfg.stability.radius))
 	cfg.stability.max_voxels = math.max(1, math.floor(cfg.stability.max_voxels))
 	cfg.stability.rigid_max = math.max(1, math.floor(cfg.stability.rigid_max))
+
+	-- 開挖周圍的彈性應力場（原型）
+	cfg.fem = load_section("fem", config.fem_defaults)
+	cfg.fem.radius = math.max(4, math.min(32, math.floor(cfg.fem.radius)))
+	cfg.fem.nu = math.max(0, math.min(0.45, cfg.fem.nu))
 
 	-- 支護
 	cfg.support = load_section("support", config.support_defaults)

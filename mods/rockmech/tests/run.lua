@@ -24,6 +24,7 @@ local SPECS = {
 	"blast_spec.lua",
 	"rockmass_spec.lua",
 	"support_spec.lua",
+	"fem_spec.lua",
 }
 
 for _, f in ipairs(SPECS) do
