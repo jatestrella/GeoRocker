@@ -282,6 +282,9 @@ rockmech_fem_drive (Stress solver drives collapses) bool true
 # Solved region: +- this many cells around the pointed cell.
 rockmech_fem_radius (Solver radius) int 12 4 32
 
+# Sub-model: element size (m) of the coarse grid solved first; its displacements become the fine grid's boundary. 1 turns it off (boundary fixed).
+rockmech_fem_coarse (Solver coarse element size) int 3 1 8
+
 # Poisson's ratio.
 rockmech_fem_nu (Poisson ratio) float 0.25 0 0.45
 

@@ -160,6 +160,7 @@ config.fem_defaults = {
 	enabled = true,           -- 地質羅盤點一格時，背景解應力並回報
 	drive = true,             -- 由應力解決定崩落：取代懸空頂板與軸差破壞（節理弱面、關鍵塊體、穩定判定照舊）
 	radius = 12,              -- 解的範圍（以點的格為中心 ±radius 格）
+	coarse = 3,               -- 子模型：粗網格元素邊長 (m)，格數與細網格相同（預設涵蓋 ±37 m），解出的位移當細網格的外緣；1 = 不用，外緣 Δu = 0
 	nu = 0.25,                -- 帕松比
 	tol = 0.001,              -- 共軛梯度法的相對殘差
 	max_iter = 1500,          -- 最多迭代幾輪
@@ -498,6 +499,7 @@ function config.load(get)
 	-- 開挖周圍的彈性應力場（原型）
 	cfg.fem = load_section("fem", config.fem_defaults)
 	cfg.fem.radius = math.max(4, math.min(32, math.floor(cfg.fem.radius)))
+	cfg.fem.coarse = math.max(1, math.min(8, math.floor(cfg.fem.coarse)))
 	cfg.fem.nu = math.max(0, math.min(0.45, cfg.fem.nu))
 
 	-- 支護

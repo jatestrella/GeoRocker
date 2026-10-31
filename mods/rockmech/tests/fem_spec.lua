@@ -15,6 +15,96 @@ local function job(nx, ny, nz, solidf, top, K)
 	return j
 end
 
+-- 粗網格：把 solidf 每 h³ 一格，過半是岩石算實心；頂層 ktop
+local function coarsen(nx, ny, nz, h, solidf, ktop, ox, oy, oz)
+	local cx, cy, cz = math.floor(nx / h), math.floor(ny / h), math.floor(nz / h)
+	local c = job(cx, cy, cz, function(x, y, z)
+		local n = 0
+		for dz = 0, h - 1 do for dy = 0, h - 1 do for dx = 0, h - 1 do
+			if solidf(h * x + dx, h * y + dy, h * z + dz) then n = n + 1 end
+		end end end
+		return 2 * n > h * h * h
+	end, ktop)
+	for k = 1, cx * cy * cz do
+		local y = math.floor((k - 1) / cx) % cy
+		local sv = h * GAMMA * (ktop - y + 0.5)
+		c.syy[k], c.sxx[k], c.szz[k] = sv, sv, sv
+	end
+	c.gamma, c.h, c.ox, c.oy, c.oz = h * GAMMA, h, ox, oy, oz
+	return c
+end
+
+describe("fem 子模型", function()
+	it("沒有開挖：粗網格與細網格的 Δu 都是 0", function()
+		local all = function(_, y) return y < 18 end
+		local j = job(9, 9, 9, function() return true end, 8)
+		j.coarse = coarsen(27, 27, 27, 3, all, 5, -9, -9, -9)
+		for k = 1, #j.syy do
+			local y = math.floor((k - 1) / 9) % 9
+			local sv = GAMMA * (17 - (y + 9) + 0.5)
+			j.syy[k], j.sxx[k], j.szz[k] = sv, sv, sv
+		end
+		j.coarse.ox, j.coarse.oy, j.coarse.oz = -9, -9, -9
+		local res = fem.solve_nested(j)
+		local m = 0
+		for k = 1, #res.u do m = math.max(m, math.abs(res.u[k])) end
+		assert.is_true(m < 1e-6)
+	end)
+
+	it("res.hot：頂板拉力最大的地方在開口跨中，細網格範圍外也找得到", function()
+		local function solidf(x, y, z)
+			if y > 17 then return false end
+			return not (x >= 3 and x <= 32 and z >= 3 and z <= 32 and y >= 6 and y <= 8)
+		end
+		local c = coarsen(36, 21, 36, 3, solidf, 5, -3, -6, -3)
+		c.tol = 1e-4
+		local j = job(5, 5, 5, function(x, y, z) return solidf(x + 3, y + 6, z + 3) end, 11)
+		j.coarse = c
+		local res = fem.solve_nested(j)
+		assert.is_true(#res.hot > 0 and #res.hot <= 16)
+		local p = res.hot[1]
+		assert.is_true(p[1] >= 3 and p[1] <= 8 and p[3] >= 3 and p[3] <= 8)
+		assert.is_true(p[2] == 3)
+	end)
+
+	it("沒接到外緣的岩塊不算勁度：不會發散", function()
+		local j = job(11, 11, 11, function(x, y, z)
+			if x >= 4 and x <= 6 and y >= 4 and y <= 6 and z >= 4 and z <= 6 then return x == 5 and y == 5 and z == 5 end
+			return y <= 8
+		end, 8)
+		local res = fem.solve(j)
+		assert.is_true(res.iters < 500)
+		local m = 0
+		for k = 1, #res.u do m = math.max(m, math.abs(res.u[k])) end
+		assert.is_true(m < 1)
+	end)
+
+	it("開口比細網格範圍大：外緣用粗網格的解比 Δu = 0 接近大範圍的解", function()
+		local N, NY, TOP = 33, 27, 23
+		local function solidf(x, y, z)
+			if y > TOP then return false end
+			return not (x >= 6 and x <= 26 and z >= 6 and z <= 26 and y >= 12 and y <= 14)
+		end
+		local big = job(N, NY, N, solidf, TOP)
+		big.tol = 1e-4
+		local rb = fem.solve(big)
+		local bx, by, bz = 12, 10, 12        -- 9 格的 box，水平範圍整個在開口裡
+		local function box()
+			local j = job(9, 9, 9, function(x, y, z) return solidf(x + bx, y + by, z + bz) end, TOP - by)
+			j.tol = 1e-4
+			return j
+		end
+		local function sxx(j, r, x, y, z) return (fem.point_stress(j, r, x, y, z, 0.5, 0, 0.5)) end
+		local truth = sxx(big, rb, 16, 15, 16)
+		local j1 = box()
+		local e1 = math.abs(sxx(j1, fem.solve(j1), 4, 5, 4) - truth)
+		local j2 = box()
+		j2.coarse = coarsen(N, NY, N, 3, solidf, 7, -bx, -by, -bz)
+		local e2 = math.abs(sxx(j2, fem.solve_nested(j2), 4, 5, 4) - truth)
+		assert.is_true(e2 < 0.5 * e1)
+	end)
+end)
+
 describe("fem 彈性應力場", function()
 	it("主應力：對角張量、純剪", function()
 		local a, b, c = fem.principal(3, 1, 2, 0, 0, 0)

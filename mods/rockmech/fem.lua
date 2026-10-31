@@ -6,7 +6,7 @@
 -- 解的是「開挖造成的變化」：現地應力 σ0（每格給定）與重力在完整岩體裡平衡，開挖後臨空面上不平衡，
 --   K·Δu = F_重力 − ∫Bᵀσ0 dV       （節點不平衡力只出現在臨空面）
 --   σ = σ0 + D·B·Δu                 （每格中心）
--- 範圍外緣的節點 Δu = 0（遠場不受開挖影響）。σ 與 E 無關，E 只是數值尺度。
+-- 範圍外緣的節點 Δu = 0（遠場不受開挖影響），或用粗網格的解給定（solve_nested）。σ 與 E 無關，E 只是數值尺度。
 -- 應力以「壓為正」進出本模組（kPa），內部的有限元素計算以「拉為正」。
 --
 -- ## 解法
@@ -15,7 +15,8 @@
 --
 -- ## 輸入 job
 -- {nx, ny, nz（格數）, solid（1 + x + y·nx + z·nx·ny → true/false）, sxx, syy, szz, sxz（σ0，kPa）,
---  gamma（kN/m³）, nu, tol, max_iter, u0（可選，上次的 Δu，當初始值）}
+--  gamma（kN/m³）, nu, tol, max_iter, u0（可選，上次的 Δu，當初始值；外緣節點的值就是給定的位移）}
+-- 邊長 h 的元素：同一個單位立方體方程式，gamma 給 γ·h，解出來的 u 是 Δu / h。
 -- ## 輸出
 -- {sxx, syy, szz, sxy, syz, szx（總應力，kPa）, u, iters, res（相對殘差）, ms}
 
@@ -91,10 +92,43 @@ local function make_stencil(Ke, mask)
 end
 fem.make_stencil = make_stencil
 
+-- 沿面相連、接到範圍外緣的岩石格。沒接到的岩塊沒有束制（K 奇異），不算勁度
+local function anchored(job)
+	local nx, ny, nz = job.nx, job.ny, job.nz
+	local solid = job.solid
+	local sy, sz = nx, nx * ny
+	local out, stack, top = {}, {}, 0
+	local function push(c)
+		if solid[c] and not out[c] then
+			out[c] = true
+			top = top + 1
+			stack[top] = c
+		end
+	end
+	for z = 0, nz - 1 do for y = 0, ny - 1 do for x = 0, nx - 1 do
+		if x == 0 or y == 0 or z == 0 or x == nx - 1 or y == ny - 1 or z == nz - 1 then
+			push(1 + x + y * sy + z * sz)
+		end
+	end end end
+	while top > 0 do
+		local c = stack[top]
+		top = top - 1
+		local k = c - 1
+		local x, y, z = k % nx, math.floor(k / sy) % ny, math.floor(k / sz)
+		if x > 0 then push(c - 1) end
+		if x < nx - 1 then push(c + 1) end
+		if y > 0 then push(c - sy) end
+		if y < ny - 1 then push(c + sy) end
+		if z > 0 then push(c - sz) end
+		if z < nz - 1 then push(c + sz) end
+	end
+	return out
+end
+
 function fem.solve(job)
 	local t_start = os.clock()
 	local nx, ny, nz = job.nx, job.ny, job.nz
-	local solid = job.solid
+	local solid = anchored(job)
 	local Nx, Ny, Nz = nx + 1, ny + 1, nz + 1
 	local sy, sz = Nx, Nx * Ny
 	local nn = Nx * Ny * Nz
@@ -180,7 +214,7 @@ function fem.solve(job)
 
 	-- r = f − K·u（只有自由節點）
 	matvec(u, q)
-	local rz, r0 = 0, 0
+	local rz, r0, ri = 0, 0, 0
 	for i = 1, na do
 		local idx, m = active[i] * 3, masks[i]
 		local st = stencils[m]
@@ -193,9 +227,10 @@ function fem.solve(job)
 			p[j] = zv
 			rz = rz + v * zv
 			r0 = r0 + f[j] * f[j]
+			ri = ri + v * v
 		end
 	end
-	r0 = math.sqrt(r0)
+	r0 = math.sqrt(math.max(r0, ri))     -- 只有外緣給定位移時 f = 0
 	local tol, max_iter = job.tol or 1e-3, job.max_iter or 1500
 	local iters, rel = 0, 0
 	if r0 > 0 then
@@ -271,6 +306,76 @@ function fem.solve(job)
 	end end end
 	out.ms = (os.clock() - t_start) * 1000
 	return out
+end
+
+-- 子模型：先解粗網格（job.coarse，元素邊長 h，原點比細網格的原點多 ox, oy, oz 公尺），
+-- 把它的位移內插到細網格外緣當邊界條件，再解細網格。範圍比開口小時也看得到整個開口。
+-- 粗網格的空節點（周圍 8 格都不是岩石）沒有解，不參與內插。
+-- res.hot：粗網格上拉力最大的頂板格（最多 16 個，{x, y, z, σ1, σ3}，kPa），細網格範圍外的頂板也看得到。
+function fem.solve_nested(job)
+	local cj = job.coarse
+	if not cj then return fem.solve(job) end
+	local cres = fem.solve(cj)
+	local hot = {}
+	local cn, cn2 = cj.nx, cj.nx * cj.ny
+	for z = 4, cj.nz - 5 do for y = 2, cj.ny - 3 do for x = 4, cj.nx - 5 do     -- 外圈 Δu = 0，應力是假的
+		local c = 1 + x + y * cn + z * cn2
+		if cj.solid[c] and not cj.solid[c - cn] then
+			local t = {fem.point_stress(cj, cres, x, y, z, 0.5, 0, 0.5)}
+			local s1, _, s3 = fem.principal(t[1], t[2], t[3], t[4], t[5], t[6])
+			if s3 < 0 then hot[#hot + 1] = {x, y, z, s1, s3} end
+		end
+	end end end
+	table.sort(hot, function(p, q) return p[5] < q[5] end)
+	for i = #hot, 17, -1 do hot[i] = nil end
+	local h = cj.h
+	local Nx, Ny, Nz = job.nx + 1, job.ny + 1, job.nz + 1
+	local cNx, cNy, cNz = cj.nx + 1, cj.ny + 1, cj.nz + 1
+	local csy, csz = cNx, cNx * cNy
+	local csolid, cu = cj.solid, cres.u
+	local function cell(x, y, z)
+		if x < 0 or y < 0 or z < 0 or x >= cj.nx or y >= cj.ny or z >= cj.nz then return false end
+		return csolid[1 + x + y * cj.nx + z * cj.nx * cj.ny]
+	end
+	local function has_rock(i, j, k)
+		for e = 0, 7 do
+			if cell(i - e % 2, j - math.floor(e / 2) % 2, k - math.floor(e / 4)) then return true end
+		end
+		return false
+	end
+	local u = job.u0
+	if not u then
+		u = {}
+		for i = 1, Nx * Ny * Nz * 3 do u[i] = 0 end
+	end
+	local sy, sz = Nx, Nx * Ny
+	for z = 0, Nz - 1 do for y = 0, Ny - 1 do for x = 0, Nx - 1 do
+		if x == 0 or y == 0 or z == 0 or x == Nx - 1 or y == Ny - 1 or z == Nz - 1 then
+			local gx, gy, gz = (x - cj.ox) / h, (y - cj.oy) / h, (z - cj.oz) / h
+			local i0 = math.max(0, math.min(cNx - 2, math.floor(gx)))
+			local j0 = math.max(0, math.min(cNy - 2, math.floor(gy)))
+			local k0 = math.max(0, math.min(cNz - 2, math.floor(gz)))
+			local fx, fy, fz = gx - i0, gy - j0, gz - k0
+			local a, b, c, w = 0, 0, 0, 0
+			for e = 0, 7 do
+				local ei, ej, ek = e % 2, math.floor(e / 2) % 2, math.floor(e / 4)
+				local i, j, k = i0 + ei, j0 + ej, k0 + ek
+				if has_rock(i, j, k) then
+					local wt = (ei == 1 and fx or 1 - fx) * (ej == 1 and fy or 1 - fy) * (ek == 1 and fz or 1 - fz)
+					local n3 = (i + j * csy + k * csz) * 3
+					a, b, c, w = a + wt * cu[n3 + 1], b + wt * cu[n3 + 2], c + wt * cu[n3 + 3], w + wt
+				end
+			end
+			local n3 = (x + y * sy + z * sz) * 3
+			local m = w > 1e-9 and h / w or 0
+			u[n3 + 1], u[n3 + 2], u[n3 + 3] = a * m, b * m, c * m
+		end
+	end end end
+	job.u0 = u
+	local res = fem.solve(job)
+	res.cu, res.citers, res.hot = cu, cres.iters, hot
+	res.ms = res.ms + cres.ms
+	return res
 end
 
 -- 對稱 3×3 應力張量的主應力（壓為正）：回傳 σ1 ≥ σ2 ≥ σ3
