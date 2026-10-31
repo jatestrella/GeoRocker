@@ -109,9 +109,9 @@ function rockmech.overhang_line(o)
 		sup = sup .. ("；岩栓 %g m 比鬆弛區 h %.1f m 短，沒算"):format(o.bolt_short, o.h or o.t)
 	end
 	if o.fs_shear then sup = ("；剪力 FS %s"):format(fs_str(o.fs_shear)) .. sup end
-	return ("懸臂 %s、t %d m、鬆弛區 k %.2f、淨高 %.1f m、荷重高 h %.1f m%s：σb=3γ·h·HR²/t_eff² %.3f / σt %.3f MPa  FS %s（L_max %.1f m）；整段最小 FS %s @ (%d,%d)%s"):format(
-		o.hr and ("水力半徑 HR %.2f m（懸空 %d m² ／ 有支撐周長 %d m）"):format(o.hr, o.area, o.perim) or ("d %d m"):format(o.d),
-		o.t, o.k or 0, o.ht or 0, o.h or o.t, root, o.sigma_b, o.tensile, fs_str(o.fs), o.lmax * (o.rho or 1), fs_str(o.group_fs), c.x, c.z,
+	return ("懸臂 %s、t %d m、鬆弛區 k %.2f、淨高 %.1f m、荷重高 h %.1f m%s：彎矩 %.0f kN·m/m，σb=6M/t_eff² %.3f / σt %.3f MPa  FS %s；整段最小 FS %s @ (%d,%d)%s"):format(
+		("懸空 %d m² ／ 有支撐周長 %d m"):format(o.area, o.perim),
+		o.t, o.k or 0, o.ht or 0, o.h or o.t, root, o.m or 0, o.sigma_b, o.tensile, fs_str(o.fs), fs_str(o.group_fs), c.x, c.z,
 		o.edge and ("（懸空群超出 ±%d m 檢查範圍，FS 可能高估）"):format((rockmech.collapse.overhang_radius())) or "")
 		.. ((o.cut_cells or 0) > 0 and ("；相鄰有 %d 格被節理切離、會掉落"):format(o.cut_cells) or "") .. sup
 end

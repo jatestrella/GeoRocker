@@ -197,20 +197,20 @@ describe("overhang 局部版本與全範圍版本一致", function()
 end)
 
 describe("overhang 懸臂安全係數", function()
-	it("FS = σt/(3γ·HR²/t) = (L_max/HR)²；單邊懸臂 HR = 伸出長度，整段共用", function()
+	it("單邊懸臂的彎矩最大值 = qL²/2：FS = (L_max/L)²", function()
 		local g = cantilever("h", 4, 1)
 		local lm = overhang.lmax(2, 25, 1)
 		local tip = overhang.cell_state(g, P, 4, 8, 0)
 		assert.are.equal(4, tip.d)
 		assert.are.equal(1, tip.t)
-		assert.near((lm / 4) ^ 2, tip.fs, 1e-9)
-		assert.near(3 * 25 * 16 / 1 / 1000, tip.sigma_b, 1e-12)
-		assert.near(2 / tip.sigma_b, tip.fs, 1e-9)
+		assert.near((lm / 4) ^ 2, tip.fs, 2e-3)
+		assert.near(3 * 25 * 16 / 1 / 1000, tip.sigma_b, 2e-3)
+		assert.near(2 / tip.sigma_b, tip.fs, 2e-3)
 		assert.near(4, tip.hr, 1e-12)                -- 懸空 4 m² ／ 有支撐周長 1 m
 		local root = overhang.cell_state(g, P, 1, 8, 0)
 		assert.are.equal(1, root.d)
-		assert.near(tip.fs, root.fs, 1e-12)          -- 同一段共用 HR
-		assert.near(tip.fs, root.group_fs, 1e-12)
+		assert.is_true(root.fs > tip.fs)             -- 每一欄有自己的彎矩
+		assert.near(tip.fs, root.group_fs, 2e-3)     -- 整段取最小
 	end)
 
 	it("岩柱本身（坐在地面上）：有支撐", function()
@@ -286,13 +286,13 @@ describe("overhang 節理切過根部斷面", function()
 		local pj = with_joints({"0,8,0,1"})
 		local st = overhang.cell_state(cantilever("h", 4, 2), pj, 1, 8, 0)
 		assert.near(0.5, st.rho, 1e-12)
-		assert.near((overhang.lmax(2, 25, 2) * 0.5 / 4) ^ 2, st.group_fs, 1e-9)
+		assert.near((overhang.lmax(2, 25, 2) * 0.5 / 4) ^ 2, st.group_fs, 2e-3)
 		assert.are.equal(1, #overhang.find_failing_local(cantilever("h", 4, 2), pj, {{x = 1, y = 8, z = 0}}))
 		assert.are.equal(0, #overhang.find_failing_local(cantilever("h", 3, 2), pj, {{x = 1, y = 8, z = 0}}))
 		assert.are.equal(0, #overhang.find_failing_local(cantilever("h", 4, 2), P, {{x = 1, y = 8, z = 0}}))
 		-- σb = 3γ·t·d²/t_eff²
 		local tip = overhang.cell_state(cantilever("h", 4, 2), pj, 4, 8, 0)
-		assert.near(3 * 25 * 2 * 16 / 1 / 1000, tip.sigma_b, 1e-12)
+		assert.near(3 * 25 * 2 * 16 / 1 / 1000, tip.sigma_b, 2e-3)
 	end)
 
 	it("梁中間被節理切斷：外側那段被切離而掉落，內側保留", function()
@@ -382,7 +382,7 @@ describe("overhang 水平節理面（不傳張力）", function()
 		assert.is_nil(st.beam)
 		assert.are.equal(8, st.d)                        -- 兩根岩柱 x = 0、16，中間 x = 8
 		assert.near(7.5, st.hr, 1e-12)                   -- 15 m² ／ 兩端各 1 m
-		assert.near((overhang.lmax(2, 25, 1) / 7.5) ^ 2, st.fs, 1e-9)
+		assert.near((overhang.lmax(2, 25, 1) / 7.5) ^ 2, st.fs, 0.01)   -- 均分：M = qS²/8
 	end)
 
 	it("只有一側連著岩體的仍是懸臂", function()
@@ -393,7 +393,7 @@ describe("overhang 水平節理面（不傳張力）", function()
 		end)
 		local st = overhang.cell_state(g, P, 9, 8, 0)
 		assert.is_nil(st.beam)
-		assert.near((overhang.lmax(2, 25, 1) / 9) ^ 2, st.fs, 1e-9)
+		assert.near((overhang.lmax(2, 25, 1) / 9) ^ 2, st.fs, 2e-3)
 	end)
 
 	it("12 m 跨度的 1 m 薄層頂板：用懸臂判定，d = 6 → 斷", function()
@@ -404,7 +404,7 @@ describe("overhang 水平節理面（不傳張力）", function()
 		end)
 		local st = overhang.cell_state(g, P, 6, 8, 0)
 		assert.are.equal(6, st.d)
-		assert.near((overhang.lmax(2, 25, 1) / 6) ^ 2, st.fs, 1e-9)
+		assert.near((overhang.lmax(2, 25, 1) / 6) ^ 2, st.fs, 2e-3)
 		assert.are.equal(1, #overhang.find_failing_local(g, P, {{x = 6, y = 8, z = 0}}))
 	end)
 
@@ -422,7 +422,7 @@ describe("overhang 懸空段列表（顯示用）", function()
 		local segs = overhang.scan_segments(g, P, {{x = 2, y = 8, z = 0}, {x = 4, y = 8, z = 0}})
 		assert.are.equal(1, #segs)
 		assert.are.equal(4, #segs[1].cells)
-		assert.near(overhang.cell_state(g, P, 1, 8, 0).group_fs, segs[1].fs, 1e-12)
+		assert.near(overhang.cell_state(g, P, 1, 8, 0).group_fs, segs[1].fs, 2e-3)
 	end)
 end)
 
@@ -454,7 +454,7 @@ describe("overhang 層疊荷重（Obert & Duvall 疊層梁）", function()
 	it("薄下層（t=1）＋厚上層（t=2）：上層較勁、自己分離，不壓在下層上（m = 1·3/9 < 1）", function()
 		local g, p, low_bot, up_bot = layered(1, 2)
 		local low = overhang.cell_state(g, p, 4, low_bot, 0)
-		assert.near((overhang.lmax(2, 25, 1) / 4) ^ 2, low.group_fs, 1e-9)
+		assert.near((overhang.lmax(2, 25, 1) / 4) ^ 2, low.group_fs, 2e-3)
 		local upc = overhang.cell_state(g, p, 4, up_bot, 0)
 		assert.are.equal(0, upc.d)
 		assert.are.equal(math.huge, upc.fs)
@@ -464,7 +464,7 @@ describe("overhang 層疊荷重（Obert & Duvall 疊層梁）", function()
 	it("厚下層（t=3）承擔薄上層（t=1）：q₁/γt₁ = 9·4/28，下層 FS ÷ 1.286 ≥ 1 → 都不斷", function()
 		local g, p, low_bot, up_bot = layered(3, 1)
 		local low = overhang.cell_state(g, p, 4, low_bot, 0)
-		assert.near((overhang.lmax(2, 25, 3) / 4) ^ 2 / (9 * 4 / 28), low.group_fs, 1e-9)
+		assert.near((overhang.lmax(2, 25, 3) / 4) ^ 2 / (9 * 4 / 28), low.group_fs, 2e-3)
 		assert.are.equal(0, #overhang.find_failing_local(g, p, {{x = 4, y = low_bot, z = 0}, {x = 4, y = up_bot, z = 0}}))
 	end)
 end)
@@ -486,7 +486,41 @@ describe("overhang 取最有利的根部", function()
 		assert.are.equal(2, st.d)
 		assert.near(1, st.rho, 1e-12)
 		assert.near(6, st.hr, 1e-12)                     -- 18 m² ／ 根部 3 m（被切大半的那欄仍有一個完好面）
-		assert.near((st.lmax / 6) ^ 2, st.fs, 1e-9)
+		assert.near((st.lmax / 6) ^ 2, st.group_fs, 0.05)   -- 整段最大彎矩在 6 m 外
+	end)
+end)
+
+describe("overhang 均分法", function()
+	-- 頁岩頂板 t = 1（y = 8）、四周岩柱；開口 open(x, z)
+	local function plate(open)
+		return grid(-2, 62, -2, 12, -2, 62, function(x, y, z)
+			if y <= 0 then return "G" end
+			if open(x, z) then
+				if y == 8 then return "h" end
+				return nil
+			end
+			if y <= 8 then return "h" end
+		end)
+	end
+	local PP = {lithologies = LITHS, scale = 1, max_voxels = 20000}
+	local q = 25    -- γh：t = 1
+	it("長條頂板：跨中 M = qW²/8", function()
+		local g = plate(function(x, z) return x >= 1 and x <= 9 and z >= 1 and z <= 60 end)
+		local s = overhang.cell_state(g, PP, 5, 8, 30)
+		assert.near(q * 81 / 8, s.m, 0.02 * q * 81 / 8)
+	end)
+	it("方形：跨中 V/4 = 0.0737·q·S²（Marcus 彎矩和）", function()
+		local g = plate(function(x, z) return x >= 1 and x <= 21 and z >= 1 and z <= 21 end)
+		local s = overhang.cell_state(g, PP, 11, 8, 11)
+		assert.near(0.0737 * q * 441, s.m, 0.02 * 0.0737 * q * 441)
+	end)
+	it("靠近支撐彎矩小、跨中彎矩大，整段取最小 FS", function()
+		local g = plate(function(x, z) return x >= 1 and x <= 9 and z >= 1 and z <= 60 end)
+		local edge = overhang.cell_state(g, PP, 1, 8, 30)
+		local mid = overhang.cell_state(g, PP, 5, 8, 30)
+		assert.is_true(edge.m < mid.m)
+		assert.is_true(edge.fs > mid.fs)
+		assert.near(mid.fs, edge.group_fs, 0.01)
 	end)
 end)
 
@@ -539,7 +573,7 @@ describe("overhang 碰到範圍上緣的欄", function()
 		assert.are.equal(6, st.d)
 		-- Terzaghi：k 0.35（GSI 不明取 50）、B = 2·6、淨高 5 → h = 0.35 × 17 = 5.95
 		assert.near(5.95, st.h, 1e-9)
-		assert.near((overhang.lmax(4, 24, 14) / 6) ^ 2 * 14 / 5.95, st.fs, 1e-9)
+		assert.near((overhang.lmax(4, 24, 14) / 6) ^ 2 * 14 / 5.95, st.fs, 2e-3)
 	end)
 end)
 

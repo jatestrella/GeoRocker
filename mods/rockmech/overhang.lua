@@ -23,17 +23,20 @@
 -- 節理面不傳張力。相鄰兩欄的介面上，被節理切過的面不算：
 --   * 根部斷面（懸空欄與有支撐欄之間）完好面數 t_eff：σb = 3γ·t·d²/t_eff²，
 --     即 L_max 變成 L_max·(t_eff/t)；t_eff = 0 → 張力為 0。
--- ## 荷重高度（Terzaghi 鬆弛區，局部版 find_failing_local）
--- 鬆弛區高度 H_p = k·(B + H_t)：B = 2·HR、H_t = 頂板下方的平均淨高、k 依 GSI 對應 Terzaghi 岩體分級。
--- 荷重高度 h = min(t, H_p)，抗彎厚度仍是 t → σb = 3γ·h·HR²/t_eff²。
--- Terzaghi 算的是支撐要扛的荷重、不是破壞準則：要不要支護仍由 σb 對 σt 判定，這裡只取它的荷重高度。
--- ## 彎曲與剪力（同一段頂板、同一個荷重 q = γh − pᵢ）
--- 沿有支撐的周長：彎矩 M = q·HR²/2 → σb = 3q·HR²/t_eff²；剪力 V = q·HR（每 m 周長），
--- 抗剪 R = k·σt·t_eff（Griffith：k = 2）。FS 取兩者較小；k = 2 時 FS_剪/FS_彎 = 6·HR/t_eff，
--- 只有 t_eff > 6·HR（厚岩層、跨度很小）才由剪力控制。
+-- ## 均分法（局部版 find_failing_local）：一段懸空頂板的彎矩
+-- 每欄的荷重 q 均分給四周：懸空的鄰欄再往外分，有支撐的岩柱收下。收斂後每欄通過的總量 V 滿足
+--   Σ_鄰欄 (V − V_鄰) + 2·(有支撐的側面數)·V = 4q      （∇²V = −4q，V = 0 落在支撐的格面上）
+-- 空的那一側（豎井、隧道口）沒有傳遞。這是 Marcus 的板力矩和：彎矩 M = V/4，與方向、形狀無關。
+--   長條頂板寬 W：M = qW²/8（簡支梁）；單邊伸出 L：最大值 qL²/2。方形房間的 V/4 是彎矩和 (Mx+My)/(1+ν)，
+--   比單一方向的彎矩大約 1.5 倍（偏保守）。單邊懸臂的最大值落在尖端而不是根部，但一段頂板是整段判定，只用到大小。
+-- σb = 6M/t_eff²，FS = σt/σb；碰到支撐的欄另外檢查剪力：每 m 周長 V/2，抗剪 k·σt·t_eff（Griffith：k = 2）。
+-- 任一欄 FS < 1 → 整段斷開。
+-- ## 荷重（Terzaghi 鬆弛區）
+-- 鬆弛區高度 H_p = k·(B + H_t)：B = 2·HR（HR = 懸空面積／有支撐周長）、H_t = 頂板下方的平均淨高、
+-- k 依 GSI 對應 Terzaghi 岩體分級。荷重高度 h = min(t, H_p)，抗彎厚度仍是 t，q = γh。
 -- ## 支護（grid.support，見 support.lua）
--- 欄底面的支護壓力 pᵢ 往上托：每 m² 荷重 γh → γh − pᵢ，σb 等比例下降（FS × γh/(γh − pᵢ)），
--- pᵢ ≥ γh 時整段被托住。岩栓要穿過鬆弛區（L ≥ h）才算；噴凝土不看長度。
+-- 欄底面的支護壓力 pᵢ 往上托：該欄的荷重 q = γh − pᵢ，效果靠均分擴散到整段（可以是負的：多的托力幫鄰欄）。
+-- 岩栓要穿過鬆弛區（L ≥ h）才算；噴凝土不看長度。
 --   * 介面完全被切開 → 兩欄不相連；碰不到有支撐欄的那一段被切離而掉落。
 --   * 水平面被切過 → 欄（run）在此斷開：上段坐在下段上（只傳壓力，下段有支撐上段就有），
 --     下段不能吊在上段下面（頂板沿層面剝落、只靠上方吊著的岩塊掉落）。
@@ -357,7 +360,7 @@ local function local_ctx(g, p)
 		local d, rho = {}, {}
 		local frontier, root_teff = {}, {}
 		local lat = {}        -- run → 側向相連的懸空 run
-		local nsup = {}       -- run → 接著有支撐岩柱的側面數（水力半徑的周長）
+		local nsup = {}       -- run → 接著有支撐岩柱的側面數（周長、均分時的吸收邊界）
 		local up, up_set = {}, {} -- run → 坐在它上面的懸空 run（支撐由下往上）
 		local cut, cut_seen = {}, {}
 		local function visit(rn)
@@ -525,41 +528,27 @@ end
 -- load：疊層的荷重倍數 m = q₁/(γt)（Obert & Duvall，≥ 1）：σb × m → FS ÷ m
 -- d = 0：坐在下層岩體上，由下層承擔 → FS = ∞
 -- beam：兩端支撐梁的 FS（未含疊層荷重），有就取兩者較大
--- 跨度用水力半徑 HR（Mathews 穩定圖、Laubscher 的跨度參數）取代 d：一段側向相連的懸空頂板，
---   HR = 懸空面積（欄數）／有支撐的周長（接著有支撐岩柱、至少一個完好面的側面數；旁邊是空的不算）。
---   與方向、形狀無關：長隧道寬 W → W/2；正方形房間邊長 S → S/4（雙向支撐）；單邊伸出 d 的懸臂 → d。
---   沒有有支撐的周長（只坐在下層懸空岩體上）時用 d。
--- 荷重高度（Terzaghi 鬆弛區）：H_p = k·(B + H_t)，B = 2·span；h = min(t, H_p)，抗彎厚度仍是 t。
---   σb = 3γ·h·HR²/t_eff² → FS = (L_max·ρ/HR)² × t/h。h = 0（完整岩體，k = 0）→ 沒有荷重，FS ∞。
---   碰不到支撐（span = nil）的整欄都壓著：h = t。s = seg_stats 的結果
-local function load_height(r, span, s)
-	if not span then return r.t end
-	return math.min(r.t, s.k * (2 * span + s.ht))
+-- 荷重高度：h = min(t, H_p)，H_p = k·(B + H_t)，B = 2·HR（s = seg_stats 的結果；沒有有支撐的周長時 HR 用 d）。
+-- 碰不到支撐（d = nil）的整欄都壓著：h = t。h = 0（完整岩體，k = 0）→ 沒有荷重
+local function load_height(r, d, s)
+	if not d then return r.t end
+	return math.min(r.t, s.k * (2 * (s.hr or d) + s.ht))
 end
--- 支護：每 m² 荷重 γh → γh − pᵢ，FS × γh/(γh − pᵢ)；pᵢ ≥ γh → 被托住（∞）。p：這一段的平均支護壓力 (kPa)
-local function support_factor(r, h, p)
-	if not p or p <= 0 then return 1 end
-	local q0 = r.crit.gamma * h
-	if p >= q0 then return math.huge end
-	return q0 / (q0 - p)
-end
--- 剪力的安全係數（未含疊層倍數與支護）：R/V = k·σt·t_eff / (γh·span)
-local function shear_fs(r, span, rho, h)
-	return r.shear_k * r.crit.tensile * 1000 * (rho or 1) * r.t / (r.crit.gamma * h * span)
-end
--- s：這一段的統計（seg_stats）：跨度 s.hr（沒有 → 用 d）、鬆弛區、平均支護壓力
+-- 彎曲與剪力較小的 FS。s：這一段的統計與均分結果（seg_stats）
 local function run_fs(r, d, rho, load, beam, s)
 	if d == 0 then return math.huge end
-	local span = d and (s.hr or d)
-	local h = load_height(r, span, s)
-	if h <= 0 then return math.huge end
-	local sf = support_factor(r, h, s.pseg)
-	if sf == math.huge then return math.huge end
-	local f = span and (r.lmax * (rho or 1) / span) ^ 2 * (r.t / h) or 0
+	if not d then return s.pseg >= r.crit.gamma * r.t and math.huge or 0 end
+	local M = s.M[r] or 0
+	if M <= 0 then return math.huge end
+	local te = (rho or 1) * r.t
+	if te <= 0 then return 0 end
+	local st = r.crit.tensile * 1000
+	local f = st * te * te / (6 * M)
 	if beam and beam > f then f = beam end
-	if span and r.shear_k then f = math.min(f, shear_fs(r, span, rho, h)) end
+	local vs = r.shear_k and s.Vs[r]
+	if vs and vs > 0 then f = math.min(f, r.shear_k * st * te / vs) end
 	if load and load > 1 then f = f / load end
-	return f * sf
+	return f
 end
 overhang.run_fs = run_fs
 
@@ -584,12 +573,64 @@ local function segments(res)
 	return list, seg_of
 end
 
--- 一段頂板的統計 {hr, area, perim, k, ht, pseg, short}：
---   水力半徑 HR = 懸空面積（欄數）／有支撐的周長（沒有有支撐的周長 → nil，用 d）；
---   k、ht：段內平均的 Terzaghi 係數與淨高；
---   pseg = 底面的支護托力總和／懸空面積 (kPa)：頂板整片當成板，岩栓、噴凝土托住的是整段（和 HR 一樣以段為單位）。
---     岩栓要穿過鬆弛區（L ≥ h）才算，short = 沒算到的岩栓最長幾 m
+-- 均分：解 Σ(V − V_鄰) + 2·nsup·V = 4q（SOR）。坐在下層上的鄰欄（d = 0）也算支撐。填 s.M（彎矩）、s.Vs（支撐邊每 m 的剪力）
+local function spread(res, sg, s)
+	local d = res.d
+	local list, idx = {}, {}
+	local dmax = 1
+	for _, r in ipairs(sg) do
+		if d[r] and d[r] > 0 then
+			list[#list + 1] = r
+			idx[r] = #list
+			if d[r] > dmax then dmax = d[r] end
+		end
+	end
+	s.M, s.Vs = {}, {}
+	local n = #list
+	if n == 0 then return end
+	local nb, diag, src, V = {}, {}, {}, {}
+	for i, r in ipairs(list) do
+		local e = {}
+		local dg = 2 * (res.nsup[r] or 0)
+		for _, x in ipairs(res.lat[r] or {}) do
+			local j = idx[x]
+			if j then e[#e + 1] = j; dg = dg + 1
+			elseif d[x] == 0 then dg = dg + 2 end
+		end
+		nb[i], diag[i], src[i], V[i] = e, dg, 4 * s.q[r], 0
+	end
+	local omega = 2 / (1 + math.sin(math.pi / (2 * dmax + 1)))
+	for _ = 1, 4000 do
+		local dv_max, v_max = 0, 0
+		for i = 1, n do
+			local dg = diag[i]
+			if dg > 0 then
+				local e = nb[i]
+				local sum = src[i]
+				for k = 1, #e do sum = sum + V[e[k]] end
+				local dv = omega * (sum / dg - V[i])
+				local v = V[i] + dv
+				V[i] = v
+				if dv < 0 then dv = -dv end
+				if v < 0 then v = -v end
+				if dv > dv_max then dv_max = dv end
+				if v > v_max then v_max = v end
+			end
+		end
+		if dv_max <= 1e-6 * v_max then break end
+	end
+	for i, r in ipairs(list) do
+		s.M[r] = V[i] / 4
+		s.Vs[r] = (res.nsup[r] or 0) > 0 and V[i] / 2 or 0
+	end
+end
+
+-- 一段頂板的統計（同一段只算一次）：hr、area、perim（HR = 懸空面積／有支撐的周長，沒有周長 → nil）、
+-- k、ht（段內平均的 Terzaghi 係數與淨高）、q（每欄的荷重 kPa）、pseg（平均支護壓力）、short（太短沒算到的岩栓最長幾 m）、M、Vs
 local function seg_stats(res, sg)
+	res.stats = res.stats or {}
+	local s = res.stats[sg]
+	if s then return s end
 	local area, perim, gaps = {}, {}, {}
 	local na, np, sk, sg_h, n_run = 0, 0, 0, 0, 0
 	for _, r in ipairs(sg) do
@@ -600,22 +641,24 @@ local function seg_stats(res, sg)
 		if r.gap > (gaps[key] or 0) then sg_h = sg_h + r.gap - (gaps[key] or 0); gaps[key] = r.gap end
 		sk, n_run = sk + r.k, n_run + 1
 	end
-	local s = {hr = np > 0 and na / np or nil, area = na, perim = np, k = sk / n_run, ht = sg_h / na}
+	s = {hr = np > 0 and na / np or nil, area = na, perim = np, k = sk / n_run, ht = sg_h / na, q = {}}
 	local ps, short = 0, nil
 	for _, r in ipairs(sg) do
-		ps = ps + (r.sc_sup or 0)
-		if r.bf then
-			local d = res.d[r]
-			local h = load_height(r, d and (s.hr or d), s)
-			for _, e in ipairs(r.bf) do
-				if e[2] >= h - 1e-6 then ps = ps + e[1] * 1000
-				else short = math.max(short or 0, e[2]) end
-			end
+		local h = load_height(r, res.d[r], s)
+		local p = r.sc_sup or 0
+		for _, e in ipairs(r.bf or {}) do
+			if e[2] >= h - 1e-6 then p = p + e[1] * 1000
+			else short = math.max(short or 0, e[2]) end
 		end
+		ps = ps + p
+		s.q[r] = r.crit.gamma * h - p
 	end
 	s.pseg, s.short = ps / na, short
+	spread(res, sg, s)
+	res.stats[sg] = s
 	return s
 end
+overhang.seg_stats = seg_stats
 
 -- 一段的判定：碰不到支撐（d = nil）→ 掉、FS 0；有任一 run FS < 1 → 整段從根部斷。
 -- 回傳 falls, fs（段內最小 FS）, crit（最小 FS 的 run）
@@ -702,22 +745,20 @@ function overhang.cell_state(g, p, x, y, z)
 	local load0 = res.load and res.load[r0] or 1
 	local segs, seg_of = segments(res)
 	local s0 = seg_stats(res, seg_of[r0])
-	local span0 = d0 and d0 > 0 and (s0.hr or d0) or d0
-	local h0 = load_height(r0, span0 ~= 0 and span0 or nil, s0)
-	local sigma_b = math.huge
-	if span0 and span0 > 0 and rho0 and rho0 > 0 then
-		-- σb = 3γ·h·HR²/t_eff² × m（疊層荷重倍數），t_eff = rho·t、h = Terzaghi 鬆弛區的荷重高度
-		sigma_b = 3 * r0.crit.gamma * span0 * span0 * h0 * math.max(1, load0) / (r0.t * r0.t * rho0 * rho0) / 1000
-			/ support_factor(r0, h0, s0.pseg)
-	end
+	local h0 = load_height(r0, d0 ~= 0 and d0 or nil, s0)
+	local M0 = (s0.M[r0] or 0) * math.max(1, load0)
+	local te0 = (rho0 or 1) * r0.t
+	-- σb = 6M/t_eff² × m（疊層荷重倍數），t_eff = rho·t
+	local sigma_b = te0 > 0 and 6 * math.max(0, M0) / (te0 * te0) / 1000 or math.huge
 	local out = {
 		d = d0, t = r0.t, rho = rho0, lmax = r0.lmax, tensile = r0.crit.tensile, gamma = r0.crit.gamma,
-		hr = s0.hr, area = s0.area, perim = s0.perim,   -- 這一段的水力半徑 = 懸空面積／有支撐的周長
+		hr = s0.hr, area = s0.area, perim = s0.perim,   -- 水力半徑 = 懸空面積／有支撐的周長（鬆弛區的 B）
 		k = s0.k, ht = s0.ht, h = h0,   -- Terzaghi 係數、淨高、荷重高度 h = min(t, k·(B + H_t))
 		bolt_short = s0.short,          -- 比鬆弛區短、沒算到的岩栓最長幾 m
-		-- 剪力的 FS（含疊層倍數與支護）；fs 已經是彎曲與剪力的較小者
-		fs_shear = span0 and span0 > 0 and h0 > 0 and r0.shear_k
-			and shear_fs(r0, span0, rho0, h0) / math.max(1, load0) * support_factor(r0, h0, s0.pseg) or nil,
+		m = s0.M[r0],                   -- 彎矩 (kN·m/m)
+		-- 剪力的 FS（這一欄碰到支撐才有）；fs 已經是彎曲與剪力的較小者
+		fs_shear = r0.shear_k and (s0.Vs[r0] or 0) > 0 and te0 > 0
+			and r0.shear_k * r0.crit.tensile * 1000 * te0 / (s0.Vs[r0] * math.max(1, load0)) or nil,
 		sigma_b = sigma_b, fs = run_fs(r0, d0, rho0, load0, res.beam and res.beam[r0] and res.beam[r0].fs, s0),
 		n_cells = res.n_cells, edge = res.edge,
 		beam = res.beam and res.beam[r0] or nil,

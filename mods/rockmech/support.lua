@@ -11,8 +11,8 @@
 --   keyblock：岩塊臨空面上的噴凝土 p_sc × 面積；穿過岩塊、錨固段打進岩塊外岩體的岩栓 T。
 --     兩者都是作用在面上、指向岩體的力，抵抗把岩塊往外推出該面的運動。
 --   頂板（底面的 pᵢ 往上托，抵銷懸空岩體的自重）：
---     懸臂（overhang.lua）：每 m² 荷重 γh → γh − pᵢ（h = Terzaghi 鬆弛區的荷重高度），σb 等比例下降；
---       pᵢ ≥ γh 被托住。岩栓要穿過鬆弛區（有效長度 L ≥ h）才算（sup.bf 記每支攤到的壓力與長度）。
+--     懸臂（overhang.lua）：那一欄的荷重 q = γh − pᵢ（h = Terzaghi 鬆弛區的荷重高度），效果靠均分法擴散到整段。
+--       岩栓要穿過鬆弛區（有效長度 L ≥ h）才算（sup.bf 記每支攤到的壓力與長度）。
 --
 -- support.scan(g, ids, prm) → sup 或 nil（範圍內沒有支護）
 --   g：failure／keyblock 的網格（data、p2、ox..nz、bonded_of）
