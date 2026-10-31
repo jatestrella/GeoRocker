@@ -7,7 +7,9 @@
 -- 參數在設定 rockmech_fem_*。
 -- drive（rockmech_fem_drive）：由應力解決定崩落。開挖後排一次求解（同時只有一個工作，附近的開挖併在一起），
 -- 解完檢查對著開挖空間的臨空面：取面上的應力（格中心看不到一格厚的梁的彎曲），與同一面相鄰的格平均以消掉角點奇異，
--- 拉力超過 σt 或軸差超過強度 → 該格變碎石，再解下一輪（最多 failure.max_cascade 輪）。對著天然空氣的面不判定。
+-- 拉力超過 σt 或軸差超過強度 → 該格變碎石，再解下一輪（最多 failure.max_cascade 輪）。
+-- 檢查的面：對著開挖空間的面，加上離開挖點 NEAR 格內的所有臨空面（懸臂的拉力在上緣，上緣常常是天然地表）；
+-- 更遠的天然岩面不判定，避免別處的天然崖壁平白崩掉。
 
 local cfg = rockmech.cfg
 local fcfg = cfg.fem
@@ -133,8 +135,9 @@ local function face_fs(job, res, meta, x, y, z, f)
 	return strength_fs(job, meta, x, y, z, s1 / 1000, s3 / 1000)
 end
 
--- 對著開挖空間的臨空格裡，FS < 1 的格（由上往下）。回傳 failed, 檢查的面數
-local function find_failed(job, res, meta)
+-- 對著開挖空間、或離開挖點 near 格內的臨空格裡，FS < 1 的格（由上往下）。回傳 failed, 檢查的面數
+local NEAR = 8
+local function find_failed(job, res, meta, center)
 	local n = job.nx
 	local a = meta.a
 	local failed, faces = {}, 0
@@ -142,8 +145,10 @@ local function find_failed(job, res, meta)
 		if job.solid[1 + x + y * n + z * n * n] and meta.lith[1 + x + y * n + z * n * n] then
 			for _, f in ipairs(FACES) do
 				local ax, ay, az = x + f[1], y + f[2], z + f[3]
+				local wx, wy, wz = a.x + ax, a.y + ay, a.z + az
 				if meta.open[1 + ax + ay * n + az * n * n]
-						and rockmech.collapse.is_excavated({x = a.x + ax, y = a.y + ay, z = a.z + az}) then
+						and (math.max(math.abs(wx - center.x), math.abs(wy - center.y), math.abs(wz - center.z)) <= NEAR
+							or rockmech.collapse.is_excavated({x = wx, y = wy, z = wz})) then
 					faces = faces + 1
 					if face_fs(job, res, meta, x, y, z, f) < 1 then
 						failed[#failed + 1] = {x = a.x + x, y = a.y + y, z = a.z + z}
@@ -233,7 +238,7 @@ local function pump()
 	local cur = table.remove(pending, 1)
 	rockmech.fem_run(cur.pos, function(job, res, meta, ms, t_build)
 		local t0 = core.get_us_time()
-		local failed, faces = find_failed(job, res, meta)
+		local failed, faces = find_failed(job, res, meta, cur.pos)
 		local t_eval = (core.get_us_time() - t0) / 1000
 		core.log("action", ("[rockmech] 應力解驅動 %s 第 %d 輪：%d 輪迭代、解 %.0f ms、組工作 %.1f ms、判定 %.1f ms（%d 面）、總 %.0f ms → %d 格破壞")
 			:format(core.pos_to_string(cur.pos), cur.round, res.iters, res.ms, t_build, t_eval, faces, ms, #failed))
