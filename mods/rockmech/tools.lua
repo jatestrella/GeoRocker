@@ -76,7 +76,7 @@ local function compass_report(pos, nodename)
 			lines[#lines + 1] = ("  q=σ1−σ3=%.3f MPa  岩體強度 q_f(σ3)=%.3f MPa  FS=%.2f  → %s"):format(
 				fs.q, fs.strength, fs.fs_axial, verdict)
 			lines[#lines + 1] = "  " .. rockmech.slip_line(fs)
-			lines[#lines + 1] = "  " .. rockmech.overhang_line(rockmech.collapse.overhang_state(pos))
+			lines[#lines + 1] = "  " .. rockmech.overhang_line(not cfg.fem.drive and rockmech.collapse.overhang_state(pos) or nil)
 			if cfg.keyblock.enabled then
 				lines[#lines + 1] = "  " .. rockmech.keyblock_line(rockmech.collapse.keyblock_state(pos))
 			end

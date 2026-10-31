@@ -40,7 +40,7 @@ function rockmech.stress_report(pos)
 		local grid = rockmech.collapse.read_failure_grid(pos, pos, cfg.failure.window)
 		r.local_state = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
 			rockmech.collapse.failure_params(true))
-		r.overhang = rockmech.collapse.overhang_state(pos)
+		if not cfg.fem.drive then r.overhang = rockmech.collapse.overhang_state(pos) end
 		r.nearby = rockmech.collapse.nearby_min_fs(pos, NEARBY_R)
 		if cfg.keyblock.enabled then r.keyblock = rockmech.collapse.keyblock_state(pos) end
 	end
@@ -89,6 +89,7 @@ local function fs_str(f)
 	return f == math.huge and "∞" or ("%.2f"):format(f)
 end
 function rockmech.overhang_line(o)
+	if cfg.fem.drive then return "懸臂：不另外計算，由應力解逐格判定" end
 	if not cfg.overhang.enabled then return "懸臂斷裂：關閉" end
 	if not o then return "懸臂：—" end
 	if o.supported then return "懸臂：此欄下方有支撐（FS ∞）" end

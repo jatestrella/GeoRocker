@@ -150,7 +150,7 @@ end
 -- 2. 懸臂：以範圍內所有臨空的鍵結格為起點（所在的懸空段底部可能在範圍外），每個懸空段取段內最小 FS
 scan_parts[2] = function(st)
 	local a, b, put = st.a, st.b, st.put
-	if cfg.overhang.enabled then
+	if cfg.overhang.enabled and not cfg.fem.drive then
 		local grid = collapse.read_overhang_grid(a, b)
 		local nx, ny = grid.nx, grid.ny
 		local data, bonded_of, solid_of = grid.data, grid.bonded_of, grid.solid_of
@@ -388,7 +388,7 @@ end
 
 local function summary(cells, counts)
 	local parts = {}
-	for _, kind in ipairs({"slip", "axial", "overhang", "keyblock", "mass"}) do
+	for _, kind in ipairs(cfg.fem.drive and {"slip", "keyblock", "mass"} or {"slip", "axial", "overhang", "keyblock", "mass"}) do
 		parts[#parts + 1] = core.colorize(KINDS[kind].color, ("■ %s %d"):format(KINDS[kind].label, counts[kind]))
 	end
 	local note = ""
