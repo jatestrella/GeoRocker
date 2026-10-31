@@ -987,7 +987,8 @@ local kcfg = cfg.keyblock
 local function face_set(x, y, z, axis)
     return rockmech.joints.face_joint(rockmech.get_joint_sets(), x, y, z, axis)
 end
--- 塊體接觸面的局部應力（MPa）：{σxx, σyy, σzz, σxz}，依網格快取
+-- 塊體接觸面的局部應力（MPa）：{σxx, σyy, σzz, σxz[, σxy, σyz]}，依網格快取。
+-- 應力解涵蓋這一格就用應力解，否則用柱狀荷重的估算
 local stress_params
 local function stress_at(g, x, y, z)
     local cache = g.stress_cache
@@ -996,12 +997,15 @@ local function stress_at(g, x, y, z)
     if not i then return nil end
     local v = cache[i]
     if v == nil then
-        if not stress_params then
-            stress_params = collapse.failure_params()
-            stress_params.weakness = nil
+        v = cfg.fem.drive and rockmech.fem_tensor and rockmech.fem_tensor(x, y, z)
+        if not v then
+            if not stress_params then
+                stress_params = collapse.failure_params()
+                stress_params.weakness = nil
+            end
+            local st = failure.cell_state(g, x, y, z, stress_params)
+            v = st and {st.sx, st.sy, st.sz, st.sxz} or false
         end
-        local st = failure.cell_state(g, x, y, z, stress_params)
-        v = st and {st.sx, st.sy, st.sz, st.sxz} or false
         cache[i] = v
     end
     return v or nil
@@ -1033,6 +1037,7 @@ function collapse.overhang_state(pos)
     return rockmech.overhang.cell_state(grid, collapse.overhang_params(), pos.x, pos.y, pos.z)
 end
 
+local block_pass = false      -- 這一輪判定關鍵塊體（應力解決定崩落時，解完才判定，見 collapse.queue_block_check）
 local function run_stability_check()
     stability_scheduled = false
     local starts = pending_starts
@@ -1041,6 +1046,15 @@ local function run_stability_check()
     stability_changes = new_changes()
     if #starts == 0 or not scfg.enabled then return end
     local n_existing = 0
+    local check_blocks = kcfg.enabled and (block_pass or not cfg.fem.drive)
+    block_pass = false
+    -- 應力解決定崩落：塊體的夾持力要用開挖後的應力，等解完再判定。
+    -- 挖岩石本來就會排解；其他玩家造成的改變（挖土、放方塊）在這裡補排
+    if kcfg.enabled and not check_blocks then
+        for _, ch in ipairs(changes.list) do
+            if ch.r == primary_radius() then rockmech.fem_queue(ch, fcfg.max_cascade) end
+        end
+    end
 
     local t0 = core.get_us_time()
     local ocfg = cfg.overhang
@@ -1182,7 +1196,7 @@ local function run_stability_check()
             end
         end
         -- 關鍵塊體：被節理與臨空面圍住的岩塊，以重力判斷落下／滑動
-        if kcfg.enabled then
+        if check_blocks then
             local kp = collapse.keyblock_params()
             -- 起點：穩定判定的起點，加上每個改變格周圍其影響範圍（玩家 6 m／物理延伸 3 m）內
             -- 有臨空面的岩格（完全被包在岩體裡的岩塊不可能滑出）
@@ -1446,6 +1460,15 @@ function collapse.queue_stability_check(pos, prev)
     if stability_scheduled then return end
     stability_scheduled = true
     core.after(0, run_stability_check)
+end
+
+-- 應力解完：判定 pos 附近的關鍵塊體（夾持力用剛解出來的應力）
+function collapse.queue_block_check(pos)
+    block_pass = true
+    local prev = physics_updating
+    physics_updating = false
+    collapse.queue_stability_check(pos)
+    physics_updating = prev
 end
 
 -- 挖掉非岩石（例如土）也可能讓上方岩石懸空；岩石本身由 on_destruct 觸發

@@ -28,7 +28,8 @@
 --
 -- ## 應力夾持（Unwedge 式的現地應力，含應力釋放係數）
 -- 每個節理接觸面的夾持力 C = λ·σn·A（σn = ν·σ·ν，σ 取塊體這一側格子的局部應力，
--- 已含開挖後的集中與臨空面釋放；λ = params.clamp，0 = 不考慮）。
+-- 已含開挖後的集中與臨空面釋放；λ = params.clamp，0 = 不考慮）。節理面受拉（σn < 0）沒有夾持。
+-- params.stress_at 回傳 {σxx, σyy, σzz, σxz, σxy（可省略）, σyz（可省略）}（MPa）。
 -- 運動時仍保持接觸的面（滑動面、與運動方向平行的面）才提供摩擦 C·tanφ；會打開的面沒有夾持。
 -- 先不含夾持分析，FS < 1 才算應力再分析一次（節省時間）。
 --
@@ -136,6 +137,7 @@ local function add_clamp(ctx, planes, lam)
 				if st then
 					local v = pl.nu
 					local sn = st[1] * v.x * v.x + st[2] * v.y * v.y + st[3] * v.z * v.z + 2 * st[4] * v.x * v.z
+						+ 2 * (st[5] or 0) * v.x * v.y + 2 * (st[6] or 0) * v.y * v.z
 					sum, n = sum + math.max(0, sn), n + 1
 				end
 			end

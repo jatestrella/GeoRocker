@@ -386,6 +386,18 @@ local function hot_spot(job, res, cur)
 	return nil
 end
 
+-- 最後一次解涵蓋 (x, y, z) 時回傳格中心的應力 {σxx, σyy, σzz, σxz, σxy, σyz}（MPa），給關鍵塊體的夾持力
+function rockmech.fem_tensor(x, y, z)
+	if not last_job then return nil end
+	local n = last_job.nx
+	local cx, cy, cz = x - last_meta.a.x, y - last_meta.a.y, z - last_meta.a.z
+	if cx < 2 or cy < 2 or cz < 2 or cx >= n - 2 or cy >= n - 2 or cz >= n - 2 then return nil end
+	local c = 1 + cx + cy * n + cz * n * n
+	if not last_job.solid[c] then return nil end
+	local r = last_res
+	return {r.sxx[c] / 1000, r.syy[c] / 1000, r.szz[c] / 1000, r.szx[c] / 1000, r.sxy[c] / 1000, r.syz[c] / 1000}
+end
+
 -- 開挖後排解：同時只有一個工作；排隊中離得近的併成一個（範圍內都檢查得到）。
 -- far：粗網格派來的，只判定對著開挖空間的面
 local pending, busy = {}, false
@@ -398,6 +410,7 @@ local function pump()
 		local failed, faces, warned = find_failed(job, res, meta, not cur.far and cur.pos or nil)
 		update_cracks(meta, job.nx, warned)
 		if rockmech.fswarn_refresh then rockmech.fswarn_refresh(cur.pos) end
+		rockmech.collapse.queue_block_check(cur.pos)
 		local t_eval = (core.get_us_time() - t0) / 1000
 		core.log("action", ("[rockmech] 應力解驅動 %s 第 %d 輪：%d 輪迭代、解 %.0f ms、組工作 %.1f ms、判定 %.1f ms（%d 面）、總 %.0f ms → %d 格破壞")
 			:format(core.pos_to_string(cur.pos), cur.round, res.iters, res.ms, t_build, t_eval, faces, ms, #failed))
