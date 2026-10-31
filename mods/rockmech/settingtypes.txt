@@ -306,7 +306,7 @@ rockmech_support_shotcrete_p (Shotcrete support pressure) float 0.01 0 10
 # Rock bolt capacity T = min(grip * effective length, steel yield), spread over the 3x3 faces around the bolt
 # (pattern bolting at spacing s gives about T/s^2). Bolt length = hole depth; for key blocks only the part
 # anchored beyond the block counts.
-rockmech_support_bolt_grip (Rock bolt grip) float 50 0 1000
+rockmech_support_bolt_grip (Rock bolt grip) float 200 0 1000
 
 # Steel yield capacity of a rock bolt (kN).
 rockmech_support_bolt_yield (Rock bolt steel yield) float 200 0 10000

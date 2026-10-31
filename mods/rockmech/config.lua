@@ -173,7 +173,7 @@ config.support_defaults = {
 	shotcrete_p = 0.01,       -- 噴凝土的等效支護壓力 p_sc (MPa)：比 3 m 間距的岩栓（約 0.022 MPa）弱，約等於 0.4 m 岩層
 	-- 岩栓錨定力 T = min(握裹力 × 有效長度, 鋼材降伏)，長度 = 孔深；平均分給周圍 3×3 m² 的岩面（間距 s ≈ T/s²）。
 	-- 關鍵塊體只算打進岩塊外那一段的長度
-	bolt_grip = 50,           -- 握裹力 g (kN/m)
+	bolt_grip = 200,          -- 握裹力 g (kN/m)：全長灌漿岩栓，約 1 m 就達到鋼材降伏
 	bolt_yield = 200,         -- 鋼材降伏 T_y (kN)
 }
 
