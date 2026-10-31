@@ -30,6 +30,7 @@
 --   長條頂板寬 W：M = qW²/8（簡支梁）；單邊伸出 L：最大值 qL²/2。方形房間的 V/4 是彎矩和 (Mx+My)/(1+ν)，
 --   比單一方向的彎矩大約 1.5 倍（偏保守）。單邊懸臂的最大值落在尖端而不是根部，但一段頂板是整段判定，只用到大小。
 -- σb = 6M/t_eff²，FS = σt/σb；碰到支撐的欄另外檢查剪力：每 m 周長 V/2，抗剪 k·σt·t_eff（Griffith：k = 2）。
+-- t_eff = ρ·max(t, 段內平均厚度)：同一片板曲率相同，彎矩由厚的部分扛，薄的那幾欄不會吃整片的彎矩。
 -- 任一欄 FS < 1 → 整段斷開。
 -- ## 荷重（Terzaghi 鬆弛區）
 -- 鬆弛區高度 H_p = k·(B + H_t)：B = 2·HR（HR = 懸空面積／有支撐周長）、H_t = 頂板下方的平均淨高、
@@ -536,7 +537,7 @@ local function run_fs(r, d, rho, load, beam, s)
 	if not d then return s.pseg >= r.crit.gamma * r.t and math.huge or 0 end
 	local M = s.M[r] or 0
 	if M <= 0 then return math.huge end
-	local te = (rho or 1) * r.t
+	local te = (rho or 1) * math.max(r.t, s.tbar)
 	if te <= 0 then return 0 end
 	local st = r.crit.tensile * 1000
 	local f = st * te * te / (6 * M)
@@ -628,7 +629,7 @@ local function seg_stats(res, sg)
 	local s = res.stats[sg]
 	if s then return s end
 	local area, perim, gaps = {}, {}, {}
-	local na, np, sk, sg_h, n_run = 0, 0, 0, 0, 0
+	local na, np, sk, sg_h, n_run, st = 0, 0, 0, 0, 0, 0
 	for _, r in ipairs(sg) do
 		local key = r.lx * 65536 + r.lz
 		if not area[key] then area[key] = true; na = na + 1 end
@@ -636,8 +637,9 @@ local function seg_stats(res, sg)
 		if n > (perim[key] or 0) then np = np + n - (perim[key] or 0); perim[key] = n end
 		if r.gap > (gaps[key] or 0) then sg_h = sg_h + r.gap - (gaps[key] or 0); gaps[key] = r.gap end
 		sk, n_run = sk + r.k, n_run + 1
+		st = st + r.t
 	end
-	s = {hr = np > 0 and na / np or nil, area = na, perim = np, k = sk / n_run, ht = sg_h / na, q = {}}
+	s = {hr = np > 0 and na / np or nil, area = na, perim = np, k = sk / n_run, ht = sg_h / na, q = {}, tbar = st / n_run}
 	local ps = 0
 	for _, r in ipairs(sg) do
 		ps = ps + r.p_sup
@@ -737,7 +739,7 @@ function overhang.cell_state(g, p, x, y, z)
 	local s0 = seg_stats(res, seg_of[r0])
 	local h0 = load_height(r0, d0 ~= 0 and d0 or nil, s0)
 	local M0 = (s0.M[r0] or 0) * math.max(1, load0)
-	local te0 = (rho0 or 1) * r0.t
+	local te0 = (rho0 or 1) * math.max(r0.t, s0.tbar)
 	-- σb = 6M/t_eff² × m（疊層荷重倍數），t_eff = rho·t
 	local sigma_b = te0 > 0 and 6 * math.max(0, M0) / (te0 * te0) / 1000 or math.huge
 	local out = {

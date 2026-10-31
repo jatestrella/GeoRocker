@@ -514,6 +514,26 @@ describe("overhang 均分法", function()
 		local s = overhang.cell_state(g, PP, 11, 8, 11)
 		assert.near(0.0737 * q * 441, s.m, 0.02 * 0.0737 * q * 441)
 	end)
+	it("頂板洞底補一格薄岩石：不會把整片拉下來", function()
+		local function roof(plug)
+			return grid(-6, 12, -2, 14, -6, 12, function(x, y, z)
+				if y <= 0 then return "G" end
+				if y > 8 then return nil end
+				local room = x >= 1 and x <= 5 and z >= 1 and z <= 5
+				if room and y <= 3 then return nil end
+				if x == 3 and z == 2 and y >= 4 then         -- 頂板直通地表的 1×1 天井
+					if plug and y == 4 then return "h" end
+					return nil
+				end
+				return "h"
+			end)
+		end
+		local a = overhang.cell_state(roof(false), PP, 3, 4, 3)
+		local b = overhang.cell_state(roof(true), PP, 3, 4, 3)
+		assert.is_true(b.group_fs >= 0.9 * a.group_fs)
+		assert.are.equal(1, overhang.cell_state(roof(true), PP, 3, 4, 2).t)
+	end)
+
 	it("靠近支撐彎矩小、跨中彎矩大，整段取最小 FS", function()
 		local g = plate(function(x, z) return x >= 1 and x <= 9 and z >= 1 and z <= 60 end)
 		local edge = overhang.cell_state(g, PP, 1, 8, 30)
