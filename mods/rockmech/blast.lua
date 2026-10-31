@@ -11,17 +11,18 @@
 
 local blast = {}
 
-function blast.factor(ucs, ucs_ref)
+-- exp：強度指數。炸開的體積 ∝ 半徑³ ∝ UCS^(−3·exp)，1/6 就是單位炸藥量 ∝ √UCS
+function blast.factor(ucs, ucs_ref, exp)
 	if not ucs or ucs <= 0 then return 1 end
-	return ((ucs_ref or 60) / ucs) ^ (1 / 3)
+	return ((ucs_ref or 60) / ucs) ^ (exp or 1 / 6)
 end
 
 function blast.effective_radius(r0, n_tnt)
 	return math.floor(r0 * math.max(1, n_tnt) ^ (1 / 3))
 end
 
-function blast.zone(d, R, ucs, ucs_ref, inner)
-	local r_out = R * blast.factor(ucs, ucs_ref)
+function blast.zone(d, R, ucs, ucs_ref, inner, exp)
+	local r_out = R * blast.factor(ucs, ucs_ref, exp)
 	if d <= (inner or 0.5) * r_out then return "eject" end
 	if d <= r_out then return "rubble" end
 	return nil

@@ -557,7 +557,7 @@ local TOGGLES = {
 		label = "TNT 爆破破碎（依岩石強度）",
 		short = "爆破破碎",
 		info = function()
-			return ("破碎半徑 = 爆炸半徑 × (%g/UCS)^(1/3)；內 %d%% 炸飛"):format(cfg.blast.ucs_ref, cfg.blast.inner * 100)
+			return ("破碎半徑 = 爆炸半徑 × (%g/UCS)^" .. cfg.blast.ucs_exp .. "；內 %d%% 炸飛"):format(cfg.blast.ucs_ref, cfg.blast.inner * 100)
 		end,
 		off_note = "關閉：岩石不受 TNT 影響（只炸掉其他方塊）",
 	},

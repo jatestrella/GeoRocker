@@ -60,7 +60,7 @@ function rockmech.blast_rock(center, R, floor_y)
 	build_maps()
 	local fmax = 1
 	for _, l in pairs(cfg.lithologies) do
-		local f = blast.factor(l.ucs, bcfg.ucs_ref)
+		local f = blast.factor(l.ucs, bcfg.ucs_ref, bcfg.ucs_exp)
 		if f > fmax then fmax = f end
 	end
 	local rr = math.ceil(R * fmax)
@@ -88,7 +88,7 @@ function rockmech.blast_rock(center, R, floor_y)
 				local d = math.sqrt(dx * dx + dy * dy + dz * dz)
 				local p = {x = x, y = y, z = z}
 				if li then
-					local zone = blast.zone(d, R, li.lith.ucs, bcfg.ucs_ref, bcfg.inner)
+					local zone = blast.zone(d, R, li.lith.ucs, bcfg.ucs_ref, bcfg.inner, bcfg.ucs_exp)
 					local rname = rockmech.rubble_for(li.name)
 					if zone then changes[#changes + 1] = {pos = p, name = li.name} end
 					if zone == "eject" then

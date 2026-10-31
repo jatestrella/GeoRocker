@@ -180,7 +180,8 @@ config.support_defaults = {
 -- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
 config.blast_defaults = {
 	enabled = true,
-	ucs_ref = 60,             -- 破碎半徑 = 爆炸半徑 × (ucs_ref / UCS)^(1/3)
+	ucs_ref = 60,             -- 破碎半徑 = 爆炸半徑 × (ucs_ref / UCS)^ucs_exp
+	ucs_exp = 0.167,          -- 強度指數：1/6 = 單位炸藥量 ∝ √UCS（花崗岩約頁岩的 2.4 倍）；1/3 = 單位炸藥量 ∝ UCS
 	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
 	-- 鑽孔爆破（drilling.lua）
 	charge_radius = 2.0,      -- 一條乳膠炸藥的爆炸半徑 R0 (m)；n 條 R = R0·n^(1/3)（再依岩石強度縮放）
@@ -513,6 +514,7 @@ function config.load(get)
 	-- 爆破破碎
 	cfg.blast = load_section("blast", config.blast_defaults)
 	cfg.blast.ucs_ref = math.max(0.1, cfg.blast.ucs_ref)
+	cfg.blast.ucs_exp = math.max(0, math.min(1, cfg.blast.ucs_exp))
 	cfg.blast.inner = math.max(0, math.min(1, cfg.blast.inner))
 
 	-- 警戒裂紋
