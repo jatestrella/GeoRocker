@@ -99,9 +99,12 @@ local SKIN, SLEEVE = "#d8a880", "#3a5a8a"
 local ARM = ("[fill:24x40:#00000000^[fill:10x10:2,0:%s^[fill:10x10:5,10:%s^[fill:10x10:8,20:%s^[fill:10x10:11,30:%s"):format(
 	SKIN, SKIN, SLEEVE, SLEEVE)
 local ARM_X = {carry = 0.11, cart = 0.2}    -- 手臂離畫面中央多遠（畫面寬度的比例）
-local arms = {}             -- 玩家名稱 → {mode, left, right}
+local ARM_LOOK, ARM_LOOK_MAX = 0.3, 0.25    -- 推車時視線偏離車斗 1 rad，手臂在畫面上移多少（握把在畫面上跟著移）
+local ARM_STEER = 0.04                      -- 推車轉向時雙手往轉的方向推多少
+local arms = {}             -- 玩家名稱 → {mode, left, right, shift}
 
-local function set_arms(player, mode)
+-- shift：雙手一起左右移（畫面寬度的比例）
+local function set_arms(player, mode, shift)
 	local name = player:get_player_name()
 	local a = arms[name]
 	if not a then
@@ -112,28 +115,38 @@ local function set_arms(player, mode)
 		a = {left = arm(""), right = arm("")}
 		arms[name] = a
 	end
-	if a.mode == mode then return end
-	local had = a.mode
-	a.mode = mode
-	local dx = ARM_X[mode] or 0
-	player:hud_change(a.left, "text", mode and ARM .. "^[transformFX" or "")
-	player:hud_change(a.right, "text", mode and ARM or "")
-	player:hud_change(a.left, "position", {x = 0.5 - dx, y = 1})
-	player:hud_change(a.right, "position", {x = 0.5 + dx, y = 1})
-	if mode then player:hud_set_flags({wielditem = false})
-	elseif had and not player:get_attach() then player:hud_set_flags({wielditem = true}) end
+	shift = shift or 0
+	if a.mode ~= mode then
+		local had = a.mode
+		a.mode = mode
+		player:hud_change(a.left, "text", mode and ARM .. "^[transformFX" or "")
+		player:hud_change(a.right, "text", mode and ARM or "")
+		if mode then player:hud_set_flags({wielditem = false})
+		elseif had and not player:get_attach() then player:hud_set_flags({wielditem = true}) end
+		a.shift = nil
+	end
+	if not a.shift or math.abs(shift - a.shift) > 0.004 then
+		a.shift = shift
+		local dx = ARM_X[mode] or 0
+		player:hud_change(a.left, "position", {x = 0.5 + shift - dx, y = 1})
+		player:hud_change(a.right, "position", {x = 0.5 + shift + dx, y = 1})
+	end
 end
 
 local arm_t = 0
 core.register_globalstep(function(dtime)
 	arm_t = arm_t + dtime
-	if arm_t < 0.25 then return end
+	if arm_t < 0.1 then return end
 	arm_t = 0
 	for _, player in ipairs(core.get_connected_players()) do
 		local parent = player:get_attach()
 		local e = parent and parent:get_luaentity()
 		local def = e and e.vkind and V.TYPES[e.vkind]
-		if def and def.pushed then set_arms(player, "cart")
+		if def and def.pushed then
+			local rel = (player:get_look_horizontal() - parent:get_yaw()) % (2 * math.pi) - math.pi     -- 車斗在車尾那一側
+			local ctrl = player:get_player_control()
+			local steer = (ctrl.right and 1 or 0) - (ctrl.left and 1 or 0)
+			set_arms(player, "cart", math.max(-ARM_LOOK_MAX, math.min(ARM_LOOK_MAX, rel * ARM_LOOK)) + steer * ARM_STEER)
 		elseif parent then set_arms(player, nil)
 		else set_arms(player, carried(player) and "carry" or nil) end
 	end

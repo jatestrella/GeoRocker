@@ -8,9 +8,9 @@ local NLEV, box_tex = V.NLEV, V.box_tex
 
 local c = "#8a7050"
 local cart = {desc = "手推車 Hand cart", short = "推車", color = c, cap = rockmech.cfg.cart_blocks * NLEV, speed = 2.5,
-	tire = 0.6, no_ahs = true, pushed = true, push_z = 1.3, look_limit = math.pi,
+	tire = 0.6, no_ahs = true, pushed = true, push_z = 0.9, look_limit = math.pi,
 	select_box = {-1.4, -0.9, -3.2, 1.4, 1.6, 1.6}, aim_margin = 1.2,   -- 車子小，點選和怪手瞄準的範圍放大
-	half = 0.9, top = 0.6, lat = {-1, 0, 1}, eye_up = V.EYE_HEIGHT - 0.9, eye_fwd = -1.3, rear = 2.4,
+	half = 0.9, top = 0.6, lat = {-1, 0, 1}, eye_up = V.EYE_HEIGHT - 0.9, eye_fwd = -0.9, rear = 2.4,
 	tilt = {front = 0.4, rear = -2.0, side_z = -0.8, side_x = 0.6},
 	max_grade = math.rad(17),
 	item_desc = ("右鍵推車；空白鍵把車斗往前倒（載量 %d 塊）\n手上拿著碎石時右鍵是裝上去"):format(rockmech.cfg.cart_blocks)}
@@ -26,8 +26,8 @@ do
 	local body = {
 		{pos = {x = 0, y = -0.45, z = -1.6}, size = {x = 0.9, y = 0.1, z = 1.8}, tex = wood},       -- 車斗下的底架
 		{pos = {x = 0, y = -0.6, z = -2.1}, size = {x = 0.25, y = 0.6, z = 0.6}, tex = wheel},      -- 前面的輪子
-		{pos = {x = -0.45, y = -0.15, z = 0.1}, size = {x = 0.1, y = 0.1, z = 2.0}, tex = wood},    -- 兩根握把，伸到人手上
-		{pos = {x = 0.45, y = -0.15, z = 0.1}, size = {x = 0.1, y = 0.1, z = 2.0}, tex = wood},
+		{pos = {x = -0.45, y = -0.15, z = -0.25}, size = {x = 0.1, y = 0.1, z = 1.1}, tex = wood},  -- 兩根握把，伸到人手上
+		{pos = {x = 0.45, y = -0.15, z = -0.25}, size = {x = 0.1, y = 0.1, z = 1.1}, tex = wood},
 	}
 	V.hauler(cart, {
 		hinge = {x = 0, y = -0.4, z = -2.4}, size = {x = 1.5, y = 0.8, z = 1.6}, body = body,

@@ -993,6 +993,8 @@ function V.register(kind, def)
 			if turn ~= 0 then
 				yaw = yaw + turn * TURN_RATE * dtime
 				obj:set_yaw(yaw)
+				-- 推車：人跟著車轉，視線也跟著
+				if def.pushed and d then d:set_look_horizontal(d:get_look_horizontal() + turn * TURN_RATE * dtime) end
 			end
 			-- 外觀隨地形傾斜（角度平滑趨近）
 			if def.tilt then
