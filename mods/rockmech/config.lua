@@ -572,6 +572,7 @@ function config.load(get)
 
 	-- 岩體強度：相似比 N、擾動 D、各岩性的 GSI 剖面與 mi
 	cfg.rubble_squeeze = math.max(0, tonumber(get("rockmech_rubble_squeeze")) or 0.125)
+	cfg.vehicle_slide_mu = math.max(0, tonumber(get("rockmech_vehicle_slide_mu")) or 0.5)
 	cfg.model_scale = tonumber(get("rockmech_model_scale")) or 1
 	if cfg.model_scale <= 0 then
 		warnings[#warnings + 1] = "rockmech_model_scale ≤ 0，改為 1"

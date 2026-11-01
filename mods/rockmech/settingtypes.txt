@@ -257,6 +257,9 @@ rockmech_slope_angle (Rubble angle of repose) float 35 1 89
 # Loads count as extra rubble height (q - Kp * gamma * h) / gamma, where h is how far the rubble beside rises above this cell. 0 turns it off.
 rockmech_rubble_squeeze (Rubble squeezed per load event) float 0.125 0 8
 
+# Friction between vehicles and rubble. A vehicle on a rubble slope steeper than atan(mu) slides down it. 0 turns it off.
+rockmech_vehicle_slide_mu (Vehicle friction on rubble) float 0.5 0 2
+
 [Stability]
 
 # When something is removed, rock groups no longer connected to the rock mass

@@ -294,6 +294,9 @@ end
 local PASSIVE_K = granular.passive_k(rockmech.cfg.slope.angle)
 local SQUEEZE_CAP = math.ceil(rockmech.cfg.rubble_squeeze * NLEV)     -- 受壓時一步最多流幾級
 
+-- 坡上的垮塌（side.slump）：荷重往坡上傳，每一格剩 SLUMP_DECAY，車越重垮的範圍越大；一步可以多流 SLUMP_CAP 倍
+local SLUMP_DECAY, SLUMP_CAP = 0.7, 4
+
 -- 碎石頂格 T 被擠空：壓在上面的岩石整疊往下移一格。一次移完，不留空洞：
 -- 留空洞的話旁邊的碎石馬上流回來，岩石落下又被墊高，一直循環。壓著的不全是岩石就回傳 false，照常落下
 local function sink_load(T)
@@ -355,7 +358,8 @@ local function granular_settle(pos, chain, q_ext, side)
             nbs[i] = {e = e, d = d[3]}
             lands[i] = land
         end
-        local i, amount = granular.choose_flow(src, k, nbs, SLOPE_TAN, q > 0 and SQUEEZE_CAP or nil)
+        local cap = q > 0 and SQUEEZE_CAP * (side and side.slump and SLUMP_CAP or 1) or nil
+        local i, amount = granular.choose_flow(src, k, nbs, SLOPE_TAN, cap)
         if not i then return end
         local land = lands[i]
         physics_updating = true
@@ -366,10 +370,19 @@ local function granular_settle(pos, chain, q_ext, side)
         debris({x = T.x + d[1] * 0.4, y = T.y, z = T.z + d[2] * 0.4}, base,
             math.max(3, amount * 2), {x = d[1] * 1.5, y = 0, z = d[2] * 1.5})
         next_pos = {k - amount > 0 and T or below, land.pos}
+        -- side.slump：坡腳被擠走，坡上那一格變陡，也要判定（漸進破壞往坡上傳，荷重跟著衰減）
+        if side and side.slump then
+            local ux, uz = T.x - math.floor(side.x + 0.5), T.z - math.floor(side.z + 0.5)
+            local up = {x = ux, y = T.y + 1, z = uz}
+            if not rubble_k(core.get_node(up).name) then up.y = T.y end
+            next_pos[3] = up
+        end
     end
     core.after(GRAN_STEP_DELAY, function()
         -- side：接下來也只往這一側流，車輪擠開的碎石才不會馬上流回車轍
-        for _, p in ipairs(next_pos) do granular_settle(p, chain - 1, nil, side) end
+        for n, p in ipairs(next_pos) do
+            granular_settle(p, chain - 1, n == 3 and q_ext and q_ext * SLUMP_DECAY or nil, side)
+        end
     end)
 end
 collapse.granular_settle = granular_settle

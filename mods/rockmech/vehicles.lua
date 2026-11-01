@@ -396,6 +396,52 @@ local function step_ahead(pos, dir, def, f, speed)
 	return h
 end
 
+-- 車底的碎石坡：回傳 坡度 tanθ（往下坡的單位向量 x, z）；車底大多不是碎石回傳 0。
+-- 量車身前後左右的地面高度，地面在車底上下幾格內找
+local function rubble_slope(pos, def)
+	local r = def.half
+	local base = pos.y - def.half
+	local from = base + 3
+	local function top(x, z) return ground_top(x, from, z, 8) end
+	local e, w, n, s = top(pos.x + r, pos.z), top(pos.x - r, pos.z), top(pos.x, pos.z + r), top(pos.x, pos.z - r)
+	if not (e and w and n and s) then return 0 end
+	local loose = 0
+	for _, p in ipairs({{0, 0}, {r, 0}, {-r, 0}, {0, r}, {0, -r}}) do
+		local x, z = math.floor(pos.x + p[1] + 0.5), math.floor(pos.z + p[2] + 0.5)
+		for y = math.floor(from + 0.5), math.floor(from + 0.5) - 8, -1 do
+			local name = core.get_node({x = x, y = y, z = z}).name
+			if rockmech.rubble_level[name] then loose = loose + 1; break end
+			if not V.passable(name) then break end
+		end
+	end
+	if loose < 3 then return 0 end
+	local gx, gz = (e - w) / (2 * r), (n - s) / (2 * r)
+	local t = math.sqrt(gx * gx + gz * gz)
+	if t < 1e-6 then return 0 end
+	return t, -gx / t, -gz / t
+end
+V.rubble_slope = rubble_slope
+
+-- 車在碎石坡上滑動：坡度超過摩擦角（tanθ > μ）就沿最陡方向下滑，a = g(sinθ − μ·cosθ)，g 取 10。
+-- 回傳 這一步的滑動速度 x, z（m/s）
+local SLIDE_MAX, SLIDE_STOP = 6, 6     -- 最快 (m/s)、坡度不夠時的減速 (m/s²)
+local function slide_step(self, pos, def, dtime)
+	local mu = rockmech.cfg.vehicle_slide_mu
+	local t, dx, dz = rubble_slope(pos, def)
+	self.slope_t, self.slope_x, self.slope_z = t, dx, dz
+	if mu > 0 and t > mu then
+		local th = math.atan(t)
+		local a = 10 * (math.sin(th) - mu * math.cos(th))
+		self.slide = math.min(SLIDE_MAX, (self.slide or 0) + a * dtime)
+		self.slide_x, self.slide_z = dx, dz
+	elseif (self.slide or 0) > 0 then
+		self.slide = math.max(0, self.slide - SLIDE_STOP * dtime)
+	end
+	local v = self.slide or 0
+	if v <= 0 then return 0, 0 end
+	return v * self.slide_x, v * self.slide_z
+end
+
 -- 車輛的自重 (t)，車種沒列的用 20
 V.MASS = {truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
 	jumbo = 30, charger = 20, drillrig = 25}
@@ -408,6 +454,7 @@ function V.ground_pressure(self, def, kind)
 end
 
 -- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
+-- 在碎石坡上（tanθ > 0.35）整個車寬都判定、往下坡擠：坡在安息角附近時，加上車重就往下垮，並往坡上傳。
 -- 車速快時一步走超過 1 m，沿著這一步的路徑逐格補上
 function V.press_rubble(self, kind, def, pos, dir, f)
 	local j = f > 0 and def.half or -(def.rear or def.half)
@@ -421,7 +468,8 @@ function V.press_rubble(self, kind, def, pos, dir, f)
 	for t = 1, steps do
 		local px, pz = last.x + (cx - last.x) * t / steps, last.z + (cz - last.z) * t / steps
 		local lat = def.lat or {-0.5, 0.5}
-		for _, l in ipairs({lat[1], lat[#lat]}) do
+		local downhill = (self.slope_t or 0) > 0.35
+		for _, l in ipairs(downhill and lat or {lat[1], lat[#lat]}) do
 			local x, z = math.floor(px + dir.z * l + 0.5), math.floor(pz - dir.x * l + 0.5)
 			local key = x + 65536 * z
 			if self.pressed[l] ~= key then
@@ -431,7 +479,8 @@ function V.press_rubble(self, kind, def, pos, dir, f)
 					local p = {x = x, y = y, z = z}
 					local name = core.get_node(p).name
 					if rockmech.rubble_level[name] then
-						rockmech.collapse.squeeze(p, q, {x = dir.z * l, z = -dir.x * l})
+						rockmech.collapse.squeeze(p, q, downhill and {x = self.slope_x, z = self.slope_z, slump = true}
+							or {x = dir.z * l, z = -dir.x * l})
 						break
 					end
 					if not V.passable(name) then break end
@@ -809,7 +858,8 @@ function V.register(kind, def)
 			local regions = def.overhangs_now and def.overhangs_now(self) or def.overhangs
 			if regions then push_players(self, pos, yaw, def, regions) end
 			local dir, s = dirs(yaw)
-			if fwd ~= 0 then V.press_rubble(self, kind, def, pos, dir, fwd) end
+			local slide_x, slide_z = slide_step(self, pos, def, dtime)
+			if fwd ~= 0 or (self.slide or 0) > 0 then V.press_rubble(self, kind, def, pos, dir, fwd ~= 0 and fwd or 1) end
 			-- 直線前進一段時間後慢慢加速到 top_speed；轉彎時減速回 speed，停下、倒車就回到 speed
 			local speed = def.speed * fwd
 			if def.top_speed then
@@ -840,7 +890,7 @@ function V.register(kind, def)
 			end
 			if steep ~= self.steep then self.steep = steep; update_hud(self) end
 			if def.move then def.move(self, ctx) end
-			obj:set_velocity({x = dir.x * ctx.speed, y = vel.y, z = dir.z * ctx.speed})
+			obj:set_velocity({x = dir.x * ctx.speed + slide_x, y = vel.y, z = dir.z * ctx.speed + slide_z})
 			-- HUD 時速（每 5 km/h 更新一次）
 			if def.top_speed then
 				local kmh = math.floor(math.abs(ctx.speed) * 3.6 / 5 + 0.5) * 5
