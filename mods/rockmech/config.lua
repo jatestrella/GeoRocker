@@ -27,7 +27,7 @@ local config = {}
 config.lithologies = {
 	sandstone = {
 		name = "sandstone", description = "Sandstone (砂岩)",
-		gamma = 24.0, ucs = 60.0, tensile = 4.0, mi = 17,
+		gamma = 25.0, ucs = 60.0, tensile = 4.0, mi = 17,
 		color = "#c9a46a", cracky = 3,
 		rn = 0.35, rt = 0.85, mu_roll = 0.40, break_height = 4.0,
 	},
@@ -39,7 +39,7 @@ config.lithologies = {
 	},
 	granite = {
 		name = "granite", description = "Granite (花崗岩)",
-		gamma = 26.5, ucs = 180.0, tensile = 10.0, mi = 32,
+		gamma = 25.0, ucs = 180.0, tensile = 10.0, mi = 32,
 		color = "#d2b4ac", cracky = 2,
 		rn = 0.45, rt = 0.90, mu_roll = 0.35, break_height = 8.0,
 	},
@@ -203,6 +203,8 @@ config.blast_defaults = {
 -- 警戒裂紋（fsmask.lua）：1 < FS < max 的岩格加上裂紋；設定鍵為 rockmech_fswarn_<key>
 config.fswarn_defaults = {
 	max = 2.0,                -- FS 低於此值（且 > 1）就顯示裂紋
+	sound_gain = 1.0,         -- 裂紋出現或變嚴重時破裂聲的音量（0 = 不播）
+	sound_distance = 32,      -- 破裂聲聽得到的距離 (m)
 }
 
 -- 關鍵塊體（keyblock.lua）；設定鍵為 rockmech_keyblock_<key>
@@ -520,6 +522,8 @@ function config.load(get)
 	-- 警戒裂紋
 	cfg.fswarn = load_section("fswarn", config.fswarn_defaults)
 	cfg.fswarn.max = math.max(1.01, math.min(5, cfg.fswarn.max))
+	cfg.fswarn.sound_gain = math.max(0, cfg.fswarn.sound_gain)
+	cfg.fswarn.sound_distance = math.max(1, cfg.fswarn.sound_distance)
 
 	-- 關鍵塊體
 	cfg.keyblock = load_section("keyblock", config.keyblock_defaults)

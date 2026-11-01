@@ -369,9 +369,35 @@ function rockmech.fswarn_at(name, pos)
 	return {kind = m.kind, label = WARN_LABEL[m.kind] or m.kind, fs = m.fs}
 end
 
+-- 破裂聲：這次掃描新出現或變嚴重的裂紋，在最嚴重的那格響一聲（FS 越接近 1 越大聲）。
+-- 只比前後兩次都掃到的範圍，走動帶進範圍的舊裂紋不算；重開顯示後的第一次掃描也不算。
+-- 附近地形剛改變（SOUND_WINDOW 秒內）才響：換個解的範圍時，同一格的 FS 會有小幅差異，那不是岩石裂了
+local SOUND_WINDOW = 5
+local function crack_sound(player, a, center, cells)
+	local seen, worst = {}, nil
+	for _, c in ipairs(cells) do
+		local k = pkey(c.pos)
+		local stage = warn_stage(c.fs)
+		seen[k] = stage
+		if a.wseen and stage > (a.wseen[k] or -1) and (not worst or c.fs < worst.fs)
+				and math.max(math.abs(c.pos.x - a.wcenter.x), math.abs(c.pos.y - a.wcenter.y), math.abs(c.pos.z - a.wcenter.z)) <= LIVE_R then
+			worst = c
+		end
+	end
+	a.wseen, a.wcenter = seen, center
+	if worst and cfg.fswarn.sound_gain > 0 and now() - (a.wchange or -math.huge) <= SOUND_WINDOW then
+		core.sound_play("rockmech_crack", {
+			pos = worst.pos, to_player = player:get_player_name(),
+			gain = cfg.fswarn.sound_gain * (0.5 + 0.5 * warn_stage(worst.fs) / (WARN_STAGES - 1)),
+			pitch = 0.9 + 0.2 * math.random(), max_hear_distance = cfg.fswarn.sound_distance,
+		}, true)
+	end
+end
+
 -- 警戒裂紋標記（1 < FS < max）：裂紋級數變了就換貼圖
 local function apply_warn(player, a, center, cells)
 	by_distance(cells, center)
+	crack_sound(player, a, center, cells)
 	local want = {}
 	for i, c in ipairs(cells) do
 		if i <= MAX_ENTITIES then want[pkey(c.pos)] = c end
@@ -440,7 +466,7 @@ function rockmech.set_fswarn(player, on)
 	local name = player:get_player_name()
 	player:get_meta():set_string(META_W, on and "1" or "0")
 	local a = ensure(name)
-	if not on then clear_marks(player, a.wmarks) end
+	if not on then clear_marks(player, a.wmarks); a.wseen = nil end
 	a.dirty = true
 end
 
@@ -484,13 +510,21 @@ core.register_on_placenode(function(pos)
 end)
 
 local orig_queue = collapse.queue_stability_check
+local block_check = false      -- 應力解完的塊體判定也走這裡，那不是地形改變
 collapse.queue_stability_check = function(pos, prev)
 	orig_queue(pos, prev)
 	for _, a in pairs(active) do
 		if a.center and vector.distance(pos, a.center) <= LIVE_R + 2 * cfg.failure.window + 2 then
 			a.dirty = true
+			if not block_check then a.wchange = now() end
 		end
 	end
+end
+local orig_block = collapse.queue_block_check
+collapse.queue_block_check = function(pos)
+	block_check = true
+	orig_block(pos)
+	block_check = false
 end
 
 -- 應力解完：附近的即時顯示重新掃描

@@ -141,6 +141,12 @@ rockmech_failure_budget_ms (Time budget per check) float 5 0.1 1000
 # Rock nodes around the player with 1 < FS < this value get a crack overlay (per-player display, /rockmech_fswarn).
 rockmech_fswarn_max (Crack warning FS threshold) float 2 1.01 5
 
+# Volume of the rock fracture sound played when a crack appears or gets worse. 0 turns it off.
+rockmech_fswarn_sound_gain (Crack sound volume) float 1 0 3
+
+# Distance in metres at which the crack sound can be heard.
+rockmech_fswarn_sound_distance (Crack sound distance) float 32 1 128
+
 [Key blocks]
 
 # Blocks completely bounded by joints and free faces are checked under gravity:
