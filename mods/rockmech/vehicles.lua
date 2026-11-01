@@ -636,9 +636,13 @@ local function tail_blocked(p, yaw, p2, yaw2, def)
 	return after > tail_overlap(p, yaw, def)
 end
 -- 轉彎：車尾會撞到方塊、人或車就不轉
+-- 車尾和人、車：碰撞箱只蓋到車身，車斗可以貼到別台車旁邊。本來就貼著就不擋，不然永遠離不開
+local function tail_hits(self, def, pos, yaw, pos2, yaw2)
+	return V.objects_in(self, pos2, yaw2, -def.half, def.half, -def.rear, -def.half)
+		and not V.objects_in(self, pos, yaw, -def.half, def.half, -def.rear, -def.half)
+end
 function V.tail_can_turn(self, pos, yaw, yaw2, def)
-	return not (tail_blocked(pos, yaw, pos, yaw2, def)
-		or V.objects_in(self, pos, yaw2, -def.half, def.half, -def.rear, -def.half))
+	return not (tail_blocked(pos, yaw, pos, yaw2, def) or tail_hits(self, def, pos, yaw, pos, yaw2))
 end
 -- 倒車：看後面一點（全速 0.1 s 走的距離）；前進時車尾跟著車頭走過的路，不必檢查。
 -- 伺服器卡頓時一步會退很遠、預判擋不住：倒車後車尾撞得比上一步多，就退回上一步的位置
@@ -656,15 +660,15 @@ function V.tail_guard(self, def, ctx)
 	if ctx.speed >= 0 then return end
 	local la = ctx.speed * 0.1
 	local p2 = {x = pos.x + dir.x * la, y = pos.y, z = pos.z + dir.z * la}
-	if tail_blocked(pos, ctx.yaw, p2, ctx.yaw, def)
-			or V.objects_in(self, p2, ctx.yaw, -def.half, def.half, -def.rear, -def.half) then
+	if tail_blocked(pos, ctx.yaw, p2, ctx.yaw, def) or tail_hits(self, def, pos, ctx.yaw, p2, ctx.yaw) then
 		ctx.speed = 0
 	else
 		self.tail_safe = {pos = vector.copy(pos), n = tail_overlap(pos, ctx.yaw, def)}
 	end
 end
 
-function V.objects_in(self, pos, yaw, x0, x1, z0, z1)
+-- only：只看 "player" 或 "vehicle"，不給就都看
+function V.objects_in(self, pos, yaw, x0, x1, z0, z1, only)
 	local def = TYPES[self.vkind]
 	local c, sn = math.cos(yaw), math.sin(yaw)
 	local cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
@@ -675,8 +679,8 @@ function V.objects_in(self, pos, yaw, x0, x1, z0, z1)
 		local e = o:get_luaentity()
 		local p, m, lo, hi = o:get_pos()
 		if o:is_player() and not o:get_attach() then
-			m, lo, hi = 0.3, p.y, p.y + 1.8
-		elseif e and e ~= self and e.vkind and TYPES[e.vkind] then
+			if only ~= "vehicle" then m, lo, hi = 0.3, p.y, p.y + 1.8 end
+		elseif e and e ~= self and e.vkind and TYPES[e.vkind] and only ~= "player" then
 			local od = TYPES[e.vkind]
 			m, lo, hi = od.half, p.y - od.half, p.y + (od.top or od.half)
 		end

@@ -19,7 +19,9 @@ local V = rockmech.vehicles
 local REC_STEP = 3          -- 錄製路線點的間距 (m)
 local TURN_ONLY = 0.6       -- 方向差超過這個角度 (rad) 就停下來原地轉
 local DEAD = 0.08           -- 方向差小於這個角度就不轉
-local LOOK = 6              -- 障礙偵測：車頭前方幾公尺
+local LOOK = 6              -- 障礙偵測：車頭前方幾公尺有人就停
+local LOOK_VEHICLE = 1.5    -- 別台車只看這麼近：要能開到怪手手臂範圍內，車子停得住，不必提早
+local TURN_AHEAD = 0.25     -- 原地轉之前先看這麼遠 (rad)，要大於一步轉的角度
 local LATERAL = {0, 1, -1, 2, -2, 3, -3, 4, -4}   -- 傾倒位置的橫向順序（車寬＋1 m 為單位）
 local DUMP_SPOTS = #LATERAL
 local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾公尺
@@ -105,9 +107,15 @@ local function drive_to(self, def, ctx, a, ap, target)
 	local pos = ctx.pos
 	local diff = heading_diff(ctx.yaw, target.x - pos.x, target.z - pos.z)
 	if diff > DEAD then ap.left = true elseif diff < -DEAD then ap.right = true end
-	if math.abs(diff) >= TURN_ONLY then return end
+	if math.abs(diff) >= TURN_ONLY then
+		-- 車尾會掃到東西（常是旁邊的怪手）：先往前開，拉開距離再轉。比實際一步轉得多，才不會轉到一半卡住
+		local yaw2 = ctx.yaw + (diff > 0 and 1 or -1) * TURN_AHEAD
+		if not def.can_turn or def.can_turn(self, pos, ctx.yaw, yaw2) then return end
+		ap.left, ap.right = nil, nil
+	end
 	local h = def.half
-	if V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK) then
+	if V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK, "player")
+			or V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK_VEHICLE, "vehicle") then
 		if a.wait_msg ~= "前方有障礙，等待中" then a.wait_msg = "前方有障礙，等待中"; V.refresh(self) end
 		return
 	end
