@@ -368,7 +368,8 @@ local function granular_settle(pos, chain, q_ext, side)
         next_pos = {k - amount > 0 and T or below, land.pos}
     end
     core.after(GRAN_STEP_DELAY, function()
-        for _, p in ipairs(next_pos) do granular_settle(p, chain - 1) end
+        -- side：接下來也只往這一側流，車輪擠開的碎石才不會馬上流回車轍
+        for _, p in ipairs(next_pos) do granular_settle(p, chain - 1, nil, side) end
     end)
 end
 collapse.granular_settle = granular_settle
