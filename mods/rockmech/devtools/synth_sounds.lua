@@ -180,7 +180,7 @@ end
 
 local ENGINES = {
 	idle = {seed = 101, len = 2, f0 = 36, harmonics = 24, roll = 0.9, noise = 0.5},    -- 約 700 rpm
-	run = {seed = 103, len = 2, f0 = 92, harmonics = 16, roll = 0.8, noise = 1.0},     -- 約 1800 rpm
+	run = {seed = 103, len = 2, f0 = 62, harmonics = 14, roll = 0.85, noise = 0.4},     -- 約 1100 rpm，高頻少，低沉有力
 }
 
 local SLIDES = {

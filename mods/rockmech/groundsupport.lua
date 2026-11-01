@@ -110,6 +110,39 @@ local function creative(player)
 	return core.is_creative_enabled(player and player:is_player() and player:get_player_name() or "")
 end
 
+-- 被碎石蓋住的噴凝土：一格只能有一個方塊，碎石會取代薄板。記下來（存在世界裡，鍵 "sc:x,y,z"），碎石清走時放回去。
+-- 蓋住的期間沒有支護壓力，改由碎石的反力頂著
+local SC_PREFIX = "sc:"
+local buried = {}
+core.register_on_mods_loaded(function()
+	for k, v in pairs(rockmech.collapse.storage:to_table().fields) do
+		if k:sub(1, #SC_PREFIX) == SC_PREFIX then buried[k:sub(#SC_PREFIX + 1)] = v end
+	end
+end)
+local function bury(pos, name)
+	core.after(0, function()
+		if rockmech.rubble_level[core.get_node(pos).name] then
+			local k = core.pos_to_string(pos)
+			buried[k] = name
+			rockmech.collapse.storage:set_string(SC_PREFIX .. k, name)
+		end
+	end)
+end
+-- pos 的碎石移走了：底下有噴凝土就放回去
+function rockmech.shotcrete_uncover(pos)
+	local k = core.pos_to_string(pos)
+	local name = buried[k]
+	if not name then return end
+	local p = {x = pos.x, y = pos.y, z = pos.z}
+	core.after(0, function()
+		if core.get_node(p).name ~= "air" or buried[k] ~= name then return end
+		buried[k] = nil
+		rockmech.collapse.storage:set_string(SC_PREFIX .. k, "")
+		core.set_node(p, {name = name})
+		if rockmech.cfg.fem.drive then rockmech.fem_queue(p, 1, true) end
+	end)
+end
+
 -- 噴凝土層：空氣格裡貼著相鄰岩面的薄板（connected nodebox，只畫有岩石的那幾面），層數越多越厚
 for n = 1, MAX_LAYERS do
 	local T = 0.06 * n
@@ -129,6 +162,7 @@ for n = 1, MAX_LAYERS do
 		tiles = {tex},
 		walkable = false, buildable_to = true, is_ground_content = false,
 		drop = "", groups = {cracky = 3, not_in_creative_inventory = 1, shotcrete = n, shotcrete_lining = n},
+		on_destruct = function(pos) bury(pos, LININGS[n]) end,
 		after_dig_node = function(pos)
 			if rockmech.cfg.fem.drive then rockmech.fem_queue(pos, 1) end
 		end,

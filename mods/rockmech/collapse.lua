@@ -1669,6 +1669,7 @@ local function register_physics_events(name, intact)
         end,
         on_destruct = function(pos)
             collapse.mark_excavated(pos)
+            rockmech.shotcrete_uncover(pos)
             -- 穩定判定不受防護限制：任何移除（包括物理系統把碎石移走、
             -- 落石離開原位）都可能讓上方岩石懸空。判定很便宜，且只會讓
             -- 懸空群落下，不會無限連鎖。

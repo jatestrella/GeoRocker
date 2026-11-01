@@ -118,6 +118,7 @@ local function push(self, pos, s)
 			core.swap_node(c, {name = "air"})
 			collapse.mark_excavated(c)
 			collapse.queue_stability_check(c, n)
+			rockmech.shotcrete_uncover(c)
 		end
 	end
 	local ycap = y0 + PILE_H - 1
