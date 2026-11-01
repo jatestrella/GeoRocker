@@ -458,14 +458,12 @@ local function on_shotcrete(pos, def, dir)
 	return n >= 2
 end
 
--- 引擎聲：有人駕駛（或自動駕駛）才發動，怠速與運轉兩段循環音同時播，用音量切換（播放中不能改音高）。
--- 車越重音高越低
-local ENGINE_IDLE, ENGINE_RUN, ENGINE_LOW, ENGINE_FADE = 0.4, 1.3, 0.02, 2.5
+-- 引擎聲：有人駕駛（或自動駕駛）才發動，一段循環音，運作時放大。車越重音高越低
+local ENGINE_IDLE, ENGINE_RUN, ENGINE_FADE = 0.4, 1.3, 2.5
 local function engine_stop(self)
 	local e = self.engine
 	if e then
-		core.sound_stop(e.idle)
-		core.sound_stop(e.run)
+		core.sound_stop(e.handle)
 		self.engine = nil
 	end
 end
@@ -474,17 +472,14 @@ local function engine_update(self, kind, working)
 	if not (self.driver or self.autopilot) or g <= 0 then return engine_stop(self) end
 	local e = self.engine
 	if not e then
-		local pitch = math.max(0.6, math.min(1, 0.9 * (20 / (V.MASS[kind] or 20)) ^ 0.2))
-		local function loop(name, gain)
-			return core.sound_play(name, {object = self.object, loop = true, gain = gain * g, pitch = pitch, max_hear_distance = 48})
-		end
-		e = {idle = loop("rockmech_engine_idle", ENGINE_IDLE), run = loop("rockmech_engine_run", ENGINE_LOW), work = false}
+		local pitch = math.max(0.65, math.min(1.15, (20 / (V.MASS[kind] or 20)) ^ 0.2))
+		e = {work = false, handle = core.sound_play("rockmech_engine", {object = self.object, loop = true,
+			gain = ENGINE_IDLE * g, pitch = pitch, max_hear_distance = 48})}
 		self.engine = e
 	end
 	if working ~= e.work then
 		e.work = working
-		core.sound_fade(e.idle, ENGINE_FADE, (working and ENGINE_LOW * 5 or ENGINE_IDLE) * g)
-		core.sound_fade(e.run, ENGINE_FADE, (working and ENGINE_RUN or ENGINE_LOW) * g)
+		core.sound_fade(e.handle, ENGINE_FADE, (working and ENGINE_RUN or ENGINE_IDLE) * g)
 	end
 end
 

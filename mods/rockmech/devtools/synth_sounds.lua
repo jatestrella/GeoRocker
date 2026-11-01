@@ -1,5 +1,5 @@
 -- 合成音效，輸出 sounds/rockmech_crack.<n>.ogg（岩石破裂）、rockmech_rubble.<n>.ogg（碎石滾動）、
--- rockmech_engine_idle.1.ogg／rockmech_engine_run.1.ogg（柴油引擎，循環播放）。
+-- rockmech_engine.1.ogg（柴油引擎，循環播放）。
 -- 單聲道：Luanti 的定位音效只對單聲道有效。
 -- 遊戲不會載入這個檔案。在 rockmech 目錄下執行：lua devtools/synth_sounds.lua [原始 PCM 輸出目錄]
 --
@@ -178,10 +178,7 @@ local function render_engine(v)
 	return buf
 end
 
-local ENGINES = {
-	idle = {seed = 101, len = 2, f0 = 24, harmonics = 30, roll = 0.9, noise = 0.3},    -- 低頻靠諧波間距聽出來，喇叭放不出基頻也聽得到
-	run = {seed = 103, len = 2, f0 = 40, harmonics = 20, roll = 0.85, noise = 0.3},     -- 約 1100 rpm，高頻少，低沉有力
-}
+local ENGINE = {seed = 101, len = 2, f0 = 36, harmonics = 24, roll = 0.9, noise = 0.5}    -- 約 700 rpm
 
 local SLIDES = {
 	{seed = 71, len = 1.0, rate = 420, clacks = 5, rumble = 0.5},     -- 短
@@ -485,5 +482,4 @@ local function write(name, i, pcm)
 end
 for i, v in ipairs(VARIANTS) do write("rockmech_crack", i, render(v)) end
 for i, v in ipairs(SLIDES) do write("rockmech_rubble", i, render_slide(v)) end
-write("rockmech_engine_idle", 1, render_engine(ENGINES.idle))
-write("rockmech_engine_run", 1, render_engine(ENGINES.run))
+write("rockmech_engine", 1, render_engine(ENGINE))
