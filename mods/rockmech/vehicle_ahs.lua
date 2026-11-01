@@ -538,6 +538,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		if not (a.route and #a.route >= 2 and a.dump) then msg = "要先錄好路線（裝載點 → 傾倒點）"
 		else
 			a.on = true
+			a.hopper = find_hopper(a)        -- 破碎站可能是錄完路線才蓋的，或錄的時候差一點在範圍外
 			-- 從最近的路線點接上：在裝載點附近就等裝滿，否則先開回裝載點
 			local best, bi = math.huge, 1
 			for i, p in ipairs(a.route) do

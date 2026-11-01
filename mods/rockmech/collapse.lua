@@ -439,6 +439,18 @@ granular_settle = function(pos, chain, q_ext, side)
 end
 collapse.granular_settle = granular_settle
 
+-- 碎石超過安息角卻沒人叫它流（倒的時候旁邊的區塊沒載入、離玩家太遠）會一直立在那裡：
+-- 玩家附近定期掃一下表面，一欄走一步，穩定的格子什麼都不會發生
+core.register_abm({
+    label = "rockmech: 立著的碎石繼續流",
+    nodenames = {"group:rockmech_rubble"},
+    neighbors = {"air"},
+    interval = 3, chance = 4, catch_up = false,
+    action = function(pos)
+        if core.get_node({x = pos.x, y = pos.y + 1, z = pos.z}).name == "air" then granular_settle(pos, 1) end
+    end,
+})
+
 -- 碎石受到外加荷重 q（kPa）：判定一步，最多擠開 rockmech_rubble_squeeze。side：只往這一側擠
 function collapse.squeeze(pos, q, side)
     if rockmech.is_rubble(core.get_node(pos).name) then granular_settle(pos, nil, q, side) end
