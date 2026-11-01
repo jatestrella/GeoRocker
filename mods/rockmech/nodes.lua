@@ -243,6 +243,25 @@ core.register_node(rockmech.RUBBLE_GRANITE, {
 
 rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE}
 
+-- 岩性 → 碎石（未列出的岩性用一般碎石）、碎石 → 岩性
+rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
+rockmech.lith_of_rubble = {[rockmech.RUBBLE_GRANITE] = "granite"}
+for _, key in ipairs(cfg.lithology_order) do
+	local lith = cfg.lithologies[key]
+	if lith.heat then
+		local name = rockmech.modname .. ":rubble_" .. key
+		core.register_node(name, {
+			description = lith.description:gsub("^Coal, ", "Crushed coal, ") .. ("\n%d kcal/kg"):format(lith.heat),
+			tiles = {has_default and ("default_gravel.png^[colorize:" .. lith.color .. ":210") or ("[fill:16x16:" .. lith.color)},
+			groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
+			sounds = gravel_sounds,
+		})
+		rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name
+		rockmech.rubble_of_lith[key] = name
+		rockmech.lith_of_rubble[name] = key
+	end
+end
+
 -- 不滿格的碎石（顆粒流用，granular.lua）：每格分 8 級，<碎石>_l1 … _l7 高度 1/8 … 7/8 m；
 -- 滿格仍是原本的碎石 node。都屬於 rockmech_rubble 群組（實心、可站立）。
 rockmech.RUBBLE_LEVELS = 8
@@ -282,8 +301,6 @@ function rockmech.rubble_with_level(base, k)
 	if k >= rockmech.RUBBLE_LEVELS then return base end
 	return base .. "_l" .. k
 end
--- 岩性 → 碎石；未列出的岩性用一般碎石
-rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
 
 function rockmech.is_rubble(name)
 	return core.get_item_group(name, "rockmech_rubble") > 0

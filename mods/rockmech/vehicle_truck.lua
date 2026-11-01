@@ -103,8 +103,10 @@ local function hauler(def, spec)
 	function def.refresh(self)
 		local t, cap = load_total(self), def.cap
 		local st = V.ahs.status(self)
+		local share, heat = V.load_coal(self)
+		local coal = share and ("\n煤 %.0f%%　平均 %.0f kcal/kg"):format(share * 100, heat) or ""
 		self.object:set_properties({
-			nametag = ("載量 %d / %d 級（%.1f / %.0f m³）"):format(t, cap, t / NLEV, cap / NLEV) .. (st and ("\n" .. st) or ""),
+			nametag = ("載量 %d / %d 級（%.1f / %.0f m³）"):format(t, cap, t / NLEV, cap / NLEV) .. coal .. (st and ("\n" .. st) or ""),
 			nametag_color = t >= cap and "#ff8060" or "#ffffff",
 		})
 		if not self.tip then place_bed(self, 0) end

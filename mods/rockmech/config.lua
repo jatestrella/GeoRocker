@@ -22,6 +22,7 @@ local config = {}
 --   cracky      Luanti 挖掘群組等級（1 最硬、3 最軟）
 --   rn, rt      落石撞擊此岩面時的法向／切向回彈係數
 --   mu_roll     落石在此岩面上的滾動阻力係數（tan 滾動摩擦角）
+--   heat        （煤）發熱量 (kcal/kg)。品位分三類，各是一種岩性與碎石：碎石一直在分級、流動、裝車，不能存連續的數值
 --   break_height 掉落破碎特徵高度 h_ref (m)：落下 h 公尺後變碎石的機率
 --               p = 1 − exp(−h / h_ref)，越硬越大
 config.lithologies = {
@@ -45,8 +46,21 @@ config.lithologies = {
 	},
 }
 
+for _, c in ipairs({
+	{"coal_high", "Coal, high grade (高品位煤)", "#141416", 6000},
+	{"coal_mid", "Coal, medium grade (中品位煤)", "#2c2c31", 5000},
+	{"coal_low", "Coal, low grade (低品位煤)", "#47433c", 4000},
+}) do
+	config.lithologies[c[1]] = {
+		name = c[1], description = c[2], heat = c[4],
+		gamma = 14.0, ucs = 15.0, tensile = 1.0, mi = 8, gsi = {top = 50},
+		color = c[3], cracky = 3,
+		rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 2.0,
+	}
+end
+
 -- 註冊順序（固定，讓 content id / 測試結果可重現）
-config.lithology_order = {"sandstone", "shale", "granite"}
+config.lithology_order = {"sandstone", "shale", "granite", "coal_high", "coal_mid", "coal_low"}
 
 -- 依深度分層：h = y0 - y，h < bottom 即屬於該層（由上往下排列）。
 -- h < 0（高於 y0 的山丘）歸入第一層。

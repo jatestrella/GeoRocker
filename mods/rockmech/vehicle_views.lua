@@ -87,7 +87,7 @@ local function rgb_of(name)
 	local lith, base = rockmech.lith_of_node[name], rockmech.rubble_base[name]
 	local h
 	if lith then h = lith.color
-	elseif base == rockmech.RUBBLE_GRANITE then h = rockmech.cfg.lithologies.granite.color
+	elseif rockmech.lith_of_rubble[base] then h = rockmech.cfg.lithologies[rockmech.lith_of_rubble[base]].color
 	elseif base then h = "#6a6058"
 	elseif rockmech.hole_kind(name) == "rockmech:drill_hole" then h = "#e0d8c8"                                   -- 鑽孔：孔口一圈淺色岩粉
 	elseif rockmech.hole_kind(name) == "rockmech:charged_hole" or name == "rockmech:surface_charge" then h = "#e8c070"   -- 裝藥：黃點

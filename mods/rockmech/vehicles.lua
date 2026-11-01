@@ -637,6 +637,17 @@ function V.load_mix(self)
 	end
 	return total, best
 end
+-- 車上的煤：回傳 煤佔的比例, 平均發熱量 (kcal/kg)；沒有煤回傳 nil
+function V.load_coal(self)
+	local total, coal, heat = 0, 0, 0
+	for base, lv in pairs(self.load or {}) do
+		total = total + lv
+		local lith = rockmech.cfg.lithologies[rockmech.lith_of_rubble[base] or ""]
+		if lith and lith.heat then coal, heat = coal + lv, heat + lv * lith.heat end
+	end
+	if coal == 0 then return nil end
+	return coal / total, heat / coal
+end
 -- 碎石種類的貼圖（給碎石塊零件）
 function V.rubble_tex(base)
 	local nd = core.registered_nodes[base]

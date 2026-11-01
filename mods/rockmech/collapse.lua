@@ -222,7 +222,13 @@ local function neighbor_surface(x, z, ty, base, lift)
         if nk < NLEV and rockmech.rubble_base[n.name] == base then
             return granular.surface(ty, nk), {pos = p, k = nk}
         end
-        if not lift or nk < NLEV then return nil end
+        -- 不同種類的半格：一格只能一種，當成滿格，從上面堆過去
+        if nk < NLEV then
+            local up = {x = x, y = ty + 1, z = z}
+            if passable(core.get_node(up).name) then return granular.surface(ty, NLEV), {pos = up, k = 0} end
+            return nil
+        end
+        if not lift then return nil end
         -- 受壓：滿格的鄰欄從它的頂上隆起
         for y = ty + 1, ty + 16 do
             local q = {x = x, y = y, z = z}
@@ -232,8 +238,7 @@ local function neighbor_surface(x, z, ty, base, lift)
                 if not passable(m) then return nil end
                 return granular.surface(y - 1, NLEV), {pos = q, k = 0}
             end
-            if mk < NLEV then
-                if rockmech.rubble_base[m] ~= base then return nil end
+            if mk < NLEV and rockmech.rubble_base[m] == base then
                 return granular.surface(y, mk), {pos = q, k = mk}
             end
         end
