@@ -652,6 +652,8 @@ function config.load(get)
 	-- 經營模式（career.lua）
 	cfg.career = get("rockmech_career") == "true" or get("rockmech_career") == true
 	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 1000)
+	cfg.hand_ore_time = math.max(0.1, tonumber(get("rockmech_hand_ore_time")) or 60)
+	cfg.hand_rubble_time = math.max(0.1, tonumber(get("rockmech_hand_rubble_time")) or 4)
 	cfg.pick_rock_time = math.max(0.1, tonumber(get("rockmech_pick_rock_time")) or 8)
 	cfg.pick_rubble_time = math.max(0.1, tonumber(get("rockmech_pick_rubble_time")) or 2)
 	cfg.cart_blocks = math.max(1, math.floor(tonumber(get("rockmech_cart_blocks")) or 3))

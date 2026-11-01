@@ -290,6 +290,12 @@ rockmech_career (Career mode) bool false
 # Career mode: starting money.
 rockmech_career_start (Career starting money) float 1000 0 100000000
 
+# Career mode: seconds to break a block of ore by hand. Hands cannot break other rock.
+rockmech_hand_ore_time (Bare hand time on ore) float 60 0.1 600
+
+# Career mode: seconds to pick up a rubble cell by hand.
+rockmech_hand_rubble_time (Bare hand time on rubble) float 4 0.1 60
+
 # Career mode: seconds for the pickaxe to break a rock cell (softest rock).
 rockmech_pick_rock_time (Pickaxe time on rock) float 8 0.1 120
 

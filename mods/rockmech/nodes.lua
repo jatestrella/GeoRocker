@@ -105,7 +105,7 @@ for _, key in ipairs(cfg.lithology_order) do
 	rockmech.lith_variant[key] = {}
 	for mask = 0, 63 do
 		local name = variant_name(base, mask)
-		local groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1}
+		local groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1, rockmech_ore = lith.ore and 1 or nil, rockmech_ore = lith.ore and 1 or nil}
 		if mask ~= 0 then groups.not_in_creative_inventory = 1 end
 		core.register_node(name, {
 			description = lith.description .. "\n" ..

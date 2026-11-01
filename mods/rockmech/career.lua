@@ -1,7 +1,8 @@
 -- rockmech/career.lua
 -- 經營模式（rockmech_career = true，世界要關掉創造模式）：從一把免費的鎬子開始賺錢，再到帳篷下的供應商買設備。
---   徒手挖不動。鎬子挖岩石很慢，岩石原地變成碎石；挖碎石就是把它拿起來，人只能拿一塊（滿格），不進物品欄，
---   右鍵放下，或對著車斗按右鍵裝上去。世界不掉落岩石和碎石，礦都要實際搬到破碎站才換得到錢。
+--   徒手只敲得動礦石，一塊 rockmech_hand_ore_time 秒；鎬子什麼岩石都能挖，也很慢。敲開的岩石原地變成碎石；
+--   挖碎石就是把它拿起來，人只能拿一塊（滿格），不進物品欄，右鍵放下，或對著車斗按右鍵裝上去。
+--   世界不掉落岩石和碎石，礦都要實際搬到破碎站才換得到錢。
 --   第一次進世界在出生點旁蓋好帳篷（供應商）和一座破碎站。
 
 local cfg = rockmech.cfg
@@ -137,6 +138,18 @@ function core.node_dig(pos, node, digger)
 	return node_dig(pos, node, digger)
 end
 
+-- 右鍵：點到方塊的右鍵功能優先，否則放下手上的碎石（鎬子和空手共用）
+local function place(itemstack, placer, pointed)
+	if pointed.type ~= "node" then return itemstack end
+	local un = core.get_node(pointed.under)
+	local def = core.registered_nodes[un.name]
+	if def and def.on_rightclick and not placer:get_player_control().sneak then
+		return def.on_rightclick(pointed.under, un, placer, itemstack, pointed)
+	end
+	put_down(placer, pointed.above)
+	return itemstack
+end
+
 local function times(t) return {[1] = t * 2, [2] = t * 1.5, [3] = t} end
 core.register_tool(PICK, {
 	description = ("Pickaxe (挖礦鎬)\n挖岩石很慢，岩石會變成碎石\n挖碎石就是拿起來，一次一塊\n右鍵放下手上的碎石"),
@@ -149,22 +162,21 @@ core.register_tool(PICK, {
 		},
 		damage_groups = {fleshy = 2},
 	},
-	on_place = function(itemstack, placer, pointed)
-		if pointed.type ~= "node" then return itemstack end
-		local un = core.get_node(pointed.under)
-		local def = core.registered_nodes[un.name]
-		if def and def.on_rightclick and not placer:get_player_control().sneak then
-			return def.on_rightclick(pointed.under, un, placer, itemstack, pointed)
-		end
-		put_down(placer, pointed.above)
-		return itemstack
-	end,
+	on_place = place,
 })
 
--- 徒手挖不動
+-- 徒手：只敲得動礦石，碎石拿得起來
 core.register_on_mods_loaded(function()
-	core.override_item("", {tool_capabilities = {full_punch_interval = 1, max_drop_level = 0, groupcaps = {},
-		damage_groups = {fleshy = 1}}})
+	local t = cfg.hand_rubble_time
+	core.override_item("", {
+		tool_capabilities = {full_punch_interval = 1, max_drop_level = 0,
+			groupcaps = {
+				rockmech_ore = {times = {[1] = cfg.hand_ore_time}, uses = 0, maxlevel = 1},
+				crumbly = {times = {[1] = t, [2] = t, [3] = t}, uses = 0, maxlevel = 1},
+			},
+			damage_groups = {fleshy = 1}},
+		on_place = place,
+	})
 end)
 
 ---------------------------------------------------------------------------
