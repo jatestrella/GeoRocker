@@ -8,7 +8,8 @@
 --   傾倒區：沿傾倒點左右排成一排（中、左、右、更左、更右…，間距一個車寬＋1 m，共 DUMP_SPOTS 個），碎石都倒在
 --   這條傾倒線外側，不會倒在進出的路上（像真的調度系統每趟分配不同的傾倒位置、倒車進位置）。位置被土堆佔住就跳過；
 --   倒不乾淨就換下一個位置再倒，連兩個位置都倒不完就帶著剩下的開回去；全滿就在傾倒點等（推土機推平後在設定畫面重設）。
---   傾倒點設在破碎站的格柵上：車子順著路線的方向開到格柵前，自己倒車把車斗對準格柵中心，每趟都倒同一個位置。
+--   傾倒點設在破碎站旁邊：車子順著路線的方向開到受料倉前，自己倒車把車斗對準倉的中心，每趟都倒同一個位置；
+--   倉裡放不下這一車就在待命點等。
 --   前方有人或車就停（障礙偵測）；有人上車駕駛就暫停。爬坡限制、車尾碰撞照常。
 --   只在玩家附近（引擎執行的區塊內）會動，跑太遠會停住，等玩家靠近才繼續。
 
@@ -22,6 +23,7 @@ local LATERAL = {0, 1, -1, 2, -2, 3, -3, 4, -4}   -- 傾倒位置的橫向順序
 local DUMP_SPOTS = #LATERAL
 local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾公尺
 local APPROACH = 16         -- 進格柵的方向：看路線上離格柵這麼遠的點，別被最後幾公尺的轉彎帶偏
+local HOPPER_WAIT = "受料倉滿了，等待中"
 
 local AHS = {}
 V.ahs = AHS
@@ -156,8 +158,15 @@ function AHS.step(self, def, ctx)
 	elseif a.phase == "to_spot" then
 		-- 先到傾倒位置前方的待命點
 		local sp = standoff(a, a.target, STANDOFF)
-		if flat_dist(pos, sp) < 1.0 then set_phase(self, "align")
-		else drive_to(self, def, ctx, a, ap, sp) end
+		if flat_dist(pos, sp) < 1.0 then
+			if a.hopper and rockmech.hopper_room(a.hopper) < V.load_total(self) then
+				if a.wait_msg ~= HOPPER_WAIT then a.wait_msg = HOPPER_WAIT; V.refresh(self) end
+			else
+				set_phase(self, "align")
+			end
+		else
+			drive_to(self, def, ctx, a, ap, sp)
+		end
 	elseif a.phase == "align" then
 		-- 原地轉成車頭朝回程、車尾朝外
 		local d = dir_in(a)
@@ -266,7 +275,7 @@ core.register_globalstep(function(dtime)
 end)
 core.register_on_leaveplayer(function(player) lines[player:get_player_name()] = nil end)
 
--- 傾倒點在破碎站的格柵上：記下格柵中心和進格柵的方向
+-- 傾倒點在破碎站旁邊：記下格柵中心和進格柵的方向
 local function find_hopper(a)
 	local c = rockmech.grate_center(a.dump)
 	if not c then return nil end
@@ -331,7 +340,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			a.route[#a.route + 1] = round(pos)
 			a.dump, a.rec = round(pos), false
 			a.hopper = find_hopper(a)
-			msg = ("路線錄好了（%d 個點）%s"):format(#a.route, a.hopper and "：傾倒點在破碎站，會自己倒車對準格柵" or "")
+			msg = ("路線錄好了（%d 個點）%s"):format(#a.route, a.hopper and "：傾倒點在破碎站，會自己倒車對準受料倉" or "")
 		end
 	elseif fields.start then
 		if not (a.route and #a.route >= 2 and a.dump) then msg = "要先錄好路線（裝載點 → 傾倒點）"
