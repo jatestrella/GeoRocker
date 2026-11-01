@@ -353,7 +353,27 @@ local fall_with_slope_settle
 -- 顆粒流一步：先往下倒（下方是不滿格的同種碎石），否則依安息角流向最陡的一側。
 -- 之後在來源與承接位置排程下一步（最多 chain 步）。q_ext（kPa）：這一步外加的荷重（車輛、應力解）；
 -- side（可選，{x, z}）：這一步只往這一側流
-local function granular_settle(pos, chain, q_ext, side)
+local granular_settle
+-- 排下一步：同一格同時只排一次。一步會接到來源和承接兩格，不合併的話步數是 2 的 chain 次方，伺服器會卡死
+local settle_pending = {}
+local function settle_later(pos, chain, q_ext, side)
+    local key = core.hash_node_position(pos)
+    local e = settle_pending[key]
+    if e then
+        e.chain = math.max(e.chain, chain)
+        e.q = e.q and q_ext and math.max(e.q, q_ext) or e.q or q_ext
+        e.side = e.side or side
+        return
+    end
+    e = {chain = chain, q = q_ext, side = side}
+    settle_pending[key] = e
+    core.after(GRAN_STEP_DELAY, function()
+        settle_pending[key] = nil
+        granular_settle(pos, e.chain, e.q, e.side)
+    end)
+end
+
+granular_settle = function(pos, chain, q_ext, side)
     if not rockmech.cfg.slope.enabled then return end
     chain = chain or GRAN_MAX_CHAIN
     if chain <= 0 then return end
@@ -412,12 +432,10 @@ local function granular_settle(pos, chain, q_ext, side)
             next_pos[3] = up
         end
     end
-    core.after(GRAN_STEP_DELAY, function()
-        -- side：接下來也只往這一側流，車輪擠開的碎石才不會馬上流回車轍
-        for n, p in ipairs(next_pos) do
-            granular_settle(p, chain - 1, n == 3 and q_ext and q_ext * SLUMP_DECAY or nil, side)
-        end
-    end)
+    -- side：接下來也只往這一側流，車輪擠開的碎石才不會馬上流回車轍
+    for n, p in ipairs(next_pos) do
+        settle_later(p, chain - 1, n == 3 and q_ext and q_ext * SLUMP_DECAY or nil, side)
+    end
 end
 collapse.granular_settle = granular_settle
 
