@@ -256,9 +256,9 @@ local function excavator(kind, P)
 			for base, lv in pairs(self.load) do
 				local m = math.min(lv, room)
 				if m > 0 then
-					truck.load[base] = (truck.load[base] or 0) + m
+					V.load_put(truck, base, m, V.load_grade(self, base))
 					room = room - m
-					self.load[base] = lv - m > 0 and (lv - m) or nil
+					V.load_keep(self, base, lv - m)
 				end
 			end
 			if load_total(self) > 0 then self.msg = TYPES[truck.vkind].short .. "滿了" end
@@ -280,9 +280,9 @@ local function excavator(kind, P)
 		local got = 0
 		for _, c in ipairs(cells) do
 			if want <= 0 then break end
-			local t, base = V.take_rubble(c, want)
+			local t, base, g = V.take_rubble(c, want)
 			if t > 0 then
-				self.load[base] = (self.load[base] or 0) + t
+				V.load_put(self, base, t, g)
 				want = want - t
 				got = got + t
 			end

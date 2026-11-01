@@ -105,13 +105,15 @@ local function push(self, pos, s)
 		if not rockmech.rubble_level[n] and not passable(n) then blocked = true end   -- 岩石：推不動
 	end
 	if blocked then return "鏟刀前是岩石" end
-	local got = {}
+	local got, grade = {}, {}
 	for _, c in ipairs(under) do src[#src + 1] = c end
 	for _, c in ipairs(src) do
-		local n = core.get_node(c).name
+		local node = core.get_node(c)
+		local n = node.name
 		local k = rockmech.rubble_level[n]
 		if k then
 			local base = rockmech.rubble_base[n]
+			grade[base] = rockmech.mix_grade(got[base] or 0, grade[base] or 0, k, node.param2)
 			got[base] = (got[base] or 0) + k
 			-- 不用 remove_node：它會讓周圍 5 格的碎石重新流動，剛推出去的那堆會流回鏟刀前。
 			-- 只保留開挖記錄與穩定判定（推走撐住岩石的碎石，上面的岩石照樣會掉）
@@ -138,7 +140,7 @@ local function push(self, pos, s)
 					y = y - 1
 				end
 				self.pile = self.pile or {}
-				left = left + deposit_column(c.x, c.z, ycap, base, share, ycap - y + 1, self.pile)
+				left = left + deposit_column(c.x, c.z, ycap, base, share, ycap - y + 1, self.pile, grade[base])
 			end
 			rest = left
 		end
@@ -147,7 +149,7 @@ local function push(self, pos, s)
 			blocked = true
 			for _, c in ipairs(src) do
 				if rest <= 0 then break end
-				rest = deposit_column(c.x, c.z, c.y, base, rest, 2)
+				rest = deposit_column(c.x, c.z, c.y, base, rest, 2, nil, grade[base])
 			end
 		end
 	end

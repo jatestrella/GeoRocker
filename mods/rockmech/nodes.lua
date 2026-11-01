@@ -82,6 +82,7 @@ for _, key in ipairs(cfg.lithology_order) do
 				"\n放置後依所在位置顯示節理",
 			tiles = mask == 0 and {base_tile} or joint_tiles(base_tile, mask),
 			is_ground_content = true,
+			paramtype2 = lith.palette and "color" or nil, palette = lith.palette,
 			groups = groups,
 			sounds = sounds,
 		})
@@ -167,6 +168,7 @@ do
 					description = base_def.description,
 					tiles = tiles,
 					is_ground_content = true,
+					paramtype2 = lith.palette and "color" or nil, palette = lith.palette,
 					groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1,
 						not_in_creative_inventory = 1},
 					sounds = sounds,
@@ -246,20 +248,40 @@ rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE}
 -- 岩性 → 碎石（未列出的岩性用一般碎石）、碎石 → 岩性
 rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
 rockmech.lith_of_rubble = {[rockmech.RUBBLE_GRANITE] = "granite"}
-for _, key in ipairs(cfg.lithology_order) do
-	local lith = cfg.lithologies[key]
-	if lith.heat then
-		local name = rockmech.modname .. ":rubble_" .. key
-		core.register_node(name, {
-			description = lith.description:gsub("^Coal, ", "Crushed coal, ") .. ("\n%d kcal/kg"):format(lith.heat),
-			tiles = {has_default and ("default_gravel.png^[colorize:" .. lith.color .. ":210") or ("[fill:16x16:" .. lith.color)},
-			groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
-			sounds = gravel_sounds,
-		})
-		rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name
-		rockmech.rubble_of_lith[key] = name
-		rockmech.lith_of_rubble[name] = key
-	end
+rockmech.RUBBLE_COAL = rockmech.modname .. ":rubble_coal"
+core.register_node(rockmech.RUBBLE_COAL, {
+	description = "Crushed coal (碎煤)",
+	tiles = {has_default and "default_gravel.png^[colorize:#e0e0e0:200" or "[fill:16x16:#e0e0e0"},
+	paramtype2 = "color", palette = cfg.lithologies.coal.palette,
+	groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
+	sounds = gravel_sounds,
+})
+rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = rockmech.RUBBLE_COAL
+rockmech.rubble_of_lith.coal = rockmech.RUBBLE_COAL
+rockmech.lith_of_rubble[rockmech.RUBBLE_COAL] = "coal"
+
+-- 煤的品位（param2）：0 = 沒指定，算中間值。回傳 1..255
+function rockmech.coal_grade(p2)
+	return p2 == 0 and 128 or p2
+end
+-- 品位 → 發熱量 (kcal/kg)
+function rockmech.coal_heat(p2)
+	local h = cfg.lithologies.coal.heat
+	return h[1] + (h[2] - h[1]) * (rockmech.coal_grade(p2) - 1) / 254
+end
+-- 兩份碎石合併：依級數加權的品位。一般碎石都是 0，維持 0
+function rockmech.mix_grade(k1, p1, k2, p2)
+	if p1 == 0 and p2 == 0 then return 0 end
+	if k1 <= 0 then return p2 end
+	if k2 <= 0 then return p1 end
+	local g = rockmech.coal_grade
+	return math.floor((k1 * g(p1) + k2 * g(p2)) / (k1 + k2) + 0.5)
+end
+-- 岩石破碎後碎石的 param2：煤保留品位，其他岩石的 param2 是 GSI，碎石用不到
+function rockmech.rubble_p2(node)
+	local lith = rockmech.lith_of_node[node.name]
+	if lith and lith.heat or rockmech.rubble_base[node.name] == rockmech.RUBBLE_COAL then return node.param2 end
+	return 0
 end
 
 -- 不滿格的碎石（顆粒流用，granular.lua）：每格分 8 級，<碎石>_l1 … _l7 高度 1/8 … 7/8 m；
@@ -283,6 +305,7 @@ for _, base in ipairs(rockmech.rubble_nodes) do
 			tiles = bdef.tiles,
 			drawtype = "nodebox",
 			paramtype = "light",
+			paramtype2 = bdef.paramtype2, palette = bdef.palette,
 			node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, top, 0.5}},
 			groups = groups,
 			sounds = bdef.sounds,
@@ -336,3 +359,17 @@ end
 core.register_on_joinplayer(function(player)
 	rockmech.merge_partial_rubble(player:get_inventory(), "main")
 end)
+
+-- 早期分三類的煤與碎煤：放過的方塊換成現在的（品位回到中間值）
+for _, old in ipairs({"high", "mid", "low"}) do
+	for _, n in ipairs(rockmech.lith_nodes) do
+		if n:find("^" .. rockmech.modname .. ":coal") then
+			core.register_alias(n:gsub(":coal", ":coal_" .. old, 1), n)
+		end
+	end
+	local oldr = rockmech.RUBBLE_COAL .. "_" .. old
+	core.register_alias(oldr, rockmech.RUBBLE_COAL)
+	for k = 1, rockmech.RUBBLE_LEVELS - 1 do
+		core.register_alias(oldr .. "_l" .. k, rockmech.RUBBLE_COAL .. "_l" .. k)
+	end
+end

@@ -61,7 +61,7 @@ local function place_cells(self, drop, off)
 			end
 		end
 		if can_place(p) then
-			core.set_node(p, {name = name})
+			core.set_node(p, {name = name, param2 = c.param2 or 0})
 			placed[#placed + 1] = {pos = p, name = name}
 		else
 			core.add_item(p, name) -- 落點被佔（理論上不會發生）
@@ -174,7 +174,7 @@ function api.spawn(cells, drop)
 	le.drop = drop
 	le.cells = {}
 	for i, c in ipairs(cells) do
-		le.cells[i] = {dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z, name = c.name}
+		le.cells[i] = {dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z, name = c.name, param2 = c.param2}
 	end
 	parent:set_properties({node = {name = o.name}, is_visible = true})
 	for i = 2, #cells do

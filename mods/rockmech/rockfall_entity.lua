@@ -79,7 +79,7 @@ local function settle(self)
 		local n = core.get_node(q)
 		local d = core.registered_nodes[n.name]
 		if n.name == "air" or (d and d.buildable_to) then
-			core.set_node(q, {name = self.node_name})
+			core.set_node(q, {name = self.node_name, param2 = self.param2 or 0})
 			-- 停下來的碎石接著做顆粒流（併入下方不滿格的碎石、依安息角攤開）
 			local col = rockmech.collapse
 			if col and rockmech.is_rubble(self.node_name) then
@@ -116,6 +116,7 @@ core.register_entity(ENT, {
 			local d = core.deserialize(staticdata)
 			if d then
 				self.node_name = d.node_name or ""
+				self.param2 = d.param2
 				self.age = d.age or 0
 				self.roll = d.roll or 0
 				self.yaw = d.yaw or 0
@@ -134,7 +135,7 @@ core.register_entity(ENT, {
 
 	get_staticdata = function(self)
 		return core.serialize({
-			node_name = self.node_name, age = self.age, roll = self.roll, yaw = self.yaw,
+			node_name = self.node_name, param2 = self.param2, age = self.age, roll = self.roll, yaw = self.yaw,
 		})
 	end,
 
@@ -239,7 +240,7 @@ function api.active_count()
 end
 
 -- 在 pos 產生翻滾落石（呼叫者需先移除該處的 node）。回傳 ObjectRef 或 nil。
-function api.spawn(pos, node_name, velocity)
+function api.spawn(pos, node_name, velocity, param2)
 	if not api.can_spawn() then return nil end
 	local def = core.registered_nodes[node_name]
 	if not def or def.drawtype == "airlike" then return nil end
@@ -247,6 +248,7 @@ function api.spawn(pos, node_name, velocity)
 	if not obj then return nil end
 	local le = obj:get_luaentity()
 	le.node_name = node_name
+	le.param2 = param2
 	obj:set_properties({node = {name = node_name}, is_visible = true})
 	if velocity then obj:set_velocity(velocity) end
 	return obj

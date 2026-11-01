@@ -83,7 +83,8 @@ function rockmass.new(cfg, legacy)
 		return rockmass.gsi_at(prof, (cfg.surface_y or 0) - y)
 	end
 	function q.at(key, y, gsi)
-		if not gsi or gsi < 1 or gsi > 100 then gsi = q.gsi(key, y) end
+		-- 煤的 param2 是品位，不是 GSI
+		if not gsi or gsi < 1 or gsi > 100 or cfg.lithologies[key].heat then gsi = q.gsi(key, y) end
 		local c = cache[key]
 		if not c then c = {}; cache[key] = c end
 		local r = c[gsi]

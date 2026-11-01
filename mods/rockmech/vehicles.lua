@@ -318,22 +318,44 @@ end
 -- 地面層（車身最下面那層格子的高程）。half：碰撞箱半邊長（預設 1）
 function V.ground_y(pos, half) return math.floor(pos.y - (half or 1) + 0.5) end
 
--- 從 cell 取走最多 want 級碎石。回傳 取走的級數, 碎石種類
+-- 從 cell 取走最多 want 級碎石。回傳 取走的級數, 碎石種類, 品位（param2）
 function V.take_rubble(cell, want)
-	local name = core.get_node(cell).name
+	local node = core.get_node(cell)
+	local name = node.name
 	local k = rockmech.rubble_level[name]
 	if not k or want <= 0 then return 0 end
 	local base = rockmech.rubble_base[name]
 	local t = math.min(k, want)
 	local rest = rockmech.rubble_with_level(base, k - t)
-	if rest then core.swap_node(cell, {name = rest}) else core.remove_node(cell) end
+	if rest then core.swap_node(cell, {name = rest, param2 = node.param2}) else core.remove_node(cell) end
 	collapse.check_cell({x = cell.x, y = cell.y + 1, z = cell.z})   -- 上方的碎石往下掉
-	return t, base
+	return t, base, node.param2
 end
 
+-- 車上的碎石：self.load[種類] = 級數；碎煤另外記 self.loadq[種類] = Σ 級數 × 品位
+function V.load_put(self, base, lv, g)
+	self.load[base] = (self.load[base] or 0) + lv
+	if base == rockmech.RUBBLE_COAL then
+		self.loadq[base] = (self.loadq[base] or 0) + lv * rockmech.coal_grade(g or 0)
+	end
+end
+-- 車上這種碎石的平均品位（param2）
+function V.load_grade(self, base)
+	local lv, q = self.load[base], self.loadq[base]
+	return lv and lv > 0 and q and math.floor(q / lv + 0.5) or 0
+end
+-- 車上這種碎石只剩 rest 級（平均品位不變）
+function V.load_keep(self, base, rest)
+	local lv = self.load[base]
+	if self.loadq[base] then self.loadq[base] = rest > 0 and self.loadq[base] * rest / lv or nil end
+	self.load[base] = rest > 0 and rest or nil
+end
+
+-- g：品位（param2），和既有的碎石合併時加權平均
 -- 在 (x, z) 這一欄、從 ytop 往下找落點，倒 a 級 base 碎石；滿了往上堆（最多 max_h 格，預設 8）。
 -- placed（可選）：收集倒下的格子，不立即做安息角流動（推土機推著的那堆）。回傳倒不下的級數
-local function deposit_column(x, z, ytop, base, a, max_h, placed)
+local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
+	g = g or 0
 	local y = ytop
 	for _ = 1, 8 do
 		if not passable(core.get_node({x = x, y = y - 1, z = z}).name) then break end
@@ -346,12 +368,13 @@ local function deposit_column(x, z, ytop, base, a, max_h, placed)
 		local k = rockmech.rubble_level[n]
 		if passable(n) then
 			local put = math.min(NLEV, a)
-			core.set_node(p, {name = rockmech.rubble_with_level(base, put)})
+			core.set_node(p, {name = rockmech.rubble_with_level(base, put), param2 = g})
 			a = a - put
 			if placed then placed[#placed + 1] = p else collapse.check_cell(p) end
 		elseif k and k < NLEV and rockmech.rubble_base[n] == base then
 			local put = math.min(NLEV - k, a)
-			core.swap_node(p, {name = rockmech.rubble_with_level(base, k + put)})
+			core.swap_node(p, {name = rockmech.rubble_with_level(base, k + put),
+				param2 = rockmech.mix_grade(k, core.get_node(p).param2, put, g)})
 			a = a - put
 			if placed then placed[#placed + 1] = p else collapse.check_cell(p) end
 		end
@@ -537,12 +560,13 @@ end
 function V.dump_to_ground(self, cells, ytop)
 	for base, lv in pairs(self.load) do
 		local rest = 0
+		local g = V.load_grade(self, base)
 		for i, c in ipairs(cells) do
 			local share = math.ceil(lv / (#cells - i + 1))
 			lv = lv - share
-			rest = rest + deposit_column(c.x, c.z, ytop, base, share)
+			rest = rest + deposit_column(c.x, c.z, ytop, base, share, nil, nil, g)
 		end
-		self.load[base] = rest > 0 and rest or nil
+		V.load_keep(self, base, rest)
 	end
 end
 
@@ -639,14 +663,11 @@ function V.load_mix(self)
 end
 -- 車上的煤：回傳 煤佔的比例, 平均發熱量 (kcal/kg)；沒有煤回傳 nil
 function V.load_coal(self)
-	local total, coal, heat = 0, 0, 0
-	for base, lv in pairs(self.load or {}) do
-		total = total + lv
-		local lith = rockmech.cfg.lithologies[rockmech.lith_of_rubble[base] or ""]
-		if lith and lith.heat then coal, heat = coal + lv, heat + lv * lith.heat end
-	end
-	if coal == 0 then return nil end
-	return coal / total, heat / coal
+	local total = 0
+	for _, lv in pairs(self.load or {}) do total = total + lv end
+	local coal = self.load and self.load[rockmech.RUBBLE_COAL]
+	if not coal then return nil end
+	return coal / total, rockmech.coal_heat(V.load_grade(self, rockmech.RUBBLE_COAL))
 end
 -- 碎石種類的貼圖（給碎石塊零件）
 function V.rubble_tex(base)
@@ -768,10 +789,11 @@ function V.register(kind, def)
 		},
 		vkind = kind,
 		on_activate = function(self, staticdata)
-			self.load, self.store = {}, {}
+			self.load, self.store, self.loadq = {}, {}, {}
 			local data = staticdata ~= "" and core.deserialize(staticdata) or nil
 			if data then
 				self.load = data.load or {}
+				self.loadq = data.loadq or {}
 				self.store = data.store or {}
 				if data.yaw then self.object:set_yaw(data.yaw) end
 			end
@@ -795,7 +817,7 @@ function V.register(kind, def)
 			drop_chase(self)
 		end,
 		get_staticdata = function(self)
-			local data = {load = self.load, store = self.store, yaw = self.object:get_yaw()}
+			local data = {load = self.load, loadq = self.loadq, store = self.store, yaw = self.object:get_yaw()}
 			if def.on_save then def.on_save(self, data) end
 			return core.serialize(data)
 		end,
