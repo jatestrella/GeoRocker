@@ -1,7 +1,8 @@
 -- rockmech/ui.lua
 -- 介面（引擎端）：
 --   /rockmech        完整資訊頁（總覽、岩性、節理、應力、開關）
---   現地應力 HUD     指著岩石時，畫面左側顯示岩性、應力與最低的 FS；/rockmech_hud 開關
+--   現地應力 HUD     指著岩石時，畫面左側顯示岩性、品位、應力與最低的 FS；指著碎石時顯示種類與品位；
+--                    /rockmech_hud 開關
 
 local cfg = rockmech.cfg
 local joints = rockmech.joints
@@ -34,7 +35,7 @@ function rockmech.stress_report(pos)
 	local lith = rockmech.lith_of_node[node.name]
 	local is_rock = lith ~= nil
 	if not lith then lith = rockmech.lith_at(pos.x, pos.y, pos.z) end
-	local r = {pos = pos, name = node.name, lith = lith, is_rock = is_rock,
+	local r = {pos = pos, name = node.name, p2 = rockmech.rubble_p2(node), lith = lith, is_rock = is_rock,
 		init = rockmech.collapse.initial_stress(pos, lith)}
 	if is_rock then
 		local grid = rockmech.collapse.read_failure_grid(pos, pos, cfg.failure.window)
@@ -165,6 +166,8 @@ local function fmt_report_lines(r, pname)
 	local lines = {}
 	lines[#lines + 1] = ("%s%s　上覆 %d m"):format(r.lith.description:gsub("\n.*", ""),
 		s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", i.h)
+	local ore = cfg.ores[r.lith.ore]
+	if ore and r.is_rock then lines[#lines + 1] = rockmech.ore_text(ore, r.p2 / 255) end
 	if not s then return lines end
 	-- 應力解決定崩落時，應力與 FS 看應力解（這一格還沒解過就先用現有估算）
 	local fc = rockmech.fem_cell and rockmech.fem_cell(r.pos)
@@ -189,6 +192,15 @@ local function fmt_report_lines(r, pname)
 	return lines
 end
 rockmech.hud_lines = fmt_report_lines   -- 測試用
+
+-- 指著碎石時的 HUD：種類，礦石碎石再加品位
+local function rubble_lines(node)
+	local base = rockmech.rubble_base[node.name]
+	local lines = {(core.registered_nodes[base].description:gsub("\n.*", ""))}
+	local ore = rockmech.ore_of_rubble[base]
+	if ore then lines[2] = rockmech.ore_text(ore, node.param2 / 255) end
+	return lines
+end
 
 ---------------------------------------------------------------------------
 -- HUD
@@ -236,15 +248,18 @@ core.register_globalstep(function(dtime)
 	local dt = hud_timer
 	hud_timer = 0
 	for _, player in ipairs(core.get_connected_players()) do
-		-- 指著岩石才顯示
+		-- 指著岩石或碎石才顯示
 		local pos = hud_enabled(player) and pointed_node_pos(player, 8)
-		if pos and rockmech.lith_of_node[core.get_node(pos).name] then
+		local node = pos and core.get_node(pos)
+		local rubble = node and rockmech.is_rubble(node.name)
+		if rubble or node and rockmech.lith_of_node[node.name] then
 			local name = player:get_player_name()
 			local h = huds[name]
 			local key = core.pos_to_string(pos)
 			-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
 			if not h or h.key ~= key or h.t > 2 then
-				hud_set(player, table.concat(fmt_report_lines(rockmech.stress_report(pos), name), "\n"))
+				hud_set(player, table.concat(rubble and rubble_lines(node)
+					or fmt_report_lines(rockmech.stress_report(pos), name), "\n"))
 				huds[name].key = key
 				huds[name].t = 0
 			else

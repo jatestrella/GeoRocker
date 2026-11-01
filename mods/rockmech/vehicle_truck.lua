@@ -105,7 +105,7 @@ local function hauler(def, spec)
 		local t, cap = load_total(self), def.cap
 		local st = V.ahs.status(self)
 		local ore, grade = V.load_ore(self)
-		local mix = ore and ("\n%s品位 %.0f%%　%.0f %s"):format(ore.label, grade * 100, grade * ore.value, ore.unit) or ""
+		local mix = ore and "\n" .. rockmech.ore_text(ore, grade) or ""
 		self.object:set_properties({
 			nametag = ("載量 %d / %d 級（%.1f / %.0f m³）"):format(t, cap, t / NLEV, cap / NLEV) .. mix .. (st and ("\n" .. st) or ""),
 			nametag_color = t >= cap and "#ff8060" or "#ffffff",

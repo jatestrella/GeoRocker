@@ -352,6 +352,11 @@ function rockmech.ore_value(base, p2)
 	return ore and ore.value * p2 / 255 or 0
 end
 
+-- 礦石品位的顯示文字（grade 0..1）：HUD、車輛載量共用
+function rockmech.ore_text(ore, grade)
+	return ("%s品位 %.0f%%　%.0f %s"):format(ore.label, grade * 100, grade * ore.value, ore.unit)
+end
+
 -- 不滿格的碎石（顆粒流用，granular.lua）：每格分 8 級，<碎石>_l1 … _l7 高度 1/8 … 7/8 m；
 -- 滿格仍是原本的碎石 node。都屬於 rockmech_rubble 群組（實心、可站立）。
 rockmech.RUBBLE_LEVELS = 8
