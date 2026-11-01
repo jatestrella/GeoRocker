@@ -520,6 +520,7 @@ function V.press_rubble(self, kind, def, pos, dir, f)
 					local p = {x = x, y = y, z = z}
 					local name = core.get_node(p).name
 					if rockmech.rubble_level[name] then
+						rockmech.collapse.rubble_sound(p, 1)      -- 壓過就有聲音，空車擠不動碎石也一樣
 						rockmech.collapse.squeeze(p, q, downhill and {x = self.slope_x, z = self.slope_z, slump = true}
 							or {x = dir.z * l, z = -dir.x * l})
 						break

@@ -319,7 +319,7 @@ local function sink_load(T)
 end
 
 -- 碎石流動的聲音：同一區（8 m）RUBBLE_GAP 秒響一次，全場最多每 RUBBLE_ANY 秒一次，大崩落時音源才不會用完
-local RUBBLE_GAP, RUBBLE_ANY = 0.5, 0.1
+local RUBBLE_GAP, RUBBLE_ANY = 0.3, 0.1
 local rubble_last, rubble_any, rubble_n = {}, 0, 0
 local function rubble_sound(p, amount)
     local gain = rockmech.cfg.rubble_sound_gain
@@ -329,12 +329,14 @@ local function rubble_sound(p, amount)
     if now - rubble_any < RUBBLE_ANY or now - (rubble_last[key] or -math.huge) < RUBBLE_GAP then return end
     if rubble_n > 256 then rubble_last, rubble_n = {}, 0 end
     rubble_last[key], rubble_any, rubble_n = now, now, rubble_n + 1
-    -- default 的碎石錄音：量大用挖掘聲，量小用腳步聲；音高放低，聽起來是石塊不是細砂
-    core.sound_play(amount >= 3 and "default_gravel_dug" or "default_gravel_footstep", {
-        pos = p, gain = gain * math.max(0.1, (amount / NLEV) ^ 1.5),   -- 移得越多越大聲
-        pitch = 0.75 + 0.2 * math.random(), max_hear_distance = 32,
+    -- default 的碎石錄音：量大（超過 3/8 m）用挖掘聲並放大，量小用腳步聲
+    local big = amount >= 3
+    core.sound_play(big and "default_gravel_dug" or "default_gravel_footstep", {
+        pos = p, gain = gain * (big and 1 + amount / NLEV or 0.6),
+        pitch = 0.9 + 0.2 * math.random(), max_hear_distance = 32,
     }, true)
 end
+collapse.rubble_sound = rubble_sound
 
 local fall_with_slope_settle
 
