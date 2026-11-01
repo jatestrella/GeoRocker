@@ -1116,7 +1116,7 @@ local function run_stability_check()
     -- 挖岩石本來就會排解；其他玩家造成的改變（挖土、放方塊）在這裡補排
     if kcfg.enabled and not check_blocks then
         for _, ch in ipairs(changes.list) do
-            if ch.r == primary_radius() then rockmech.fem_queue(ch, fcfg.max_cascade) end
+            if ch.r == primary_radius() then rockmech.fem_queue(ch, fcfg.max_cascade, true) end
         end
     end
 
@@ -1653,10 +1653,11 @@ local function register_physics_events(name, intact)
             end)
             -- 物理系統造成的移除（崩落、滑出、碎石滑走）也會露出新岩面，要檢查（延伸範圍），
             -- 但連鎖要有上限：剝落連鎖第 k 輪中的移除 → 第 k + 1 輪；其他物理移除只檢查一次
-            -- （不再往下連鎖），避免「碎石滑走 → 露出新岩面 → 再剝落」無限往後退
+            -- （不再往下連鎖），避免「碎石滑走 → 露出新岩面 → 再剝落」無限往後退。
+            -- 碎石自己流走不用檢查：貼著碎石的岩面解應力時本來就判定過了，再排解會一直循環
             if physics_updating then
                 local rnd = fail_gen > 0 and fail_gen + 1 or fcfg.max_cascade
-                if rnd <= fcfg.max_cascade then
+                if intact and rnd <= fcfg.max_cascade then
                     collapse.queue_failure_check(pos, nil, secondary_radius(), rnd)
                 end
                 return
@@ -1666,7 +1667,7 @@ local function register_physics_events(name, intact)
                 update_affected_area(pos)
                 physics_updating = false
             end)
-            collapse.queue_failure_check(pos)
+            collapse.queue_failure_check(pos, nil, nil, nil, not intact)   -- 清碴：只判定開挖面
         end
     }
     if intact then

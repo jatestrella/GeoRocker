@@ -570,9 +570,9 @@ end
 if fcfg.drive then
 	local collapse = rockmech.collapse
 	local orig = collapse.queue_failure_check
-	collapse.queue_failure_check = function(pos, prev, r, round)
+	collapse.queue_failure_check = function(pos, prev, r, round, far)
 		orig(pos, prev, r, round)
-		rockmech.fem_queue(pos, round or 1)
+		rockmech.fem_queue(pos, round or 1, far)
 	end
 end
 

@@ -370,10 +370,11 @@ V.load_total = load_total
 V.MASS = {truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
 	jumbo = 30, charger = 20, drillrig = 25}
 
--- 接地壓力 (kPa) = (自重 + 車上的碎石) / 車身投影面積，g 取 10
+-- 接地壓力 (kPa) = (自重 + 車上的碎石) / 兩條輪跡的面積（各寬 1 m、長 = 車長），g 取 10。
+-- 重量都在輪子或履帶下面，不能平均到整個車身
 function V.ground_pressure(self, def, kind)
 	local kn = (V.MASS[kind] or 20) * 10 + load_total(self) / NLEV * rockmech.cfg.failure.gamma_other
-	return kn / (2 * def.half * (def.half + (def.rear or def.half)))
+	return kn / (2 * (def.half + (def.rear or def.half)))
 end
 
 -- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
@@ -395,12 +396,15 @@ function V.press_rubble(self, kind, def, pos, dir, f)
 			local key = x + 65536 * z
 			if self.pressed[l] ~= key then
 				self.pressed[l] = key
-				for y = gy, gy - 1, -1 do
+				-- 車子傾斜時，車頭、車尾的地面和車身中心差好幾格
+				for y = gy + 3, gy - 4, -1 do
 					local p = {x = x, y = y, z = z}
-					if rockmech.rubble_level[core.get_node(p).name] then
+					local name = core.get_node(p).name
+					if rockmech.rubble_level[name] then
 						rockmech.collapse.squeeze(p, q, {x = dir.z * l, z = -dir.x * l})
 						break
 					end
+					if not V.passable(name) then break end
 				end
 			end
 		end
