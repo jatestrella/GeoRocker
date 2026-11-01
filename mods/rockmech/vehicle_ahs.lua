@@ -11,6 +11,8 @@
 --   倒不乾淨就換下一個位置再倒，連兩個位置都倒不完就帶著剩下的開回去；全滿就在傾倒點等（推土機推平後在設定畫面重設）。
 --   傾倒點設在破碎站旁邊：車子順著路線的方向開到受料倉前，自己倒車把車斗對準倉的中心，每趟都倒同一個位置；
 --   倉裡放不下這一車就在待命點等。
+--   綁定怪手：裝載點跟著怪手走，像真的礦場由怪手決定停車位置（spotting）。回到路線起點後直線開向怪手，在怪手前方
+--   掉頭、倒車到車尾離怪手 rockmech_ahs_tail_gap，車頭朝外，裝滿直接開走。怪手移動就重新停車；前一台還在裝就在旁邊排隊。
 --   前方有人或車就停（障礙偵測）；有人上車駕駛就暫停。爬坡限制、車尾碰撞照常。
 --   只在玩家附近（引擎執行的區塊內）會動，跑太遠會停住，等玩家靠近才繼續。
 
@@ -27,13 +29,16 @@ local DUMP_SPOTS = #LATERAL
 local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾公尺
 local APPROACH = 16         -- 進格柵的方向：看路線上離格柵這麼遠的點，別被最後幾公尺的轉彎帶偏
 local HOPPER_WAIT = "受料倉滿了，等待中"
+local QUEUE_R, QUEUE_SIDE = 25, 8   -- 排隊的位置：離怪手多遠、離進出的路線多遠 (m)
+local cfg = rockmech.cfg
 
 local AHS = {}
 V.ahs = AHS
 
 local PHASE = {wait = "在裝載點等裝滿", to_dump = "前往傾倒點", to_spot = "前往傾倒位置", align = "對準傾倒位置",
 	back_in = "倒車進傾倒位置", dumping = "倒土", pull_out = "離開傾倒位置", to_route = "倒完，回到路線",
-	to_load = "回裝載點", full = "傾倒區滿了（推平後在設定畫面重設）"}
+	to_load = "回裝載點", full = "傾倒區滿了（推平後在設定畫面重設）",
+	to_exc = "前往怪手", exc_align = "掉頭對準怪手", exc_back = "倒車到怪手旁"}
 
 local function flat_dist(a, b) return math.sqrt((a.x - b.x) ^ 2 + (a.z - b.z) ^ 2) end
 local function round(p) return {x = math.floor(p.x * 10 + 0.5) / 10, y = math.floor(p.y * 10 + 0.5) / 10, z = math.floor(p.z * 10 + 0.5) / 10} end
@@ -127,6 +132,34 @@ local function drive_to(self, def, ctx, a, ap, target)
 	if msg ~= a.wait_msg then a.wait_msg = msg; V.refresh(self) end
 end
 
+-- 綁定的怪手：回傳 位置、路線那一側的單位向量 u、車身中心要停在離怪手多遠。怪手沒載入時用最後看到的位置
+local function exc_spot(a, def)
+	local b = a.bound
+	local e = V.by_uid[b.uid]
+	local p = e and e.object:get_pos()
+	if p then b.pos = round(p) end
+	local start = a.route[1]
+	local dx, dz = start.x - b.pos.x, start.z - b.pos.z
+	local l = math.sqrt(dx * dx + dz * dz)
+	local u = l < 1 and {x = 0, z = 1} or {x = dx / l, z = dz / l}
+	return b.pos, u, def.rear + cfg.ahs_tail_gap, l
+end
+-- 怪手這裡有別台綁同一台的車：正在裝，或裝滿還沒開遠（只有一條進出的路，重車先走，不然會面對面停住）
+local function exc_busy(self, a, e)
+	for _, o in ipairs(core.get_objects_inside_radius(e, QUEUE_R)) do
+		local t = o:get_luaentity()
+		local ta = t and t ~= self and t.ahs
+		if ta and ta.on and ta.bound and ta.bound.uid == a.bound.uid
+				and (ta.phase == "wait" or ta.phase == "exc_align" or ta.phase == "exc_back" or ta.phase == "to_dump") then
+			return true
+		end
+	end
+	return false
+end
+local function say(self, a, msg)
+	if a.wait_msg ~= msg then a.wait_msg = msg; V.refresh(self) end
+end
+
 -- 每一步：錄製路線點；無人駕駛時決定下一步的操作（self.autopilot）
 function AHS.step(self, def, ctx)
 	local a = self.ahs
@@ -142,8 +175,10 @@ function AHS.step(self, def, ctx)
 	local reach = def.half + 1
 	if a.phase == "wait" then
 		if V.load_total(self) >= def.cap then
-			a.idx = 2
+			a.idx = a.bound and 1 or 2      -- 綁定怪手：從怪手旁邊先開回路線起點
 			set_phase(self, "to_dump")
+		elseif a.bound and flat_dist(exc_spot(a, def), a.spot_at or pos) > cfg.ahs_follow then
+			set_phase(self, "to_exc")       -- 怪手走了，跟過去
 		end
 	elseif a.phase == "to_dump" or a.phase == "to_load" then
 		local fwd = a.phase == "to_dump"
@@ -162,7 +197,44 @@ function AHS.step(self, def, ctx)
 			a.target = next_spot(a, def)
 			set_phase(self, a.target and "to_spot" or "full")
 		else
+			set_phase(self, a.bound and "to_exc" or "wait")
+		end
+	elseif a.phase == "to_exc" then
+		local e, u, stop, far = exc_spot(a, def)
+		if far > cfg.ahs_max_dist then
+			say(self, a, ("怪手離路線起點太遠（%d m）"):format(far))
+		elseif exc_busy(self, a, e) then
+			-- 前一台還在裝：在路線旁邊等，不擋它出來
+			local q = {x = e.x + u.x * QUEUE_R - u.z * QUEUE_SIDE, y = e.y, z = e.z + u.z * QUEUE_R + u.x * QUEUE_SIDE}
+			if flat_dist(pos, q) < reach then say(self, a, "等前一台裝完")
+			else drive_to(self, def, ctx, a, ap, q) end
+		else
+			local far_pt = {x = e.x + u.x * (stop + cfg.ahs_back_in), y = e.y, z = e.z + u.z * (stop + cfg.ahs_back_in)}
+			if flat_dist(pos, far_pt) < 1.5 then set_phase(self, "exc_align")
+			else drive_to(self, def, ctx, a, ap, far_pt) end
+		end
+	elseif a.phase == "exc_align" then
+		-- 原地轉成車頭朝路線、車尾朝怪手
+		local _, u = exc_spot(a, def)
+		local diff = heading_diff(ctx.yaw, u.x, u.z)
+		if math.abs(diff) > 0.12 then
+			if diff > 0 then ap.left = true else ap.right = true end
+		else
+			a.stuck_t = 0
+			set_phase(self, "exc_back")
+		end
+	elseif a.phase == "exc_back" then
+		-- 倒車到車尾離怪手 ahs_tail_gap；到了、或頂到東西 3 秒沒動，就在這裡裝
+		local e, u, stop = exc_spot(a, def)
+		local moved = a.last_pos and flat_dist(pos, a.last_pos) or 1
+		a.stuck_t = moved < 0.01 and (a.stuck_t or 0) + ctx.dtime or 0
+		if flat_dist(pos, e) - stop < 0.3 or a.stuck_t > 3 then
+			a.spot_at = {x = e.x, y = e.y, z = e.z}
 			set_phase(self, "wait")
+		else
+			ap.down = true
+			local diff = heading_diff(ctx.yaw, u.x, u.z)
+			if diff > DEAD then ap.left = true elseif diff < -DEAD then ap.right = true end
 		end
 	elseif a.phase == "to_spot" then
 		-- 先到傾倒位置前方的待命點
@@ -275,6 +347,13 @@ local function draw_line(name, a)
 	end
 	if a.load and flat_dist(me, a.load) < LINE_RANGE then mark(name, a.load, 12, "#40a0ff") end
 	if a.dump and flat_dist(me, a.dump) < LINE_RANGE then mark(name, a.dump, 12, "#ff4040") end
+	if a.bound and a.route[1] and flat_dist(me, a.bound.pos) < LINE_RANGE then
+		-- 綁定的怪手：藍點，路線起點到怪手畫一段
+		local p, q = a.route[1], a.bound.pos
+		local n = math.max(1, math.floor(flat_dist(p, q) / LINE_STEP))
+		for s = 0, n - 1 do mark(name, vector.add(p, vector.multiply(vector.subtract(q, p), s / n)), 3, "#40ff70") end
+		mark(name, q, 12, "#40a0ff")
+	end
 	local c = rockmech.grate_center(me, LINE_RANGE)
 	if c then
 		local R = rockmech.HOPPER_RANGE
@@ -330,9 +409,9 @@ local function formspec(self)
 			or "錄製路線中（開到傾倒點後按「設為傾倒點」）")
 		or a.on and (a.wait_msg or PHASE[a.phase] or "") or "停止"
 	return table.concat({
-		"formspec_version[6]size[9,8.4]",
+		"formspec_version[6]size[9,9.3]",
 		"label[0.5,0.6;無人駕駛（AHS）]",
-		("label[0.5,1.2;裝載點：%s]"):format(fmt(a.load)),
+		("label[0.5,1.2;裝載點：%s]"):format(a.bound and "跟著怪手" or fmt(a.load)),
 		("label[0.5,1.7;傾倒點：%s%s]"):format(fmt(a.dump), a.hopper and "（破碎站受料倉）" or ""),
 		("label[0.5,2.2;路線：%d 個點　傾倒區：已用 %d / %d 個位置]"):format(a.route and #a.route or 0,
 			math.min(a.spot or 0, DUMP_SPOTS), DUMP_SPOTS),
@@ -345,7 +424,8 @@ local function formspec(self)
 		"button[4.6,5.9;3.9,0.8;reset;重設傾倒區]",
 		"button[0.5,6.8;3.9,0.8;line;顯示／隱藏路線]",
 		"button_exit[4.6,6.8;3.9,0.8;ok;關閉]",
-		"label[0.5,7.9;裝滿 → 沿路線到傾倒線，倒車進這趟的位置倒土 → 開回裝載點；前方有人或車會停]",
+		("button[0.5,7.7;8,0.8;bind;%s]"):format(a.bound and "解除綁定怪手" or "綁定最近的怪手（裝載點跟著怪手走）"),
+		"label[0.5,8.8;裝滿 → 沿路線到傾倒線，倒車進這趟的位置倒土 → 開回裝載點；前方有人或車會停]",
 	})
 end
 function AHS.open(self, player)
@@ -385,7 +465,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				local dd = flat_dist(pos, p)
 				if dd < best then best, bi = dd, i end
 			end
-			if bi == 1 then a.phase = "wait" else a.phase, a.idx = "to_load", bi end
+			if bi == 1 then a.phase = a.bound and "to_exc" or "wait" else a.phase, a.idx = "to_load", bi end
 			a.wait_msg = nil
 			msg = "已啟動：請下車"
 		end
@@ -396,7 +476,27 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		self.autopilot = nil
 		msg = "已停止"
 	elseif fields.go then
-		if a.on and a.phase == "wait" then a.idx = 2; a.phase = "to_dump"; msg = "出發" end
+		if a.on and a.phase == "wait" then a.idx = a.bound and 1 or 2; a.phase = "to_dump"; msg = "出發" end
+	elseif fields.bind then
+		if a.bound then
+			a.bound, a.spot_at = nil, nil
+			msg = "解除綁定怪手"
+		else
+			local best, bd
+			for _, o in ipairs(core.get_objects_inside_radius(pos, cfg.ahs_max_dist)) do
+				local e = o:get_luaentity()
+				if e and e.uid and e.vkind and e.vkind:find("excavator", 1, true) then
+					local d = vector.distance(pos, o:get_pos())
+					if not bd or d < bd then best, bd = e, d end
+				end
+			end
+			if best then
+				a.bound = {uid = best.uid, pos = round(best.object:get_pos())}
+				msg = ("綁定怪手（%d m 外）：裝載點跟著它走"):format(bd)
+			else
+				msg = ("%d m 內沒有怪手"):format(cfg.ahs_max_dist)
+			end
+		end
 	elseif fields.reset then
 		a.spot = 0
 		msg = "傾倒區重設：從第一個位置開始"

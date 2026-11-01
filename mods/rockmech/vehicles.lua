@@ -394,6 +394,7 @@ local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
 end
 V.deposit_column = deposit_column
 
+V.by_uid = {}      -- 車輛編號（存在車上，重開遊戲不變）→ 目前載入的實體
 local function load_total(self)
 	local t = 0
 	for _, v in pairs(self.load) do t = t + v end
@@ -845,6 +846,8 @@ function V.register(kind, def)
 		on_activate = function(self, staticdata)
 			self.load, self.store, self.loadq = {}, {}, {}
 			local data = staticdata ~= "" and core.deserialize(staticdata) or nil
+			self.uid = data and data.uid or ("%x-%x"):format(os.time(), math.random(0, 0xffffff))
+			V.by_uid[self.uid] = self
 			if data then
 				self.load = data.load or {}
 				self.loadq = data.loadq or {}
@@ -866,12 +869,13 @@ function V.register(kind, def)
 			end
 		end,
 		on_deactivate = function(self)
+			if V.by_uid[self.uid] == self then V.by_uid[self.uid] = nil end
 			engine_stop(self)
 			remove_parts(self)
 			drop_chase(self)
 		end,
 		get_staticdata = function(self)
-			local data = {load = self.load, loadq = self.loadq, store = self.store, yaw = self.object:get_yaw()}
+			local data = {load = self.load, loadq = self.loadq, store = self.store, yaw = self.object:get_yaw(), uid = self.uid}
 			if def.on_save then def.on_save(self, data) end
 			return core.serialize(data)
 		end,

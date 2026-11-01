@@ -626,6 +626,11 @@ function config.load(get)
 	cfg.rubble_sound_gain = math.max(0, tonumber(get("rockmech_rubble_sound_gain")) or 1)
 	cfg.vehicle_sound_gain = math.max(0, tonumber(get("rockmech_vehicle_sound_gain")) or 1)
 	cfg.shotcrete_speed = math.max(0.1, tonumber(get("rockmech_shotcrete_speed")) or 1.5)
+	-- 無人卡車綁定怪手（vehicle_ahs.lua）：車尾離怪手中心、倒車的距離、怪手移動多遠要重新停車、離路線起點多遠就不去
+	cfg.ahs_tail_gap = math.max(1, tonumber(get("rockmech_ahs_tail_gap")) or 5)
+	cfg.ahs_back_in = math.max(0.5, tonumber(get("rockmech_ahs_back_in")) or 3)
+	cfg.ahs_follow = math.max(1, tonumber(get("rockmech_ahs_follow")) or 6)
+	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)
 	cfg.model_scale = tonumber(get("rockmech_model_scale")) or 1
