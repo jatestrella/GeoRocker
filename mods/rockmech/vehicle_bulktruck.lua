@@ -19,7 +19,7 @@ local ANFO, EMULSION = "rockmech:anfo", "rockmech:emulsion"
 local HOLE, CHARGED, ANFO_HOLE = "rockmech:drill_hole", "rockmech:charged_hole", "rockmech:anfo_hole"
 
 local def = {desc = "ANFO 裝藥車 Bulk explosives truck", color = "#3a8a50", cap = 0, speed = 5.0,
-	top_speed = 12, accel = 1.5, max_grade = math.rad(17), look_limit = math.rad(75),
+	top_speed = 12, accel = 1.5, max_grade = math.rad(17), look_limit = math.rad(75), tire = 1.0,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 	tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	tail_lat = {-1.25, 0, 1.25}, tail_dy = {1.2, 2.2},

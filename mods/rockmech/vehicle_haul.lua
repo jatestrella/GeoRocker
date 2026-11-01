@@ -10,7 +10,7 @@ local NLEV, box_tex = V.NLEV, V.box_tex
 
 local def = {desc = "礦卡 Haul truck", short = "礦卡", color = "#d89818", cap = 36 * NLEV, speed = 4.5,
 	top_speed = 9, accel = 0.8,    -- 直線加速到約 32 km/h
-	stepheight = 1.6,              -- 輪胎比卡車大，爬得上較高的台階
+	tire = 2.4,
 	half = 2.5, top = 1.5, lat = {-2, -1, 0, 1, 2}, eye_up = 1.3, eye_fwd = 2.4, rear = 7.5,
 	mirror = {x = 2.45, y = 1.3, z = 2.2}, rearcam = {x = 0, y = 1.4, z = -7.7},
 	tilt = {front = 1.0, rear = -4.6, side_z = -4.6, side_x = 1.7}, max_grade = math.rad(12),   -- 重載礦卡約 20%

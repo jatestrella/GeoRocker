@@ -20,7 +20,7 @@ rockmech.vehicles = V
 -- rearcam：倒車攝影機位置；tilt：外觀隨地形傾斜時量地面的位置（前、後端的 z，左右兩側的 z 與 ±x）；
 -- rear：車身伸出碰撞箱後方到 z = −rear（選取框跟著加長；tail_lat／tail_dy 是倒車、轉彎檢查點，見 V.tail_guard）；top：碰撞箱上緣（預設 half，車身不是立方體時用）；
 -- overhangs：伸出碰撞箱那段擋人的範圍（見 V.overhang_push）；overhangs_now(self)：會動的擋人範圍（挖土機鏟斗）；max_grade：最大爬坡角（rad；行進方向整台車長的平均坡度）；
--- top_speed／accel：直線前進時從 speed 加速到 top_speed（m/s、m/s²）；stepheight（預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
+-- top_speed／accel：直線前進時從 speed 加速到 top_speed（m/s、m/s²）；tire（輪胎直徑，爬台階的上限，見 V.max_step）；stepheight（沒有 tire 的車，預設 1.1）；look_limit：第一人稱視線離車頭最多幾度（rad，省略 → 不限）；inv_image、item_desc：物品。
 -- 各車的行為（都可省略）：parts（零件清單）、on_spawn(self)（零件生成後）、on_load(self, data)／on_save(self, data)、
 -- refresh(self)（外觀與名牌）、hud(self)（HUD 加的文字）、can_turn(self, pos, yaw, yaw2)、
 -- move(self, ctx)（設定 ctx.speed）、step(self, ctx)（設定速度之後）、action(self, ctx)（作業鍵）。
@@ -168,24 +168,26 @@ end
 -- 隨地形傾斜：量前後軸（履帶前後端）、左右輪（履帶）下方的地面（def.tilt），算俯仰（前高為正）
 -- 與側傾（右側低為正，set_rotation 是右手 Z-X-Y：X 正 = 抬頭、Z 正 = 向右傾）。只有外觀傾斜，碰撞箱維持水平
 -- 爬坡：行進方向上（f = 1 前進、−1 倒車）從後端接地點到前端前方 1 m 的平均坡度（rad，上坡為正）。
--- 沿車身每 0.5 m 量地面高度、最小平方法擬合斜率（方塊地形是台階，只比兩點會差一整階）；
--- 量整台車長的平均，單一一格台階對長車只是小坡；地面在車底往上 1.6 m 以內找
+-- 沿車身每 0.5 m 量地面高度，取任兩點斜率的中位數（Theil-Sen）。只比兩點差一格就差很多；
+-- 最小平方法會把一個台階當成斜坡，車頭爬上去、車尾還沒上去時被「坡太陡」卡住。地面在車底往上 1.6 m 以內找
 local function travel_grade(p, yaw, def, f)
 	local t = def.tilt
 	local c, sn = math.cos(yaw), math.sin(yaw)
 	local za, zb = t.rear, t.front + 1
 	if f < 0 then za, zb = t.rear - 1, t.front end
 	local from = p.y - def.half + 1.6
-	local n, sz, sh, szz, szh = 0, 0, 0, 0, 0
+	local zs, hs = {}, {}
 	for z = za, zb, 0.5 do
 		local h = ground_top(p.x - z * sn, from, p.z + z * c, 10)
-		if h then
-			n, sz, sh, szz, szh = n + 1, sz + z, sh + h, szz + z * z, szh + z * h
-		end
+		if h then zs[#zs + 1], hs[#hs + 1] = z, h end
 	end
-	local var = n * szz - sz * sz
-	if n < 3 or var <= 0 then return 0 end
-	return math.atan(f * (n * szh - sz * sh) / var)
+	if #zs < 3 then return 0 end
+	local slopes = {}
+	for i = 1, #zs do for j = i + 1, #zs do
+		slopes[#slopes + 1] = (hs[j] - hs[i]) / (zs[j] - zs[i])
+	end end
+	table.sort(slopes)
+	return math.atan(f * slopes[math.ceil(#slopes / 2)])
 end
 
 local function ground_tilt(p, yaw, def)
@@ -365,6 +367,34 @@ local function load_total(self)
 	return t
 end
 V.load_total = load_total
+
+-- 爬台階：def.tire（輪胎直徑，m）的車最高爬輪胎的一半，但至少爬得上一格方塊（否則地形的 1 m 台階都上不去）。
+-- 台階低於 STEP_FREE 不減速（車轍、碎石的小高低差），越接近上限掉得越快，到上限剩 STEP_CRAWL（1 km/h）
+local STEP_FREE, STEP_CRAWL = 0.25, 1 / 3.6
+function V.max_step(def)
+	return math.max(def.tire / 2, 1.05)
+end
+function V.step_speed(v, h, hmax)
+	if h <= STEP_FREE then return v end
+	local a = math.abs(v)
+	local r = math.min(1, (h - STEP_FREE) / (hmax - STEP_FREE))
+	local slow = math.max(math.min(a, STEP_CRAWL), a * (1 - r) ^ 2)
+	return v >= 0 and slow or -slow
+end
+
+-- 行進方向前方（車頭或車尾外側）的地面比車底高多少
+local function step_ahead(pos, dir, def, f, speed)
+	local j = (f > 0 and def.half or -(def.rear or def.half)) + f * math.max(0.6, math.abs(speed) * 0.3)
+	local base = pos.y - def.half
+	local hmax = V.max_step(def)
+	local h = 0
+	for _, l in ipairs(def.lat or {-0.5, 0.5}) do
+		local x, z = pos.x + dir.x * j + dir.z * l, pos.z + dir.z * j - dir.x * l
+		local top = ground_top(x, base + hmax + 2, z, math.ceil(hmax) + 4)
+		if top then h = math.max(h, top - base) end
+	end
+	return h
+end
 
 -- 車輛的自重 (t)，車種沒列的用 20
 V.MASS = {truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
@@ -630,7 +660,7 @@ function V.register(kind, def)
 			textures = {CLEAR, CLEAR, CLEAR, CLEAR, CLEAR, CLEAR},
 			use_texture_alpha = true,
 			backface_culling = true,       -- 從車身裡面往外看是透明的
-			stepheight = def.stepheight or 1.1,
+			stepheight = def.tire and V.max_step(def) + 0.02 or def.stepheight or 1.1,
 			static_save = true,
 		},
 		vkind = kind,
@@ -802,6 +832,11 @@ function V.register(kind, def)
 				elseif g > 0 then
 					ctx.speed = ctx.speed * (1 - 0.7 * g / def.max_grade)
 				end
+			end
+			if def.tire and ctx.fwd ~= 0 then
+				local h, hmax = step_ahead(pos, dir, def, ctx.fwd, ctx.speed), V.max_step(def)
+				ctx.speed = V.step_speed(ctx.speed, h, hmax)
+				if h > hmax and not steep then steep = ("台階太高（%.1f m > %.1f m）"):format(h, hmax) end
 			end
 			if steep ~= self.steep then self.steep = steep; update_hud(self) end
 			if def.move then def.move(self, ctx) end
