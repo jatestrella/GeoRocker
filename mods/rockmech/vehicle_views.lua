@@ -24,7 +24,7 @@ local function hud_text(self)
 	if def.hud then s = s .. def.hud(self) end
 	if def.top_speed then s = s .. ("　%d km/h"):format(self.kmh or 0) end
 	if self.steep then s = s .. "\n" .. self.steep end
-	return s .. "　Z 切換視角　Shift 下車"
+	return s .. (def.pushed and "　Shift 放手" or "　Z 切換視角　Shift 下車")
 end
 
 -- 駕駛艙框（全螢幕 HUD 圖片，中間透明）：上方車頂邊條、左右 A 柱（車身顏色）、左右上方後照鏡、下方儀表板
@@ -367,11 +367,12 @@ function V.update_hud(self)
 		for _, id in ipairs(self.hud_mirror or {}) do d:hud_remove(id) end
 		self.hud_mirror = nil
 	end
-	if not self.hud_cockpit and not self.chase then
+	local pushed = TYPES[self.vkind].pushed     -- 手推車沒有駕駛艙和後照鏡
+	if not self.hud_cockpit and not self.chase and not pushed then
 		self.hud_cockpit = d:hud_add({type = "image", position = {x = 0.5, y = 0.5}, alignment = {x = 0, y = 0},
 			scale = {x = -100, y = -100}, text = cockpit_tex(self.vkind), z_index = -10})
 	end
-	if not self.hud_mirror and not self.chase then
+	if not self.hud_mirror and not self.chase and not pushed then
 		self.hud_mirror, self.mirror_last, self.mirror_t = {}, {}, nil
 		for i, view in ipairs(views_of(self.vkind)) do
 			local r = view.hud

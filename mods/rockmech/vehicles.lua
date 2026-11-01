@@ -783,14 +783,14 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 end)
 
 -- 駕駛的姿勢（有 player_api 時）：上車坐著、下車恢復
-local function set_seated(player, on)
+local function set_seated(player, on, pose)
 	if not player then return end
 	-- 開車時收起快捷欄與手上拿的東西（不擋駕駛艙畫面），下車再顯示
 	player:hud_set_flags({hotbar = not on, wielditem = not on})
 	if not player_api then return end
 	local name = player:get_player_name()
 	player_api.player_attached[name] = on or nil
-	player_api.set_animation(player, on and "sit" or "stand")
+	player_api.set_animation(player, on and (pose or "sit") or "stand")
 end
 
 local function drop_chase(self)
@@ -893,11 +893,17 @@ function V.register(kind, def)
 				pe.driver = nil
 			end
 			self.driver = name
-			clicker:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+			-- def.pushed（手推車）：人走在車後面推，面向車斗。實體的車尾朝前（車斗、倒土的邏輯都不用改）
+			if def.pushed then
+				clicker:set_attach(self.object, "", {x = 0, y = -def.half * 10, z = def.push_z * 10}, {x = 0, y = 180, z = 0})
+				clicker:set_look_horizontal(self.object:get_yaw() + math.pi)
+			else
+				clicker:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+			end
 			-- 第三人稱：盡量抬高（上限 y 1.5 m、前後 ±0.5 m），從後上方看得到駕駛艙與手臂
 			clicker:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
 			clicker:set_camera({mode = "first"})
-			set_seated(clicker, true)
+			set_seated(clicker, true, def.pushed and "stand")
 			update_hud(self)
 		end,
 		on_punch = function(self, puncher)
@@ -978,6 +984,7 @@ function V.register(kind, def)
 			if driven then
 				if d and ctrl.sneak then get_off(self); return end
 				fwd = (ctrl.up and 1 or 0) - (ctrl.down and 1 or 0)
+				if def.pushed then fwd = -fwd end
 				turn = (ctrl.left and 1 or 0) - (ctrl.right and 1 or 0)
 			end
 			if turn ~= 0 and def.can_turn and not def.can_turn(self, pos, yaw, yaw + turn * TURN_RATE * dtime) then
@@ -1032,8 +1039,10 @@ function V.register(kind, def)
 			if steep ~= self.steep then self.steep = steep; update_hud(self) end
 			if ctx.speed ~= 0 and on_shotcrete(pos, def, dir) then ctx.speed = ctx.speed * rockmech.cfg.shotcrete_speed end
 			if def.move then def.move(self, ctx) end
-			engine_update(self, kind, ctx.speed ~= 0 or turn ~= 0 or self.dig ~= nil or self.tip ~= nil or self.boring ~= nil
-				or (def.busy ~= nil and def.busy(self)))
+			if def.pushed then
+				if d and player_api then player_api.set_animation(d, ctx.speed ~= 0 and "walk" or "stand") end
+			else engine_update(self, kind, ctx.speed ~= 0 or turn ~= 0 or self.dig ~= nil or self.tip ~= nil or self.boring ~= nil
+				or (def.busy ~= nil and def.busy(self))) end
 			obj:set_velocity({x = dir.x * ctx.speed + slide_x, y = vel.y, z = dir.z * ctx.speed + slide_z})
 			-- HUD 時速（每 5 km/h 更新一次）
 			if def.top_speed then
@@ -1043,7 +1052,7 @@ function V.register(kind, def)
 			if def.step then def.step(self, ctx) end
 			-- Z（zoom 鍵）：切換追蹤相機（駕駛掛到車子後上方的點上）／車頂第一人稱
 			if d then
-				if ctrl.zoom and not self.zoom_held then
+				if ctrl.zoom and not self.zoom_held and not def.pushed then
 					if self.chase then
 						drop_chase(self)
 						d:set_detach()
@@ -1085,7 +1094,7 @@ function V.register(kind, def)
 			local odd = (def.half * 2) % 2 == 1
 			local off = odd and 0 or 0.5
 			local obj = core.add_entity({x = a.x + off, y = a.y - 0.5 + def.half, z = a.z + off}, ename)
-			if obj and placer then obj:set_yaw(placer:get_look_horizontal()) end
+			if obj and placer then obj:set_yaw(placer:get_look_horizontal() + (def.pushed and math.pi or 0)) end
 			if not core.is_creative_enabled(placer and placer:get_player_name() or "") then itemstack:take_item() end
 			return itemstack
 		end,

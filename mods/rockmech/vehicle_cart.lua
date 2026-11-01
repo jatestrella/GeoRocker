@@ -1,17 +1,18 @@
 -- rockmech/vehicle_cart.lua
--- 手推車：經營模式第一台買得起的車，比人多載一點（rockmech_cart_blocks 塊）。操作同卡車：右鍵上車、空白鍵倒在車尾，
--- 手上拿著碎石時右鍵是裝上去。沒有無人駕駛。
+-- 手推車：經營模式第一台買得起的車，比人多載一點（rockmech_cart_blocks 塊）。人走在車後面推，車斗在前面，
+-- 空白鍵把車斗往前翻，碎石倒在前方；手上拿著碎石時右鍵是裝上去。沒有引擎，也沒有無人駕駛。
+-- 實體的車尾就是推車的前方（def.pushed：前後操作對調），車斗、倒土的邏輯和卡車共用。
 
 local V = rockmech.vehicles
 local NLEV, box_tex = V.NLEV, V.box_tex
 
 local c = "#8a7050"
 local cart = {desc = "手推車 Hand cart", short = "推車", color = c, cap = rockmech.cfg.cart_blocks * NLEV, speed = 2.5,
-	tire = 0.6, no_ahs = true,
-	half = 0.9, top = 0.6, lat = {-1, 0, 1}, eye_up = 1.2, eye_fwd = 0.3, rear = 2.4, mirror = {x = 0.8, y = 0.8, z = 0.2},
-	rearcam = {x = 0, y = 0.9, z = -2.6}, tilt = {front = 0.4, rear = -2.0, side_z = -0.8, side_x = 0.6},
+	tire = 0.6, no_ahs = true, pushed = true, push_z = 1.3, look_limit = math.pi,
+	half = 0.9, top = 0.6, lat = {-1, 0, 1}, eye_up = V.EYE_HEIGHT - 0.9, eye_fwd = -1.3, rear = 2.4,
+	tilt = {front = 0.4, rear = -2.0, side_z = -0.8, side_x = 0.6},
 	max_grade = math.rad(17),
-	item_desc = ("右鍵上車；空白鍵把車斗倒在車尾（載量 %d 塊）\n手上拿著碎石時右鍵是裝上去"):format(rockmech.cfg.cart_blocks)}
+	item_desc = ("右鍵推車；空白鍵把車斗往前倒（載量 %d 塊）\n手上拿著碎石時右鍵是裝上去"):format(rockmech.cfg.cart_blocks)}
 do
 	local r = {}
 	r[#r + 1] = {4, 12, 22, 8, c}; r[#r + 1] = {2, 10, 26, 2, "#5a4a30"}
@@ -20,10 +21,12 @@ do
 end
 do
 	local wheel = {V.TREAD, V.TREAD, V.WHEEL, V.WHEEL, V.TREAD, V.TREAD}
+	local wood = box_tex("#5a4a30")
 	local body = {
-		{pos = {x = 0, y = -0.5, z = -0.8}, size = {x = 1.0, y = 0.12, z = 3.0}, tex = box_tex("#5a4a30")},   -- 底架
-		{pos = {x = -0.8, y = -0.55, z = -1.5}, size = {x = 0.2, y = 0.7, z = 0.7}, tex = wheel},
-		{pos = {x = 0.8, y = -0.55, z = -1.5}, size = {x = 0.2, y = 0.7, z = 0.7}, tex = wheel},
+		{pos = {x = 0, y = -0.45, z = -1.6}, size = {x = 0.9, y = 0.1, z = 1.8}, tex = wood},       -- 車斗下的底架
+		{pos = {x = 0, y = -0.6, z = -2.1}, size = {x = 0.25, y = 0.6, z = 0.6}, tex = wheel},      -- 前面的輪子
+		{pos = {x = -0.45, y = -0.15, z = 0.1}, size = {x = 0.1, y = 0.1, z = 2.0}, tex = wood},    -- 兩根握把，伸到人手上
+		{pos = {x = 0.45, y = -0.15, z = 0.1}, size = {x = 0.1, y = 0.1, z = 2.0}, tex = wood},
 	}
 	V.hauler(cart, {
 		hinge = {x = 0, y = -0.4, z = -2.4}, size = {x = 1.5, y = 0.8, z = 1.6}, body = body,
@@ -31,6 +34,6 @@ do
 		side_tex = ("[fill:16x16:%s^[fill:16x2:0,0:#5a4a30"):format(c),
 		overlap_lat = {-0.7, 0, 0.7}, overlap_dy = {0.6, 1.2}, aim_top = 0.4,
 	})
-	function cart.hud(self) return "\n空白鍵 把車斗倒在車尾" end
+	function cart.hud(self) return "\n空白鍵 把車斗往前倒" end
 end
 V.register("cart", cart)
