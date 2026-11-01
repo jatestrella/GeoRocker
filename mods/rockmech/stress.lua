@@ -109,11 +109,42 @@ function stress.zone_at_x(cfg, x)
 end
 
 -- 某位置的岩性名稱（依 cfg.lith_mode）
-function stress.lith_key_at(cfg, x, y)
+function stress.lith_key_at(cfg, x, y, z)
+	if cfg.coal_seam and z and stress.in_seam(cfg.coal_seam, x, y, z) then return "coal" end
 	if cfg.lith_mode == "zones" then
 		return stress.zone_at_x(cfg, x)
 	end
 	return stress.layer_at_depth(cfg.layers, stress.depth(y, cfg.surface_y))
+end
+
+-- 煤層（cfg.coal_seam）：平面通過 (x0, y0, z0)，往 dipdir 傾 dip 度，真厚度 t。
+-- 回傳點到煤層中面的垂直距離（m）
+function stress.seam_offset(s, x, y, z)
+	local along = (x - s.x0) * s.sin_dd + (z - s.z0) * s.cos_dd
+	return ((y - s.y0) + s.tan_dip * along) * s.cos_dip
+end
+function stress.in_seam(s, x, y, z)
+	return math.abs(stress.seam_offset(s, x, y, z)) <= s.t / 2
+end
+-- 煤的品位（param2 1..255）：煤層中央最好，靠頂底板變差（夾雜質），再加緩慢的橫向變化
+function stress.seam_grade(s, x, y, z)
+	local d = 2 * stress.seam_offset(s, x, y, z) / s.t
+	local g = 215 - 120 * d * d + 12 * math.sin(x / 37) + 12 * math.sin(z / 29)
+	return math.max(1, math.min(255, math.floor(g + 0.5)))
+end
+
+-- 露天坑（cfg.open_pit）：螺旋階梯，中心 (x0, z0)，底半徑 R、深 D（坑底 y = surface − D），
+-- 階高 H、階寬 W。每一階是一圈上升 H 的坡道，接到外圈，就是運輸道路。
+-- 回傳 (x, z) 這一欄的地面高度（小數，m）；坑外回傳 nil
+function stress.pit_surface(p, surface, x, z)
+	local dx, dz = x - p.x0, z - p.z0
+	local r = math.sqrt(dx * dx + dz * dz)
+	if r < p.R then return surface - p.D end
+	local n = math.floor((r - p.R) / p.W)
+	local turn = ((math.atan2 or math.atan)(dz, dx) / (2 * math.pi)) % 1     -- LuaJIT 的 math.atan 只收一個參數
+	local h = surface - p.D + p.H * (n + turn)
+	if h >= surface then return nil end
+	return h
 end
 
 -- 建立 y → 岩性名稱 的查表，供地圖生成在 [ymin, ymax] 內使用

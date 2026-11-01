@@ -207,7 +207,7 @@ end
 
 -- 依 y 取該深度分層的岩性條目
 function rockmech.lith_at(x, y, z)
-	return cfg.lithologies[rockmech.stress.lith_key_at(cfg, x, y)]
+	return cfg.lithologies[rockmech.stress.lith_key_at(cfg, x, y, z)]
 end
 
 function rockmech.lith_at_y(y)

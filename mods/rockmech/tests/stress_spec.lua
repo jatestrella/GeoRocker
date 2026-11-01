@@ -146,4 +146,39 @@ describe("stress 上覆荷重外插", function()
 			assert.near(a[k], b[k], 1e-12)
 		end
 	end)
+
+	local function seam(dip, dd, t, y0)
+		local a, b = math.rad(dip), math.rad(dd)
+		return {t = t, y0 = y0, x0 = 0, z0 = 0, tan_dip = math.tan(a), cos_dip = math.cos(a),
+			sin_dd = math.sin(b), cos_dd = math.cos(b)}
+	end
+
+	it("煤層：往傾向變深，真厚度 t", function()
+		local s = seam(30, 90, 15, -30)
+		assert.near(0, stress.seam_offset(s, 0, -30, 0), 1e-9)
+		assert.is_true(stress.in_seam(s, 0, -30, 0))
+		assert.is_true(stress.in_seam(s, 100, -30 - 100 * math.tan(math.rad(30)), 500))   -- 中面往東變深，南北不變
+		assert.is_false(stress.in_seam(s, 100, -30, 0))
+		-- 鉛直厚度 = t / cos(dip)
+		local v = 15 / math.cos(math.rad(30))
+		assert.is_true(stress.in_seam(s, 0, -30 + v / 2 - 0.01, 0))
+		assert.is_false(stress.in_seam(s, 0, -30 + v / 2 + 0.01, 0))
+	end)
+
+	it("煤層品位：中央比頂底板好，1..255", function()
+		local s = seam(30, 90, 15, -30)
+		local v = 7 / math.cos(math.rad(30))
+		local mid, edge = stress.seam_grade(s, 0, -30, 0), stress.seam_grade(s, 0, -30 + v, 0)
+		assert.is_true(mid > edge + 50)
+		assert.is_true(mid >= 1 and mid <= 255 and edge >= 1)
+	end)
+
+	it("露天坑：坑底平、每圈上升一階，到地表結束", function()
+		local p = {x0 = 0, z0 = 0, R = 30, D = 40, H = 8, W = 12}
+		assert.near(-40, stress.pit_surface(p, 0, 10, 0), 1e-9)
+		assert.near(-40, stress.pit_surface(p, 0, 31, 0), 1e-9)              -- 第 0 圈起點
+		assert.near(-40 + 8 * 0.25, stress.pit_surface(p, 0, 0, 31), 1e-9)   -- 轉 1/4 圈
+		assert.near(-32, stress.pit_surface(p, 0, 43, 0), 1e-9)              -- 第 1 圈起點 = 第 0 圈終點
+		assert.is_nil(stress.pit_surface(p, 0, 300, 0))
+	end)
 end)

@@ -91,12 +91,39 @@ if cfg.strip_soil then
 	end
 end
 
-local data = {}
+local data, p2data = {}, {}
+local seam, pit = cfg.coal_seam, cfg.open_pit
+local c_road = {}
+for k = 1, 7 do c_road[k] = core.get_content_id("rockmech:rubble_l" .. k) end
+
+-- 露天坑：把地面以上的格挖成空氣，路面的零頭鋪不滿格的碎石（車才開得順）
+local function cut_pit(area, minp, maxp)
+	local cut = 0
+	for z = minp.z, maxp.z do
+		for x = minp.x, maxp.x do
+			local h = stress.pit_surface(pit, cfg.surface_y, x, z)
+			if h then
+				local base = math.floor(h)
+				local k = math.floor((h - base) * 8)
+				for y = math.max(minp.y, base + 1), maxp.y do
+					local vi = area:index(x, y, z)
+					if data[vi] ~= c_air then
+						data[vi] = y == base + 1 and k > 0 and c_road[k] or c_air
+						p2data[vi] = 0
+						cut = cut + 1
+					end
+				end
+			end
+		end
+	end
+	return cut
+end
 
 core.register_on_generated(function(vm, minp, maxp, blockseed)
 	local emin, emax = vm:get_emerged_area()
 	local area = VoxelArea(emin, emax)
 	vm:get_data(data)
+	if seam or pit then vm:get_param2_data(p2data) end
 
 	-- 每個 y 的目標 content id
 	local layer = stress.layer_table(cfg, minp.y, maxp.y)
@@ -127,11 +154,13 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 					if zones then
 						cv, pv = var_x[x], plane_x[x]
 					end
+					local coal = seam and stress.in_seam(seam, x, y, z)
 					if plane then
-						data[vi] = pv[suffix(cell_traces(joints, sets, x, y, z, MAXL))]
+						data[vi] = (coal and c_plane.coal or pv)[suffix(cell_traces(joints, sets, x, y, z, MAXL))]
 					else
-						data[vi] = cv[use_joints and cell_mask(sets, x, y, z) or 0]
+						data[vi] = (coal and c_var.coal or cv)[use_joints and cell_mask(sets, x, y, z) or 0]
 					end
+					if coal then p2data[vi] = stress.seam_grade(seam, x, y, z) end
 					changed = true
 					n = n + 1
 				end
@@ -151,7 +180,8 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 			elseif cid ~= c_stone and as_stone[cid] then
 				-- 鄰近 chunk 寫進邊緣的其他天然方塊（礦石、凍土、冰…）→ 該位置的岩性
 				local p = area:position(i)
-				local key = stress.lith_key_at(cfg, p.x, p.y)
+				local key = stress.lith_key_at(cfg, p.x, p.y, p.z)
+				if key == "coal" then p2data[i] = stress.seam_grade(seam, p.x, p.y, p.z) end
 				if plane then
 					data[i] = c_plane[key][suffix(cell_traces(joints, sets, p.x, p.y, p.z, MAXL))]
 				else
@@ -163,6 +193,11 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 		if stripped > 0 then changed = true end
 	end
 
+	if pit and cut_pit(area, minp, maxp) > 0 then
+		changed = true
+		stripped = stripped + 1
+	end
+
 	if logged < 3 and n > 0 then
 		logged = logged + 1
 		core.log("action", ("[rockmech] mapgen 岩性＋節理遮罩：%d 格、剝除土壤 %d 格，%.0f ms"):format(
@@ -171,6 +206,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 
 	if changed then
 		vm:set_data(data)
+		if seam or pit then vm:set_param2_data(p2data) end
 		-- stone → 岩性 光照不變；剝除土壤會改變光照與水的流動
 		if stripped > 0 then
 			vm:calc_lighting()

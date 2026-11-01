@@ -398,6 +398,26 @@ function config.load(get)
 	}
 
 	cfg.surface_y = tonumber(get("rockmech_surface_y")) or config.defaults.surface_y
+	-- 煤層 rockmech_coal_seam = 傾角,傾向,真厚度,y0[,x0,z0]；露天坑 rockmech_open_pit = x0,z0,底半徑,深度,階高,階寬
+	local function numbers(key, count)
+		local s = get(key)
+		if not s or s == "" then return nil end
+		local v = {}
+		for tok in tostring(s):gmatch("[^,%s]+") do v[#v + 1] = tonumber(tok) end
+		if #v < count then
+			warnings[#warnings + 1] = key .. " 需要 " .. count .. " 個數字（忽略）"
+			return nil
+		end
+		return v
+	end
+	local seam = numbers("rockmech_coal_seam", 4)
+	if seam then
+		local dip, dd = math.rad(seam[1]), math.rad(seam[2])
+		cfg.coal_seam = {t = seam[3], y0 = seam[4], x0 = seam[5] or 0, z0 = seam[6] or 0,
+			tan_dip = math.tan(dip), cos_dip = math.cos(dip), sin_dd = math.sin(dd), cos_dd = math.cos(dd)}
+	end
+	local pit = numbers("rockmech_open_pit", 6)
+	if pit then cfg.open_pit = {x0 = pit[1], z0 = pit[2], R = pit[3], D = pit[4], H = pit[5], W = pit[6]} end
 	-- 節理延續性：patch = 一片一片（片的大小 ≈ 間距，會切出完整的岩塊）；face = 舊版（每個格面各自判定）
 	cfg.joint_persistence = get("rockmech_joint_persistence") == "face" and "face" or "patch"
 	cfg.joint_lattice = math.max(2, math.min(16, math.floor(

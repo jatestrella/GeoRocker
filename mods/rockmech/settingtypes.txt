@@ -86,6 +86,12 @@ rockmech_model_scale (Model scale N) float 1.0 0.01 1000
 # A rock node with param2 = 1..100 uses that value as its GSI instead.
 rockmech_gsi (GSI profile, all lithologies) string
 
+# Coal seam in new terrain: dip,dipdir,true thickness,y0[,x0,z0], a plane through (x0, y0, z0). Empty = no seam.
+rockmech_coal_seam (Coal seam) string
+
+# Open pit cut into new terrain: x0,z0,floor radius,depth,bench height,bench width. Benches form a spiral haul road. Empty = no pit.
+rockmech_open_pit (Open pit) string
+
 # GSI profile for sandstone (overrides rockmech_gsi). Same format.
 rockmech_gsi_sandstone (GSI profile: sandstone) string
 
