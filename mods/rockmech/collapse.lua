@@ -330,8 +330,8 @@ local function rubble_sound(p, amount)
     if rubble_n > 256 then rubble_last, rubble_n = {}, 0 end
     rubble_last[key], rubble_any, rubble_n = now, now, rubble_n + 1
     core.sound_play("rockmech_rubble", {
-        pos = p, gain = gain * math.min(1, 0.4 + 0.15 * amount),
-        pitch = 0.9 + 0.2 * math.random(), max_hear_distance = 32,
+        pos = p, gain = gain * (amount / NLEV) ^ 1.5 + 0.03,      -- 移得越多越大聲，車輪輕壓幾乎聽不到
+        pitch = 0.85 + 0.2 * math.random(), max_hear_distance = 32,
     }, true)
 end
 

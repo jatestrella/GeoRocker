@@ -122,11 +122,11 @@ local function render_slide(v)
 	local function env(t) return math.min(1, t / 0.08) * (1 - t / v.len) ^ 0.7 end
 	for _ = 1, math.floor(v.rate * v.len) do
 		local t = math.random() * v.len
-		burst(buf, math.floor(t * RATE), log_uniform(0.00015, 0.0008), log_uniform(0.02, 0.2) * env(t), 1000, 8000)
+		burst(buf, math.floor(t * RATE), log_uniform(0.0004, 0.002), log_uniform(0.02, 0.16) * env(t), 300, 2500)
 	end
 	for _ = 1, v.clacks do
 		local t = math.random() * v.len * 0.8
-		burst(buf, math.floor(t * RATE), log_uniform(0.0015, 0.004), log_uniform(0.2, 0.5) * env(t), 500, 5000)
+		burst(buf, math.floor(t * RATE), log_uniform(0.003, 0.008), log_uniform(0.2, 0.45) * env(t), 200, 1800)
 	end
 	for i = 0, 3 do
 		burst(buf, math.floor(i * v.len / 5 * RATE), v.len / 4, v.rumble, 15, 170)
@@ -179,9 +179,9 @@ end
 local ENGINE = {seed = 101, len = 2, f0 = 62, harmonics = 5, roll = 1.6, noise = 0.15}
 
 local SLIDES = {
-	{seed = 71, len = 1.0, rate = 420, clacks = 5, rumble = 0.5},     -- 短
-	{seed = 83, len = 1.5, rate = 520, clacks = 9, rumble = 0.7},     -- 中，石頭多
-	{seed = 97, len = 1.3, rate = 640, clacks = 4, rumble = 0.4},     -- 細碎
+	{seed = 71, len = 1.0, rate = 260, clacks = 4, rumble = 1.0},     -- 短
+	{seed = 83, len = 1.5, rate = 320, clacks = 7, rumble = 1.4},     -- 中，石頭多
+	{seed = 97, len = 1.3, rate = 380, clacks = 3, rumble = 0.9},     -- 細碎
 }
 
 ---------------------------------------------------------------------------
