@@ -29,7 +29,7 @@ local DUMP_SPOTS = #LATERAL
 local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾公尺
 local APPROACH = 16         -- 進格柵的方向：看路線上離格柵這麼遠的點，別被最後幾公尺的轉彎帶偏
 local HOPPER_WAIT = "受料倉滿了，等待中"
-local QUEUE_R, QUEUE_SIDE = 25, 8   -- 排隊的位置：離怪手多遠、離進出的路線多遠 (m)
+local QUEUE_R, QUEUE_SIDE = 25, 10  -- 排隊的位置：離怪手多遠、離進出的路線多遠 (m)
 local cfg = rockmech.cfg
 
 local AHS = {}
@@ -151,10 +151,9 @@ local function exc_busy(self, a, e)
 		local ta = t and t ~= self and t.ahs
 		if ta and ta.on and ta.bound and ta.bound.uid == a.bound.uid
 				and (ta.phase == "wait" or ta.phase == "exc_align" or ta.phase == "exc_back" or ta.phase == "to_dump") then
-			return true
+			return ta
 		end
 	end
-	return false
 end
 local function say(self, a, msg)
 	if a.wait_msg ~= msg then a.wait_msg = msg; V.refresh(self) end
@@ -203,15 +202,21 @@ function AHS.step(self, def, ctx)
 		local e, u, stop, far = exc_spot(a, def)
 		if far > cfg.ahs_max_dist then
 			say(self, a, ("怪手離路線起點太遠（%d m）"):format(far))
-		elseif exc_busy(self, a, e) then
-			-- 前一台還在裝：在路線旁邊等，不擋它出來
-			local q = {x = e.x + u.x * QUEUE_R - u.z * QUEUE_SIDE, y = e.y, z = e.z + u.z * QUEUE_R + u.x * QUEUE_SIDE}
-			if flat_dist(pos, q) < reach then say(self, a, "等前一台裝完")
-			else drive_to(self, def, ctx, a, ap, q) end
 		else
-			local far_pt = {x = e.x + u.x * (stop + cfg.ahs_back_in), y = e.y, z = e.z + u.z * (stop + cfg.ahs_back_in)}
-			if flat_dist(pos, far_pt) < 1.5 then set_phase(self, "exc_align")
-			else drive_to(self, def, ctx, a, ap, far_pt) end
+			local busy = exc_busy(self, a, e)
+			local out = busy and busy.route[1]
+			if busy then
+				-- 前一台還在裝：在路線旁邊等，站在它出去那條路的另一側（兩台的路線不同時，排隊點才不會擋路）
+				local side = (out.z - e.z) * u.x - (out.x - e.x) * u.z > 0 and -1 or 1
+				local q = {x = e.x + u.x * QUEUE_R - u.z * QUEUE_SIDE * side, y = e.y,
+					z = e.z + u.z * QUEUE_R + u.x * QUEUE_SIDE * side}
+				if flat_dist(pos, q) < reach then say(self, a, "等前一台裝完")
+				else drive_to(self, def, ctx, a, ap, q) end
+			else
+				local far_pt = {x = e.x + u.x * (stop + cfg.ahs_back_in), y = e.y, z = e.z + u.z * (stop + cfg.ahs_back_in)}
+				if flat_dist(pos, far_pt) < 1.5 then set_phase(self, "exc_align")
+				else drive_to(self, def, ctx, a, ap, far_pt) end
+			end
 		end
 	elseif a.phase == "exc_align" then
 		-- 原地轉成車頭朝路線、車尾朝怪手
