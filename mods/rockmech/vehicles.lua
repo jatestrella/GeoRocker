@@ -676,6 +676,18 @@ function V.rubble_tex(base)
 	return type(t) == "table" and t.name or t or "[fill:16x16:#6a6058"
 end
 
+-- 車斗、鏟斗裡碎石的貼圖：有煤時用碎煤貼圖，顏色依品位，再依煤的比例往一般碎石的顏色混
+function V.fill_tex(self)
+	local _, best = V.load_mix(self)
+	local coal = rockmech.RUBBLE_COAL
+	if not (self.load and self.load[coal]) then return V.rubble_tex(best) end
+	local share = V.load_coal(self)
+	local r, g, b = rockmech.coal_rgb(V.load_grade(self, coal))
+	local function mix(c, waste) return math.floor((c * share + waste * (1 - share)) / 8 + 0.5) * 8 end
+	return ("%s^[multiply:#%02x%02x%02x"):format(V.rubble_tex(coal),
+		math.min(255, mix(r, 106)), math.min(255, mix(g, 96)), math.min(255, mix(b, 88)))
+end
+
 dofile(rockmech.modpath .. "/vehicle_views.lua")
 local hud_clear, update_hud, update_mirrors = V.hud_clear, V.update_hud, V.update_mirrors
 

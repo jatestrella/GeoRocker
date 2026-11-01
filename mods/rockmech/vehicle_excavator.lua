@@ -103,11 +103,12 @@ local function excavator(kind, P)
 		local total, best = V.load_mix(self)
 		local frac = math.min(1, total / def.cap)
 		local h = frac > 0 and (P.fill_h0 + (P.fill_h1 - P.fill_h0) * frac) or 0
-		local key = ("%.2f/%s"):format(h, tostring(best))
+		local tex = total > 0 and V.fill_tex(self)
+		local key = ("%.2f/%s"):format(h, tostring(tex))
 		if self.fill_key ~= key then
 			self.fill_key = key
 			if h > 0 then
-				local t = V.rubble_tex(best)
+				local t = tex
 				o:set_properties({is_visible = true, visual_size = {x = P.fill_w, y = h, z = P.fill_l}, textures = {t, t, t, t, t, t}})
 			else
 				o:set_properties({is_visible = false})

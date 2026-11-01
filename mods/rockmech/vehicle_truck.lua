@@ -32,7 +32,8 @@ local function place_bed(self, alpha)
 	local total, best = V.load_mix(self)
 	local frac = math.min(1, total / def.cap)
 	local h = frac > 0 and (0.1 + (bed.fill_hmax - 0.1) * frac) or 0
-	local key = ("%.2f/%s"):format(h, tostring(best))
+	local tex = total > 0 and V.fill_tex(self)
+	local key = ("%.2f/%s"):format(h, tostring(tex))
 	local changed = self.fill_key ~= key
 	self.fill_key = key
 	for _, fp in ipairs(bed.fills) do
@@ -41,7 +42,7 @@ local function place_bed(self, alpha)
 			local hh = math.min(h, fp.hmax or h)
 			if changed then
 				if hh > 0 then
-					local t = V.rubble_tex(best)
+					local t = tex
 					o:set_properties({is_visible = true, visual_size = {x = bed.fill_w, y = hh, z = fp.len}, textures = {t, t, t, t, t, t}})
 				else
 					o:set_properties({is_visible = false})
