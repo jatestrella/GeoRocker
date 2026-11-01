@@ -346,15 +346,10 @@ function rockmech.rubble_p2(node)
 	if ore then return node.param2 > 0 and node.param2 or ore.default end
 	return rockmech.ore_of_rubble[rockmech.rubble_base[node.name]] and node.param2 or 0
 end
--- 碎石的價值（品位 × value）：礦石的 value 單位
-function rockmech.ore_value(base, p2)
-	local ore = rockmech.ore_of_rubble[base]
-	return ore and ore.value * p2 / 255 or 0
-end
 
 -- 礦石品位的顯示文字（grade 0..1）：HUD、車輛載量共用
 function rockmech.ore_text(ore, grade)
-	return ("%s品位 %.0f%%　%.0f %s"):format(ore.label, grade * 100, grade * ore.value, ore.unit)
+	return ("%s品位 %.0f%%"):format(ore.label, grade * 100)
 end
 
 -- 不滿格的碎石（顆粒流用，granular.lua）：每格分 8 級，<碎石>_l1 … _l7 高度 1/8 … 7/8 m；
