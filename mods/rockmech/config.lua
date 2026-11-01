@@ -49,7 +49,7 @@ config.lithologies = {
 
 config.lithologies.coal = {
 	name = "coal", description = "Coal (煤)", ore = "coal",
-	gamma = 14.0, ucs = 15.0, tensile = 1.0, mi = 8, gsi = {top = 50},
+	gamma = 14.0, ucs = 15.0, tensile = 1.0, mi = 8, gsi = {top = 75},
 	color = "#2c2c31", cracky = 3,
 	texture = "default_stone.png^[colorize:#e0e0e0:200",
 	rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 2.0,
