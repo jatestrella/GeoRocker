@@ -79,6 +79,7 @@ function rockmech.blast_rock(center, R, floor_y)
 
 	local p2data = vm:get_param2_data()
 	local ejected, n_eject, n_rubble = {}, 0, 0   -- ejected：滿格碎石名稱 → 累計級數
+	local thrown = {}      -- 經營模式：炸飛的碎石 {base, 級數, 品位}，落回爆破坑（世界不掉落碎石）
 	local removed, rubbled = {}, {}
 	local changes = {}     -- 開挖前的方塊（只有開挖造成的惡化才破壞）
 	for z = p1.z, p2.z do for y = p1.y, p2.y do
@@ -96,6 +97,7 @@ function rockmech.blast_rock(center, R, floor_y)
 					local rname = rockmech.rubble_for(li.name)
 					if zone then changes[#changes + 1] = {pos = p, name = li.name} end
 					if zone == "eject" then
+						thrown[#thrown + 1] = {rname, rockmech.RUBBLE_LEVELS, rockmech.rubble_p2({name = li.name, param2 = p2data[vi]})}
 						data[vi] = c_air
 						ejected[rname] = (ejected[rname] or 0) + rockmech.RUBBLE_LEVELS
 						n_eject = n_eject + 1
@@ -112,6 +114,7 @@ function rockmech.blast_rock(center, R, floor_y)
 					data[vi] = c_air
 					-- 不滿格的碎石：依級數累加到滿格碎石（8 級 = 1 個），物品才會疊在同一堆
 					local base = rockmech.rubble_base[rb] or rb
+					thrown[#thrown + 1] = {base, rockmech.rubble_level[rb] or rockmech.RUBBLE_LEVELS, p2data[vi]}
 					ejected[base] = (ejected[base] or 0) + (rockmech.rubble_level[rb] or rockmech.RUBBLE_LEVELS)
 					n_eject = n_eject + 1
 					removed[#removed + 1] = p
@@ -131,7 +134,18 @@ function rockmech.blast_rock(center, R, floor_y)
 	vm:close()
 	-- 級數 → 個數（四捨五入）
 	for name, lv in pairs(ejected) do ejected[name] = math.floor(lv / rockmech.RUBBLE_LEVELS + 0.5) end
-	eject_items(center, ejected)
+	if cfg.career then
+		for _, t in ipairs(thrown) do
+			local left = t[2]
+			for _ = 1, #removed do       -- 那一欄滿了就換一欄
+				if left <= 0 then break end
+				local p = removed[math.random(#removed)]
+				left = rockmech.vehicles.deposit_column(p.x, p.z, p.y, t[1], left, nil, nil, t[3])
+			end
+		end
+	else
+		eject_items(center, ejected)
+	end
 
 	-- 觸發後續判定：爆炸範圍內的移除點（穩定判定、懸臂斷裂）與爆心（軸差破壞）
 	local col = rockmech.collapse
