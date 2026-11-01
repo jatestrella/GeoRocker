@@ -197,12 +197,21 @@ local function ground_tilt(p, yaw, def)
 		return p.x + lx * c - lz * sn, p.z + lx * sn + lz * c
 	end
 	local from, depth = p.y + 0.5, 8   -- 1:1 坡上車尾量測點的地面可比車身中心低 5 m 以上
-	local fx, fz = at(0, TILT_AXLES.front)
-	local rx, rz = at(0, TILT_AXLES.rear)
-	local lx, lz = at(-TILT_AXLES.side_x, TILT_AXLES.side_z)
-	local qx, qz = at(TILT_AXLES.side_x, TILT_AXLES.side_z)
-	local hf, hr = ground_top(fx, from, fz, depth), ground_top(rx, from, rz, depth)
-	local hl, hq = ground_top(lx, from, lz, depth), ground_top(qx, from, qz, depth)
+	-- 從 (lx0, lz0) 沿 (dx, dz) 走 len 公尺：一路接著地面走，碰到超過 1 m 的斷崖就停。
+	-- 懸在坑洞上的那一段沒有接地，不能拿洞底算傾角
+	local function reach(lx0, lz0, dx, dz, len)
+		local h
+		for t = 0, len, 0.5 do
+			local x, z = at(lx0 + dx * t, lz0 + dz * t)
+			local g = ground_top(x, from, z, depth)
+			if not g or (h and g < h - 1) then break end
+			h = g
+		end
+		return h
+	end
+	local hf, hr = reach(0, 0, 0, 1, TILT_AXLES.front), reach(0, 0, 0, -1, -TILT_AXLES.rear)
+	local hl = reach(0, TILT_AXLES.side_z, -1, 0, TILT_AXLES.side_x)
+	local hq = reach(0, TILT_AXLES.side_z, 1, 0, TILT_AXLES.side_x)
 	local pitch, roll = 0, 0
 	if hf and hr then pitch = math.atan((hf - hr) / (TILT_AXLES.front - TILT_AXLES.rear)) end
 	if hl and hq then roll = math.atan((hl - hq) / (2 * TILT_AXLES.side_x)) end

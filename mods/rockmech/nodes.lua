@@ -269,10 +269,11 @@ function rockmech.coal_heat(p2)
 	local h = cfg.lithologies.coal.heat
 	return h[1] + (h[2] - h[1]) * (rockmech.coal_grade(p2) - 1) / 254
 end
--- 品位 → 顏色 r, g, b（和 rockmech_coal_palette.png 相同：品位越高越黑）
+-- 品位 → 顏色 r, g, b（和 rockmech_coal_palette.png 相同：品位越高越黑，低品位偏冷的藍灰；
+-- 岩石碎石偏暖的褐色，車上混了岩石才分得出來，不會和低品位煤一樣）
 function rockmech.coal_rgb(p2)
 	local t = (rockmech.coal_grade(p2) - 1) / 254
-	return 120 + (22 - 120) * t, 112 + (22 - 112) * t, 100 + (25 - 100) * t
+	return 92 + (22 - 92) * t, 104 + (22 - 104) * t, 124 + (26 - 124) * t
 end
 -- 兩份碎石合併：依級數加權的品位。一般碎石都是 0，維持 0
 function rockmech.mix_grade(k1, p1, k2, p2)
