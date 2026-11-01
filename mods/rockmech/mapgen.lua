@@ -94,9 +94,9 @@ end
 local data, p2data = {}, {}
 local seam, pit = cfg.coal_seam, cfg.open_pit
 local c_road = {}
-for k = 1, 7 do c_road[k] = core.get_content_id("rockmech:rubble_l" .. k) end
+for k = 1, 7 do c_road[k] = core.get_content_id("rockmech:road_l" .. k) end
 
--- 露天坑：把地面以上的格挖成空氣，路面的零頭鋪不滿格的碎石（車才開得順）
+-- 露天坑：把地面以上的格挖成空氣，路面的零頭鋪不滿格的夯實碎石（車才開得順）
 local function cut_pit(area, minp, maxp)
 	local cut = 0
 	for z = minp.z, maxp.z do

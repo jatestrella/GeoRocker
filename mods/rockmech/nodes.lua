@@ -406,6 +406,26 @@ function rockmech.is_rubble(name)
 	return core.get_item_group(name, "rockmech_rubble") > 0
 end
 
+-- 夯實碎石（路面）：壓實過的碎石不算碎石，不會流動、車壓不出車轍、不會溜車；高度和碎石一樣分 8 級。
+-- 下方失去支撐才鬆開，變回碎石（collapse.lua）
+rockmech.road_level = {}      -- node 名稱 → 級數
+for k = 1, rockmech.RUBBLE_LEVELS - 1 do
+	local name = rockmech.modname .. ":road_l" .. k
+	local rubble = core.registered_nodes[rockmech.RUBBLE]
+	core.register_node(name, {
+		description = "Compacted rubble (夯實碎石)",
+		tiles = {rubble.tiles[1] .. "^[colorize:#a89878:110"},
+		drawtype = "nodebox",
+		paramtype = "light",
+		node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.5 + k / rockmech.RUBBLE_LEVELS, 0.5}},
+		groups = {crumbly = 2, cracky = 3, not_in_creative_inventory = 1},
+		is_ground_content = false,   -- 否則相鄰區塊生成時，會被 rockmech_strip_soil 當成土壤剝掉
+		sounds = rubble.sounds,
+		drop = k >= rockmech.RUBBLE_LEVELS / 2 and rockmech.RUBBLE or "",
+	})
+	rockmech.road_level[name] = k
+end
+
 -- 某個岩石 node 破碎後變成哪種碎石（碎石本身不變；不滿格的碎石回傳其滿格種類）
 function rockmech.rubble_for(nodename)
 	if rockmech.is_rubble(nodename) then return rockmech.rubble_base[nodename] or nodename end

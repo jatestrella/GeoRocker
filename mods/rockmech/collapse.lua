@@ -1699,6 +1699,8 @@ local function register_physics_events(name, intact)
             -- 正上方若是碎石（不在穩定判定的鍵結範圍內），也要重新判定掉落／滑動
             local above = {x = pos.x, y = pos.y + 1, z = pos.z}
             core.after(0, function()
+                local road = rockmech.road_level[core.get_node(above).name]
+                if road then core.swap_node(above, {name = rockmech.rubble_with_level(rockmech.RUBBLE, road)}) end
                 if rockmech.is_rubble(core.get_node(above).name) then
                     local prev = physics_updating
                     physics_updating = true

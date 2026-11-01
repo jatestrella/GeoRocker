@@ -133,17 +133,25 @@ function stress.seam_grade(s, x, y, z)
 	return math.max(1, math.min(255, math.floor(g + 0.5)))
 end
 
--- 露天坑（cfg.open_pit）：螺旋階梯，中心 (x0, z0)，底半徑 R、深 D（坑底 y = surface − D），
--- 階高 H、階寬 W。運輸道路是一條阿基米德螺線：每轉一圈往外移 W、上升 H，寬 W，轉完一圈剛好接上外圈。
+-- 露天坑（cfg.open_pit）：中心 (x0, z0)，底半徑 R、深 D（坑底 y = surface − D）。坑壁是一圈圈水平的階，
+-- 階高 H、階寬 W，到地表結束。運輸坡道寬 W、坡度 G，從坑底螺旋切過各階上到地表：中線半徑 rc 隨高度
+-- 線性往外，rc = R + cone·(h + D)，水平走 ds 上升 G·ds，所以 rc = R·e^(cone·G·θ)。
 -- 回傳 (x, z) 這一欄的地面高度（小數，m）；坑外回傳 nil
 function stress.pit_surface(p, surface, x, z)
 	local dx, dz = x - p.x0, z - p.z0
 	local r = math.sqrt(dx * dx + dz * dz)
-	if r < p.R then return surface - p.D end
+	local bottom = surface - p.D
+	local rim = p.R + p.W * math.max(p.D / p.H - 1, 1)     -- 最高一階的外緣
+	local cone = (rim + p.W / 2 - p.R) / p.D                 -- 坡道到地表時整條路剛好在坑外
 	local turn = ((math.atan2 or math.atan)(dz, dx) / (2 * math.pi)) % 1     -- LuaJIT 的 math.atan 只收一個參數
-	local n = math.floor((r - p.R) / p.W - turn)
-	if n < 0 then return surface - p.D end
-	local h = surface - p.D + p.H * (n + turn)
+	for lap = 0, 20 do
+		local rc = p.R * math.exp(cone * p.G * 2 * math.pi * (turn + lap))
+		local h = bottom + (rc - p.R) / cone
+		if h >= surface or rc - p.W / 2 > r then break end
+		if r <= rc + p.W / 2 then return h end
+	end
+	if r < p.R then return bottom end
+	local h = bottom + p.H * (math.floor((r - p.R) / p.W) + 1)
 	if h >= surface then return nil end
 	return h
 end

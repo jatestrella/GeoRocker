@@ -409,7 +409,7 @@ function config.load(get)
 	}
 
 	cfg.surface_y = tonumber(get("rockmech_surface_y")) or config.defaults.surface_y
-	-- 煤層 rockmech_coal_seam = 傾角,傾向,真厚度,y0[,x0,z0]；露天坑 rockmech_open_pit = x0,z0,底半徑,深度,階高,階寬
+	-- 煤層 rockmech_coal_seam = 傾角,傾向,真厚度,y0[,x0,z0]；露天坑 rockmech_open_pit = x0,z0,底半徑,深度,階高,階寬[,坡道坡度 %]
 	local function numbers(key, count)
 		local s = get(key)
 		if not s or s == "" then return nil end
@@ -428,7 +428,10 @@ function config.load(get)
 			tan_dip = math.tan(dip), cos_dip = math.cos(dip), sin_dd = math.sin(dd), cos_dd = math.cos(dd)}
 	end
 	local pit = numbers("rockmech_open_pit", 6)
-	if pit then cfg.open_pit = {x0 = pit[1], z0 = pit[2], R = pit[3], D = pit[4], H = pit[5], W = pit[6]} end
+	if pit then
+		cfg.open_pit = {x0 = pit[1], z0 = pit[2], R = pit[3], D = pit[4], H = pit[5], W = pit[6],
+			G = math.max(1, pit[7] or 10) / 100}
+	end
 	-- 節理延續性：patch = 一片一片（片的大小 ≈ 間距，會切出完整的岩塊）；face = 舊版（每個格面各自判定）
 	cfg.joint_persistence = get("rockmech_joint_persistence") == "face" and "face" or "patch"
 	cfg.joint_lattice = math.max(2, math.min(16, math.floor(

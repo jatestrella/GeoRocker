@@ -195,7 +195,7 @@ rockmech.hud_lines = fmt_report_lines   -- 測試用
 
 -- 指著碎石時的 HUD：種類，礦石碎石再加品位
 local function rubble_lines(node)
-	local base = rockmech.rubble_base[node.name]
+	local base = rockmech.rubble_base[node.name] or node.name
 	local lines = {(core.registered_nodes[base].description:gsub("\n.*", ""))}
 	local ore = rockmech.ore_of_rubble[base]
 	if ore then lines[2] = rockmech.ore_text(ore, node.param2 / 255) end
@@ -251,7 +251,7 @@ core.register_globalstep(function(dtime)
 		-- 指著岩石或碎石才顯示
 		local pos = hud_enabled(player) and pointed_node_pos(player, 8)
 		local node = pos and core.get_node(pos)
-		local rubble = node and rockmech.is_rubble(node.name)
+		local rubble = node and (rockmech.is_rubble(node.name) or rockmech.road_level[node.name])
 		if rubble or node and rockmech.lith_of_node[node.name] then
 			local name = player:get_player_name()
 			local h = huds[name]

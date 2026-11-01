@@ -173,32 +173,37 @@ describe("stress 上覆荷重外插", function()
 		assert.is_true(mid >= 1 and mid <= 255 and edge >= 1)
 	end)
 
-	it("露天坑：坑底平、每圈上升一階，到地表結束", function()
-		local p = {x0 = 0, z0 = 0, R = 30, D = 40, H = 8, W = 12}
+	it("露天坑：坑底平、階是水平的，坡道切過各階，到地表結束", function()
+		local p = {x0 = 0, z0 = 0, R = 30, D = 40, H = 8, W = 12, G = 0.1}
 		assert.near(-40, stress.pit_surface(p, 0, 10, 0), 1e-9)
-		assert.near(-40, stress.pit_surface(p, 0, 31, 0), 1e-9)              -- 第 0 圈起點
-		assert.near(-40 + 8 * 0.25, stress.pit_surface(p, 0, 0, 40), 1e-9)   -- 轉 1/4 圈
-		assert.near(-32, stress.pit_surface(p, 0, 43, 0), 1e-9)              -- 第 1 圈起點 = 第 0 圈終點
+		assert.near(-40, stress.pit_surface(p, 0, 31, 0), 1e-9)              -- 坡道起點
+		assert.near(-32, stress.pit_surface(p, 0, -33, 0), 1e-9)             -- 第 1 階（對面，沒有坡道）
+		assert.near(-8, stress.pit_surface(p, 0, -70, 0), 1e-9)              -- 第 4 階
+		assert.is_nil(stress.pit_surface(p, 0, -100, 0))                     -- 階頂之外是地表
+		local rc = 30 * math.exp(1.35 * 0.1 * math.pi / 2)                   -- 轉 1/4 圈的坡道中線
+		assert.near(-40 + (rc - 30) / 1.35, stress.pit_surface(p, 0, 0, 37), 1e-9)
 		assert.is_nil(stress.pit_surface(p, 0, 300, 0))
-		-- 開得出去：從坑底沿著相鄰格走，每步高差 ≤ 1 m，要走得到地面
+		-- 開得出去：從坑底沿著相鄰格走，每步高差 ≤ 1 m，要走得到地面；路程不能再是兩公里
 		local function ground(x, z)
 			local g = stress.pit_surface(p, 0, x, z)
 			return g and math.floor(g) or 0
 		end
-		local seen, queue, out = {["0,0"] = true}, {{0, 0}}, false
-		while #queue > 0 and not out do
-			local c = table.remove(queue)
+		local seen, queue, head, out = {["0,0"] = true}, {{0, 0, 0}}, 1, nil
+		while queue[head] and not out do
+			local c = queue[head]
+			head = head + 1
 			for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
 				local x, z = c[1] + d[1], c[2] + d[2]
 				local k = x .. "," .. z
 				if not seen[k] and math.abs(x) <= 120 and math.abs(z) <= 120
 					and math.abs(ground(x, z) - ground(c[1], c[2])) <= 1 then
 					seen[k] = true
-					queue[#queue + 1] = {x, z}
-					if not stress.pit_surface(p, 0, x, z) then out = true end
+					queue[#queue + 1] = {x, z, c[3] + 1}
+					if not stress.pit_surface(p, 0, x, z) and x * x + z * z > 78 * 78 then out = c[3] + 1 end
 				end
 			end
 		end
-		assert.is_true(out)
+		assert.is_true(out ~= nil, "開不出坑")
+		assert.is_true(out < 700, "路程 " .. tostring(out))
 	end)
 end)

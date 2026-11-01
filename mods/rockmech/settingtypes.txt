@@ -89,7 +89,7 @@ rockmech_gsi (GSI profile, all lithologies) string
 # Coal seam in new terrain: dip,dipdir,true thickness,y0[,x0,z0], a plane through (x0, y0, z0). Empty = no seam.
 rockmech_coal_seam (Coal seam) string
 
-# Open pit cut into new terrain: x0,z0,floor radius,depth,bench height,bench width. Benches form a spiral haul road. Empty = no pit.
+# Open pit cut into new terrain: x0,z0,floor radius,depth,bench height,bench width[,ramp grade %, default 10]. Horizontal benches, crossed by one spiral haul ramp. Empty = no pit.
 rockmech_open_pit (Open pit) string
 
 # GSI profile for sandstone (overrides rockmech_gsi). Same format.

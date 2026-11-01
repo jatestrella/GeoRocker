@@ -35,6 +35,9 @@ local function build_maps()
 		rubble_cid[core.get_content_id(n)] = n
 		cid_of[n] = core.get_content_id(n)
 	end
+	for n, k in pairs(rockmech.road_level) do     -- 炸藥下夯實碎石也一樣飛散
+		rubble_cid[core.get_content_id(n)] = rockmech.rubble_with_level(rockmech.RUBBLE, k)
+	end
 end
 
 local function eject_items(center, counts)

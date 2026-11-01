@@ -159,11 +159,12 @@ local function ground_top(x, y_from, z, depth)
 		local n = core.get_node({x = xi, y = y, z = zi}).name
 		local nd = core.registered_nodes[n]
 		if n ~= "air" and (not nd or nd.walkable ~= false) then
-			local k = rockmech.rubble_level[n]
+			local k = rockmech.rubble_level[n] or rockmech.road_level[n]
 			return k and (y - 0.5 + k / NLEV) or (y + 0.5)
 		end
 	end
 end
+V.ground_top = ground_top
 
 -- 隨地形傾斜：量前後軸（履帶前後端）、左右輪（履帶）下方的地面（def.tilt），算俯仰（前高為正）
 -- 與側傾（右側低為正，set_rotation 是右手 Z-X-Y：X 正 = 抬頭、Z 正 = 向右傾）。只有外觀傾斜，碰撞箱維持水平
