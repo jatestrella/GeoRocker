@@ -516,6 +516,33 @@ local function engine_update(self, kind, working)
 	end
 end
 
+-- 碰撞箱是平的方盒，一個角頂到碎石堆，整台車就架在那裡、中央懸空。車身中央離地時把箱子縮到中央，
+-- 車才落得下去、順著坡傾斜；四周都不比車底高了再放回完整的箱子
+local BOX_FREE, BOX_SMALL = 0.5, 1
+local function settle_box(self, def, pos, dtime)
+	self.box_t = (self.box_t or 0) + dtime
+	if self.box_t < 0.25 then return end
+	self.box_t = 0
+	local base = pos.y - def.half
+	local center = ground_top(pos.x, base + 2, pos.z, 8)
+	if not self.box_small then
+		if center and base - center > BOX_FREE then
+			self.box_small = true
+			local r, t = math.min(def.half - 0.02, BOX_SMALL), (def.top or def.half) - 0.02
+			self.object:set_properties({collisionbox = {-r, -def.half, -r, r, t, r}})
+		end
+		return
+	end
+	local r = def.half
+	for _, p in ipairs({{r, r}, {r, -r}, {-r, r}, {-r, -r}, {r, 0}, {-r, 0}, {0, r}, {0, -r}}) do
+		local g = ground_top(pos.x + p[1], base + 3, pos.z + p[2], 3)
+		if g and g > base + 0.1 then return end
+	end
+	self.box_small = nil
+	local b, t = def.half - 0.02, (def.top or def.half) - 0.02
+	self.object:set_properties({collisionbox = {-b, -def.half, -b, b, t, b}})
+end
+
 -- 車輛的自重 (t)，車種沒列的用 20
 V.MASS = {truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
 	jumbo = 30, charger = 20, drillrig = 25}
@@ -957,6 +984,7 @@ function V.register(kind, def)
 			local regions = def.overhangs_now and def.overhangs_now(self) or def.overhangs
 			if regions then push_players(self, pos, yaw, def, regions) end
 			local dir, s = dirs(yaw)
+			settle_box(self, def, pos, dtime)
 			local slide_x, slide_z = slide_step(self, pos, def, dtime)
 			if fwd ~= 0 or (self.slide or 0) > 0 then V.press_rubble(self, kind, def, pos, dir, fwd ~= 0 and fwd or 1) end
 			-- 直線前進一段時間後慢慢加速到 top_speed；轉彎時減速回 speed，停下、倒車就回到 speed
