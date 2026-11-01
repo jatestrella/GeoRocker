@@ -472,7 +472,8 @@ local function engine_update(self, kind, working)
 	if not (self.driver or self.autopilot) or g <= 0 then return engine_stop(self) end
 	local e = self.engine
 	if not e then
-		local pitch = math.max(0.55, math.min(0.8, 0.8 * (20 / (V.MASS[kind] or 20)) ^ 0.2))
+		local mass = kind == "excavator" and V.MASS.excavator_big or V.MASS[kind] or 20     -- 兩種挖土機同一個聲音
+		local pitch = math.max(0.55, math.min(0.8, 0.8 * (20 / mass) ^ 0.2))
 		e = {work = false, handle = core.sound_play("rockmech_engine", {object = self.object, loop = true,
 			gain = ENGINE_IDLE * g, pitch = pitch, max_hear_distance = 48})}
 		self.engine = e
