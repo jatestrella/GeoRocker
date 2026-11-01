@@ -134,14 +134,15 @@ function stress.seam_grade(s, x, y, z)
 end
 
 -- 露天坑（cfg.open_pit）：螺旋階梯，中心 (x0, z0)，底半徑 R、深 D（坑底 y = surface − D），
--- 階高 H、階寬 W。每一階是一圈上升 H 的坡道，接到外圈，就是運輸道路。
+-- 階高 H、階寬 W。運輸道路是一條阿基米德螺線：每轉一圈往外移 W、上升 H，寬 W，轉完一圈剛好接上外圈。
 -- 回傳 (x, z) 這一欄的地面高度（小數，m）；坑外回傳 nil
 function stress.pit_surface(p, surface, x, z)
 	local dx, dz = x - p.x0, z - p.z0
 	local r = math.sqrt(dx * dx + dz * dz)
 	if r < p.R then return surface - p.D end
-	local n = math.floor((r - p.R) / p.W)
 	local turn = ((math.atan2 or math.atan)(dz, dx) / (2 * math.pi)) % 1     -- LuaJIT 的 math.atan 只收一個參數
+	local n = math.floor((r - p.R) / p.W - turn)
+	if n < 0 then return surface - p.D end
 	local h = surface - p.D + p.H * (n + turn)
 	if h >= surface then return nil end
 	return h

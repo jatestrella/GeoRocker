@@ -177,8 +177,28 @@ describe("stress 上覆荷重外插", function()
 		local p = {x0 = 0, z0 = 0, R = 30, D = 40, H = 8, W = 12}
 		assert.near(-40, stress.pit_surface(p, 0, 10, 0), 1e-9)
 		assert.near(-40, stress.pit_surface(p, 0, 31, 0), 1e-9)              -- 第 0 圈起點
-		assert.near(-40 + 8 * 0.25, stress.pit_surface(p, 0, 0, 31), 1e-9)   -- 轉 1/4 圈
+		assert.near(-40 + 8 * 0.25, stress.pit_surface(p, 0, 0, 40), 1e-9)   -- 轉 1/4 圈
 		assert.near(-32, stress.pit_surface(p, 0, 43, 0), 1e-9)              -- 第 1 圈起點 = 第 0 圈終點
 		assert.is_nil(stress.pit_surface(p, 0, 300, 0))
+		-- 開得出去：從坑底沿著相鄰格走，每步高差 ≤ 1 m，要走得到地面
+		local function ground(x, z)
+			local g = stress.pit_surface(p, 0, x, z)
+			return g and math.floor(g) or 0
+		end
+		local seen, queue, out = {["0,0"] = true}, {{0, 0}}, false
+		while #queue > 0 and not out do
+			local c = table.remove(queue)
+			for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
+				local x, z = c[1] + d[1], c[2] + d[2]
+				local k = x .. "," .. z
+				if not seen[k] and math.abs(x) <= 120 and math.abs(z) <= 120
+					and math.abs(ground(x, z) - ground(c[1], c[2])) <= 1 then
+					seen[k] = true
+					queue[#queue + 1] = {x, z}
+					if not stress.pit_surface(p, 0, x, z) then out = true end
+				end
+			end
+		end
+		assert.is_true(out)
 	end)
 end)
