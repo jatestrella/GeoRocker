@@ -89,8 +89,9 @@ local function reverb(buf)
 	end
 end
 
-local function finish(buf)
-	reverb(buf)
+-- dry：不加迴響。迴響是固定延遲的回授，密集的顆粒聲會共振出固定音高，聽起來像敲鐵板
+local function finish(buf, dry)
+	if not dry then reverb(buf) end
 	local fade = math.floor(0.2 * RATE)
 	for i = 1, fade do buf[#buf - i + 1] = buf[#buf - i + 1] * ((i - 1) / fade) ^ 2 end
 	local peak = 0
@@ -126,12 +127,12 @@ local function render_slide(v)
 	end
 	for _ = 1, v.clacks do
 		local t = math.random() * v.len * 0.8
-		burst(buf, math.floor(t * RATE), log_uniform(0.003, 0.008), log_uniform(0.2, 0.45) * env(t), 200, 1800)
+		burst(buf, math.floor(t * RATE), log_uniform(0.0008, 0.002), log_uniform(0.1, 0.3) * env(t), 500, 3500)
 	end
 	for i = 0, 3 do
 		burst(buf, math.floor(i * v.len / 5 * RATE), v.len / 4, v.rumble, 15, 170)
 	end
-	return finish(buf)
+	return finish(buf, true)
 end
 
 local VARIANTS = {
