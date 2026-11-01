@@ -58,6 +58,37 @@ local function joint_tiles(base_tile, mask)
 end
 rockmech.joint_tiles = joint_tiles
 
+-- 動態產生貼圖：寫到世界資料夾 rockmech_media/，再以 dynamic_add_media（filepath）傳給客戶端
+local function add_png(fname, w, h, px)
+	local dir = core.get_worldpath() .. "/rockmech_media"
+	core.mkdir(dir)
+	local path = dir .. "/" .. fname
+	local fh = assert(io.open(path, "wb"))
+	fh:write(core.encode_png(w, h, px))
+	fh:close()
+	core.dynamic_add_media({filepath = path})
+	return fname
+end
+local function rgb(hex)
+	return tonumber(hex:sub(2, 3), 16), tonumber(hex:sub(4, 5), 16), tonumber(hex:sub(6, 7), 16)
+end
+-- 礦石方塊的調色盤：param2 i → 廢石與純礦的 RGB 線性混合（0 = 沒指定品位，用 default）
+local function ore_palette(key)
+	local ore = cfg.ores[key]
+	local fname = "rockmech_ore_" .. key .. ".png"
+	if ore.palette then return ore.palette end
+	local r0, g0, b0 = rgb(ore.waste_color)
+	local r1, g1, b1 = rgb(ore.pure)
+	local px = {}
+	for i = 0, 255 do
+		local t = (i == 0 and ore.default or i) / 255
+		px[i + 1] = string.char(math.floor(r0 + (r1 - r0) * t + 0.5), math.floor(g0 + (g1 - g0) * t + 0.5),
+			math.floor(b0 + (b1 - b0) * t + 0.5), 255)
+	end
+	ore.palette = add_png(fname, 256, 1, table.concat(px))
+	return ore.palette
+end
+
 for _, key in ipairs(cfg.lithology_order) do
 	local lith = cfg.lithologies[key]
 	local base = rockmech.modname .. ":" .. lith.name
@@ -82,7 +113,7 @@ for _, key in ipairs(cfg.lithology_order) do
 				"\n放置後依所在位置顯示節理",
 			tiles = mask == 0 and {base_tile} or joint_tiles(base_tile, mask),
 			is_ground_content = true,
-			paramtype2 = lith.palette and "color" or nil, palette = lith.palette,
+			paramtype2 = lith.ore and "color" or nil, palette = lith.ore and ore_palette(lith.ore),
 			groups = groups,
 			sounds = sounds,
 		})
@@ -168,7 +199,7 @@ do
 					description = base_def.description,
 					tiles = tiles,
 					is_ground_content = true,
-					paramtype2 = lith.palette and "color" or nil, palette = lith.palette,
+					paramtype2 = lith.ore and "color" or nil, palette = lith.ore and ore_palette(lith.ore),
 					groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1,
 						not_in_creative_inventory = 1},
 					sounds = sounds,
@@ -248,46 +279,77 @@ rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE}
 -- 岩性 → 碎石（未列出的岩性用一般碎石）、碎石 → 岩性
 rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
 rockmech.lith_of_rubble = {[rockmech.RUBBLE_GRANITE] = "granite"}
-rockmech.RUBBLE_COAL = rockmech.modname .. ":rubble_coal"
-core.register_node(rockmech.RUBBLE_COAL, {
-	description = "Crushed coal (碎煤)",
-	tiles = {has_default and "default_gravel.png^[colorize:#e0e0e0:200" or "[fill:16x16:#e0e0e0"},
-	paramtype2 = "color", palette = cfg.lithologies.coal.palette,
-	groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
-	sounds = gravel_sounds,
-})
-rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = rockmech.RUBBLE_COAL
-rockmech.rubble_of_lith.coal = rockmech.RUBBLE_COAL
-rockmech.lith_of_rubble[rockmech.RUBBLE_COAL] = "coal"
+-- 礦石碎石：一個 base，param2 存品位（礦石佔的比例），外觀依品位分 8 段（_g<段>，第 4 段就是 base 本身）。
+-- 每段是廢石貼圖上透過遮罩疊礦石貼圖，遮罩的礦石像素隨段數一顆顆增加
+rockmech.RUBBLE_STEPS = 8
+rockmech.ore_of_rubble = {}           -- 碎石 base → 礦石
+local ore_root = {}                   -- 各段的滿格 node → base
+do
+	local order, seed = {}, 12345     -- 固定順序：品位變高時礦石像素只增不減
+	for i = 1, 256 do order[i] = i end
+	for i = 256, 2, -1 do
+		seed = (seed * 1103515245 + 12345) % 2147483648
+		local j = seed % i + 1
+		order[i], order[j] = order[j], order[i]
+	end
+	local masks = {}
+	for step = 1, rockmech.RUBBLE_STEPS do
+		local on, px = {}, {}
+		for i = 1, 256 * step / rockmech.RUBBLE_STEPS do on[order[i]] = true end
+		for i = 1, 256 do px[i] = string.char(255, 255, 255, on[i] and 255 or 0) end
+		masks[step] = add_png(("rockmech_ore_mask_%d.png"):format(step), 16, 16, table.concat(px))
+	end
+	for key, ore in pairs(cfg.ores) do
+		ore.key = key
+		local base = rockmech.modname .. ":rubble_" .. key
+		local waste = rockmech.rubble_of_lith[ore.waste] or rockmech.RUBBLE
+		local tw = core.registered_nodes[waste].tiles[1]
+		local to = "default_gravel.png^[colorize:" .. ore.pure .. ":235"
+		for step = 1, rockmech.RUBBLE_STEPS do
+			local name = step == 4 and base or base .. "_g" .. step
+			core.register_node(name, {
+				description = ("Crushed %s (%s碎石)"):format(key, ore.label),
+				tiles = {("%s^(%s^[mask:%s)"):format(tw, to, masks[step])},
+				groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1, not_in_creative_inventory = step ~= 4 and 1 or nil},
+				sounds = gravel_sounds,
+			})
+			rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name
+			ore_root[name] = base
+		end
+		ore.rubble, ore.waste_rubble = base, waste
+		rockmech.ore_of_rubble[base] = ore
+		rockmech.rubble_of_lith[ore.lith] = base
+		rockmech.lith_of_rubble[base] = ore.lith
+	end
+end
 
--- 煤的品位（param2）：0 = 沒指定，算中間值。回傳 1..255
-function rockmech.coal_grade(p2)
-	return p2 == 0 and 128 or p2
+-- 兩份碎石能不能放在同一格：同種，或礦石碎石和它的廢石
+function rockmech.rubble_mixable(a, b)
+	if a == b then return true end
+	local oa, ob = rockmech.ore_of_rubble[a], rockmech.ore_of_rubble[b]
+	return oa ~= nil and oa.waste_rubble == b or ob ~= nil and ob.waste_rubble == a
 end
--- 品位 → 發熱量 (kcal/kg)
-function rockmech.coal_heat(p2)
-	local h = cfg.lithologies.coal.heat
-	return h[1] + (h[2] - h[1]) * (rockmech.coal_grade(p2) - 1) / 254
-end
--- 品位 → 顏色 r, g, b（和 rockmech_coal_palette.png 相同：品位越高越黑，低品位偏冷的藍灰；
--- 岩石碎石偏暖的褐色，車上混了岩石才分得出來，不會和低品位煤一樣）
-function rockmech.coal_rgb(p2)
-	local t = (rockmech.coal_grade(p2) - 1) / 254
-	return 92 + (22 - 92) * t, 104 + (22 - 104) * t, 124 + (26 - 124) * t
-end
--- 兩份碎石合併：依級數加權的品位。一般碎石都是 0，維持 0
+-- 兩份碎石合併：依級數加權的品位。廢石的品位是 0
 function rockmech.mix_grade(k1, p1, k2, p2)
-	if p1 == 0 and p2 == 0 then return 0 end
-	if k1 <= 0 then return p2 end
-	if k2 <= 0 then return p1 end
-	local g = rockmech.coal_grade
-	return math.floor((k1 * g(p1) + k2 * g(p2)) / (k1 + k2) + 0.5)
+	if k1 + k2 <= 0 then return 0 end
+	return math.floor((k1 * p1 + k2 * p2) / (k1 + k2) + 0.5)
 end
--- 岩石破碎後碎石的 param2：煤保留品位，其他岩石的 param2 是 GSI，碎石用不到
+-- 合併一格的碎石（base 1 的 k1 級品位 p1，加 base 2 的 k2 級品位 p2）。回傳 種類, 品位
+function rockmech.rubble_merge(b1, k1, p1, b2, k2, p2)
+	local ore = rockmech.ore_of_rubble[b1] and b1 or rockmech.ore_of_rubble[b2] and b2 or b1
+	return ore, rockmech.mix_grade(k1, b1 == ore and p1 or 0, k2, b2 == ore and p2 or 0)
+end
+-- 岩石破碎或碎石本身的品位 param2：礦石沒指定品位時用 default；其他岩石的 param2 是 GSI，碎石用不到
 function rockmech.rubble_p2(node)
 	local lith = rockmech.lith_of_node[node.name]
-	if lith and lith.heat or rockmech.rubble_base[node.name] == rockmech.RUBBLE_COAL then return node.param2 end
-	return 0
+	local ore = lith and lith.ore and cfg.ores[lith.ore]
+	if ore then return node.param2 > 0 and node.param2 or ore.default end
+	return rockmech.ore_of_rubble[rockmech.rubble_base[node.name]] and node.param2 or 0
+end
+-- 碎石的價值（品位 × value）：礦石的 value 單位
+function rockmech.ore_value(base, p2)
+	local ore = rockmech.ore_of_rubble[base]
+	return ore and ore.value * p2 / 255 or 0
 end
 
 -- 不滿格的碎石（顆粒流用，granular.lua）：每格分 8 級，<碎石>_l1 … _l7 高度 1/8 … 7/8 m；
@@ -298,8 +360,9 @@ rockmech.rubble_base = {}     -- node 名稱 → 滿格碎石的名稱
 local partial_nodes = {}
 for _, base in ipairs(rockmech.rubble_nodes) do
 	local bdef = core.registered_nodes[base]
+	local root = ore_root[base] or base
 	rockmech.rubble_level[base] = rockmech.RUBBLE_LEVELS
-	rockmech.rubble_base[base] = base
+	rockmech.rubble_base[base] = ore_root[base] or base
 	for k = 1, rockmech.RUBBLE_LEVELS - 1 do
 		local name = base .. "_l" .. k
 		local top = -0.5 + k / rockmech.RUBBLE_LEVELS
@@ -311,22 +374,25 @@ for _, base in ipairs(rockmech.rubble_nodes) do
 			tiles = bdef.tiles,
 			drawtype = "nodebox",
 			paramtype = "light",
-			paramtype2 = bdef.paramtype2, palette = bdef.palette,
 			node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, top, 0.5}},
 			groups = groups,
 			sounds = bdef.sounds,
 			drop = k >= rockmech.RUBBLE_LEVELS / 2 and base or "",
 		})
 		rockmech.rubble_level[name] = k
-		rockmech.rubble_base[name] = base
+		rockmech.rubble_base[name] = root
 		partial_nodes[#partial_nodes + 1] = name
 	end
 end
 for _, name in ipairs(partial_nodes) do rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name end
 
--- 某種碎石（滿格名稱 base）的 k 級 node 名稱（k = 0 → nil，k ≥ 8 → 滿格）
-function rockmech.rubble_with_level(base, k)
+-- 某種碎石（滿格名稱 base）的 k 級 node 名稱（k = 0 → nil，k ≥ 8 → 滿格）。p2：礦石碎石的品位，決定外觀的段
+function rockmech.rubble_with_level(base, k, p2)
 	if k <= 0 then return nil end
+	if rockmech.ore_of_rubble[base] and p2 then
+		local step = math.max(1, math.min(rockmech.RUBBLE_STEPS, math.ceil(p2 / 255 * rockmech.RUBBLE_STEPS)))
+		if step ~= 4 then base = base .. "_g" .. step end
+	end
 	if k >= rockmech.RUBBLE_LEVELS then return base end
 	return base .. "_l" .. k
 end
@@ -340,6 +406,11 @@ function rockmech.rubble_for(nodename)
 	if rockmech.is_rubble(nodename) then return rockmech.rubble_base[nodename] or nodename end
 	local lith = rockmech.lith_of_node[nodename]
 	return lith and rockmech.rubble_of_lith[lith.name] or rockmech.RUBBLE
+end
+-- 岩石破碎：回傳 碎石的滿格 node 名稱, param2
+function rockmech.rubble_node(node)
+	local p = rockmech.rubble_p2(node)
+	return rockmech.rubble_with_level(rockmech.rubble_for(node.name), rockmech.RUBBLE_LEVELS, p), p
 end
 
 -- 物品欄裡不滿格的碎石（舊版爆破噴出的）：依級數併成滿格碎石（8 級 = 1 個，四捨五入），才會疊在同一堆
@@ -373,9 +444,10 @@ for _, old in ipairs({"high", "mid", "low"}) do
 			core.register_alias(n:gsub(":coal", ":coal_" .. old, 1), n)
 		end
 	end
-	local oldr = rockmech.RUBBLE_COAL .. "_" .. old
-	core.register_alias(oldr, rockmech.RUBBLE_COAL)
+	local coal_rubble = cfg.ores.coal.rubble
+	local oldr = coal_rubble .. "_" .. old
+	core.register_alias(oldr, coal_rubble)
 	for k = 1, rockmech.RUBBLE_LEVELS - 1 do
-		core.register_alias(oldr .. "_l" .. k, rockmech.RUBBLE_COAL .. "_l" .. k)
+		core.register_alias(oldr .. "_l" .. k, coal_rubble .. "_l" .. k)
 	end
 end

@@ -49,19 +49,19 @@ local function place_cells(self, drop, off)
 	local ox, oz = off and off.x or 0, off and off.z or 0
 	for _, c in ipairs(self.cells) do
 		local p = {x = self.origin.x + c.dx + ox, y = self.origin.y + c.dy - drop, z = self.origin.z + c.dz + oz}
-		local name = c.name
+		local name, param2 = c.name, c.param2 or 0
 		if self.to_rubble and rockmech.lith_of_node[name] then
 			-- 沿節理滑動的岩塊：落地時整塊變成碎石
-			name = rockmech.rubble_for(name)
+			name, param2 = rockmech.rubble_node({name = name, param2 = param2})
 		elseif fb.enabled and not rockmech.is_rubble(name) then
 			local lith = rockmech.lith_of_node[name]
 			local h_ref = lith and lith.break_height or fb.break_height
 			if math.random() < rf.break_probability(drop, h_ref) then
-				name = rockmech.rubble_for(name)
+				name, param2 = rockmech.rubble_node({name = name, param2 = param2})
 			end
 		end
 		if can_place(p) then
-			core.set_node(p, {name = name, param2 = c.param2 or 0})
+			core.set_node(p, {name = name, param2 = param2})
 			placed[#placed + 1] = {pos = p, name = name}
 		else
 			core.add_item(p, name) -- 落點被佔（理論上不會發生）

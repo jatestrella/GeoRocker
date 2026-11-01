@@ -126,10 +126,10 @@ end
 function stress.in_seam(s, x, y, z)
 	return math.abs(stress.seam_offset(s, x, y, z)) <= s.t / 2
 end
--- 煤的品位（param2 1..255）：煤層中央最好，靠頂底板變差（夾雜質），再加緩慢的橫向變化
+-- 煤的品位（param2 1..255，煤佔的比例）：煤層中央最好，靠頂底板變差（夾雜質），再加緩慢的橫向變化
 function stress.seam_grade(s, x, y, z)
 	local d = 2 * stress.seam_offset(s, x, y, z) / s.t
-	local g = 215 - 120 * d * d + 12 * math.sin(x / 37) + 12 * math.sin(z / 29)
+	local g = 228 - 75 * d * d + 7 * math.sin(x / 37) + 7 * math.sin(z / 29)
 	return math.max(1, math.min(255, math.floor(g + 0.5)))
 end
 

@@ -335,17 +335,17 @@ function V.take_rubble(cell, want)
 	if not k or want <= 0 then return 0 end
 	local base = rockmech.rubble_base[name]
 	local t = math.min(k, want)
-	local rest = rockmech.rubble_with_level(base, k - t)
+	local rest = rockmech.rubble_with_level(base, k - t, node.param2)
 	if rest then core.swap_node(cell, {name = rest, param2 = node.param2}) else core.remove_node(cell) end
 	collapse.check_cell({x = cell.x, y = cell.y + 1, z = cell.z})   -- 上方的碎石往下掉
 	return t, base, node.param2
 end
 
--- 車上的碎石：self.load[種類] = 級數；碎煤另外記 self.loadq[種類] = Σ 級數 × 品位
+-- 車上的碎石：self.load[種類] = 級數；礦石碎石另外記 self.loadq[種類] = Σ 級數 × 品位
 function V.load_put(self, base, lv, g)
 	self.load[base] = (self.load[base] or 0) + lv
-	if base == rockmech.RUBBLE_COAL then
-		self.loadq[base] = (self.loadq[base] or 0) + lv * rockmech.coal_grade(g or 0)
+	if rockmech.ore_of_rubble[base] then
+		self.loadq[base] = (self.loadq[base] or 0) + lv * (g or 0)
 	end
 end
 -- 車上這種碎石的平均品位（param2）
@@ -377,13 +377,13 @@ local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
 		local k = rockmech.rubble_level[n]
 		if passable(n) then
 			local put = math.min(NLEV, a)
-			core.set_node(p, {name = rockmech.rubble_with_level(base, put), param2 = g})
+			core.set_node(p, {name = rockmech.rubble_with_level(base, put, g), param2 = g})
 			a = a - put
 			if placed then placed[#placed + 1] = p else collapse.check_cell(p) end
-		elseif k and k < NLEV and rockmech.rubble_base[n] == base then
+		elseif k and k < NLEV and rockmech.rubble_mixable(rockmech.rubble_base[n], base) then
 			local put = math.min(NLEV - k, a)
-			core.swap_node(p, {name = rockmech.rubble_with_level(base, k + put),
-				param2 = rockmech.mix_grade(k, core.get_node(p).param2, put, g)})
+			local b2, g2 = rockmech.rubble_merge(rockmech.rubble_base[n], k, core.get_node(p).param2, base, put, g)
+			core.swap_node(p, {name = rockmech.rubble_with_level(b2, k + put, g2), param2 = g2})
 			a = a - put
 			if placed then placed[#placed + 1] = p else collapse.check_cell(p) end
 		end
@@ -670,13 +670,16 @@ function V.load_mix(self)
 	end
 	return total, best
 end
--- 車上的煤：回傳 煤佔的比例, 平均發熱量 (kcal/kg)；沒有煤回傳 nil
-function V.load_coal(self)
-	local total = 0
-	for _, lv in pairs(self.load or {}) do total = total + lv end
-	local coal = self.load and self.load[rockmech.RUBBLE_COAL]
-	if not coal then return nil end
-	return coal / total, rockmech.coal_heat(V.load_grade(self, rockmech.RUBBLE_COAL))
+-- 車上的礦石：回傳 礦石, 整車的品位（0..1，廢石算 0）；沒有礦石回傳 nil
+function V.load_ore(self)
+	local total, ore, q = 0, nil, 0
+	for base, lv in pairs(self.load or {}) do
+		total = total + lv
+		local o = rockmech.ore_of_rubble[base]
+		if o then ore, q = o, q + (self.loadq[base] or 0) end
+	end
+	if not ore or total == 0 then return nil end
+	return ore, q / total / 255
 end
 -- 碎石種類的貼圖（給碎石塊零件）
 function V.rubble_tex(base)
@@ -685,16 +688,14 @@ function V.rubble_tex(base)
 	return type(t) == "table" and t.name or t or "[fill:16x16:#6a6058"
 end
 
--- 車斗、鏟斗裡碎石的貼圖：有煤時用碎煤貼圖，顏色依品位，再依煤的比例往一般碎石的顏色混
+-- 車斗、鏟斗裡碎石的貼圖：有礦石時和地上的碎石一樣，用整車的品位選外觀
 function V.fill_tex(self)
-	local _, best = V.load_mix(self)
-	local coal = rockmech.RUBBLE_COAL
-	if not (self.load and self.load[coal]) then return V.rubble_tex(best) end
-	local share = V.load_coal(self)
-	local r, g, b = rockmech.coal_rgb(V.load_grade(self, coal))
-	local function mix(c, waste) return math.floor((c * share + waste * (1 - share)) / 8 + 0.5) * 8 end
-	return ("%s^[multiply:#%02x%02x%02x"):format(V.rubble_tex(coal),
-		math.min(255, mix(r, 106)), math.min(255, mix(g, 96)), math.min(255, mix(b, 88)))
+	local ore, grade = V.load_ore(self)
+	if not ore then
+		local _, best = V.load_mix(self)
+		return V.rubble_tex(best)
+	end
+	return V.rubble_tex(rockmech.rubble_with_level(ore.rubble, NLEV, grade * 255))
 end
 
 dofile(rockmech.modpath .. "/vehicle_views.lua")

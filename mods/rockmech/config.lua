@@ -22,8 +22,8 @@ local config = {}
 --   cracky      Luanti 挖掘群組等級（1 最硬、3 最軟）
 --   rn, rt      落石撞擊此岩面時的法向／切向回彈係數
 --   mu_roll     落石在此岩面上的滾動阻力係數（tan 滾動摩擦角）
---   heat        （煤）發熱量範圍 {最低, 最高} (kcal/kg)：方塊與碎石的 param2 1..255 是品位，0 = 中間值（見 rockmech.coal_heat）
---   texture     （可選）方塊貼圖；palette：param2 的調色盤（煤的顏色跟著品位）
+--   ore         礦石名稱（config.ores）：方塊的 param2 1..255 是品位，不是 GSI
+--   texture     （可選）方塊貼圖
 --   break_height 掉落破碎特徵高度 h_ref (m)：落下 h 公尺後變碎石的機率
 --               p = 1 − exp(−h / h_ref)，越硬越大
 config.lithologies = {
@@ -48,11 +48,21 @@ config.lithologies = {
 }
 
 config.lithologies.coal = {
-	name = "coal", description = "Coal (煤)", heat = {3000, 7000},
+	name = "coal", description = "Coal (煤)", ore = "coal",
 	gamma = 14.0, ucs = 15.0, tensile = 1.0, mi = 8, gsi = {top = 50},
 	color = "#2c2c31", cracky = 3,
-	texture = "default_stone.png^[colorize:#e0e0e0:200", palette = "rockmech_coal_palette.png",
+	texture = "default_stone.png^[colorize:#e0e0e0:200",
 	rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 2.0,
+}
+
+-- 礦石：每一列是一種礦石和它混合的廢石。param2 1..255 = 礦石佔的比例（品位），0 = 全是廢石。
+--   lith    礦石的岩性；waste：混合的廢石是哪種岩性的碎石（同一格會合併，品位下降）
+--   pure    純礦石的顏色；waste_color：廢石的顏色（未破碎的方塊用兩者之間的顏色）
+--   value   品位 100% 時的價值；unit、label：顯示用；default：沒指定品位的方塊算多少（param2）
+-- 碎石的外觀由 8 張遮罩決定：廢石貼圖上疊礦石貼圖，品位越高礦石的像素越多。加一種礦只要在這裡加一列
+config.ores = {
+	coal = {lith = "coal", waste = "shale", pure = "#141418", waste_color = "#6a6058",
+		value = 7000, unit = "kcal/kg", label = "煤", default = 191},
 }
 
 -- 註冊順序（固定，讓 content id / 測試結果可重現）
@@ -394,6 +404,7 @@ function config.load(get)
 		lithologies = copy(config.lithologies),
 		lithology_order = copy(config.lithology_order),
 		layers = copy(config.layers),
+		ores = copy(config.ores),
 		joint_sets = copy(config.joint_sets),
 	}
 

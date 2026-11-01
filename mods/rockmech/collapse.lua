@@ -219,7 +219,7 @@ local function neighbor_surface(x, z, ty, base, lift)
     if not n then return nil end
     local nk = rubble_k(n.name)
     if nk then
-        if nk < NLEV and rockmech.rubble_base[n.name] == base then
+        if nk < NLEV and rockmech.rubble_mixable(rockmech.rubble_base[n.name], base) then
             return granular.surface(ty, nk), {pos = p, k = nk}
         end
         -- 不同種類的半格：一格只能一種，當成滿格，從上面堆過去
@@ -238,7 +238,7 @@ local function neighbor_surface(x, z, ty, base, lift)
                 if not passable(m) then return nil end
                 return granular.surface(y - 1, NLEV), {pos = q, k = 0}
             end
-            if mk < NLEV and rockmech.rubble_base[m] == base then
+            if mk < NLEV and rockmech.rubble_mixable(rockmech.rubble_base[m], base) then
                 return granular.surface(y, mk), {pos = q, k = mk}
             end
         end
@@ -251,7 +251,7 @@ local function neighbor_surface(x, z, ty, base, lift)
         if not m then return nil end
         if not passable(m.name) then
             local mk = rubble_k(m.name)
-            if mk and mk < NLEV and rockmech.rubble_base[m.name] == base then
+            if mk and mk < NLEV and rockmech.rubble_mixable(rockmech.rubble_base[m.name], base) then
                 return granular.surface(y, mk), {pos = q, k = mk}
             end
             return granular.surface(y, NLEV), {pos = {x = x, y = y + 1, z = z}, k = 0}
@@ -262,24 +262,26 @@ end
 
 -- 把 pos 的碎石設為 k 級（0 = 移除；移除會觸發 on_destruct：穩定判定、露出岩面的破壞檢查）
 local function set_rubble(pos, base, k)
-    local name = rockmech.rubble_with_level(base, k)
-    if name then core.swap_node(pos, {name = name, param2 = core.get_node(pos).param2}) else core.remove_node(pos) end
+    local p2 = core.get_node(pos).param2
+    local name = rockmech.rubble_with_level(base, k, p2)
+    if name then core.swap_node(pos, {name = name, param2 = p2}) else core.remove_node(pos) end
 end
 
 -- 在承接位置加上 a 級品位 g（param2）的碎石；滿了往上一格堆。和承接格的碎石合併時品位加權平均
 local function add_rubble(land, base, a, g)
     local p, k = land.pos, land.k
     local put = math.min(NLEV - k, a)
-    if k == 0 then core.set_node(p, {name = rockmech.rubble_with_level(base, put), param2 = g})
+    if k == 0 then core.set_node(p, {name = rockmech.rubble_with_level(base, put, g), param2 = g})
     else
-        core.swap_node(p, {name = rockmech.rubble_with_level(base, k + put),
-            param2 = rockmech.mix_grade(k, core.get_node(p).param2, put, g)})
+        local n = core.get_node(p)
+        local b2, g2 = rockmech.rubble_merge(rockmech.rubble_base[n.name], k, n.param2, base, put, g)
+        core.swap_node(p, {name = rockmech.rubble_with_level(b2, k + put, g2), param2 = g2})
     end
     a = a - put
     local up = {x = p.x, y = p.y + 1, z = p.z}
     while a > 0 and passable(core.get_node(up).name) do
         put = math.min(NLEV, a)
-        core.set_node(up, {name = rockmech.rubble_with_level(base, put), param2 = g})
+        core.set_node(up, {name = rockmech.rubble_with_level(base, put, g), param2 = g})
         a = a - put
         up = {x = up.x, y = up.y + 1, z = up.z}
     end
@@ -367,12 +369,13 @@ local function granular_settle(pos, chain, q_ext, side)
     local prev = physics_updating
     local next_pos
     local bk = rubble_k(bn)
-    if bk and bk < NLEV and rockmech.rubble_base[bn] == base then
+    if bk and bk < NLEV and rockmech.rubble_mixable(rockmech.rubble_base[bn], base) then
         -- 往下倒：先把下面那格填滿
         local put = math.min(NLEV - bk, k)
         physics_updating = true
-        core.swap_node(below, {name = rockmech.rubble_with_level(base, bk + put),
-            param2 = rockmech.mix_grade(bk, core.get_node(below).param2, put, core.get_node(T).param2)})
+        local b2, g2 = rockmech.rubble_merge(rockmech.rubble_base[bn], bk, core.get_node(below).param2,
+            base, put, core.get_node(T).param2)
+        core.swap_node(below, {name = rockmech.rubble_with_level(b2, bk + put, g2), param2 = g2})
         set_rubble(T, base, k - put)
         physics_updating = prev
         next_pos = {below}
@@ -862,7 +865,8 @@ function collapse.apply_failure(failed, round)
         local node = core.get_node(p)
         local name = node.name
         if rockmech.lith_of_node[name] then
-            core.swap_node(p, {name = rockmech.rubble_for(name), param2 = rockmech.rubble_p2(node)})
+            local rn, rp = rockmech.rubble_node(node)
+            core.swap_node(p, {name = rn, param2 = rp})
             debris(p, rockmech.rubble_for(name), 10)
         end
     end
@@ -1486,8 +1490,9 @@ local function run_stability_check()
             local name = node.name
             -- 同一輪中已經落下／移走的格子（例如也屬於斷開落下的群）不再滑出
             if is_rock(name) then
-                cells[#cells + 1] = {x = p.x, y = p.y, z = p.z, p2 = rockmech.rubble_p2(node),
-                    rubble = rockmech.lith_of_node[name] and rockmech.rubble_for(name) or name}
+                local rn, rp = name, node.param2
+                if rockmech.lith_of_node[name] then rn, rp = rockmech.rubble_node(node) end
+                cells[#cells + 1] = {x = p.x, y = p.y, z = p.z, p2 = rp, rubble = rn}
             end
         end
         local cap = 0
@@ -1631,7 +1636,8 @@ do
             local lith = rockmech.lith_of_node[name]
             local h_ref = lith and lith.break_height or fb.break_height
             if math.random() < rockmech.rockfall.break_probability(h, h_ref) then
-                self.node = {name = rockmech.rubble_for(name), param2 = rockmech.rubble_p2(self.node)}
+                local rn, rp = rockmech.rubble_node(self.node)
+                self.node = {name = rn, param2 = rp}
                 broke = true
             end
         end
@@ -1725,7 +1731,8 @@ local function register_physics_events(name, intact)
         -- 碎石下方懸空就落下、超過安息角就滑動；軸差破壞要等碎石被清走、
         -- 真正出現開口時才會觸發。
         overrides.after_dig_node = function(pos, oldnode)
-            core.set_node(pos, {name = rockmech.rubble_for(oldnode.name), param2 = rockmech.rubble_p2(oldnode)})
+            local rn, rp = rockmech.rubble_node(oldnode)
+            core.set_node(pos, {name = rn, param2 = rp})
             debris(pos, rockmech.rubble_for(oldnode.name), 6)
         end
     end
@@ -1824,17 +1831,19 @@ do
                 local vm = core.get_voxel_manip()
                 local e1, e2 = vm:read_from_map(ma, mb)
                 local area = VoxelArea(e1, e2)
-                local data = vm:get_data()
+                local data, pd = vm:get_data(), vm:get_param2_data()
                 local own = {}
                 for _, p in ipairs(m.cells) do
                     local vi = area:index(p.x, p.y, p.z)
                     local name = core.get_name_from_content_id(data[vi])
                     if rockmech.lith_of_node[name] then
-                        data[vi] = core.get_content_id(rockmech.rubble_for(name))
+                        local rn, rp = rockmech.rubble_node({name = name, param2 = pd[vi]})
+                        data[vi], pd[vi] = core.get_content_id(rn), rp
                     end
                     own[pos_key(p)] = true
                 end
                 vm:set_data(data)
+                vm:set_param2_data(pd)
                 vm:write_to_map(true)
                 vm:close()
                 if rockmech.jointmesh then rockmech.jointmesh.dirty_box(ma, mb) end

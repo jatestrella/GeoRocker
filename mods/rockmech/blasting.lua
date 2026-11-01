@@ -74,6 +74,7 @@ function rockmech.blast_rock(center, R, floor_y)
 	local data = vm:get_data()
 	local c_air = core.get_content_id("air")
 
+	local p2data = vm:get_param2_data()
 	local ejected, n_eject, n_rubble = {}, 0, 0   -- ejected：滿格碎石名稱 → 累計級數
 	local removed, rubbled = {}, {}
 	local changes = {}     -- 開挖前的方塊（只有開挖造成的惡化才破壞）
@@ -97,7 +98,8 @@ function rockmech.blast_rock(center, R, floor_y)
 						n_eject = n_eject + 1
 						removed[#removed + 1] = p
 					elseif zone == "rubble" then
-						data[vi] = cid_of[rname]
+						local rn, rp = rockmech.rubble_node({name = li.name, param2 = p2data[vi]})
+						data[vi], p2data[vi] = core.get_content_id(rn), rp
 						n_rubble = n_rubble + 1
 						rubbled[#rubbled + 1] = p
 					end
@@ -118,6 +120,7 @@ function rockmech.blast_rock(center, R, floor_y)
 
 	if n_eject + n_rubble > 0 then
 		vm:set_data(data)
+		vm:set_param2_data(p2data)
 		vm:write_to_map(true)
 		vm:update_liquids()
 		if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
