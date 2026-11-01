@@ -167,7 +167,7 @@ local function hauler(def, spec)
 		if ctx.ctrl.jump and load_total(self) > 0 and not self.tip then
 			self.t_act = TIP_TOTAL + 0.1
 			self.tip = {t = 0}
-		elseif ctx.ctrl.aux1 and ctx.d then
+		elseif ctx.ctrl.aux1 and ctx.d and not def.no_ahs then
 			self.t_act = 0.5
 			V.ahs.open(self, ctx.d)
 		end

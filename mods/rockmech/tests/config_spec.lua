@@ -99,6 +99,21 @@ describe("config.load", function()
 	end)
 end)
 
+describe("經營模式", function()
+	it("預設關閉；鎬子免費、推車便宜，價格可用設定覆寫，推車比人多載", function()
+		local cfg = config.load(getter({}))
+		assert.is_true(not cfg.career)
+		assert.is_true(cfg.cart_blocks > 1)
+		local price = {}
+		for _, it in ipairs(cfg.shop) do price[it.key] = it.price end
+		assert.are.equal(0, price.pick)
+		assert.is_true(price.cart < price.truck)
+		local c2 = config.load(getter({rockmech_career = "true", rockmech_price_haul = "123"}))
+		assert.is_true(c2.career)
+		for _, it in ipairs(c2.shop) do if it.key == "haul" then assert.are.equal(123, it.price) end end
+	end)
+end)
+
 describe("config.crush_income", function()
 	it("收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），廢石只付處理費，低於截止品位就賠錢", function()
 		local coal = config.ores.coal

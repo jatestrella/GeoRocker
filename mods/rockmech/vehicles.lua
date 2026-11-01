@@ -546,7 +546,7 @@ local function settle_box(self, def, pos, dtime)
 end
 
 -- 車輛的自重 (t)，車種沒列的用 20
-V.MASS = {truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
+V.MASS = {cart = 0.2, truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
 	jumbo = 30, charger = 20, drillrig = 25}
 
 -- 接地壓力 (kPa) = (自重 + 車上的碎石) / 兩條輪跡的面積（各寬 1 m、長 = 車長），g 取 10。
@@ -884,6 +884,7 @@ function V.register(kind, def)
 			local name = clicker:get_player_name()
 			if self.driver == name then get_off(self); return end
 			if self.driver then return end
+			if rockmech.career_load and rockmech.career_load(clicker, self, def) then return end
 			-- 從別台車直接換過來：先把原本那台的駕駛清掉（否則兩台都聽這個玩家的）
 			local parent = clicker:get_attach()
 			local pe = parent and parent:get_luaentity()
@@ -901,6 +902,10 @@ function V.register(kind, def)
 		end,
 		on_punch = function(self, puncher)
 			if not puncher or not puncher:is_player() or self.driver then return true end
+			if rockmech.cfg.career and load_total(self) > 0 then    -- 經營模式碎石不進物品欄
+				core.chat_send_player(puncher:get_player_name(), "車上還有碎石，先倒掉才能收起來")
+				return true
+			end
 			local inv = puncher:get_inventory()
 			local left = inv:add_item("main", ItemStack(ename .. "_item"))
 			if not left:is_empty() then core.add_item(self.object:get_pos(), left) end
@@ -1091,6 +1096,7 @@ dofile(rockmech.modpath .. "/vehicle_excavator.lua")
 dofile(rockmech.modpath .. "/vehicle_ahs.lua")
 dofile(rockmech.modpath .. "/vehicle_truck.lua")
 dofile(rockmech.modpath .. "/vehicle_haul.lua")
+dofile(rockmech.modpath .. "/vehicle_cart.lua")
 dofile(rockmech.modpath .. "/vehicle_dozer.lua")
 dofile(rockmech.modpath .. "/vehicle_jumbo.lua")
 dofile(rockmech.modpath .. "/vehicle_drillrig.lua")

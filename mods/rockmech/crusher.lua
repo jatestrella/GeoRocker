@@ -36,6 +36,7 @@ local function show_money(player)
 	end
 end
 
+function rockmech.money(name) return storage:get_float(MONEY .. name) end
 function rockmech.add_money(name, amount)
 	storage:set_float(MONEY .. name, storage:get_float(MONEY .. name) + amount)
 	local player = core.get_player_by_name(name)
@@ -188,6 +189,49 @@ end
 -- 方塊
 ---------------------------------------------------------------------------
 
+-- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false
+function rockmech.crusher_build(pos, dx, dz, name)
+	local half = (SIZE - 1) / 2
+	local cx, cz = pos.x + dx * (2 + half), pos.z + dz * (2 + half)    -- 受料倉中心，緊貼機身
+	local function solid(p) return not V.passable(core.get_node(p).name) end
+	for x = cx - half, cx + half do for z = cz - half, cz + half do
+		if solid({x = x, y = pos.y, z = z}) then return false end
+		for y = pos.y - 1 - DEPTH, pos.y - 1 do
+			if not solid({x = x, y = y, z = z}) then return false end
+		end
+	end end
+	for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do
+		if not solid({x = x, y = pos.y - 1, z = z}) then return false end
+		for y = pos.y, pos.y + 2 do
+			if solid({x = x, y = y, z = z}) then return false end
+		end
+	end end
+	-- 階梯漏斗：每往下一層，四邊各內縮 1 m
+	for dy = 0, DEPTH - 1 do
+		local r = half - dy
+		for x = cx - r, cx + r do for z = cz - r, cz + r do
+			local p = {x = x, y = pos.y - 1 - dy, z = z}
+			rockmech.collapse.mark_excavated(p)
+			core.swap_node(p, {name = "air"})
+		end end
+	end
+	local gy = pos.y - 1 - DEPTH
+	local r = (FEEDER - 1) / 2
+	for x = cx - r, cx + r do for z = cz - r, cz + r do
+		core.swap_node({x = x, y = gy, z = z}, {name = GRATE})
+	end end
+	core.set_node(pos, {name = CRUSHER})
+	local meta = core.get_meta(pos)
+	meta:set_string("owner", name)
+	meta:set_int("gx", cx - r)
+	meta:set_int("gy", gy)
+	meta:set_int("gz", cz - r)
+	meta:set_string("infotext", "破碎站（右鍵查看）")
+	core.get_node_timer(pos):start(STEP)
+	if not storage:contains(MONEY .. name) then rockmech.add_money(name, 0) end
+	return true
+end
+
 local BODY = "[fill:16x16:#b08a20^[fill:16x2:0,0:#303030^[fill:16x2:0,14:#303030"
 
 core.register_node(GRATE, {
@@ -214,50 +258,11 @@ core.register_node(CRUSHER, {
 		local dx, dz = 0, 0
 		if math.abs(look.x) > math.abs(look.z) then dx = look.x > 0 and -1 or 1
 		else dz = look.z > 0 and -1 or 1 end
-		local half = (SIZE - 1) / 2
-		local cx, cz = pos.x + dx * (2 + half), pos.z + dz * (2 + half)    -- 受料倉中心，緊貼機身
-		local function solid(p) return not V.passable(core.get_node(p).name) end
-		local ok = true
-		for x = cx - half, cx + half do for z = cz - half, cz + half do
-			if solid({x = x, y = pos.y, z = z}) then ok = false end
-			for y = pos.y - 1 - DEPTH, pos.y - 1 do
-				if not solid({x = x, y = y, z = z}) then ok = false end
-			end
-		end end
-		for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do
-			if not solid({x = x, y = pos.y - 1, z = z}) then ok = false end
-			for y = pos.y, pos.y + 2 do
-				if solid({x = x, y = y, z = z}) then ok = false end
-			end
-		end end
 		local name = placer:get_player_name()
-		if not ok then
+		if not rockmech.crusher_build(pos, dx, dz, name) then
 			core.chat_send_player(name, "[破碎站] 要放在平地上：機身 3×3 m 和前方 7×7 m 要平坦、地下是實心、上方淨空")
 			return itemstack
 		end
-		-- 階梯漏斗：每往下一層，四邊各內縮 1 m
-		for dy = 0, DEPTH - 1 do
-			local r = half - dy
-			for x = cx - r, cx + r do for z = cz - r, cz + r do
-				local p = {x = x, y = pos.y - 1 - dy, z = z}
-				rockmech.collapse.mark_excavated(p)
-				core.swap_node(p, {name = "air"})
-			end end
-		end
-		local gy = pos.y - 1 - DEPTH
-		local r = (FEEDER - 1) / 2
-		for x = cx - r, cx + r do for z = cz - r, cz + r do
-			core.swap_node({x = x, y = gy, z = z}, {name = GRATE})
-		end end
-		core.set_node(pos, {name = CRUSHER})
-		local meta = core.get_meta(pos)
-		meta:set_string("owner", name)
-		meta:set_int("gx", cx - r)
-		meta:set_int("gy", gy)
-		meta:set_int("gz", cz - r)
-		meta:set_string("infotext", "破碎站（右鍵查看）")
-		core.get_node_timer(pos):start(STEP)
-		if not storage:contains(MONEY .. name) then rockmech.add_money(name, 0) end
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack
 	end,

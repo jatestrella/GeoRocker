@@ -284,6 +284,21 @@ rockmech_ahs_follow (Excavator move before re-spotting) float 6 1 50
 # Autonomous truck bound to an excavator: stop and warn if the excavator is farther than this from the route start (m).
 rockmech_ahs_max_dist (Max excavator distance from route) float 60 10 500
 
+# Career mode: no rock or rubble drops, a free pickaxe and a vendor selling equipment. Turn creative mode off for this world.
+rockmech_career (Career mode) bool false
+
+# Career mode: starting money.
+rockmech_career_start (Career starting money) float 1000 0 100000000
+
+# Career mode: seconds for the pickaxe to break a rock cell (softest rock).
+rockmech_pick_rock_time (Pickaxe time on rock) float 8 0.1 120
+
+# Career mode: seconds for the pickaxe to pick up a rubble cell.
+rockmech_pick_rubble_time (Pickaxe time on rubble) float 2 0.1 60
+
+# Hand cart capacity in blocks of rubble (a person carries one).
+rockmech_cart_blocks (Hand cart capacity) int 3 1 12
+
 # Crusher throughput in tonnes per second. Rubble dumped faster than this queues on the grate.
 rockmech_crusher_rate (Crusher throughput) float 2 0.1 100
 

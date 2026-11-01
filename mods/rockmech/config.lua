@@ -66,6 +66,29 @@ config.ores = {
 		label = "煤", default = 191, price = 120, recovery = 0.9},
 }
 
+-- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個
+config.shop = {
+	{key = "pick", item = "rockmech:pick", label = "挖礦鎬", price = 0},
+	{key = "cart", item = "rockmech:cart_item", label = "手推車", price = 500},
+	{key = "truck", item = "rockmech:truck_item", label = "卡車", price = 10000},
+	{key = "excavator", item = "rockmech:excavator_item", label = "怪手", price = 15000},
+	{key = "crusher", item = "rockmech:crusher", label = "破碎站", price = 20000},
+	{key = "dozer", item = "rockmech:dozer_item", label = "推土機", price = 35000},
+	{key = "bulktruck", item = "rockmech:bulktruck_item", label = "裝藥車", price = 40000},
+	{key = "charger", item = "rockmech:charger_item", label = "裝藥台車", price = 40000},
+	{key = "drillrig", item = "rockmech:drillrig_item", label = "鑽機", price = 50000},
+	{key = "jumbo", item = "rockmech:jumbo_item", label = "鑽孔台車", price = 60000},
+	{key = "haul", item = "rockmech:haul_item", label = "礦卡", price = 150000},
+	{key = "excavator_big", item = "rockmech:excavator_big_item", label = "礦用怪手", price = 200000},
+	{key = "drill", item = "rockmech:rock_drill", label = "鑿岩機", price = 500},
+	{key = "detonator", item = "rockmech:detonator", label = "起爆器", price = 500},
+	{key = "emulsion", item = "rockmech:emulsion", label = "乳膠炸藥", price = 500, count = 10},
+	{key = "anfo", item = "rockmech:anfo", label = "ANFO", price = 1000, count = 10},
+	{key = "bolt", item = "rockmech:rock_bolt", label = "岩栓", price = 300, count = 10},
+	{key = "shotcrete", item = "rockmech:shotcrete", label = "噴凝土", price = 800, count = 10},
+	{key = "compass", item = "rockmech:compass", label = "地質羅盤", price = 200},
+}
+
 -- 破碎站的收入：噸數 ×（品位 × 回收率 × 價格 − 處理費）。ore = nil 是廢石，只付處理費
 function config.crush_income(tons, grade, ore, fee)
 	return tons * ((ore and grade * ore.recovery * ore.price or 0) - fee)
@@ -626,6 +649,16 @@ function config.load(get)
 	cfg.rubble_sound_gain = math.max(0, tonumber(get("rockmech_rubble_sound_gain")) or 1)
 	cfg.vehicle_sound_gain = math.max(0, tonumber(get("rockmech_vehicle_sound_gain")) or 1)
 	cfg.shotcrete_speed = math.max(0.1, tonumber(get("rockmech_shotcrete_speed")) or 1.5)
+	-- 經營模式（career.lua）
+	cfg.career = get("rockmech_career") == "true" or get("rockmech_career") == true
+	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 1000)
+	cfg.pick_rock_time = math.max(0.1, tonumber(get("rockmech_pick_rock_time")) or 8)
+	cfg.pick_rubble_time = math.max(0.1, tonumber(get("rockmech_pick_rubble_time")) or 2)
+	cfg.cart_blocks = math.max(1, math.floor(tonumber(get("rockmech_cart_blocks")) or 3))
+	cfg.shop = copy(config.shop)
+	for _, it in ipairs(cfg.shop) do
+		it.price = math.max(0, tonumber(get("rockmech_price_" .. it.key)) or it.price)
+	end
 	-- 無人卡車綁定怪手（vehicle_ahs.lua）：車尾離怪手中心、倒車的距離、怪手移動多遠要重新停車、離路線起點多遠就不去
 	cfg.ahs_tail_gap = math.max(1, tonumber(get("rockmech_ahs_tail_gap")) or 5)
 	cfg.ahs_back_in = math.max(0.5, tonumber(get("rockmech_ahs_back_in")) or 3)
