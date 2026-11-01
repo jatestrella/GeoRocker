@@ -147,6 +147,7 @@ local function excavator(kind, P)
 		return psi, h, reach
 	end
 
+	local AIM_MARGIN = 0.5
 	-- 滑鼠指的東西：從駕駛的相機沿視線找。回傳 {under, above}（方塊）或 {truck = 有車斗的車}；沒有回傳 nil。
 	-- with_trucks：也找有車斗的車（跳過自己、零件與玩家）
 	local function aim(self, d, pos, with_trucks)
@@ -169,7 +170,8 @@ local function excavator(kind, P)
 				break
 			end
 		end
-		-- 再找有車斗的車：沿視線每 0.2 m 檢查是否落在車身內（照車子朝向旋轉；伺服器的射線不會旋轉選取框）
+		-- 再找有車斗的車：沿視線每 0.1 m 檢查是否落在車身內（照車子朝向旋轉；伺服器的射線不會旋轉選取框）。
+		-- 車身每邊放寬 AIM_MARGIN：指到車斗邊框時射線只掠過車身一小段，要算指到
 		if with_trucks then
 			local trucks = {}
 			for _, o in ipairs(core.get_objects_inside_radius(eye, reach + 12)) do
@@ -178,7 +180,7 @@ local function excavator(kind, P)
 			end
 			if #trucks > 0 then
 				local tmax = node_t or reach
-				for t = 0, tmax, 0.2 do
+				for t = 0, tmax, 0.1 do
 					local p = vector.add(eye, vector.multiply(look, t))
 					for _, e in ipairs(trucks) do
 						local tp, ty = e.object:get_pos(), e.object:get_yaw()
@@ -187,8 +189,8 @@ local function excavator(kind, P)
 							local c, sn = math.cos(ty), math.sin(ty)
 							local lx, lz = dx * c + dz * sn, -dx * sn + dz * c
 							local td = TYPES[e.vkind]
-							if math.abs(lx) <= td.half - 0.1 and dy >= -td.half and dy <= td.bed.aim_top
-								and lz >= -td.rear and lz <= td.half then
+							if math.abs(lx) <= td.half + AIM_MARGIN and dy >= -td.half and dy <= td.bed.aim_top + AIM_MARGIN
+								and lz >= -td.rear - AIM_MARGIN and lz <= td.half + AIM_MARGIN then
 								return {truck = e}
 							end
 						end
