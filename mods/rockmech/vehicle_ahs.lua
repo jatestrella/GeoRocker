@@ -2,6 +2,7 @@
 -- 無人運輸（AHS，像 Komatsu FrontRunner／Cat MineStar Command）：有車斗的車（卡車、礦卡）沿教過的路線自己往返。
 -- 由 vehicles.lua 載入，vehicle_truck.lua 的 hauler 接上（E 設定畫面、每一步、存檔）。
 --   教路線：坐在車上按 E →「設為裝載點並開始錄製」→ 開到倒土的地方 →「設為傾倒點」（每 REC_STEP m 記一個路線點）。
+--   指示線：錄製時自動顯示，貼著地面畫出路線（綠）、裝載點（藍）、傾倒點（紅）；設定畫面可以開關，只有自己看得到。
 --   啟動後下車：在裝載點等裝滿 → 沿路線開到傾倒點 → 開到這一趟分配的傾倒位置前方的待命點 → 轉成車尾朝外
 --   → 倒車進傾倒位置 → 抬斗倒在車尾 → 開回待命點 → 沿傾倒線開回路線 → 沿路線開回裝載點 → 再等。
 --   傾倒區：沿傾倒點左右排成一排（中、左、右、更左、更右…，間距一個車寬＋1 m，共 DUMP_SPOTS 個），碎石都倒在
@@ -224,6 +225,37 @@ function AHS.step(self, def, ctx)
 	self.autopilot = ap
 end
 
+-- 路線指示線：粒子只送給設定的玩家，每秒畫一次他附近的路段
+local LINE_EVERY, LINE_STEP, LINE_RANGE = 1, 1, 48
+local lines = {}            -- 玩家名稱 → self.ahs
+local function mark(name, p, size, color)
+	local g = V.ground_top(p.x, p.y + 2, p.z, 8)
+	core.add_particle({pos = {x = p.x, y = (g or p.y) + 0.3, z = p.z}, expirationtime = LINE_EVERY * 1.1,
+		size = size, texture = "[fill:4x4:" .. color, glow = 14, playername = name})
+end
+local function draw_line(name, a)
+	local player = core.get_player_by_name(name)
+	if not player or not a.route then return end
+	local me = player:get_pos()
+	for i = 1, #a.route - 1 do
+		local p, q = a.route[i], a.route[i + 1]
+		if flat_dist(me, p) < LINE_RANGE then
+			local n = math.max(1, math.floor(flat_dist(p, q) / LINE_STEP))
+			for s = 0, n - 1 do mark(name, vector.add(p, vector.multiply(vector.subtract(q, p), s / n)), 3, "#40ff70") end
+		end
+	end
+	if a.load and flat_dist(me, a.load) < LINE_RANGE then mark(name, a.load, 12, "#40a0ff") end
+	if a.dump and flat_dist(me, a.dump) < LINE_RANGE then mark(name, a.dump, 12, "#ff4040") end
+end
+local line_t = 0
+core.register_globalstep(function(dtime)
+	line_t = line_t + dtime
+	if line_t < LINE_EVERY then return end
+	line_t = 0
+	for name, a in pairs(lines) do draw_line(name, a) end
+end)
+core.register_on_leaveplayer(function(player) lines[player:get_player_name()] = nil end)
+
 -- 設定畫面
 local editing = {}
 local function fmt(p) return p and ("(%d, %d, %d)"):format(math.floor(p.x + 0.5), math.floor(p.y + 0.5), math.floor(p.z + 0.5)) or "未設定" end
@@ -245,6 +277,7 @@ local function formspec(self)
 		"button[4.6,5.0;3.9,0.8;stop;停止]",
 		"button[0.5,5.9;3.9,0.8;go;立即出發（不等裝滿）]",
 		"button[4.6,5.9;3.9,0.8;reset;重設傾倒區]",
+		"button[0.5,6.8;3.9,0.8;line;顯示／隱藏路線]",
 		"button_exit[4.6,6.8;3.9,0.8;ok;關閉]",
 		"label[0.5,7.9;裝滿 → 沿路線到傾倒線，倒車進這趟的位置倒土 → 開回裝載點；前方有人或車會停]",
 	})
@@ -265,6 +298,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local msg
 	if fields.rec then
 		a.load, a.dump, a.route, a.rec, a.on, a.spot = round(pos), nil, {round(pos)}, true, false, 0
+		lines[name] = a
 		msg = "開始錄製：開到倒土的地方"
 	elseif fields.dump then
 		if not a.rec then msg = "要先設裝載點並開始錄製"
@@ -287,6 +321,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			a.wait_msg = nil
 			msg = "已啟動：請下車"
 		end
+	elseif fields.line then
+		lines[name] = lines[name] ~= a and a or nil
 	elseif fields.stop then
 		a.on = false
 		self.autopilot = nil
