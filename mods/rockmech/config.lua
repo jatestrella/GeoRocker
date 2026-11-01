@@ -59,11 +59,17 @@ config.lithologies.coal = {
 --   lith    礦石的岩性；waste：混合的廢石是哪種岩性的碎石（同一格會合併，品位下降）
 --   pure    純礦石的顏色；waste_color：廢石的顏色（未破碎的方塊用兩者之間的顏色）
 --   value   品位 100% 時的價值；unit、label：顯示用；default：沒指定品位的方塊算多少（param2）
+--   price   品位 100% 時每噸的售價；recovery：選礦回收率（破碎站，見 config.crush_income）
 -- 碎石的外觀由 8 張遮罩決定：廢石貼圖上疊礦石貼圖，品位越高礦石的像素越多。加一種礦只要在這裡加一列
 config.ores = {
 	coal = {lith = "coal", waste = "shale", pure = "#141418", waste_color = "#6a6058",
-		value = 7000, unit = "kcal/kg", label = "煤", default = 191},
+		value = 7000, unit = "kcal/kg", label = "煤", default = 191, price = 120, recovery = 0.9},
 }
+
+-- 破碎站的收入：噸數 ×（品位 × 回收率 × 價格 − 處理費）。ore = nil 是廢石，只付處理費
+function config.crush_income(tons, grade, ore, fee)
+	return tons * ((ore and grade * ore.recovery * ore.price or 0) - fee)
+end
 
 -- 註冊順序（固定，讓 content id / 測試結果可重現）
 config.lithology_order = {"sandstone", "shale", "granite", "coal"}
@@ -620,6 +626,8 @@ function config.load(get)
 	cfg.rubble_sound_gain = math.max(0, tonumber(get("rockmech_rubble_sound_gain")) or 1)
 	cfg.vehicle_sound_gain = math.max(0, tonumber(get("rockmech_vehicle_sound_gain")) or 1)
 	cfg.shotcrete_speed = math.max(0.1, tonumber(get("rockmech_shotcrete_speed")) or 1.5)
+	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
+	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)
 	cfg.model_scale = tonumber(get("rockmech_model_scale")) or 1
 	if cfg.model_scale <= 0 then
 		warnings[#warnings + 1] = "rockmech_model_scale ≤ 0，改為 1"

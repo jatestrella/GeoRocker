@@ -8,6 +8,7 @@
 --   傾倒區：沿傾倒點左右排成一排（中、左、右、更左、更右…，間距一個車寬＋1 m，共 DUMP_SPOTS 個），碎石都倒在
 --   這條傾倒線外側，不會倒在進出的路上（像真的調度系統每趟分配不同的傾倒位置、倒車進位置）。位置被土堆佔住就跳過；
 --   倒不乾淨就換下一個位置再倒，連兩個位置都倒不完就帶著剩下的開回去；全滿就在傾倒點等（推土機推平後在設定畫面重設）。
+--   傾倒點設在破碎站的格柵上：格柵吃得掉，每趟都倒同一個位置，不往兩側排。
 --   前方有人或車就停（障礙偵測）；有人上車駕駛就暫停。爬坡限制、車尾碰撞照常。
 --   只在玩家附近（引擎執行的區塊內）會動，跑太遠會停住，等玩家靠近才繼續。
 
@@ -79,12 +80,19 @@ local function spot_free(a, def, sp)
 	local q = {x = math.floor(sp.x + d.x * back + 0.5), y = y0 + 2, z = math.floor(sp.z + d.z * back + 0.5)}
 	return V.passable(core.get_node(q).name)
 end
+-- 在 sp 倒土會落在破碎站的格柵上
+local function on_grate(a, def, sp)
+	local d = dir_in(a)
+	local back = def.rear + 1
+	return core.get_node({x = math.floor(sp.x + d.x * back + 0.5), y = V.ground_y(sp, def.half) - 1,
+		z = math.floor(sp.z + d.z * back + 0.5)}).name == "rockmech:crusher_grate"
+end
 -- 從 a.spot 起找下一個能用的傾倒位置
 local function next_spot(a, def)
 	while true do
 		local sp = spot_pos(a, def, a.spot or 0)
 		if not sp then return nil end
-		if spot_free(a, def, sp) then return sp end
+		if on_grate(a, def, sp) or spot_free(a, def, sp) then return sp end
 		a.spot = (a.spot or 0) + 1
 	end
 end
@@ -177,7 +185,7 @@ function AHS.step(self, def, ctx)
 		elseif a.tipped then
 			-- 倒完一次：這個位置用掉了；倒乾淨就離開，倒不乾淨換下一個位置，連兩個都倒不完就帶著剩下的回去
 			a.tipped = nil
-			a.spot = (a.spot or 0) + 1
+			if not on_grate(a, def, a.target) then a.spot = (a.spot or 0) + 1 end
 			if V.load_total(self) == 0 then
 				set_phase(self, "pull_out")
 			else

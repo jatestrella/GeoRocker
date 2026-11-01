@@ -99,6 +99,16 @@ describe("config.load", function()
 	end)
 end)
 
+describe("config.crush_income", function()
+	it("收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），廢石只付處理費，低於截止品位就賠錢", function()
+		local coal = config.ores.coal
+		assert.near(72 * (0.75 * 0.9 * 120 - 30), config.crush_income(72, 0.75, coal, 30), 1e-9)
+		assert.near(-720, config.crush_income(24, 0, nil, 30), 1e-9)
+		assert.is_true(config.crush_income(1, 0.2, coal, 30) < 0)
+		assert.is_true(config.crush_income(1, 0.3, coal, 30) > 0)
+	end)
+end)
+
 describe("config.is_soil", function()
 	it("crumbly 天然地層為土壤；碎石、岩石、非天然方塊不是", function()
 		assert.is_true(config.is_soil("default:dirt", {crumbly = 3, soil = 1}, true))
