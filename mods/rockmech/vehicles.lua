@@ -668,7 +668,7 @@ function V.tail_guard(self, def, ctx)
 	end
 end
 
--- only：只看 "player" 或 "vehicle"，不給就都看
+-- only：只看 "player" 或 "vehicle"，不給就都看。回傳 擋到了沒, 擋到的車
 function V.objects_in(self, pos, yaw, x0, x1, z0, z1, only)
 	local def = TYPES[self.vkind]
 	local c, sn = math.cos(yaw), math.sin(yaw)
@@ -688,7 +688,7 @@ function V.objects_in(self, pos, yaw, x0, x1, z0, z1, only)
 		if m and hi > bottom and lo < top then
 			local dx, dz = p.x - pos.x, p.z - pos.z
 			local lx, lz = dx * c + dz * sn, -dx * sn + dz * c
-			if lx > x0 - m and lx < x1 + m and lz > z0 - m and lz < z1 + m then return true end
+			if lx > x0 - m and lx < x1 + m and lz > z0 - m and lz < z1 + m then return true, e end
 		end
 	end
 	return false

@@ -13,6 +13,8 @@
 --   倉裡放不下這一車就在待命點等。
 --   綁定怪手：裝載點跟著怪手走，像真的礦場由怪手決定停車位置（spotting）。回到路線起點後直線開向怪手，在怪手前方
 --   掉頭、倒車到車尾離怪手 rockmech_ahs_tail_gap，車頭朝外，裝滿直接開走。怪手移動就重新停車；前一台還在裝就在旁邊排隊。
+--   會車：無人車被另一台無人車擋住，優先權低的那台往旁邊讓路，等對方過去再回來。裝滿出發的車最優先，再來是
+--   正在裝的車，其他的最低；一樣就比編號。不然兩台會面對面互等。
 --   前方有人或車就停（障礙偵測）；有人上車駕駛就暫停。爬坡限制、車尾碰撞照常。
 --   只在玩家附近（引擎執行的區塊內）會動，跑太遠會停住，等玩家靠近才繼續。
 
@@ -22,7 +24,7 @@ local REC_STEP = 3          -- 錄製路線點的間距 (m)
 local TURN_ONLY = 0.6       -- 方向差超過這個角度 (rad) 就停下來原地轉
 local DEAD = 0.08           -- 方向差小於這個角度就不轉
 local LOOK = 6              -- 障礙偵測：車頭前方幾公尺有人就停
-local LOOK_VEHICLE = 1.5    -- 別台車只看這麼近：要能開到怪手手臂範圍內，車子停得住，不必提早
+local LOOK_VEHICLE = 1.5    -- 其他車只看這麼近：要能開到怪手手臂範圍內。別台無人車看 LOOK，兩台對開才留得出讓路的空間
 local TURN_AHEAD = 0.25     -- 原地轉之前先看這麼遠 (rad)，要大於一步轉的角度
 local LATERAL = {0, 1, -1, 2, -2, 3, -3, 4, -4}   -- 傾倒位置的橫向順序（車寬＋1 m 為單位）
 local DUMP_SPOTS = #LATERAL
@@ -30,6 +32,9 @@ local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾�
 local APPROACH = 16         -- 進格柵的方向：看路線上離格柵這麼遠的點，別被最後幾公尺的轉彎帶偏
 local HOPPER_WAIT = "受料倉滿了，等待中"
 local QUEUE_R, QUEUE_SIDE = 25, 10  -- 排隊的位置：離怪手多遠、離進出的路線多遠 (m)
+local YIELD_AFTER = 1       -- 被別台無人車擋住多久才要它讓路 (s)
+local YIELD_HOLD = 4        -- 對方不再要求之後，再等這麼久才回去 (s)
+local YIELD_GAP = 2         -- 讓路時兩台車身之間留的距離 (m)
 local cfg = rockmech.cfg
 
 local AHS = {}
@@ -107,6 +112,42 @@ local function next_spot(a, def)
 	end
 end
 
+-- 會車的優先權：裝滿出發 > 正在裝 > 其他，一樣就比編號
+local function rank(t)
+	local p = t.ahs.phase
+	if p == "to_dump" then return 3 end
+	if p == "wait" or p == "exc_align" or p == "exc_back" then return 2 end
+	return 1
+end
+local function outranks(s, b)
+	if rank(s) ~= rank(b) then return rank(s) > rank(b) end
+	return s.uid < b.uid
+end
+-- self 開不過去：要擋路的 b 讓到路線旁邊。旁邊不能站（坑、岩壁）就換另一邊
+local function ask_yield(self, def, ctx, b)
+	local td = V.TYPES[b.vkind]
+	local bp = b.object:get_pos()
+	local fx, fz = ctx.dir.x, ctx.dir.z
+	local rx, rz = bp.x - ctx.pos.x, bp.z - ctx.pos.z
+	local along, lat = rx * fx + rz * fz, rx * fz - rz * fx
+	local clear = def.half + td.half + YIELD_GAP
+	local first = lat >= 0 and 1 or -1
+	local target
+	for _, side in ipairs({first, -first}) do
+		local x = ctx.pos.x + fx * along + fz * clear * side
+		local z = ctx.pos.z + fz * along - fx * clear * side
+		local g = V.ground_top(x, bp.y + 2, z, 6)
+		target = target or {x = x, y = bp.y, z = z}
+		if g and math.abs(g - (bp.y - td.half)) < 1.2 then
+			target = {x = x, y = bp.y, z = z}
+			break
+		end
+	end
+	local y = b.ahs.yield
+	if y then y.left = YIELD_HOLD
+	else b.ahs.yield = {x = target.x, y = target.y, z = target.z, left = YIELD_HOLD} end
+end
+
 -- 朝 target 開（方向差大就原地轉，否則邊開邊修正；前方有人或車就停；卡住會顯示）。ap 是這一步的操作
 local function drive_to(self, def, ctx, a, ap, target)
 	local pos = ctx.pos
@@ -119,11 +160,19 @@ local function drive_to(self, def, ctx, a, ap, target)
 		ap.left, ap.right = nil, nil
 	end
 	local h = def.half
-	if V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK, "player")
-			or V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK_VEHICLE, "vehicle") then
+	local _, car = V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK, "vehicle")
+	if car and not (car.ahs and car.ahs.on) then
+		_, car = V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK_VEHICLE, "vehicle")
+	end
+	if car or V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK, "player") then
+		a.block_t = (a.block_t or 0) + ctx.dtime
+		if car and a.block_t > YIELD_AFTER and car.ahs and car.ahs.on and not car.driver and outranks(self, car) then
+			ask_yield(self, def, ctx, car)
+		end
 		if a.wait_msg ~= "前方有障礙，等待中" then a.wait_msg = "前方有障礙，等待中"; V.refresh(self) end
 		return
 	end
+	a.block_t = 0
 	ap.up = true
 	-- 卡住偵測：一直想往前卻 8 秒沒前進
 	local moved = a.last_pos and flat_dist(pos, a.last_pos) or 1
@@ -172,6 +221,23 @@ function AHS.step(self, def, ctx)
 	if ctx.d then self.autopilot = nil; return end   -- 有人駕駛：暫停
 	local ap = {}
 	local reach = def.half + 1
+	if a.yield then
+		-- 讓路：開到旁邊等對方過去；讓路前在裝的車，回來重新停車
+		a.yield.left = a.yield.left - ctx.dtime
+		if a.yield.left <= 0 then
+			a.yield = nil
+			if a.bound and a.phase == "wait" then set_phase(self, "to_exc") end
+		else
+			say(self, a, "讓路中")
+			if flat_dist(pos, a.yield) > 1.5 then
+				drive_to(self, def, ctx, a, ap, a.yield)
+				if not (ap.up or ap.left or ap.right) then ap.down = true end   -- 已經貼住了：先倒車退開
+			end
+			a.last_pos = vector.copy(pos)
+			self.autopilot = ap
+			return
+		end
+	end
 	if a.phase == "wait" then
 		if V.load_total(self) >= def.cap then
 			a.idx = a.bound and 1 or 2      -- 綁定怪手：從怪手旁邊先開回路線起點
