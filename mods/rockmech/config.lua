@@ -203,7 +203,7 @@ config.blast_defaults = {
 -- 警戒裂紋（fsmask.lua）：1 < FS < max 的岩格加上裂紋；設定鍵為 rockmech_fswarn_<key>
 config.fswarn_defaults = {
 	max = 2.0,                -- FS 低於此值（且 > 1）就顯示裂紋
-	sound_gain = 1.0,         -- 裂紋出現或變嚴重時破裂聲的音量（0 = 不播）
+	sound_gain = 3.0,         -- 裂紋出現或變嚴重時破裂聲的音量（0 = 不播，字幕也不顯示）；定位音效隨距離衰減，所以大於 1
 	sound_distance = 32,      -- 破裂聲聽得到的距離 (m)
 }
 

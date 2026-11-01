@@ -369,28 +369,52 @@ function rockmech.fswarn_at(name, pos)
 	return {kind = m.kind, label = WARN_LABEL[m.kind] or m.kind, fs = m.fs}
 end
 
--- 破裂聲：這次掃描新出現或變嚴重的裂紋，在最嚴重的那格響一聲（FS 越接近 1 越大聲）。
+-- 破裂聲的字幕（左下角）：連續響時延長同一個字幕
+local CAPTION_TIME = 2.5
+local function crack_caption(player, a)
+	a.wcap_t = now() + CAPTION_TIME
+	if a.wcap then return end
+	a.wcap = player:hud_add({type = "text", position = {x = 0.01, y = 0.95}, alignment = {x = 1, y = -1},
+		text = "*岩石碎裂聲*", number = 0xFFC080, z_index = 100})
+	local name = player:get_player_name()
+	local function check()
+		if active[name] ~= a then return end
+		local left = a.wcap_t - now()
+		if left > 0 then core.after(left, check); return end
+		local pl = core.get_player_by_name(name)
+		if pl then pl:hud_remove(a.wcap) end
+		a.wcap = nil
+	end
+	core.after(CAPTION_TIME, check)
+end
+
+-- 破裂聲：這次掃描新出現或變嚴重的裂紋，在最近的那格響一聲（定位音效隨距離衰減，放在遠處的頂板中央會聽不到）；
+-- 這些裂紋裡最接近 FS = 1 的決定音量。
 -- 只比前後兩次都掃到的範圍，走動帶進範圍的舊裂紋不算；重開顯示後的第一次掃描也不算。
 -- 附近地形剛改變（SOUND_WINDOW 秒內）才響：換個解的範圍時，同一格的 FS 會有小幅差異，那不是岩石裂了
 local SOUND_WINDOW = 5
 local function crack_sound(player, a, center, cells)
-	local seen, worst = {}, nil
-	for _, c in ipairs(cells) do
+	local seen, near, worst = {}, nil, -1
+	for _, c in ipairs(cells) do         -- 由近到遠
 		local k = pkey(c.pos)
 		local stage = warn_stage(c.fs)
 		seen[k] = stage
-		if a.wseen and stage > (a.wseen[k] or -1) and (not worst or c.fs < worst.fs)
+		if a.wseen and stage > (a.wseen[k] or -1)
 				and math.max(math.abs(c.pos.x - a.wcenter.x), math.abs(c.pos.y - a.wcenter.y), math.abs(c.pos.z - a.wcenter.z)) <= LIVE_R then
-			worst = c
+			near = near or c
+			worst = math.max(worst, stage)
 		end
 	end
 	a.wseen, a.wcenter = seen, center
-	if worst and cfg.fswarn.sound_gain > 0 and now() - (a.wchange or -math.huge) <= SOUND_WINDOW then
+	if near and cfg.fswarn.sound_gain > 0 and now() - (a.wchange or -math.huge) <= SOUND_WINDOW then
+		local gain = cfg.fswarn.sound_gain * (0.5 + 0.5 * worst / (WARN_STAGES - 1))
 		core.sound_play("rockmech_crack", {
-			pos = worst.pos, to_player = player:get_player_name(),
-			gain = cfg.fswarn.sound_gain * (0.5 + 0.5 * warn_stage(worst.fs) / (WARN_STAGES - 1)),
+			pos = near.pos, to_player = player:get_player_name(), gain = gain,
 			pitch = 0.9 + 0.2 * math.random(), max_hear_distance = cfg.fswarn.sound_distance,
 		}, true)
+		crack_caption(player, a)
+		core.log("action", ("[rockmech] 破裂聲 %s 距離 %.1f m、音量 %.2f"):format(
+			core.pos_to_string(near.pos), vector.distance(near.pos, center), gain))
 	end
 end
 
