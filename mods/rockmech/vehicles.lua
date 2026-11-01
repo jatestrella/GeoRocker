@@ -397,9 +397,9 @@ local function step_ahead(pos, dir, def, f, speed)
 end
 
 -- 車底的碎石坡：回傳 坡度 tanθ（往下坡的單位向量 x, z）；車底大多不是碎石回傳 0。
--- 量車身前後左右的地面高度，地面在車底上下幾格內找
+-- 量車身中央前後左右 1.5 m 的地面高度：碎石堆常常比車小，量到車身外緣會跨過堆頂，兩邊抵銷。地面在車底上下幾格內找
 local function rubble_slope(pos, def)
-	local r = def.half
+	local r = math.min(def.half, 1.5)
 	local base = pos.y - def.half
 	local from = base + 3
 	local function top(x, z) return ground_top(x, from, z, 8) end
@@ -423,10 +423,12 @@ end
 V.rubble_slope = rubble_slope
 
 -- 車在碎石坡上滑動：坡度超過摩擦角（tanθ > μ）就沿最陡方向下滑，a = g(sinθ − μ·cosθ)，g 取 10。
+-- 滑起來之後是動摩擦 μk = 0.7 μ：坡被壓垮變緩也不會馬上停，要滑到坡腳。
 -- 回傳 這一步的滑動速度 x, z（m/s）
-local SLIDE_MAX, SLIDE_STOP = 6, 6     -- 最快 (m/s)、坡度不夠時的減速 (m/s²)
+local SLIDE_MAX, SLIDE_STOP = 6, 2     -- 最快 (m/s)、坡度不夠時的減速 (m/s²，碎石面有起伏，太大一顛就停了)
 local function slide_step(self, pos, def, dtime)
 	local mu = rockmech.cfg.vehicle_slide_mu
+	if (self.slide or 0) > 0 then mu = mu * 0.7 end
 	local t, dx, dz = rubble_slope(pos, def)
 	self.slope_t, self.slope_x, self.slope_z = t, dx, dz
 	if mu > 0 and t > mu then
