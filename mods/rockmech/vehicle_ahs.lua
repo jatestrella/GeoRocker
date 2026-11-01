@@ -12,7 +12,7 @@
 --   傾倒點設在破碎站旁邊：車子順著路線的方向開到受料倉前，自己倒車把車斗對準倉的中心，每趟都倒同一個位置；
 --   倉裡放不下這一車就在待命點等。
 --   綁定怪手：裝載點跟著怪手走，像真的礦場由怪手決定停車位置（spotting）。回到路線起點後直線開向怪手，在怪手前方
---   掉頭、倒車到車尾離怪手 rockmech_ahs_tail_gap，車頭朝外，裝滿直接開走。怪手移動就重新停車；前一台還在裝就在旁邊排隊。
+--   掉頭、倒車到車尾離怪手車身 rockmech_ahs_tail_gap，車斗在這台怪手的手臂範圍內，車頭朝外，裝滿直接開走。怪手移動就重新停車；前一台還在裝就在旁邊排隊。
 --   會車：無人車被另一台無人車擋住，優先權低的那台往旁邊讓路，等對方過去再回來。裝滿出發的車最優先，再來是
 --   正在裝的車，其他的最低；一樣就比編號。不然兩台會面對面互等。
 --   前方有人或車就停（障礙偵測）；有人上車駕駛就暫停。爬坡限制、車尾碰撞照常。
@@ -32,6 +32,8 @@ local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾�
 local APPROACH = 16         -- 進格柵的方向：看路線上離格柵這麼遠的點，別被最後幾公尺的轉彎帶偏
 local HOPPER_WAIT = "受料倉滿了，等待中"
 local QUEUE_R, QUEUE_SIDE = 25, 10  -- 排隊的位置：離怪手多遠、離進出的路線多遠 (m)
+local ARM_USE = 0.9         -- 車斗中心要在手臂長度的這個比例內
+local TAIL_MIN = 0.6        -- 手臂再短，車尾離怪手車身也至少留這麼多 (m)
 local YIELD_AFTER = 1       -- 被別台無人車擋住多久才要它讓路 (s)
 local YIELD_HOLD = 4        -- 對方不再要求之後，再等這麼久才回去 (s)
 local YIELD_GAP = 2         -- 讓路時兩台車身之間留的距離 (m)
@@ -181,17 +183,23 @@ local function drive_to(self, def, ctx, a, ap, target)
 	if msg ~= a.wait_msg then a.wait_msg = msg; V.refresh(self) end
 end
 
+-- 車尾離怪手中心多遠：離車身留 ahs_tail_gap，但車斗中心要搆得到；手臂短的怪手車就停近一點
+local function tail_gap(kind, def)
+	local ex = V.TYPES[kind]
+	local reach = ex.arm_reach * ARM_USE - def.bed.size.z / 2
+	return math.max(ex.half + TAIL_MIN, math.min(ex.half + cfg.ahs_tail_gap, reach))
+end
 -- 綁定的怪手：回傳 位置、路線那一側的單位向量 u、車身中心要停在離怪手多遠。怪手沒載入時用最後看到的位置
 local function exc_spot(a, def)
 	local b = a.bound
 	local e = V.by_uid[b.uid]
 	local p = e and e.object:get_pos()
-	if p then b.pos = round(p) end
+	if p then b.pos, b.kind = round(p), e.vkind end
 	local start = a.route[1]
 	local dx, dz = start.x - b.pos.x, start.z - b.pos.z
 	local l = math.sqrt(dx * dx + dz * dz)
 	local u = l < 1 and {x = 0, z = 1} or {x = dx / l, z = dz / l}
-	return b.pos, u, def.rear + cfg.ahs_tail_gap, l
+	return b.pos, u, def.rear + tail_gap(b.kind or "excavator_big", def), l
 end
 -- 怪手這裡有別台綁同一台的車：正在裝，或裝滿還沒開遠（只有一條進出的路，重車先走，不然會面對面停住）
 local function exc_busy(self, a, e)
@@ -562,7 +570,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				end
 			end
 			if best then
-				a.bound = {uid = best.uid, pos = round(best.object:get_pos())}
+				a.bound = {uid = best.uid, pos = round(best.object:get_pos()), kind = best.vkind}
 				msg = ("綁定怪手（%d m 外）：裝載點跟著它走"):format(bd)
 			else
 				msg = ("%d m 內沒有怪手"):format(cfg.ahs_max_dist)

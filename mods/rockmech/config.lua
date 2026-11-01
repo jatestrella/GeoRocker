@@ -663,8 +663,8 @@ function config.load(get)
 	for _, it in ipairs(cfg.shop) do
 		it.price = math.max(0, tonumber(get("rockmech_price_" .. it.key)) or it.price)
 	end
-	-- 無人卡車綁定怪手（vehicle_ahs.lua）：車尾離怪手中心、倒車的距離、怪手移動多遠要重新停車、離路線起點多遠就不去
-	cfg.ahs_tail_gap = math.max(1, tonumber(get("rockmech_ahs_tail_gap")) or 5)
+	-- 無人卡車綁定怪手（vehicle_ahs.lua）：車尾離怪手車身、倒車的距離、怪手移動多遠要重新停車、離路線起點多遠就不去
+	cfg.ahs_tail_gap = math.max(0.6, tonumber(get("rockmech_ahs_tail_gap")) or 1.5)
 	cfg.ahs_back_in = math.max(0.5, tonumber(get("rockmech_ahs_back_in")) or 3)
 	cfg.ahs_follow = math.max(1, tonumber(get("rockmech_ahs_follow")) or 6)
 	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)

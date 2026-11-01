@@ -272,8 +272,8 @@ rockmech_vehicle_sound_gain (Vehicle engine volume) float 1 0 5
 # Speed multiplier for vehicles driving on shotcrete.
 rockmech_shotcrete_speed (Speed on shotcrete) float 1.5 0.1 5
 
-# Autonomous truck bound to an excavator: distance from the excavator's centre to the truck's tail when loading (m).
-rockmech_ahs_tail_gap (Truck tail gap to excavator) float 5 1 20
+# Autonomous truck bound to an excavator: gap between the excavator's body and the truck's tail when loading (m). The truck parks closer if its bed would be out of the arm's reach.
+rockmech_ahs_tail_gap (Truck tail gap to excavator) float 1.5 0.6 20
 
 # Autonomous truck bound to an excavator: how far it reverses to reach the loading spot (m). It turns around this far out.
 rockmech_ahs_back_in (Truck reverse distance to excavator) float 3 0.5 20

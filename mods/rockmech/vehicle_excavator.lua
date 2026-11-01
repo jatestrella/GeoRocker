@@ -64,6 +64,7 @@ local function excavator(kind, P)
 	local BOOM_ROOT, BUCKET_REST = P.boom_root, P.bucket_rest
 	local BOOM_LEN, STICK_LEN = P.boom_len, P.stick_len
 	local ARM_REACH = BOOM_LEN + STICK_LEN
+	def.arm_reach = ARM_REACH
 
 	local parts = {}
 	for _, p in ipairs(P.body) do parts[#parts + 1] = p end
