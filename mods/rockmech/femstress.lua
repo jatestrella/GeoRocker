@@ -156,7 +156,9 @@ local function make_job(pos)
 		if x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n then return 1 + x + y * n + z * n * n end
 	end, 1)
 	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石不算空）
-	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}}
+	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}}
+	local press = job.press or {}
+	for i = 1, #press, 3 do meta.press[press[i] * 8 + press[i + 1]] = press[i + 2] end
 	for c = 1, n * n * n do
 		local k = c - 1
 		local x, y, z = k % n, math.floor(k / n) % n, math.floor(k / (n * n))
@@ -206,7 +208,11 @@ local function face_fs(job, res, meta, x, y, z, f)
 		end
 	end end
 	if m == 0 then return math.huge end
-	local s1, _, s3 = fem.principal(sum[1] / m, sum[2] / m, sum[3] / m, sum[4] / m, sum[5] / m, sum[6] / m)
+	local st = {}
+	for i = 1, 6 do st[i] = sum[i] / m end
+	local k = dx > 0 and 1 or dx < 0 and 2 or dy > 0 and 3 or dy < 0 and 4 or dz > 0 and 5 or 6
+	fem.free_face(st, dx ~= 0 and 1 or dy ~= 0 and 2 or 3, meta.press[(1 + x + y * n + z * n * n) * 8 + k] or 0)
+	local s1, _, s3 = fem.principal(st[1], st[2], st[3], st[4], st[5], st[6])
 	s1, s3 = s1 / 1000, s3 / 1000
 	local fs, mode = strength_fs(job, meta, x, y, z, s1, s3)
 	return fs, mode, s1, s3

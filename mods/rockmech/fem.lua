@@ -414,6 +414,16 @@ function fem.solve_nested(job)
 end
 
 -- 對稱 3×3 應力張量的主應力（壓為正）：回傳 σ1 ≥ σ2 ≥ σ3
+-- 臨空面的邊界條件：法向應力 = 支護壓力 p、面上的剪應力 = 0（一階元素外插到面上不滿足，
+-- 會差一個應力梯度，看起來像垂直岩面的拉力）。s = {sxx, syy, szz, sxy, syz, szx}，axis 1..3 = 面的法向
+function fem.free_face(s, axis, p)
+	s[axis] = p
+	if axis == 1 then s[4], s[6] = 0, 0
+	elseif axis == 2 then s[4], s[5] = 0, 0
+	else s[5], s[6] = 0, 0 end
+	return s
+end
+
 function fem.principal(sxx, syy, szz, sxy, syz, szx)
 	local q = (sxx + syy + szz) / 3
 	local p1 = sxy * sxy + syz * syz + szx * szx
