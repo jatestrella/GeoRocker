@@ -20,7 +20,7 @@ local SITE_KEY = "career_site"
 local SHOP = "rockmech:shop"
 local VENDOR = "rockmech:vendor"
 local CAMP_Z = 14           -- 帳篷中心在出生點北邊幾公尺
-local CRUSHER_X = 16        -- 破碎站機身在帳篷東邊幾公尺
+local CRUSHER_X = 22        -- 破碎站機身在帳篷東邊幾公尺；受料倉在機身西側，煤層往西露頭，機身才不擋運礦的路
 
 -- 主選單的創造模式開關是全域設定，不見得跟著世界走：經營模式一律不是創造模式
 function core.is_creative_enabled() return false end
@@ -391,7 +391,7 @@ local function build_camp(owner)
 		end end
 	end
 	core.add_entity({x = 0, y = y + 0.5, z = CAMP_Z}, VENDOR)
-	if not rockmech.crusher_build({x = CRUSHER_X, y = (ground_y(CRUSHER_X, CAMP_Z) or y) + 1, z = CAMP_Z}, 0, -1, owner) then
+	if not rockmech.crusher_build({x = CRUSHER_X, y = (ground_y(CRUSHER_X, CAMP_Z) or y) + 1, z = CAMP_Z}, -1, 0, owner) then
 		core.log("warning", "[rockmech] 起始破碎站蓋不起來：地形不平")
 	end
 end

@@ -652,7 +652,7 @@ function config.load(get)
 	cfg.shotcrete_speed = math.max(0.1, tonumber(get("rockmech_shotcrete_speed")) or 1.5)
 	-- 經營模式（career.lua）
 	cfg.career = get("rockmech_career") == "true" or get("rockmech_career") == true
-	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 1000)
+	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 23000)
 	cfg.hand_ore_time = math.max(0.1, tonumber(get("rockmech_hand_ore_time")) or 60)
 	cfg.hand_rubble_time = math.max(0.1, tonumber(get("rockmech_hand_rubble_time")) or 4)
 	cfg.pick_rock_time = math.max(0.1, tonumber(get("rockmech_pick_rock_time")) or 8)

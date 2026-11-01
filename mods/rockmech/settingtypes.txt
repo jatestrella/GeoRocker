@@ -288,7 +288,7 @@ rockmech_ahs_max_dist (Max excavator distance from route) float 60 10 500
 rockmech_career (Career mode) bool false
 
 # Career mode: starting money.
-rockmech_career_start (Career starting money) float 1000 0 100000000
+rockmech_career_start (Career starting money) float 23000 0 100000000
 
 # Career mode: seconds to break a block of ore by hand. Hands cannot break other rock.
 rockmech_hand_ore_time (Bare hand time on ore) float 60 0.1 600
