@@ -972,9 +972,10 @@ function V.register(kind, def)
 			if d then update_mirrors(self, d, dtime) end
 			-- 第一人稱視線限制在車頭左右 look_limit 以內（看後面用後照鏡、倒車攝影機）
 			if d and def.look_limit and not self.chase then
-				local rel = (d:get_look_horizontal() - yaw + math.pi) % (2 * math.pi) - math.pi
+				local front = yaw + (def.pushed and math.pi or 0)   -- 手推車的前方是實體的車尾
+				local rel = (d:get_look_horizontal() - front + math.pi) % (2 * math.pi) - math.pi
 				if math.abs(rel) > def.look_limit then
-					d:set_look_horizontal(yaw + (rel > 0 and def.look_limit or -def.look_limit))
+					d:set_look_horizontal(front + (rel > 0 and def.look_limit or -def.look_limit))
 				end
 			end
 			local fwd, turn = 0, 0
@@ -987,14 +988,19 @@ function V.register(kind, def)
 				if def.pushed then fwd = -fwd end
 				turn = (ctrl.left and 1 or 0) - (ctrl.right and 1 or 0)
 			end
+			-- 手推車沒有方向盤：人看哪裡就推向哪裡
+			if def.pushed and d then
+				local rel = (d:get_look_horizontal() - yaw) % (2 * math.pi) - math.pi
+				local step = TURN_RATE * dtime
+				turn = math.max(-1, math.min(1, rel / step))
+				if math.abs(rel) < 0.02 then turn = 0 end
+			end
 			if turn ~= 0 and def.can_turn and not def.can_turn(self, pos, yaw, yaw + turn * TURN_RATE * dtime) then
 				turn = 0
 			end
 			if turn ~= 0 then
 				yaw = yaw + turn * TURN_RATE * dtime
 				obj:set_yaw(yaw)
-				-- 推車：人跟著車轉，視線也跟著
-				if def.pushed and d then d:set_look_horizontal(d:get_look_horizontal() + turn * TURN_RATE * dtime) end
 			end
 			-- 外觀隨地形傾斜（角度平滑趨近）
 			if def.tilt then

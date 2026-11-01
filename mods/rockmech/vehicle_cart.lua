@@ -1,5 +1,5 @@
 -- rockmech/vehicle_cart.lua
--- 手推車：經營模式第一台買得起的車，比人多載一點（rockmech_cart_blocks 塊）。人走在車後面推，車斗在前面，
+-- 手推車：經營模式第一台買得起的車，比人多載一點（rockmech_cart_blocks 塊）。人走在車後面推，車斗在前面，看哪裡就推向哪裡，
 -- 空白鍵把車斗往前翻，碎石倒在前方；手上拿著碎石時右鍵是裝上去。沒有引擎，也沒有無人駕駛。
 -- 實體的車尾就是推車的前方（def.pushed：前後操作對調），車斗、倒土的邏輯和卡車共用。
 
@@ -8,7 +8,7 @@ local NLEV, box_tex = V.NLEV, V.box_tex
 
 local c = "#8a7050"
 local cart = {desc = "手推車 Hand cart", short = "推車", color = c, cap = rockmech.cfg.cart_blocks * NLEV, speed = 2.5,
-	tire = 0.6, no_ahs = true, pushed = true, push_z = 0.9, look_limit = math.pi,
+	tire = 0.6, no_ahs = true, pushed = true, push_z = 0.9, look_limit = math.rad(50),
 	select_box = {-1.4, -0.9, -3.2, 1.4, 1.6, 1.6}, aim_margin = 1.2,   -- 車子小，點選和怪手瞄準的範圍放大
 	half = 0.9, top = 0.6, lat = {-1, 0, 1}, eye_up = V.EYE_HEIGHT - 0.9, eye_fwd = -0.9, rear = 2.4,
 	tilt = {front = 0.4, rear = -2.0, side_z = -0.8, side_x = 0.6},

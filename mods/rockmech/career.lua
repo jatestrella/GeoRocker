@@ -98,9 +98,8 @@ end
 local SKIN, SLEEVE = "#d8a880", "#3a5a8a"
 local ARM = ("[fill:24x40:#00000000^[fill:10x10:2,0:%s^[fill:10x10:5,10:%s^[fill:10x10:8,20:%s^[fill:10x10:11,30:%s"):format(
 	SKIN, SKIN, SLEEVE, SLEEVE)
-local ARM_X = {carry = 0.11, cart = 0.2}    -- 手臂離畫面中央多遠（畫面寬度的比例）
-local ARM_LOOK, ARM_LOOK_MAX = 0.3, 0.25    -- 推車時視線偏離車斗 1 rad，手臂在畫面上移多少（握把在畫面上跟著移）
-local ARM_STEER = 0.04                      -- 推車轉向時雙手往轉的方向推多少
+local ARM_X = {carry = 0.11, cart = 0.17}   -- 手臂離畫面中央多遠（畫面寬度的比例）；推車時對準握把進入畫面的位置
+local ARM_LOOK = 0.3                        -- 推車時視線領先車子 1 rad，手臂在畫面上移多少（握把在畫面上跟著移）
 local arms = {}             -- 玩家名稱 → {mode, left, right, shift}
 
 -- shift：雙手一起左右移（畫面寬度的比例）
@@ -144,18 +143,23 @@ core.register_globalstep(function(dtime)
 		local def = e and e.vkind and V.TYPES[e.vkind]
 		if def and def.pushed then
 			local rel = (player:get_look_horizontal() - parent:get_yaw()) % (2 * math.pi) - math.pi     -- 車斗在車尾那一側
-			local ctrl = player:get_player_control()
-			local steer = (ctrl.right and 1 or 0) - (ctrl.left and 1 or 0)
-			set_arms(player, "cart", math.max(-ARM_LOOK_MAX, math.min(ARM_LOOK_MAX, rel * ARM_LOOK)) + steer * ARM_STEER)
+			set_arms(player, "cart", rel * ARM_LOOK)
 		elseif parent then set_arms(player, nil)
 		else set_arms(player, carried(player) and "carry" or nil) end
 	end
 end)
 
--- 手上的碎石裝上車：回傳有沒有裝。沒拿東西、或這台車沒有車斗就回 false，照常上車
+-- 手上的碎石裝上車：回傳右鍵用掉了沒。沒拿東西、或這台車沒有車斗就回 false，照常上車。
+-- 按住右鍵會連發：剛裝完 LOAD_HOLD 秒內的右鍵也算用掉，不然手一空就上車了
+local LOAD_HOLD = 1
+local loaded_at = {}
 function rockmech.career_load(player, self, def)
+	local name = player:get_player_name()
+	local now = core.get_us_time() / 1e6
 	local c = carried(player)
+	if not c and now - (loaded_at[name] or -LOAD_HOLD) < LOAD_HOLD then return true end
 	if not c or (def.cap or 0) <= 0 then return false end
+	loaded_at[name] = now
 	local put = math.min(c.lv, def.cap - V.load_total(self))
 	if put <= 0 then
 		core.chat_send_player(player:get_player_name(), "車斗滿了")
@@ -405,5 +409,5 @@ core.register_on_joinplayer(function(player)
 end)
 core.register_on_leaveplayer(function(player)
 	local name = player:get_player_name()
-	carry_hud[name], carry_img[name], arms[name] = nil, nil, nil
+	carry_hud[name], carry_img[name], arms[name], loaded_at[name] = nil, nil, nil, nil
 end)
