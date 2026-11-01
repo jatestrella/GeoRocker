@@ -29,6 +29,14 @@ local function in_situ(job, c, sv)
 	job.sxz[c] = (sH - sh) * sc
 end
 
+-- 開挖前的地表：surface_y（挖掉的算回去，開挖才會放出應力）。生成時就有的露天坑是天然地形、已經平衡，
+-- 坑裡的地表是坑的地面，否則一解就等於整個坑同時開挖
+local function natural_top(x, z)
+	local surface = cfg.surface_y or 0
+	local h = cfg.open_pit and rockmech.stress.pit_surface(cfg.open_pit, surface, x, z)
+	return h and math.floor(h) or surface
+end
+
 -- 支護（support.lua）→ job.press：力沿打設方向作用在面上。to_cell(世界 x, y, z) → 格索引或 nil；
 -- scale = 1 m² 的力換成這個網格一面的壓力（粗網格 1/C²）
 local function set_press(job, g, to_cell, scale)
@@ -74,7 +82,7 @@ local function make_coarse(pos)
 	local gam_sum, gam_n = 0, 0
 	for z = 0, n - 1 do for x = 0, n - 1 do
 		local cx, cz = C * x + mid, C * z + mid
-		local top = cfg.surface_y or 0
+		local top = natural_top(a.x + cx, a.z + cz)
 		local col = 1 + (a.x + cx - g.ox) + (a.z + cz - g.oz) * sz
 		for ly = g.ny - 1, 0, -1 do
 			if bonded[data[col + ly * sy]] then
@@ -131,7 +139,7 @@ local function make_job(pos)
 	for z = 0, n - 1 do for x = 0, n - 1 do
 		-- 這一欄的地表：岩石頂面，或 surface_y（挖掉的算回去，所以開挖才會放出應力）
 		local gx, gz = a.x + x - g.ox, a.z + z - g.oz
-		local top = cfg.surface_y or 0
+		local top = natural_top(a.x + x, a.z + z)
 		for ly = g.ny - 1, 0, -1 do
 			if g.bonded_of[g.data[1 + gx + ly * gsy + gz * gsz]] then
 				top = math.max(top, g.oy + ly)
