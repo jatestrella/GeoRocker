@@ -19,8 +19,10 @@ local CARRY_KEY = "rockmech:carry"
 local SITE_KEY = "career_site"
 local SHOP = "rockmech:shop"
 local VENDOR = "rockmech:vendor"
-local CAMP_Z = 14           -- 帳篷中心在出生點北邊幾公尺
-local CRUSHER_X = 22        -- 破碎站機身在帳篷東邊幾公尺；受料倉在機身西側，煤層往西露頭，機身才不擋運礦的路
+local CAMP_Z = 14           -- 破碎站在出生點北邊幾公尺
+local CRUSHER_X = 22        -- 破碎站機身在東邊幾公尺；受料倉在機身西側，煤層往西露頭，機身才不擋運礦的路
+local TENT_Z = -14          -- 帳篷在出生點南邊幾公尺，遠離往受料倉的路（卡車要在倉前掉頭倒車）
+local OLD_TENT_Z = 14       -- 舊版的帳篷位置
 
 -- 主選單的創造模式開關是全域設定，不見得跟著世界走：經營模式一律不是創造模式
 function core.is_creative_enabled() return false end
@@ -350,6 +352,7 @@ core.register_entity(VENDOR, {
 		nametag = "供應商（右鍵）", nametag_color = "#ffe080", static_save = true,
 	},
 	on_activate = function(self)
+		if math.abs(self.object:get_pos().z - TENT_Z) > 3 then self.object:remove(); return end     -- 舊版位置的 NPC
 		self.object:set_armor_groups({immortal = 1})
 		self.object:set_animation({x = 0, y = 79}, 30)
 	end,
@@ -378,20 +381,25 @@ local function ground_y(x, z)
 	end
 end
 
--- 帳篷（四根柱子撐三層布）、供應商、一座破碎站
-local function build_camp(owner)
-	local y = ground_y(0, CAMP_Z) or 0
+-- 帳篷（四根柱子撐三層布）和供應商
+local function build_tent()
+	local y = ground_y(0, TENT_Z) or 0
 	for _, s in ipairs({{-3, -3}, {3, -3}, {-3, 3}, {3, 3}}) do
-		for h = 1, 3 do core.set_node({x = s[1], y = y + h, z = CAMP_Z + s[2]}, {name = "rockmech:tent_pole"}) end
+		for h = 1, 3 do core.set_node({x = s[1], y = y + h, z = TENT_Z + s[2]}, {name = "rockmech:tent_pole"}) end
 	end
 	for layer = 0, 2 do
 		local r = 3 - layer
 		for x = -r, r do for z = -r, r do
-			core.set_node({x = x, y = y + 4 + layer, z = CAMP_Z + z}, {name = "rockmech:tent_canvas"})
+			core.set_node({x = x, y = y + 4 + layer, z = TENT_Z + z}, {name = "rockmech:tent_canvas"})
 		end end
 	end
-	core.add_entity({x = 0, y = y + 0.5, z = CAMP_Z}, VENDOR)
-	if not rockmech.crusher_build({x = CRUSHER_X, y = (ground_y(CRUSHER_X, CAMP_Z) or y) + 1, z = CAMP_Z}, -1, 0, owner) then
+	core.add_entity({x = 0, y = y + 0.5, z = TENT_Z}, VENDOR)
+end
+
+local function build_camp(owner)
+	build_tent()
+	local y = ground_y(CRUSHER_X, CAMP_Z) or 0
+	if not rockmech.crusher_build({x = CRUSHER_X, y = y + 1, z = CAMP_Z}, -1, 0, owner) then
 		core.log("warning", "[rockmech] 起始破碎站蓋不起來：地形不平")
 	end
 end
@@ -399,13 +407,29 @@ end
 core.register_on_joinplayer(function(player)
 	local name = player:get_player_name()
 	show_carry(player, carried(player))
-	if storage:get_string(SITE_KEY) == "" then
-		storage:set_string(SITE_KEY, "1")
+	local site = storage:get_string(SITE_KEY)
+	local a, b = {x = -8, y = -30, z = TENT_Z - 8}, {x = CRUSHER_X + 8, y = 40, z = CAMP_Z + 8}
+	if site == "" then
 		rockmech.add_money(name, cfg.career_start)
-		core.emerge_area({x = -8, y = -30, z = CAMP_Z - 16}, {x = CRUSHER_X + 8, y = 40, z = CAMP_Z + 8}, function(_, _, rem)
+		core.emerge_area(a, b, function(_, _, rem)
 			if rem == 0 then build_camp(name) end
 		end)
+	elseif site == "1" then
+		-- 舊版的世界：帳篷搬走（NPC 在 on_activate 自己消失）
+		core.emerge_area(a, b, function(_, _, rem)
+			if rem > 0 then return end
+			for _, p in ipairs(core.find_nodes_in_area({x = -4, y = -30, z = OLD_TENT_Z - 4}, {x = 4, y = 40, z = OLD_TENT_Z + 4},
+					{"rockmech:tent_pole", "rockmech:tent_canvas"})) do
+				core.remove_node(p)
+			end
+			for _, o in ipairs(core.get_objects_inside_radius({x = 0, y = 1, z = OLD_TENT_Z}, 8)) do
+				local e = o:get_luaentity()
+				if e and e.name == VENDOR then o:remove() end
+			end
+			build_tent()
+		end)
 	end
+	storage:set_string(SITE_KEY, "2")
 end)
 core.register_on_leaveplayer(function(player)
 	local name = player:get_player_name()
