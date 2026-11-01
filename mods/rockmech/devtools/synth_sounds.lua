@@ -1,4 +1,5 @@
--- 合成岩石破裂音效，輸出 sounds/rockmech_crack.<n>.ogg（單聲道：Luanti 的定位音效只對單聲道有效）。
+-- 合成音效，輸出 sounds/rockmech_crack.<n>.ogg（岩石破裂）、rockmech_rubble.<n>.ogg（碎石滾動）。
+-- 單聲道：Luanti 的定位音效只對單聲道有效。
 -- 遊戲不會載入這個檔案。在 rockmech 目錄下執行：lua devtools/synth_sounds.lua [原始 PCM 輸出目錄]
 --
 -- 聲音：主破裂（寬頻雜訊爆裂 + 裂縫傳播的細爆裂 + 低頻隆隆聲），接著一串微破裂與碎屑顆粒
@@ -87,6 +88,16 @@ local function reverb(buf)
 	end
 end
 
+local function finish(buf)
+	reverb(buf)
+	local fade = math.floor(0.2 * RATE)
+	for i = 1, fade do buf[#buf - i + 1] = buf[#buf - i + 1] * ((i - 1) / fade) ^ 2 end
+	local peak = 0
+	for i = 1, #buf do peak = math.max(peak, math.abs(buf[i])) end
+	for i = 1, #buf do buf[i] = buf[i] / peak * 0.85 end
+	return buf
+end
+
 local function render(v)
 	math.randomseed(v.seed)
 	local buf = {}
@@ -99,13 +110,27 @@ local function render(v)
 	end
 	grains(buf, v.grains, T)
 	grit(buf, 0.002, 0.14, 0.05)
-	reverb(buf)
-	local fade = math.floor(0.2 * RATE)
-	for i = 1, fade do buf[#buf - i + 1] = buf[#buf - i + 1] * ((i - 1) / fade) ^ 2 end
-	local peak = 0
-	for i = 1, #buf do peak = math.max(peak, math.abs(buf[i])) end
-	for i = 1, #buf do buf[i] = buf[i] / peak * 0.85 end
-	return buf
+	return finish(buf)
+end
+
+-- 碎石滾動：大量細碎的顆粒持續一段時間，夾幾顆大石頭的碰撞與低頻隆隆聲，沒有明顯的起音
+local function render_slide(v)
+	math.randomseed(v.seed)
+	local buf = {}
+	for i = 1, math.floor(v.len * RATE) do buf[i] = 0 end
+	local function env(t) return math.min(1, t / 0.08) * (1 - t / v.len) ^ 0.7 end
+	for _ = 1, math.floor(v.rate * v.len) do
+		local t = math.random() * v.len
+		burst(buf, math.floor(t * RATE), log_uniform(0.00015, 0.0008), log_uniform(0.02, 0.2) * env(t), 1000, 8000)
+	end
+	for _ = 1, v.clacks do
+		local t = math.random() * v.len * 0.8
+		burst(buf, math.floor(t * RATE), log_uniform(0.0015, 0.004), log_uniform(0.2, 0.5) * env(t), 500, 5000)
+	end
+	for i = 0, 3 do
+		burst(buf, math.floor(i * v.len / 5 * RATE), v.len / 4, v.rumble, 15, 170)
+	end
+	return finish(buf)
 end
 
 local VARIANTS = {
@@ -113,6 +138,12 @@ local VARIANTS = {
 	{seed = 23, len = 1.2, band = {700, 8000}, body = 0.4, micro = 32, grains = 400, main = {{0, 0.8}}},        -- 破裂接一串細碎聲
 	{seed = 37, len = 0.9, band = {700, 8000}, body = 0.3, micro = 14, grains = 200, main = {{0, 0.9}, {0.17, 0.6}}}, -- 連續兩聲
 	{seed = 53, len = 1.1, band = {500, 7000}, body = 0.4, micro = 18, grains = 250, main = {{0, 1}}},          -- 較低沉的破裂
+}
+
+local SLIDES = {
+	{seed = 71, len = 1.0, rate = 420, clacks = 5, rumble = 0.5},     -- 短
+	{seed = 83, len = 1.5, rate = 520, clacks = 9, rumble = 0.7},     -- 中，石頭多
+	{seed = 97, len = 1.3, rate = 640, clacks = 4, rumble = 0.4},     -- 細碎
 }
 
 ---------------------------------------------------------------------------
@@ -400,13 +431,14 @@ end
 ---------------------------------------------------------------------------
 
 local raw_dir = arg and arg[1]
-for i, v in ipairs(VARIANTS) do
-	local pcm = render(v)
-	local size = encode(pcm, ("sounds/rockmech_crack.%d.ogg"):format(i))
-	print(("%d：%.2f 秒，%d bytes"):format(i, #pcm / RATE, size))
+local function write(name, i, pcm)
+	local size = encode(pcm, ("sounds/%s.%d.ogg"):format(name, i))
+	print(("%s.%d：%.2f 秒，%d bytes"):format(name, i, #pcm / RATE, size))
 	if raw_dir then
-		local f = assert(io.open(("%s/orig_%d.raw"):format(raw_dir, i), "wb"))
+		local f = assert(io.open(("%s/orig_%s_%d.raw"):format(raw_dir, name, i), "wb"))
 		for j = 1, #pcm do f:write(string.pack("<i2", math.floor(pcm[j] * 32767 + 0.5))) end
 		f:close()
 	end
 end
+for i, v in ipairs(VARIANTS) do write("rockmech_crack", i, render(v)) end
+for i, v in ipairs(SLIDES) do write("rockmech_rubble", i, render_slide(v)) end

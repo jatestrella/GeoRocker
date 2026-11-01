@@ -318,6 +318,23 @@ local function sink_load(T)
     return true
 end
 
+-- 碎石流動的聲音：同一區（8 m）RUBBLE_GAP 秒響一次，全場最多每 RUBBLE_ANY 秒一次，大崩落時音源才不會用完
+local RUBBLE_GAP, RUBBLE_ANY = 0.5, 0.1
+local rubble_last, rubble_any, rubble_n = {}, 0, 0
+local function rubble_sound(p, amount)
+    local gain = rockmech.cfg.rubble_sound_gain
+    if gain <= 0 then return end
+    local now = core.get_us_time() / 1e6
+    local key = math.floor(p.x / 8) .. "," .. math.floor(p.y / 8) .. "," .. math.floor(p.z / 8)
+    if now - rubble_any < RUBBLE_ANY or now - (rubble_last[key] or -math.huge) < RUBBLE_GAP then return end
+    if rubble_n > 256 then rubble_last, rubble_n = {}, 0 end
+    rubble_last[key], rubble_any, rubble_n = now, now, rubble_n + 1
+    core.sound_play("rockmech_rubble", {
+        pos = p, gain = gain * math.min(1, 0.4 + 0.15 * amount),
+        pitch = 0.9 + 0.2 * math.random(), max_hear_distance = 32,
+    }, true)
+end
+
 local fall_with_slope_settle
 
 -- 顆粒流一步：先往下倒（下方是不滿格的同種碎石），否則依安息角流向最陡的一側。
@@ -366,6 +383,7 @@ local function granular_settle(pos, chain, q_ext, side)
         if not (q > 0 and amount == k and sink_load(T)) then set_rubble(T, base, k - amount) end
         add_rubble(land, base, amount)
         physics_updating = prev
+        rubble_sound(T, amount)
         local d = granular.DIRS[i]
         debris({x = T.x + d[1] * 0.4, y = T.y, z = T.z + d[2] * 0.4}, base,
             math.max(3, amount * 2), {x = d[1] * 1.5, y = 0, z = d[2] * 1.5})
