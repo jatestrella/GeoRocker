@@ -428,6 +428,33 @@ function rockmech.fem_tensor(x, y, z)
 	return {r.sxx[c] / 1000, r.syy[c] / 1000, r.szz[c] / 1000, r.szx[c] / 1000, r.sxy[c] / 1000, r.syz[c] / 1000}
 end
 
+-- 頂到岩石、旁邊有自由面的碎石：解出來的 σv 當荷重，往自由面擠（每次解最多 SQUEEZE_MAX 欄，應力大的先）。
+-- 四周都被圍住的碎石只受壓，不動
+local SQUEEZE_MAX = 32
+local function squeeze_rubble(job, res, meta)
+	local n = job.nx
+	local list = {}
+	for c in pairs(job.soft) do
+		local k = c - 1
+		local x, y, z = k % n, math.floor(k / n) % n, math.floor(k / (n * n))
+		local above = c + n
+		if x >= 2 and y >= 2 and z >= 2 and x < n - 2 and y < n - 2 and z < n - 2
+				and job.solid[above] and not job.soft[above] and res.syy[c] > 0 then
+			for _, o in ipairs({1, -1, n * n, -n * n}) do
+				if meta.open[c + o] and not job.soft[c + o] then
+					list[#list + 1] = {x, y, z, res.syy[c]}
+					break
+				end
+			end
+		end
+	end
+	table.sort(list, function(p, q) return p[4] > q[4] end)
+	for i = 1, math.min(#list, SQUEEZE_MAX) do
+		local e = list[i]
+		rockmech.collapse.squeeze({x = meta.a.x + e[1], y = meta.a.y + e[2], z = meta.a.z + e[3]}, e[4])
+	end
+end
+
 -- 開挖後排解：同時只有一個工作；排隊中離得近的併成一個（範圍內都檢查得到）。
 -- far：粗網格派來的，只判定對著開挖空間的面
 local pending, busy = {}, false
@@ -439,6 +466,7 @@ local function pump()
 		local t0 = core.get_us_time()
 		local failed, faces, warned = find_failed(job, res, meta, not cur.far and cur.pos or nil)
 		update_cracks(meta, job.nx, warned)
+		if not cur.far then squeeze_rubble(job, res, meta) end
 		if rockmech.fswarn_refresh then rockmech.fswarn_refresh(cur.pos) end
 		rockmech.collapse.queue_block_check(cur.pos)
 		local t_eval = (core.get_us_time() - t0) / 1000

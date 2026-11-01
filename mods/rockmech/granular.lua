@@ -24,10 +24,17 @@ function granular.surface(y, k)
 	return 8 * y - 4 + k
 end
 
--- 超載換算高度（八分之一公尺）：上方的荷重 q (kPa) 等於多高的碎石（q / γ_r，地工的等效超載高度），
--- 加到來源表面上，受壓的碎石就照安息角往旁邊擠
-function granular.surcharge(q, gamma)
-	return 8 * q / gamma
+-- 朗肯被動土壓係數：Kp = (1 + sinφ) / (1 − sinφ)
+function granular.passive_k(phi_deg)
+	local s = math.sin(math.rad(phi_deg))
+	return (1 + s) / (1 - s)
+end
+
+-- 碎石受壓的換算高度（八分之一公尺）：荷重 q (kPa) 扣掉側向的被動抗力 Kp·γ·h 之後，等於多高的碎石。
+-- h (m)：那一側的碎石比這一格高出多少。平面上 h = 0，陷進碎石堆就越來越推不動。
+-- 回填、落石、車輛、應力解的碎石應力都走這一條，只差 q 怎麼來
+function granular.squeeze_head(q, gamma, kp, h)
+	return 8 * math.max(0, q - kp * gamma * math.max(0, h or 0)) / gamma
 end
 
 -- 由表面高度反推所在格與級數：回傳 y, k（1..8）
@@ -40,8 +47,9 @@ end
 -- 選擇流向與流量。
 -- src_e：來源表面；avail：來源頂格可流出的級數；tan_r：tan(安息角)
 -- nbs：{{e = 鄰欄表面（nil = 擋住，不能流）, d = 水平距離}, ...}
+-- cap（可選）：這一步最多流幾級
 -- 回傳 index, amount（不流時回傳 nil）
-function granular.choose_flow(src_e, avail, nbs, tan_r)
+function granular.choose_flow(src_e, avail, nbs, tan_r, cap)
 	if avail <= 0 then return nil end
 	local best, best_x
 	for i, n in ipairs(nbs) do
@@ -52,6 +60,7 @@ function granular.choose_flow(src_e, avail, nbs, tan_r)
 	end
 	if not best then return nil end
 	local a = math.min(avail, math.max(1, ceil(best_x / 2)))
+	if cap then a = math.min(a, cap) end
 	return best, a
 end
 

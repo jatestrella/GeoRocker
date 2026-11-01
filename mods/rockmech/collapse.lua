@@ -222,9 +222,20 @@ local function neighbor_surface(x, z, ty, base, lift)
         if nk < NLEV and rockmech.rubble_base[n.name] == base then
             return granular.surface(ty, nk), {pos = p, k = nk}
         end
-        local up = {x = x, y = ty + 1, z = z}
-        if lift and nk == NLEV and passable(core.get_node(up).name) then
-            return granular.surface(ty, NLEV), {pos = up, k = 0}
+        if not lift or nk < NLEV then return nil end
+        -- 受壓：滿格的鄰欄從它的頂上隆起
+        for y = ty + 1, ty + 16 do
+            local q = {x = x, y = y, z = z}
+            local m = core.get_node(q).name
+            local mk = rubble_k(m)
+            if not mk then
+                if not passable(m) then return nil end
+                return granular.surface(y - 1, NLEV), {pos = q, k = 0}
+            end
+            if mk < NLEV then
+                if rockmech.rubble_base[m] ~= base then return nil end
+                return granular.surface(y, mk), {pos = q, k = mk}
+            end
         end
         return nil
     end
@@ -280,6 +291,9 @@ local function overload(T)
     return q
 end
 
+local PASSIVE_K = granular.passive_k(rockmech.cfg.slope.angle)
+local SQUEEZE_CAP = math.ceil(rockmech.cfg.rubble_squeeze * NLEV)     -- 受壓時一步最多流幾級
+
 -- 碎石頂格 T 被擠空：壓在上面的岩石整疊往下移一格。一次移完，不留空洞：
 -- 留空洞的話旁邊的碎石馬上流回來，岩石落下又被墊高，一直循環。壓著的不全是岩石就回傳 false，照常落下
 local function sink_load(T)
@@ -304,8 +318,9 @@ end
 local fall_with_slope_settle
 
 -- 顆粒流一步：先往下倒（下方是不滿格的同種碎石），否則依安息角流向最陡的一側。
--- 之後在來源與承接位置排程下一步（最多 chain 步）
-local function granular_settle(pos, chain)
+-- 之後在來源與承接位置排程下一步（最多 chain 步）。q_ext（kPa）：這一步外加的荷重（車輛、應力解）；
+-- side（可選，{x, z}）：這一步只往這一側流
+local function granular_settle(pos, chain, q_ext, side)
     if not rockmech.cfg.slope.enabled then return end
     chain = chain or GRAN_MAX_CHAIN
     if chain <= 0 then return end
@@ -330,15 +345,17 @@ local function granular_settle(pos, chain)
         physics_updating = prev
         next_pos = {below}
     else
-        local q = overload(T)
+        local q = SQUEEZE_CAP > 0 and overload(T) + (q_ext or 0) or 0
+        local src, gam = granular.surface(T.y, k), rockmech.cfg.failure.gamma_other
         local nbs, lands = {}, {}
         for i, d in ipairs(granular.DIRS) do
             local e, land = neighbor_surface(T.x + d[1], T.z + d[2], T.y, base, q > 0)
+            if e and q > 0 then e = e - granular.squeeze_head(q, gam, PASSIVE_K, (e - src) / NLEV) end
+            if side and d[1] * side.x + d[2] * side.z <= 0 then e = nil end
             nbs[i] = {e = e, d = d[3]}
             lands[i] = land
         end
-        local head = granular.surcharge(q, rockmech.cfg.failure.gamma_other)
-        local i, amount = granular.choose_flow(granular.surface(T.y, k) + head, k, nbs, SLOPE_TAN)
+        local i, amount = granular.choose_flow(src, k, nbs, SLOPE_TAN, q > 0 and SQUEEZE_CAP or nil)
         if not i then return end
         local land = lands[i]
         physics_updating = true
@@ -355,6 +372,11 @@ local function granular_settle(pos, chain)
     end)
 end
 collapse.granular_settle = granular_settle
+
+-- 碎石受到外加荷重 q（kPa）：判定一步，最多擠開 rockmech_rubble_squeeze。side：只往這一側擠
+function collapse.squeeze(pos, q, side)
+    if rockmech.is_rubble(core.get_node(pos).name) then granular_settle(pos, nil, q, side) end
+end
 
 -- 碎石懸空：沿用原版 falling node 落下（不滿格的碎石保留級數），落地後接著顆粒流
 fall_with_slope_settle = function(pos)

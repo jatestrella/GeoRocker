@@ -73,15 +73,30 @@ describe("granular 碎石顆粒流", function()
 	end)
 
 	it("超載換算高度：q / γ，一格岩石（25 kPa）壓在 γ = 20 的碎石上 = 1.25 m", function()
-		assert.near(10, granular.surcharge(25, 20), 1e-12)
-		assert.near(0, granular.surcharge(0, 20), 1e-12)
+		assert.near(10, granular.squeeze_head(25, 20, 3.7, 0), 1e-12)
+		assert.near(0, granular.squeeze_head(0, 20, 3.7, 0), 1e-12)
 	end)
 
 	it("平的碎石面：沒有荷重不流，壓了一格岩石就往旁邊擠", function()
 		local e = granular.surface(0, 8)
 		assert.is_nil(granular.choose_flow(e, 8, {{e = e, d = 1}}, TAN35))
-		local i, a = granular.choose_flow(e + granular.surcharge(25, 20), 8, {{e = e, d = 1}}, TAN35)
+		local i, a = granular.choose_flow(e, 8, {{e = e - granular.squeeze_head(25, 20, 3.7, 0), d = 1}}, TAN35)
 		assert.are.equal(1, i)
 		assert.is_true(a >= 1)
+	end)
+
+	it("被動抗力：陷進碎石越深越推不動，低於 Kp·γ·h 就是 0", function()
+		local kp = granular.passive_k(35)
+		assert.near(3.69, kp, 0.01)
+		assert.near(0, granular.squeeze_head(50, 20, kp, 1), 1e-12)        -- 74 kPa 的抗力
+		assert.is_true(granular.squeeze_head(100, 20, kp, 1) > 0)
+		assert.near(granular.squeeze_head(25, 20, kp, 0), granular.squeeze_head(25, 20, kp, -3), 1e-12)   -- 旁邊比較低：沒有抗力
+	end)
+
+	it("cap：一步最多流這麼多級", function()
+		local _, a = granular.choose_flow(40, 8, {{e = 0, d = 1}}, TAN35)
+		local _, b = granular.choose_flow(40, 8, {{e = 0, d = 1}}, TAN35, 2)
+		assert.are.equal(8, a)
+		assert.are.equal(2, b)
 	end)
 end)

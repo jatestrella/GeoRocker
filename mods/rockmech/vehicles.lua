@@ -366,6 +366,47 @@ local function load_total(self)
 end
 V.load_total = load_total
 
+-- 車輛的自重 (t)，車種沒列的用 20
+V.MASS = {truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
+	jumbo = 30, charger = 20, drillrig = 25}
+
+-- 接地壓力 (kPa) = (自重 + 車上的碎石) / 車身投影面積，g 取 10
+function V.ground_pressure(self, def, kind)
+	local kn = (V.MASS[kind] or 20) * 10 + load_total(self) / NLEV * rockmech.cfg.failure.gamma_other
+	return kn / (2 * def.half * (def.half + (def.rear or def.half)))
+end
+
+-- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
+-- 車速快時一步走超過 1 m，沿著這一步的路徑逐格補上
+function V.press_rubble(self, kind, def, pos, dir, f)
+	local j = f > 0 and def.half or -(def.rear or def.half)
+	local cx, cz = pos.x + dir.x * j, pos.z + dir.z * j
+	local gy = math.floor(pos.y - def.half + 0.5)
+	local q = V.ground_pressure(self, def, kind)
+	self.pressed = self.pressed or {}
+	local last = self.press_at or {x = cx, z = cz}
+	self.press_at = {x = cx, z = cz}
+	local steps = math.min(8, math.max(1, math.ceil(math.max(math.abs(cx - last.x), math.abs(cz - last.z)))))
+	for t = 1, steps do
+		local px, pz = last.x + (cx - last.x) * t / steps, last.z + (cz - last.z) * t / steps
+		local lat = def.lat or {-0.5, 0.5}
+		for _, l in ipairs({lat[1], lat[#lat]}) do
+			local x, z = math.floor(px + dir.z * l + 0.5), math.floor(pz - dir.x * l + 0.5)
+			local key = x + 65536 * z
+			if self.pressed[l] ~= key then
+				self.pressed[l] = key
+				for y = gy, gy - 1, -1 do
+					local p = {x = x, y = y, z = z}
+					if rockmech.rubble_level[core.get_node(p).name] then
+						rockmech.collapse.squeeze(p, q, {x = dir.z * l, z = -dir.x * l})
+						break
+					end
+				end
+			end
+		end
+	end
+end
+
 -- 倒出車上的碎石：平均分到 cells 所在的欄（每欄往上最多堆 8 格），之後依安息角流開
 function V.dump_to_ground(self, cells, ytop)
 	for base, lv in pairs(self.load) do
@@ -734,6 +775,7 @@ function V.register(kind, def)
 			local regions = def.overhangs_now and def.overhangs_now(self) or def.overhangs
 			if regions then push_players(self, pos, yaw, def, regions) end
 			local dir, s = dirs(yaw)
+			if fwd ~= 0 then V.press_rubble(self, kind, def, pos, dir, fwd) end
 			-- 直線前進一段時間後慢慢加速到 top_speed；轉彎時減速回 speed，停下、倒車就回到 speed
 			local speed = def.speed * fwd
 			if def.top_speed then
