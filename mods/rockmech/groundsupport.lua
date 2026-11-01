@@ -158,7 +158,7 @@ for n = 1, MAX_LAYERS do
 			connect_left = {-0.5, -0.5, -0.5, -0.5 + T, 0.5, 0.5},
 			connect_right = {0.5 - T, -0.5, -0.5, 0.5, 0.5, 0.5},
 		},
-		connects_to = {"group:rockmech_rock"},
+		connects_to = {"group:rockmech_intact"},
 		tiles = {tex},
 		walkable = false, buildable_to = true, is_ground_content = false,
 		drop = "", groups = {cracky = 3, not_in_creative_inventory = 1, shotcrete = n, shotcrete_lining = n},

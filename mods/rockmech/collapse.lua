@@ -1650,6 +1650,7 @@ local function register_physics_events(name, intact)
     local new_groups = table.copy(def.groups or {})
     new_groups.falling_node = nil
     new_groups.rockmech_rock = 1
+    new_groups.rockmech_intact = intact and 1 or nil   -- 完整岩石（噴凝土只貼這個，不貼碎石）
 
     local overrides = {
         groups = new_groups,

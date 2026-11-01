@@ -179,8 +179,8 @@ local function render_engine(v)
 end
 
 local ENGINES = {
-	idle = {seed = 101, len = 2, f0 = 36, harmonics = 24, roll = 0.9, noise = 0.5},    -- 約 700 rpm
-	run = {seed = 103, len = 2, f0 = 62, harmonics = 14, roll = 0.85, noise = 0.4},     -- 約 1100 rpm，高頻少，低沉有力
+	idle = {seed = 101, len = 2, f0 = 24, harmonics = 30, roll = 0.9, noise = 0.3},    -- 低頻靠諧波間距聽出來，喇叭放不出基頻也聽得到
+	run = {seed = 103, len = 2, f0 = 40, harmonics = 20, roll = 0.85, noise = 0.3},     -- 約 1100 rpm，高頻少，低沉有力
 }
 
 local SLIDES = {

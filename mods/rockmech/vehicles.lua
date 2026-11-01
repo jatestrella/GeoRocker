@@ -474,7 +474,7 @@ local function engine_update(self, kind, working)
 	if not (self.driver or self.autopilot) or g <= 0 then return engine_stop(self) end
 	local e = self.engine
 	if not e then
-		local pitch = math.max(0.65, math.min(1.15, (20 / (V.MASS[kind] or 20)) ^ 0.2))
+		local pitch = math.max(0.6, math.min(1, 0.9 * (20 / (V.MASS[kind] or 20)) ^ 0.2))
 		local function loop(name, gain)
 			return core.sound_play(name, {object = self.object, loop = true, gain = gain * g, pitch = pitch, max_hear_distance = 48})
 		end
