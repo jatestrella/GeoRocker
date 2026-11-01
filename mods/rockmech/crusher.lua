@@ -30,7 +30,7 @@ local function show_money(player)
 	if money_hud[name] then
 		player:hud_change(money_hud[name], "text", text)
 	else
-		money_hud[name] = player:hud_add({type = "text", position = {x = 0.99, y = 0.03}, alignment = {x = -1, y = 1},
+		money_hud[name] = player:hud_add({type = "text", position = {x = 0.98, y = 0.06}, alignment = {x = -1, y = 1},
 			number = 0xFFE080, text = text, z_index = 100})
 	end
 end
