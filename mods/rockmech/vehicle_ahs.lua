@@ -3,6 +3,7 @@
 -- 由 vehicles.lua 載入，vehicle_truck.lua 的 hauler 接上（E 設定畫面、每一步、存檔）。
 --   教路線：坐在車上按 E →「設為裝載點並開始錄製」→ 開到倒土的地方 →「設為傾倒點」（每 REC_STEP m 記一個路線點）。
 --   指示線：錄製時自動顯示，貼著地面畫出路線（綠）、裝載點（藍）、傾倒點（紅）；設定畫面可以開關，只有自己看得到。
+--   附近有破碎站時再畫一圈容許範圍：傾倒點設在圈內才會自己對準受料倉，人在圈內圈變綠，在圈外是橘色。
 --   啟動後下車：在裝載點等裝滿 → 沿路線開到傾倒點 → 開到這一趟分配的傾倒位置前方的待命點 → 轉成車尾朝外
 --   → 倒車進傾倒位置 → 抬斗倒在車尾 → 開回待命點 → 沿傾倒線開回路線 → 沿路線開回裝載點 → 再等。
 --   傾倒區：沿傾倒點左右排成一排（中、左、右、更左、更右…，間距一個車寬＋1 m，共 DUMP_SPOTS 個），碎石都倒在
@@ -246,6 +247,7 @@ end
 
 -- 路線指示線：粒子只送給設定的玩家，每秒畫一次他附近的路段
 local LINE_EVERY, LINE_STEP, LINE_RANGE = 1, 1, 48
+local RING_STEP = 1.5       -- 容許範圍圈上粒子的間距 (m)
 local lines = {}            -- 玩家名稱 → self.ahs
 local function mark(name, p, size, color)
 	local g = V.ground_top(p.x, p.y + 2, p.z, 8)
@@ -265,6 +267,16 @@ local function draw_line(name, a)
 	end
 	if a.load and flat_dist(me, a.load) < LINE_RANGE then mark(name, a.load, 12, "#40a0ff") end
 	if a.dump and flat_dist(me, a.dump) < LINE_RANGE then mark(name, a.dump, 12, "#ff4040") end
+	local c = rockmech.grate_center(me, LINE_RANGE)
+	if c then
+		local R = rockmech.HOPPER_RANGE
+		local color = flat_dist(me, c) <= R and "#60ff60" or "#ffb040"
+		local n = math.floor(2 * math.pi * R / RING_STEP)
+		for i = 1, n do
+			local t = 2 * math.pi * i / n
+			mark(name, {x = c.x + R * math.cos(t), y = c.y + 6, z = c.z + R * math.sin(t)}, 4, color)
+		end
+	end
 end
 local line_t = 0
 core.register_globalstep(function(dtime)
@@ -286,6 +298,17 @@ local function find_hopper(a)
 	local dx, dz = c.x - from.x, c.z - from.z
 	local l = math.sqrt(dx * dx + dz * dz)
 	c.d = l < 1e-6 and {x = 0, z = 1} or {x = dx / l, z = dz / l}
+	-- 從機身那一側來的話，倒車會頂到機身、料倒不進倉：改從旁邊倒進去
+	local b = core.find_node_near(c, 7, "rockmech:crusher")
+	if b then
+		local bx, bz = b.x - c.x, b.z - c.z
+		local bl = math.sqrt(bx * bx + bz * bz)
+		bx, bz = bx / bl, bz / bl
+		if -(c.d.x * bx + c.d.z * bz) > 0.5 then
+			local side = c.d.z * bx - c.d.x * bz >= 0 and 1 or -1
+			c.d = {x = -bz * side, z = bx * side}
+		end
+	end
 	return c
 end
 
@@ -294,13 +317,15 @@ local editing = {}
 local function fmt(p) return p and ("(%d, %d, %d)"):format(math.floor(p.x + 0.5), math.floor(p.y + 0.5), math.floor(p.z + 0.5)) or "未設定" end
 local function formspec(self)
 	local a = self.ahs or {}
-	local st = a.rec and "錄製路線中（開到傾倒點後按「設為傾倒點」）"
+	local st = a.rec and (rockmech.grate_center(self.object:get_pos())
+			and "錄製中：在受料倉範圍內，在這裡按「設為傾倒點」會自己對準"
+			or "錄製路線中（開到傾倒點後按「設為傾倒點」）")
 		or a.on and (a.wait_msg or PHASE[a.phase] or "") or "停止"
 	return table.concat({
 		"formspec_version[6]size[9,8.4]",
 		"label[0.5,0.6;無人駕駛（AHS）]",
 		("label[0.5,1.2;裝載點：%s]"):format(fmt(a.load)),
-		("label[0.5,1.7;傾倒點：%s]"):format(fmt(a.dump)),
+		("label[0.5,1.7;傾倒點：%s%s]"):format(fmt(a.dump), a.hopper and "（破碎站受料倉）" or ""),
 		("label[0.5,2.2;路線：%d 個點　傾倒區：已用 %d / %d 個位置]"):format(a.route and #a.route or 0,
 			math.min(a.spot or 0, DUMP_SPOTS), DUMP_SPOTS),
 		("label[0.5,2.7;狀態：%s]"):format(st),

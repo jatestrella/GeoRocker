@@ -14,7 +14,8 @@ local SIZE, FEEDER = 7, 3    -- 受料倉開口、底部格柵的邊長 (m)
 local DEPTH = (SIZE - FEEDER) / 2 + 1              -- 倉深 (m)：每往下一層四邊各內縮 1 m（壁坡 45°），最底層就是格柵的大小
 local CAPACITY = (SIZE ^ 2 + (SIZE - 2) ^ 2 + FEEDER ^ 2) * rockmech.vehicles.NLEV   -- 容量（級），裝到倉口
 local PILE = 8              -- 格柵上往上找幾格碎石
-local FIND_R = 12           -- 傾倒點離格柵多近算在破碎站
+local FIND_R = 8            -- 傾倒點離格柵中心多近（水平距離）算在破碎站
+rockmech.HOPPER_RANGE = FIND_R
 local STEP = 1              -- 每幾秒吃一次
 local MONEY = "money:"      -- mod storage 的鍵
 
@@ -46,9 +47,9 @@ core.register_on_joinplayer(function(player)
 end)
 core.register_on_leaveplayer(function(player) money_hud[player:get_player_name()] = nil end)
 
--- pos 附近有破碎站就回傳格柵的中心，否則 nil
-function rockmech.grate_center(pos)
-	local g = core.find_node_near(pos, FIND_R, GRATE)
+-- pos 在破碎站的容許範圍內就回傳格柵的中心，否則 nil。給 search 就改找這個距離內最近的破碎站，不管容許範圍
+function rockmech.grate_center(pos, search)
+	local g = core.find_node_near(pos, search or FIND_R + FEEDER, GRATE)
 	if not g then return nil end
 	local x, y, z = g.x, g.y, g.z
 	local function span(dx, dz)
@@ -56,7 +57,9 @@ function rockmech.grate_center(pos)
 		while core.get_node({x = x + dx * (k + 1), y = y, z = z + dz * (k + 1)}).name == GRATE do k = k + 1 end
 		return k
 	end
-	return {x = x + (span(1, 0) - span(-1, 0)) / 2, y = y, z = z + (span(0, 1) - span(0, -1)) / 2}
+	local c = {x = x + (span(1, 0) - span(-1, 0)) / 2, y = y, z = z + (span(0, 1) - span(0, -1)) / 2}
+	if not search and (pos.x - c.x) ^ 2 + (pos.z - c.z) ^ 2 > FIND_R ^ 2 then return nil end
+	return c
 end
 
 ---------------------------------------------------------------------------
