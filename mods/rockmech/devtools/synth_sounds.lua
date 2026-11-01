@@ -141,7 +141,7 @@ local VARIANTS = {
 	{seed = 53, len = 1.1, band = {500, 7000}, body = 0.4, micro = 18, grains = 250, main = {{0, 1}}},          -- 較低沉的破裂
 }
 
--- 柴油引擎：爆發頻率 f0 的諧波（加半階、1.5 階讓聲音粗糙）加一點進氣雜訊。
+-- 引擎：像電梯的低沉嗡嗡聲，f0 的少數低階諧波加一點氣流雜訊，長時間聽不累（諧波多、有半階的話聲音躁）。
 -- 全部是 len 秒內整數週期，循環接縫沒有爆音；不加迴響也不淡出
 local function render_engine(v)
 	math.randomseed(v.seed)
@@ -154,8 +154,6 @@ local function render_engine(v)
 		for i = 1, L do buf[i] = buf[i] + amp * math.sin(w * i + ph) end
 	end
 	for h = 1, v.harmonics do tone(v.f0 * h, 1 / h ^ v.roll) end
-	tone(v.f0 * 0.5, 0.4)
-	tone(v.f0 * 1.5, 0.3)
 	-- 循環的雜訊：濾波繞兩圈，第二圈才用
 	local n, lp, slow = {}, 0, 0
 	for i = 1, L do n[i] = 2 * math.random() - 1 end
@@ -167,18 +165,18 @@ local function render_engine(v)
 			if pass == 2 then buf[i] = buf[i] + v.noise * (lp - slow) end
 		end
 	end
-	-- 爆發不完全均勻：慢慢起伏
-	local rc = math.floor(v.f0 / 6 * v.len + 0.5)
+	-- 輕微的慢起伏（一個循環一次），不會聽起來死板
+	local rc = 1
 	local peak = 0
 	for i = 1, L do
-		buf[i] = buf[i] * (1 + 0.15 * math.sin(2 * math.pi * rc * i / L))
+		buf[i] = buf[i] * (1 + 0.04 * math.sin(2 * math.pi * rc * i / L))
 		peak = math.max(peak, math.abs(buf[i]))
 	end
 	for i = 1, L do buf[i] = buf[i] / peak * 0.8 end
 	return buf
 end
 
-local ENGINE = {seed = 101, len = 2, f0 = 36, harmonics = 24, roll = 0.9, noise = 0.5}    -- 約 700 rpm
+local ENGINE = {seed = 101, len = 2, f0 = 62, harmonics = 5, roll = 1.6, noise = 0.15}
 
 local SLIDES = {
 	{seed = 71, len = 1.0, rate = 420, clacks = 5, rumble = 0.5},     -- 短

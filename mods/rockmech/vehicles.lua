@@ -458,8 +458,8 @@ local function on_shotcrete(pos, def, dir)
 	return n >= 2
 end
 
--- 引擎聲：有人駕駛（或自動駕駛）才發動，一段循環音，運作時放大。車越重音高越低
-local ENGINE_IDLE, ENGINE_RUN, ENGINE_FADE = 0.4, 1.3, 2.5
+-- 引擎聲：有人駕駛（或自動駕駛）才發動，一段循環音，運作時放大，約 1 秒漸變。車越重音高越低
+local ENGINE_IDLE, ENGINE_RUN, ENGINE_FADE = 0.1, 0.55, 0.45
 local function engine_stop(self)
 	local e = self.engine
 	if e then
