@@ -299,36 +299,3 @@ core.register_tool("rockmech:dig_wand", {
 		return nil
 	end,
 })
-
--- 試聽碎石音效的候選：/rockmech_soundtest [編號]，不給編號就播下一個。可以同時播兩段
-local SOUND_TESTS = {
-	{"default_gravel_footstep", 1.0}, {"default_gravel_footstep", 0.7},
-	{"default_gravel_dig", 1.0}, {"default_gravel_dig", 0.7},
-	{"default_gravel_dug", 1.0}, {"default_gravel_dug", 0.7},
-	{"default_hard_footstep", 1.0}, {"default_hard_footstep", 0.7},
-	{"default_dig_cracky", 1.0}, {"default_dig_cracky", 0.7},
-	{"default_place_node_hard", 1.0}, {"default_place_node_hard", 0.7},
-	{"default_dug_node", 1.0}, {"default_dug_node", 0.7},
-	{"default_dirt_footstep", 0.8}, {"default_sand_footstep", 0.8},
-	{"default_gravel_dug", 0.8, "default_hard_footstep", 0.8},
-	{"default_gravel_footstep", 0.8, "default_hard_footstep", 0.7},
-	{"default_gravel_dug", 0.8, "default_dig_cracky", 0.8},
-	{"default_gravel_footstep", 0.8, "default_place_node_hard", 0.8},
-}
-local sound_test_at = {}
-core.register_chatcommand("rockmech_soundtest", {
-	params = "[編號]",
-	description = "試聽碎石音效的候選（不給編號就播下一個）",
-	func = function(name, param)
-		local n = tonumber(param) or (sound_test_at[name] or 0) % #SOUND_TESTS + 1
-		local t = SOUND_TESTS[n]
-		if not t then return false, ("編號 1 ~ %d"):format(#SOUND_TESTS) end
-		sound_test_at[name] = n
-		local parts = {}
-		for i = 1, #t, 2 do
-			core.sound_play(t[i], {to_player = name, gain = 1, pitch = t[i + 1]}, true)
-			parts[#parts + 1] = ("%s（音高 %.1f）"):format(t[i]:gsub("default_", ""), t[i + 1])
-		end
-		return true, ("[%d / %d] %s"):format(n, #SOUND_TESTS, table.concat(parts, " + "))
-	end,
-})

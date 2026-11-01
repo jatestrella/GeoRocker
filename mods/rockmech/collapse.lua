@@ -329,12 +329,12 @@ local function rubble_sound(p, amount)
     if now - rubble_any < RUBBLE_ANY or now - (rubble_last[key] or -math.huge) < RUBBLE_GAP then return end
     if rubble_n > 256 then rubble_last, rubble_n = {}, 0 end
     rubble_last[key], rubble_any, rubble_n = now, now, rubble_n + 1
-    -- default 的碎石錄音：量大（超過 3/8 m）用挖掘聲並放大，量小用腳步聲
+    -- default 的錄音：量小是碎石腳步聲放低音高；量大（3/8 m 以上）放大，同時加放硬方塊的聲音，像石塊互撞
     local big = amount >= 3
-    core.sound_play(big and "default_gravel_dug" or "default_gravel_footstep", {
-        pos = p, gain = gain * (big and 1 + amount / NLEV or 0.6),
-        pitch = 0.9 + 0.2 * math.random(), max_hear_distance = 32,
-    }, true)
+    local spec = {pos = p, gain = gain * (big and 1 + amount / NLEV or 0.6), max_hear_distance = 32}
+    spec.pitch = (big and 0.8 or 0.7) + 0.06 * (math.random() - 0.5)
+    core.sound_play("default_gravel_footstep", spec, true)
+    if big then core.sound_play("default_place_node_hard", spec, true) end
 end
 collapse.rubble_sound = rubble_sound
 
