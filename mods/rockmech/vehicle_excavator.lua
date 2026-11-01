@@ -328,6 +328,7 @@ local function excavator(kind, P)
 		-- 第一人稱駕駛：上部結構轉向視線的水平方向（車身座標的迴轉角 ψ 往右為正，實體 yaw 往左為正）
 		local d = ctx.d
 		self.follow = d ~= nil and not self.chase
+		self.swing_t = math.max(0, (self.swing_t or 0) - ctx.dtime)     -- 迴轉中：引擎算運作（多留一下，滑鼠微動時音量才不會一直跳）
 		if self.follow and not self.dig and self.parts then
 			local goal = ctx.yaw - d:get_look_horizontal()
 			local cur = self.swing or 0
@@ -336,9 +337,12 @@ local function excavator(kind, P)
 				local st = P.swing_rate * ctx.dtime
 				self.swing = cur + math.max(-st, math.min(st, diff))
 				place_arm(self, BUCKET_REST)
+				if math.abs(diff) > 0.02 then self.swing_t = 0.5 end
 			end
 		end
 	end
+
+	function def.busy(self) return (self.swing_t or 0) > 0 end
 
 	function def.action(self, ctx)
 		local ctrl, d, pos = ctx.ctrl, ctx.d, ctx.pos

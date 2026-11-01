@@ -933,7 +933,7 @@ function V.register(kind, def)
 			if steep ~= self.steep then self.steep = steep; update_hud(self) end
 			if ctx.speed ~= 0 and on_shotcrete(pos, def, dir) then ctx.speed = ctx.speed * rockmech.cfg.shotcrete_speed end
 			if def.move then def.move(self, ctx) end
-			engine_update(self, kind, ctx.speed ~= 0 or self.dig ~= nil or self.tip ~= nil or self.boring ~= nil
+			engine_update(self, kind, ctx.speed ~= 0 or turn ~= 0 or self.dig ~= nil or self.tip ~= nil or self.boring ~= nil
 				or (def.busy ~= nil and def.busy(self)))
 			obj:set_velocity({x = dir.x * ctx.speed + slide_x, y = vel.y, z = dir.z * ctx.speed + slide_z})
 			-- HUD 時速（每 5 km/h 更新一次）
