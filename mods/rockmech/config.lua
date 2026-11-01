@@ -69,6 +69,7 @@ config.ores = {
 -- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個
 config.shop = {
 	{key = "pick", item = "rockmech:pick", label = "挖礦鎬", price = 0},
+	{key = "shovel", item = "rockmech:shovel", label = "鏟子", price = 100},
 	{key = "cart", item = "rockmech:cart_item", label = "手推車", price = 500},
 	{key = "truck", item = "rockmech:truck_item", label = "卡車", price = 10000},
 	{key = "excavator", item = "rockmech:excavator_item", label = "怪手", price = 15000},
@@ -656,6 +657,7 @@ function config.load(get)
 	cfg.hand_rubble_time = math.max(0.1, tonumber(get("rockmech_hand_rubble_time")) or 4)
 	cfg.pick_rock_time = math.max(0.1, tonumber(get("rockmech_pick_rock_time")) or 8)
 	cfg.pick_rubble_time = math.max(0.1, tonumber(get("rockmech_pick_rubble_time")) or 2)
+	cfg.shovel_time = math.max(0.1, tonumber(get("rockmech_shovel_time")) or 0.5)
 	cfg.cart_blocks = math.max(1, math.floor(tonumber(get("rockmech_cart_blocks")) or 3))
 	cfg.shop = copy(config.shop)
 	for _, it in ipairs(cfg.shop) do

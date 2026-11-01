@@ -302,6 +302,9 @@ rockmech_pick_rock_time (Pickaxe time on rock) float 8 0.1 120
 # Career mode: seconds for the pickaxe to pick up a rubble cell.
 rockmech_pick_rubble_time (Pickaxe time on rubble) float 2 0.1 60
 
+# Career mode: seconds for the shovel to pick up a rubble cell. The shovel cannot break rock.
+rockmech_shovel_time (Shovel time on rubble) float 0.5 0.1 60
+
 # Hand cart capacity in blocks of rubble (a person carries one).
 rockmech_cart_blocks (Hand cart capacity) int 3 1 12
 

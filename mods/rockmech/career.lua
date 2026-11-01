@@ -1,6 +1,7 @@
 -- rockmech/career.lua
 -- 經營模式（rockmech_career = true，世界要關掉創造模式）：從一把免費的鎬子開始賺錢，再到帳篷下的供應商買設備。
---   徒手只敲得動礦石，一塊 rockmech_hand_ore_time 秒；鎬子什麼岩石都能挖，也很慢。敲開的岩石原地變成碎石；
+--   徒手只敲得動礦石，一塊 rockmech_hand_ore_time 秒；鎬子什麼岩石都能挖，也很慢；鏟子只鏟碎石，最快。
+--   敲開的岩石原地變成碎石；
 --   挖碎石就是把它拿起來，人只能拿一塊（滿格），不進物品欄，右鍵放下，或對著車斗按右鍵裝上去。
 --   世界不掉落岩石和碎石，礦都要實際搬到破碎站才換得到錢。
 --   第一次進世界在出生點旁蓋好帳篷（供應商）和一座破碎站。
@@ -13,6 +14,7 @@ local storage = rockmech.collapse.storage
 local NLEV = V.NLEV
 
 local PICK = "rockmech:pick"
+local SHOVEL = "rockmech:shovel"
 local CARRY_KEY = "rockmech:carry"
 local SITE_KEY = "career_site"
 local SHOP = "rockmech:shop"
@@ -82,14 +84,60 @@ local function show_carry(player, c)
 	if carry_img[name] then
 		player:hud_change(carry_img[name], "text", img)
 	else
-		carry_img[name] = player:hud_add({type = "image", position = {x = 0.74, y = 0.84}, alignment = {x = 0, y = 0},
-			scale = {x = 5, y = 5}, text = img, z_index = 90})
+		carry_img[name] = player:hud_add({type = "image", position = {x = 0.5, y = 0.74}, alignment = {x = 0, y = 0},
+			scale = {x = 4, y = 4}, text = img, z_index = 90})
 	end
 end
 local function set_carried(player, c)
 	player:get_meta():set_string(CARRY_KEY, c and core.serialize(c) or "")
 	show_carry(player, c)
 end
+
+-- 雙手：拿碎石時從下方捧著，推車時伸向握把。引擎只畫右手，自己畫一對方塊手臂（畫面最下方往上、往中間斜），
+-- 這時收起原本手上的東西。mode：nil、"carry"、"cart"
+local SKIN, SLEEVE = "#d8a880", "#3a5a8a"
+local ARM = ("[fill:24x40:#00000000^[fill:10x10:2,0:%s^[fill:10x10:5,10:%s^[fill:10x10:8,20:%s^[fill:10x10:11,30:%s"):format(
+	SKIN, SKIN, SLEEVE, SLEEVE)
+local ARM_X = {carry = 0.11, cart = 0.2}    -- 手臂離畫面中央多遠（畫面寬度的比例）
+local arms = {}             -- 玩家名稱 → {mode, left, right}
+
+local function set_arms(player, mode)
+	local name = player:get_player_name()
+	local a = arms[name]
+	if not a then
+		local function arm(tex)
+			return player:hud_add({type = "image", position = {x = 0.5, y = 1}, alignment = {x = 0, y = -1},
+				scale = {x = -14, y = -30}, text = tex, z_index = 95})
+		end
+		a = {left = arm(""), right = arm("")}
+		arms[name] = a
+	end
+	if a.mode == mode then return end
+	local had = a.mode
+	a.mode = mode
+	local dx = ARM_X[mode] or 0
+	player:hud_change(a.left, "text", mode and ARM .. "^[transformFX" or "")
+	player:hud_change(a.right, "text", mode and ARM or "")
+	player:hud_change(a.left, "position", {x = 0.5 - dx, y = 1})
+	player:hud_change(a.right, "position", {x = 0.5 + dx, y = 1})
+	if mode then player:hud_set_flags({wielditem = false})
+	elseif had and not player:get_attach() then player:hud_set_flags({wielditem = true}) end
+end
+
+local arm_t = 0
+core.register_globalstep(function(dtime)
+	arm_t = arm_t + dtime
+	if arm_t < 0.25 then return end
+	arm_t = 0
+	for _, player in ipairs(core.get_connected_players()) do
+		local parent = player:get_attach()
+		local e = parent and parent:get_luaentity()
+		local def = e and e.vkind and V.TYPES[e.vkind]
+		if def and def.pushed then set_arms(player, "cart")
+		elseif parent then set_arms(player, nil)
+		else set_arms(player, carried(player) and "carry" or nil) end
+	end
+end)
 
 -- 手上的碎石裝上車：回傳有沒有裝。沒拿東西、或這台車沒有車斗就回 false，照常上車
 function rockmech.career_load(player, self, def)
@@ -195,7 +243,7 @@ end
 local function times(t) return {[1] = t * 2, [2] = t * 1.5, [3] = t} end
 core.register_tool(PICK, {
 	description = ("Pickaxe (挖礦鎬)\n挖岩石很慢，岩石會變成碎石\n挖碎石就是拿起來，一次一塊\n右鍵放下手上的碎石"),
-	inventory_image = "[fill:16x16:#00000000^[fill:2x13:7,3:#7a5a30^[fill:12x2:2,2:#8a8a8a^[fill:2x2:2,4:#8a8a8a^[fill:2x2:12,4:#8a8a8a",
+	inventory_image = "default_tool_steelpick.png",
 	tool_capabilities = {
 		full_punch_interval = 1.2, max_drop_level = 0,
 		groupcaps = {
@@ -203,6 +251,18 @@ core.register_tool(PICK, {
 			crumbly = {times = {[1] = cfg.pick_rubble_time, [2] = cfg.pick_rubble_time, [3] = cfg.pick_rubble_time}, uses = 0, maxlevel = 1},
 		},
 		damage_groups = {fleshy = 2},
+	},
+	on_place = place,
+	on_secondary_use = place_air,
+})
+
+core.register_tool(SHOVEL, {
+	description = "Shovel (鏟子)\n很快把碎石鏟起來，一次一塊\n挖不動岩石\n右鍵放下手上的碎石",
+	inventory_image = "default_tool_steelshovel.png",
+	tool_capabilities = {
+		full_punch_interval = 0.6, max_drop_level = 0,
+		groupcaps = {crumbly = {times = {[1] = cfg.shovel_time, [2] = cfg.shovel_time, [3] = cfg.shovel_time}, uses = 0, maxlevel = 1}},
+		damage_groups = {fleshy = 1},
 	},
 	on_place = place,
 	on_secondary_use = place_air,
@@ -332,5 +392,5 @@ core.register_on_joinplayer(function(player)
 end)
 core.register_on_leaveplayer(function(player)
 	local name = player:get_player_name()
-	carry_hud[name], carry_img[name] = nil, nil
+	carry_hud[name], carry_img[name], arms[name] = nil, nil, nil
 end)
