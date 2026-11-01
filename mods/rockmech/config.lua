@@ -164,6 +164,7 @@ config.fem_defaults = {
 	coarse_blend = 0.1,       -- 粗網格剪力項全積分的比例（其餘取格中心，避免一層元素太少時梁太硬）；1 = 全積分
 	nu = 0.25,                -- 帕松比
 	rubble_e = 0.1,           -- 滿格碎石的勁度 / 岩石的勁度（0 = 碎石沒有勁度）
+	active_range = 64,        -- 離所有玩家超過此距離 (m) 的應力解與連鎖崩落先暫停，玩家回來才接著算（0 = 不限）
 	tol = 0.001,              -- 共軛梯度法的相對殘差
 	max_iter = 1500,          -- 最多迭代幾輪
 }
@@ -507,6 +508,7 @@ function config.load(get)
 	cfg.fem.coarse = math.max(1, math.min(8, math.floor(cfg.fem.coarse)))
 	cfg.fem.coarse_blend = math.max(0.01, math.min(1, cfg.fem.coarse_blend))
 	cfg.fem.nu = math.max(0, math.min(0.45, cfg.fem.nu))
+	cfg.fem.active_range = math.max(0, cfg.fem.active_range)
 
 	-- 支護
 	cfg.support = load_section("support", config.support_defaults)

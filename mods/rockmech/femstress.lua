@@ -458,10 +458,47 @@ end
 -- 開挖後排解：同時只有一個工作；排隊中離得近的併成一個（範圍內都檢查得到）。
 -- far：粗網格派來的，只判定對著開挖空間的面
 local pending, busy = {}, false
+
+-- 離所有玩家超過 active_range 的工作先擱置（連鎖崩落的每一輪都經過這裡），玩家回來才從那一輪接著解。
+-- 擱置的工作存在世界裡，重開遊戲也接得上
+local PARK_KEY = "fem_parked"
+local parked = core.deserialize(rockmech.collapse.storage:get_string(PARK_KEY)) or {}
+local function save_parked()
+	rockmech.collapse.storage:set_string(PARK_KEY, #parked > 0 and core.serialize(parked) or "")
+end
+local function player_near(p)
+	if fcfg.active_range <= 0 then return true end
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), p) <= fcfg.active_range then return true end
+	end
+	return false
+end
+local function park(cur)
+	core.log("action", ("[rockmech] 玩家離開，應力解暫停 %s 第 %d 輪"):format(core.pos_to_string(cur.pos), cur.round))
+	for _, q in ipairs(parked) do
+		if vector.distance(q.pos, cur.pos) <= fcfg.radius / 2 then
+			q.round = math.min(q.round, cur.round)
+			q.far = q.far and cur.far
+			save_parked()
+			return
+		end
+	end
+	parked[#parked + 1] = {pos = cur.pos, round = cur.round, far = cur.far}
+	save_parked()
+end
+
 local function pump()
-	if busy or #pending == 0 then return end
+	if busy then return end
+	local cur
+	while not cur do
+		cur = table.remove(pending, 1)
+		if not cur then return end
+		if not player_near(cur.pos) then
+			park(cur)
+			cur = nil
+		end
+	end
 	busy = true
-	local cur = table.remove(pending, 1)
 	rockmech.fem_run(cur.pos, function(job, res, meta, ms, t_build)
 		local t0 = core.get_us_time()
 		local failed, faces, warned = find_failed(job, res, meta, not cur.far and cur.pos or nil)
@@ -498,6 +535,23 @@ function rockmech.fem_queue(pos, round, far)
 	pending[#pending + 1] = {pos = p, round = round, far = far}
 	core.after(0, pump)
 end
+local PARK_CHECK = 2      -- 每幾秒看一次玩家回來了沒
+local park_t = 0
+core.register_globalstep(function(dtime)
+	park_t = park_t + dtime
+	if park_t < PARK_CHECK or #parked == 0 then return end
+	park_t = 0
+	for i = #parked, 1, -1 do
+		local q = parked[i]
+		if player_near(q.pos) then
+			table.remove(parked, i)
+			save_parked()
+			core.log("action", ("[rockmech] 玩家回來，應力解接著 %s 第 %d 輪"):format(core.pos_to_string(q.pos), q.round))
+			rockmech.fem_queue(q.pos, q.round, q.far)
+		end
+	end
+end)
+
 -- 玩家走到附近有開挖、但還沒解過的地方（例如重開遊戲）：解一次，裂紋才看得到
 local WATCH_MOVE, WATCH_R = 6, 10
 local watched

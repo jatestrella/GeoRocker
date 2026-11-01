@@ -835,6 +835,7 @@ end
 -- 這些位置上現在的岩石是後來放回去或掉下來的（回填），沒有現地應力（femstress.lua）。
 -- 記憶體裡用數字當鍵：應力解組工作時每格都要查
 local ex_storage = core.get_mod_storage()
+collapse.storage = ex_storage
 local EX_PREFIX = "ex:"
 local excavated = {}
 local function ex_id(x, y, z) return (x + 32768) + (y + 32768) * 65536 + (z + 32768) * 4294967296 end
