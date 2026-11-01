@@ -42,6 +42,24 @@ core.register_on_joinplayer(function(player)
 end)
 core.register_on_leaveplayer(function(player) money_hud[player:get_player_name()] = nil end)
 
+-- pos 往下碰到格柵（上面堆著碎石也算）就回傳格柵的中心，否則 nil
+function rockmech.grate_center(pos)
+	local x, z = math.floor(pos.x + 0.5), math.floor(pos.z + 0.5)
+	local y = math.floor(pos.y + 0.5)
+	for _ = 1, 8 do
+		local n = core.get_node({x = x, y = y, z = z}).name
+		if not V.passable(n) and not rockmech.rubble_level[n] then break end
+		y = y - 1
+	end
+	if core.get_node({x = x, y = y, z = z}).name ~= GRATE then return nil end
+	local function span(dx, dz)
+		local k = 0
+		while core.get_node({x = x + dx * (k + 1), y = y, z = z + dz * (k + 1)}).name == GRATE do k = k + 1 end
+		return k
+	end
+	return {x = x + (span(1, 0) - span(-1, 0)) / 2, y = y, z = z + (span(0, 1) - span(0, -1)) / 2}
+end
+
 ---------------------------------------------------------------------------
 -- 破碎
 ---------------------------------------------------------------------------
