@@ -226,4 +226,38 @@ describe("fem 彈性應力場", function()
 		assert.near(40, w[1], 1e-12); assert.near(0, w[4], 1e-12); assert.near(0, w[6], 1e-12)
 		assert.near(2, w[5], 1e-12)
 	end)
+
+	it("碎石填滿開口：壓力往岩壁回推，頂板下陷變小，碎石本身受壓", function()
+		local n = 21
+		local function room(x, y, z) return x >= 8 and x <= 12 and y >= 8 and y <= 11 and z >= 8 and z <= 12 end
+		local empty = job(n, n, n, function(x, y, z) return not room(x, y, z) end, 40, 1)
+		local filled = job(n, n, n, function() return true end, 40, 1)
+		filled.soft = {}
+		for z = 0, n - 1 do for y = 0, n - 1 do for x = 0, n - 1 do
+			if room(x, y, z) then
+				local c = 1 + x + y * n + z * n * n
+				filled.soft[c] = true
+				filled.syy[c], filled.sxx[c], filled.szz[c] = 0, 0, 0
+			end
+		end end end
+		filled.soft_e = 0.1
+		local r0, r1 = fem.solve(empty), fem.solve(filled)
+		local c = 1 + 10 + 10 * n + 10 * n * n
+		assert.is_true(r1.syy[c] > 0 and r1.sxx[c] > 0 and r1.szz[c] > 0)   -- 三向受壓
+		local Nx = n + 1
+		local node = (10 + 12 * Nx + 10 * Nx * Nx) * 3 + 2                  -- 頂板中央的節點 uy
+		assert.is_true(math.abs(r1.u[node]) < math.abs(r0.u[node]))
+		-- 頂板第一格的 σyy：沒有碎石時接近 0，有碎石時等於碎石頂上來的反力
+		local roof = 1 + 10 + 12 * n + 10 * n * n
+		assert.is_true(r1.syy[roof] > r0.syy[roof])
+	end)
+
+	it("沒有碎石格時，給不給 soft 結果都一樣", function()
+		local n = 11
+		local function s1(x, y, z) return not (x >= 4 and x <= 6 and y >= 4 and y <= 6 and z >= 4 and z <= 6) end
+		local a, b = job(n, n, n, s1, 20, 1), job(n, n, n, s1, 20, 1)
+		b.soft, b.soft_e = {}, 0.1
+		local ra, rb = fem.solve(a), fem.solve(b)
+		for k = 1, #ra.syy do assert.near(ra.syy[k], rb.syy[k], 1e-9) end
+	end)
 end)

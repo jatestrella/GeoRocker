@@ -297,6 +297,9 @@ rockmech_fem_coarse_blend (Solver coarse shear integration) float 0.1 0.01 1
 # Poisson's ratio.
 rockmech_fem_nu (Poisson ratio) float 0.25 0 0.45
 
+# Stiffness of a full rubble cell as a fraction of rock. Rock walls converging on rubble get a reaction in every direction. 0 = rubble has no stiffness.
+rockmech_fem_rubble_e (Rubble stiffness ratio) float 0.1 0 1
+
 # Conjugate gradient relative residual.
 rockmech_fem_tol (Solver tolerance) float 0.001 0.000001 0.1
 

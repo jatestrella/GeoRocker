@@ -2,7 +2,9 @@
 -- 開挖周圍的彈性應力場（純函式，不依賴引擎；也載入背景執行緒，見 femstress.lua）。
 --
 -- ## 模型
--- 每個岩石格是一個邊長 1 m 的 8 節點六面體元素（線彈性、均質、等向），空氣與碎石沒有勁度。
+-- 每個岩石格是一個邊長 1 m 的 8 節點六面體元素（線彈性、均質、等向），空氣沒有勁度。
+-- 滿格的碎石是軟的元素（job.soft，勁度 = 岩石 × job.soft_e）：沒有現地應力、不加重力，反力只來自岩壁收斂壓它
+-- （等於開挖前就在那裡，同回採區充填的簡化）。
 -- 解的是「開挖造成的變化」：現地應力 σ0（每格給定）與重力在完整岩體裡平衡，開挖後臨空面上不平衡，
 --   K·Δu = F_重力 − ∫Bᵀσ0 dV       （節點不平衡力只出現在臨空面）
 --   σ = σ0 + D·B·Δu                 （每格中心）
@@ -18,6 +20,7 @@
 --  gamma（kN/m³）, nu, tol, max_iter, u0（可選，上次的 Δu，當初始值；外緣節點的值就是給定的位移）}
 -- 邊長 h 的元素：同一個單位立方體方程式，gamma 給 γ·h，解出來的 u 是 Δu / h。
 -- job.press（可選）= {格, 方向 k, p, ...}：支護。格往 k（1..6 = +x −x +y −y +z −z）那一面受壓力 p（kPa），指向岩體。
+-- job.soft（可選）= {[格] = true}：其中 solid 為 true 的格是碎石，job.soft_e = 勁度比例（預設 0.1）。
 -- ## 輸出
 -- {sxx, syy, szz, sxy, syz, szx（總應力，kPa）, u, iters, res（相對殘差）, ms}
 
@@ -75,11 +78,13 @@ fem.element_stiffness = element_stiffness
 
 -- 一個節點周圍 8 格（位元 e = ex + 2ey + 4ez，該格在節點的 (ex−1, ey−1, ez−1) 位置）的組合 → 模版
 -- {n, dx[], dy[], dz[], k[]（每鄰點 9 個）, d1, d2, d3（對角）}
-local function make_stencil(Ke, mask)
+-- soft（可選）：mask 裡哪幾格是軟的元素，勁度乘 ratio
+local function make_stencil(Ke, mask, soft, ratio)
 	local sum = {}
 	for e = 0, 7 do
 		if math.floor(mask / 2 ^ e) % 2 == 1 then
 			local ex, ey, ez = e % 2, math.floor(e / 2) % 2, math.floor(e / 4)
+			local w = soft and math.floor(soft / 2 ^ e) % 2 == 1 and ratio or 1
 			local a = (1 - ex) + 2 * (1 - ey) + 4 * (1 - ez)   -- 這個節點是該格的第 a 個角
 			local ai, aj, ak = 1 - ex, 1 - ey, 1 - ez
 			for b = 0, 7 do
@@ -87,7 +92,7 @@ local function make_stencil(Ke, mask)
 				local key = (bi - ai + 1) + 3 * (bj - aj + 1) + 9 * (bk - ak + 1)
 				local s = sum[key]
 				if not s then s = {0, 0, 0, 0, 0, 0, 0, 0, 0}; sum[key] = s end
-				for q = 1, 9 do s[q] = s[q] + Ke[a][b][q] end
+				for q = 1, 9 do s[q] = s[q] + w * Ke[a][b][q] end
 			end
 		end
 	end
@@ -151,6 +156,7 @@ function fem.solve(job)
 	local Ke = element_stiffness(nu, job.blend)
 	local lam = E * nu / ((1 + nu) * (1 - 2 * nu))
 	local mu = E / (2 * (1 + nu))
+	local soft, ratio = job.soft or {}, job.soft_e or 0.1
 
 	local function is_solid(x, y, z)
 		if x < 0 or y < 0 or z < 0 or x >= nx or y >= ny or z >= nz then return false end
@@ -162,21 +168,26 @@ function fem.solve(job)
 	local active, masks = {}, {}
 	local na = 0
 	for z = 1, Nz - 2 do for y = 1, Ny - 2 do for x = 1, Nx - 2 do
-		local m = 0
+		local m, sm = 0, 0
 		for e = 0, 7 do
 			local ex, ey, ez = e % 2, math.floor(e / 2) % 2, math.floor(e / 4)
-			if is_solid(x + ex - 1, y + ey - 1, z + ez - 1) then m = m + 2 ^ e end
+			local cx, cy, cz = x + ex - 1, y + ey - 1, z + ez - 1
+			if is_solid(cx, cy, cz) then
+				m = m + 2 ^ e
+				if soft[1 + cx + cy * nx + cz * nx * ny] then sm = sm + 2 ^ e end
+			end
 		end
 		if m > 0 then
+			local key = m + 256 * sm
 			na = na + 1
 			active[na] = x + y * sy + z * sz
-			masks[na] = m
-			if not stencils[m] then
-				local st = make_stencil(Ke, m)
-				stencils[m] = st
+			masks[na] = key
+			if not stencils[key] then
+				local st = make_stencil(Ke, m, sm, ratio)
+				stencils[key] = st
 				local o = {}
 				for s = 1, st.n do o[s] = (st.dx[s] + st.dy[s] * sy + st.dz[s] * sz) * 3 end
-				offs[m] = o
+				offs[key] = o
 			end
 		end
 	end end end
@@ -195,7 +206,7 @@ function fem.solve(job)
 	end
 	for cz = 0, nz - 1 do for cy = 0, ny - 1 do for cx = 0, nx - 1 do
 		local c = 1 + cx + cy * nx + cz * nx * ny
-		if solid[c] then
+		if solid[c] and not soft[c] then
 			local txx, tyy, tzz, txz = -job.sxx[c], -job.syy[c], -job.szz[c], -job.sxz[c]
 			for a = 1, 8 do
 				local cr = cs[a]
@@ -330,13 +341,14 @@ function fem.solve(job)
 				gyz = gyz + gz * uy + gy * uz
 				gzx = gzx + gx * uz + gz * ux
 			end
-			local tr = lam * (exx + eyy + ezz)
-			out.sxx[c] = job.sxx[c] - (tr + 2 * mu * exx)
-			out.syy[c] = job.syy[c] - (tr + 2 * mu * eyy)
-			out.szz[c] = job.szz[c] - (tr + 2 * mu * ezz)
-			out.sxy[c] = -mu * gxy
-			out.syz[c] = -mu * gyz
-			out.szx[c] = job.sxz[c] - mu * gzx
+			local w = soft[c] and ratio or 1
+			local tr = w * lam * (exx + eyy + ezz)
+			out.sxx[c] = job.sxx[c] - (tr + 2 * w * mu * exx)
+			out.syy[c] = job.syy[c] - (tr + 2 * w * mu * eyy)
+			out.szz[c] = job.szz[c] - (tr + 2 * w * mu * ezz)
+			out.sxy[c] = -w * mu * gxy
+			out.syz[c] = -w * mu * gyz
+			out.szx[c] = job.sxz[c] - w * mu * gzx
 		end
 	end end end
 	out.ms = (os.clock() - t_start) * 1000
@@ -355,7 +367,7 @@ function fem.solve_nested(job)
 	local cn, cn2 = cj.nx, cj.nx * cj.ny
 	for z = 4, cj.nz - 5 do for y = 2, cj.ny - 3 do for x = 4, cj.nx - 5 do     -- 外圈 Δu = 0，應力是假的
 		local c = 1 + x + y * cn + z * cn2
-		if cj.solid[c] and not cj.solid[c - cn] then
+		if cj.solid[c] and not cj.solid[c - cn] and not (cj.soft and cj.soft[c]) then
 			local t = {fem.point_stress(cj, cres, x, y, z, 0.5, 0, 0.5)}
 			local s1, _, s3 = fem.principal(t[1], t[2], t[3], t[4], t[5], t[6])
 			if s3 < 0 then hot[#hot + 1] = {x, y, z, s1, s3} end
@@ -450,7 +462,7 @@ function fem.cell_principal(job, res, x, y, z, r)
 		local cx, cy, cz = x + dx, y + dy, z + dz
 		if cx >= 0 and cy >= 0 and cz >= 0 and cx < nx and cy < ny and cz < nz then
 			local c = 1 + cx + cy * nx + cz * nx * ny
-			if solid[c] then
+			if solid[c] and not (job.soft and job.soft[c]) then
 				n = n + 1
 				sum[1] = sum[1] + res.sxx[c]
 				sum[2] = sum[2] + res.syy[c]

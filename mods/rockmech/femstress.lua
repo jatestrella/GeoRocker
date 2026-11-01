@@ -5,6 +5,7 @@
 -- 有臨空面的格取面上的應力（和崩落判定同一個數），內部的格取周圍 1 格內岩石格的平均。
 -- 範圍外用粗網格（rockmech_fem_coarse）：先解大範圍的粗網格，它的位移當細網格的外緣，開口比範圍大也看得到。
 -- 支護（岩栓、噴凝土）是面上的力，沿打設方向推進岩體。目前不含節理：岩體是均質彈性體。
+-- 滿格碎石是軟的元素（rockmech_fem_rubble_e），岩壁收斂壓它就有水平與垂直的反力；貼著碎石的岩面照樣判定，碎石的應力當圍壓。
 -- 參數在設定 rockmech_fem_*。
 -- drive（rockmech_fem_drive）：由應力解決定崩落。開挖後排一次求解（同時只有一個工作，附近的開挖併在一起），
 -- 解完檢查對著開挖空間的臨空面：取面上的應力（格中心看不到一格厚的梁的彎曲），與同一面相鄰的格平均以消掉角點奇異，
@@ -62,9 +63,11 @@ local function make_coarse(pos)
 	local a = {x = snap(pos.x), y = snap(pos.y), z = snap(pos.z)}
 	local g = rockmech.collapse.read_grid(a, vector.add(a, n * C - 1))
 	local job = {nx = n, ny = n, nz = n, h = C, a = a, solid = {}, sxx = {}, syy = {}, szz = {}, sxz = {},
-		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, blend = fcfg.coarse_blend}
+		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, blend = fcfg.coarse_blend,
+		soft = {}, soft_e = fcfg.rubble_e}
 	local sy, sz = g.nx, g.nx * g.ny
 	local data, bonded = g.data, g.bonded_of
+	local rubble = fcfg.rubble_e > 0 and g.rubble_of or {}
 	local ignore, surf = core.CONTENT_IGNORE, cfg.surface_y or 0
 	local base = 1 + (a.x - g.ox) + (a.y - g.oy) * sy + (a.z - g.oz) * sz
 	local mid = math.floor((C - 1) / 2)
@@ -82,21 +85,25 @@ local function make_coarse(pos)
 		local ktop = math.floor((top - a.y) / C)
 		for y = 0, n - 1 do
 			local c = 1 + x + y * n + z * n * n
-			local count = 0
+			local count, loose = 0, 0
 			for dz = 0, C - 1 do for dy = 0, C - 1 do
 				local row = base + C * x + (C * y + dy) * sy + (C * z + dz) * sz
 				local under = a.y + C * y + dy <= surf
 				for dx = 0, C - 1 do
 					local id = data[row + dx]
-					if bonded[id] or (under and id == ignore) then count = count + 1 end
+					if bonded[id] or (under and id == ignore) then count = count + 1
+					elseif rubble[id] == 1 then loose = loose + 1 end
 				end
 			end end
 			local solid = 2 * count > C * C * C
-			job.solid[c] = solid
+			local soft = not solid and 2 * (count + loose) > C * C * C
+			job.solid[c] = solid or soft
+			job.soft[c] = soft or nil
 			local lith = cfg.lithologies[g.lith_of[data[base + cx + (C * y + mid) * sy + cz * sz]]]
 			local gamma = lith and lith.gamma or cfg.failure.gamma_other
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			in_situ(job, c, gamma * C * math.max(0, ktop - y + 0.5))
+			if soft then job.sxx[c], job.syy[c], job.szz[c], job.sxz[c] = 0, 0, 0, 0 end
 		end
 	end end
 	job.gamma = C * (gam_n > 0 and gam_sum / gam_n or 25)    -- 單位立方體的方程式：γ·h，解出 Δu / h
@@ -117,7 +124,7 @@ local function make_job(pos)
 	local g = rockmech.collapse.read_grid(a, b)      -- 往上多讀，找每一欄的岩石頂面
 	local n = 2 * r + 1
 	local job = {nx = n, ny = n, nz = n, solid = {}, sxx = {}, syy = {}, szz = {}, sxz = {},
-		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, gamma = 25}
+		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, gamma = 25, soft = {}, soft_e = fcfg.rubble_e}
 	local gsy, gsz = g.nx, g.nx * g.ny
 	local gam_sum, gam_n = 0, 0
 	local is_excavated_at = rockmech.collapse.is_excavated_at
@@ -140,10 +147,12 @@ local function make_job(pos)
 			local lith = key and cfg.lithologies[key]
 			local gamma = lith and lith.gamma or cfg.failure.gamma_other
 			local solid = g.bonded_of[cid] and true or false
+			local soft = fcfg.rubble_e > 0 and g.rubble_of[cid] == 1
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			local sv = gamma * math.max(0, top + 0.5 - wy)     -- kPa
-			job.solid[c] = solid
-			if solid and is_excavated_at(a.x + x, wy, a.z + z) then
+			job.solid[c] = solid or soft
+			job.soft[c] = soft or nil
+			if soft or (solid and is_excavated_at(a.x + x, wy, a.z + z)) then
 				job.syy[c], job.sxx[c], job.szz[c], job.sxz[c] = 0, 0, 0, 0
 			else
 				in_situ(job, c, sv)
@@ -155,7 +164,7 @@ local function make_job(pos)
 		local x, y, z = wx - a.x, wy - a.y, wz - a.z
 		if x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n then return 1 + x + y * n + z * n * n end
 	end, 1)
-	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石不算空）
+	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石算空：貼著它的岩面要判定，反力在 face_fs）
 	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}}
 	local press = job.press or {}
 	for i = 1, #press, 3 do meta.press[press[i] * 8 + press[i + 1]] = press[i + 2] end
@@ -165,7 +174,7 @@ local function make_job(pos)
 		local gi = 1 + (a.x + x - g.ox) + (a.y + y - g.oy) * gsy + (a.z + z - g.oz) * gsz
 		meta.lith[c] = g.lith_of[g.data[gi]]
 		meta.p2[c] = g.p2[gi]
-		meta.open[c] = not g.solid_of[g.data[gi]]
+		meta.open[c] = not g.solid_of[g.data[gi]] or g.rubble_of[g.data[gi]] ~= nil
 	end
 	return job, meta
 end
@@ -200,7 +209,7 @@ local function face_fs(job, res, meta, x, y, z, f)
 	for a = -1, 1 do for b = -1, 1 do
 		local cx, cy, cz = x + a * f[4] + b * f[7], y + a * f[5] + b * f[8], z + a * f[6] + b * f[9]
 		if cx >= 1 and cy >= 1 and cz >= 1 and cx < n - 1 and cy < n - 1 and cz < n - 1
-				and job.solid[1 + cx + cy * n + cz * n * n]
+				and job.solid[1 + cx + cy * n + cz * n * n] and not job.soft[1 + cx + cy * n + cz * n * n]
 				and meta.open[1 + (cx + dx) + (cy + dy) * n + (cz + dz) * n * n] then
 			local t = {fem.point_stress(job, res, cx, cy, cz, xi, eta, zeta)}
 			for i = 1, 6 do sum[i] = sum[i] + t[i] end
@@ -211,7 +220,12 @@ local function face_fs(job, res, meta, x, y, z, f)
 	local st = {}
 	for i = 1, 6 do st[i] = sum[i] / m end
 	local k = dx > 0 and 1 or dx < 0 and 2 or dy > 0 and 3 or dy < 0 and 4 or dz > 0 and 5 or 6
-	fem.free_face(st, dx ~= 0 and 1 or dy ~= 0 and 2 or 3, meta.press[(1 + x + y * n + z * n * n) * 8 + k] or 0)
+	local p = meta.press[(1 + x + y * n + z * n * n) * 8 + k] or 0
+	local out = 1 + (x + dx) + (y + dy) * n + (z + dz) * n * n
+	if job.soft[out] then       -- 碎石壓在這一面的反力（受拉不算）
+		p = p + math.max(0, (dx ~= 0 and res.sxx or dy ~= 0 and res.syy or res.szz)[out])
+	end
+	fem.free_face(st, dx ~= 0 and 1 or dy ~= 0 and 2 or 3, p)
 	local s1, _, s3 = fem.principal(st[1], st[2], st[3], st[4], st[5], st[6])
 	s1, s3 = s1 / 1000, s3 / 1000
 	local fs, mode = strength_fs(job, meta, x, y, z, s1, s3)
@@ -221,6 +235,7 @@ end
 -- 顯示用的 FS：有臨空面取最危險的面（與崩落判定同一個數），內部的格取周圍 1 格平均。回傳 FS, σ1, σ3, 破壞型式
 local function cell_fs(job, res, meta, x, y, z)
 	local n = job.nx
+	if not meta.lith[1 + x + y * n + z * n * n] then return nil end
 	if x >= 1 and y >= 1 and z >= 1 and x < n - 1 and y < n - 1 and z < n - 1 then
 		local best, b1, b3, bm
 		for _, f in ipairs(FACES) do
@@ -309,7 +324,8 @@ local function report(pos, job, res, meta)
 	local cnt, fails = 0, 0
 	local solid = job.solid
 	local function at(x, y, z)
-		return x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n and solid[1 + x + y * n + z * n * n]
+		local c = 1 + x + y * n + z * n * n
+		return x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n and solid[c] and not job.soft[c]
 	end
 	for z = 1, n - 2 do for y = 1, n - 2 do for x = 1, n - 2 do
 		if at(x, y, z) and meta.lith[1 + x + y * n + z * n * n] and
@@ -363,7 +379,8 @@ function rockmech.fem_cell(pos)
 	local n = last_job.nx
 	local x, y, z = pos.x - last_meta.a.x, pos.y - last_meta.a.y, pos.z - last_meta.a.z
 	if x < 0 or y < 0 or z < 0 or x >= n or y >= n or z >= n then return nil end
-	if not last_job.solid[1 + x + y * n + z * n * n] then return nil end
+	local c = 1 + x + y * n + z * n * n
+	if not last_job.solid[c] or last_job.soft[c] then return nil end
 	local fs, s1, s3 = cell_fs(last_job, last_res, last_meta, x, y, z)
 	return fs and {fs = fs, s1 = s1, s3 = s3}
 end
@@ -406,7 +423,7 @@ function rockmech.fem_tensor(x, y, z)
 	local cx, cy, cz = x - last_meta.a.x, y - last_meta.a.y, z - last_meta.a.z
 	if cx < 2 or cy < 2 or cz < 2 or cx >= n - 2 or cy >= n - 2 or cz >= n - 2 then return nil end
 	local c = 1 + cx + cy * n + cz * n * n
-	if not last_job.solid[c] then return nil end
+	if not last_job.solid[c] or last_job.soft[c] then return nil end
 	local r = last_res
 	return {r.sxx[c] / 1000, r.syy[c] / 1000, r.szz[c] / 1000, r.szx[c] / 1000, r.sxy[c] / 1000, r.syz[c] / 1000}
 end
