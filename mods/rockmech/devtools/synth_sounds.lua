@@ -1,7 +1,7 @@
 -- 合成岩石破裂音效，輸出 sounds/rockmech_crack.<n>.ogg（單聲道：Luanti 的定位音效只對單聲道有效）。
 -- 遊戲不會載入這個檔案。在 rockmech 目錄下執行：lua devtools/synth_sounds.lua [原始 PCM 輸出目錄]
 --
--- 聲音：主破裂（幾個高頻阻尼模態 + 極短的雜訊 + 低頻的岩體悶響），接著一串微破裂
+-- 聲音：主破裂（寬頻雜訊爆裂 + 裂縫傳播的細爆裂 + 低頻隆隆聲），接著一串微破裂與碎屑顆粒
 -- （發生率隨時間 ∝ 1/(t + c) 衰減，Omori 餘震律），再過一段短的地下迴響。
 --
 -- 編碼器：只用 Vorbis 規格裡最簡單的組合 —— 固定區塊 256、平坦的 floor 1（只有兩個端點）、
@@ -17,37 +17,46 @@ local MAXQ = 127               -- 量化值 ±MAXQ
 -- 合成
 ---------------------------------------------------------------------------
 
-local function damped(buf, i0, f, tau, amp)
+-- 帶通雜訊的爆裂，指數衰減；頻帶 f_lo..f_hi 用一階濾波。全部用雜訊：
+-- 正弦的阻尼模態有音高，聽起來是敲木頭，脆性破裂是沒有音高的寬頻聲
+local function burst(buf, i0, tau, amp, f_lo, f_hi)
 	local n = math.floor(math.min(#buf - i0, tau * 8 * RATE))
-	local w, d = 2 * math.pi * f / RATE, math.exp(-1 / (tau * RATE))
-	local e = amp
-	for i = 1, n do
-		buf[i0 + i] = buf[i0 + i] + e * math.sin(w * i)
-		e = e * d
-	end
-end
-
-local function noise_burst(buf, i0, tau, amp)
-	local n = math.floor(math.min(#buf - i0, tau * 8 * RATE))
+	local a_lo = 1 - math.exp(-2 * math.pi * f_lo / RATE)
+	local a_hi = 1 - math.exp(-2 * math.pi * f_hi / RATE)
 	local d = math.exp(-1 / (tau * RATE))
-	local e = amp
+	local lp, slow, e = 0, 0, amp
 	for i = 1, n do
-		buf[i0 + i] = buf[i0 + i] + e * (2 * math.random() - 1)
+		lp = lp + a_hi * (2 * math.random() - 1 - lp)
+		slow = slow + a_lo * (lp - slow)
+		buf[i0 + i] = buf[i0 + i] + e * (lp - slow)
 		e = e * d
 	end
 end
 
 local function log_uniform(a, b) return a * (b / a) ^ math.random() end
 
--- 一次破裂：amp 大小；band = {f1, f2} 模態頻帶；body = 低頻悶響的比例
+-- Omori 律的時間：密度 ∝ 1/(t + c)，t 在 0..T
+local function omori(c, T) return c * ((1 + T / c) ^ math.random() - 1) end
+
+-- 一次破裂：主爆裂 + 裂縫傳播的連續細爆裂（30 ms 內）+ 岩體的低頻隆隆聲。
+-- amp 大小；band = {f1, f2}；body = 隆隆聲的比例
 local function crack(buf, t, amp, band, body)
 	local i0 = math.floor(t * RATE)
 	if i0 >= #buf then return end
-	noise_burst(buf, i0, 0.0012, amp * 0.9)
-	for _ = 1, 5 do
-		damped(buf, i0, log_uniform(band[1], band[2]), log_uniform(0.003, 0.012), amp * (0.2 + 0.25 * math.random()))
+	burst(buf, i0, 0.003, amp * 1.6, band[1], band[2])
+	for _ = 1, math.random(4, 9) do
+		local dt = 0.03 * math.random() ^ 2
+		burst(buf, i0 + math.floor(dt * RATE), log_uniform(0.0004, 0.0015), amp * (0.3 + 0.9 * math.random()), band[1], band[2])
 	end
-	if body > 0 then damped(buf, i0, log_uniform(85, 190), log_uniform(0.025, 0.055), amp * body) end
+	burst(buf, i0, log_uniform(0.05, 0.1), amp * body * 5, 15, 170)
+end
+
+-- 碎屑：大量極短的高頻顆粒
+local function grains(buf, count, T)
+	for _ = 1, count do
+		local t = 0.01 + omori(0.05, T)
+		burst(buf, math.floor(t * RATE), log_uniform(0.00015, 0.0006), log_uniform(0.03, 0.22) * math.exp(-t / T), 1800, 9000)
+	end
 end
 
 -- 碎屑的沙沙聲：帶通雜訊，指數衰減
@@ -83,11 +92,12 @@ local function render(v)
 	local buf = {}
 	for i = 1, math.floor(v.len * RATE) do buf[i] = 0 end
 	for _, e in ipairs(v.main) do crack(buf, e[1], e[2], v.band, v.body) end
-	local c, T = 0.015, v.len * 0.75
+	local T = v.len * 0.75
 	for _ = 1, v.micro do
-		local t = c * ((1 + T / c) ^ math.random() - 1)
-		crack(buf, 0.004 + t, 0.32 * math.random() ^ 2 * math.exp(-t / T), v.band, v.body * 0.3)
+		local t = omori(0.015, T)
+		crack(buf, 0.004 + t, 0.3 * math.random() ^ 2 * math.exp(-t / T), v.band, v.body * 0.3)
 	end
+	grains(buf, v.grains, T)
 	grit(buf, 0.002, 0.14, 0.05)
 	reverb(buf)
 	local fade = math.floor(0.2 * RATE)
@@ -99,10 +109,10 @@ local function render(v)
 end
 
 local VARIANTS = {
-	{seed = 11, len = 0.8, band = {1100, 5200}, body = 0.5, micro = 8, main = {{0, 1}}},           -- 單聲脆裂
-	{seed = 23, len = 1.2, band = {900, 4600}, body = 0.4, micro = 32, main = {{0, 0.8}}},         -- 破裂接一串細碎聲
-	{seed = 37, len = 0.9, band = {700, 3600}, body = 0.7, micro = 14, main = {{0, 0.9}, {0.17, 0.6}}}, -- 連續兩聲
-	{seed = 53, len = 1.1, band = {500, 2800}, body = 1.0, micro = 18, main = {{0, 1}}},           -- 低沉的悶裂
+	{seed = 11, len = 0.8, band = {900, 9000}, body = 0.5, micro = 8, grains = 120, main = {{0, 1}}},           -- 單聲脆裂
+	{seed = 23, len = 1.2, band = {700, 8000}, body = 0.4, micro = 32, grains = 400, main = {{0, 0.8}}},        -- 破裂接一串細碎聲
+	{seed = 37, len = 0.9, band = {700, 8000}, body = 0.3, micro = 14, grains = 200, main = {{0, 0.9}, {0.17, 0.6}}}, -- 連續兩聲
+	{seed = 53, len = 1.1, band = {500, 7000}, body = 0.4, micro = 18, grains = 250, main = {{0, 1}}},          -- 較低沉的破裂
 }
 
 ---------------------------------------------------------------------------
