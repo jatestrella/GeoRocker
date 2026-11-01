@@ -52,6 +52,13 @@ end
 ---------------------------------------------------------------------------
 
 local carry_hud = {}        -- 玩家名稱 → HUD id
+local carry_img = {}        -- 玩家名稱 → 手上那塊碎石的 HUD id
+
+-- 手上的碎石畫成畫面右下方的方塊，貼圖跟著種類與品位
+local function cube(c)
+	local t = V.rubble_tex(rockmech.rubble_with_level(c.base, NLEV, c.p2)):gsub("%^", "&")
+	return ("[inventorycube{%s{%s{%s"):format(t, t, t)
+end
 
 local function carried(player)
 	local s = player:get_meta():get_string(CARRY_KEY)
@@ -70,6 +77,13 @@ local function show_carry(player, c)
 	else
 		carry_hud[name] = player:hud_add({type = "text", position = {x = 0.5, y = 0.8}, alignment = {x = 0, y = 0},
 			number = 0xFFE080, text = text, z_index = 100})
+	end
+	local img = c and cube(c) or ""
+	if carry_img[name] then
+		player:hud_change(carry_img[name], "text", img)
+	else
+		carry_img[name] = player:hud_add({type = "image", position = {x = 0.74, y = 0.84}, alignment = {x = 0, y = 0},
+			scale = {x = 5, y = 5}, text = img, z_index = 90})
 	end
 end
 local function set_carried(player, c)
@@ -286,4 +300,7 @@ core.register_on_joinplayer(function(player)
 		end)
 	end
 end)
-core.register_on_leaveplayer(function(player) carry_hud[player:get_player_name()] = nil end)
+core.register_on_leaveplayer(function(player)
+	local name = player:get_player_name()
+	carry_hud[name], carry_img[name] = nil, nil
+end)
