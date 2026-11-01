@@ -152,7 +152,26 @@ function core.node_dig(pos, node, digger)
 	return node_dig(pos, node, digger)
 end
 
--- 右鍵：點到方塊的右鍵功能優先，否則放下手上的碎石（鎬子和空手共用）
+-- 落點 LOAD_R 內有裝得下的車斗就裝上去：差一點沒點中車子，碎石不該掉在地上
+local LOAD_R = 2.5
+local function load_near(player, pos)
+	for _, o in ipairs(core.get_objects_inside_radius(pos, LOAD_R + 3)) do
+		local e = o:get_luaentity()
+		local def = e and e.vkind and V.TYPES[e.vkind]
+		if def and (def.cap or 0) > V.load_total(e) and not e.driver then
+			local p = o:get_pos()
+			local dir = core.yaw_to_dir(o:get_yaw())
+			local bed = vector.add(p, vector.multiply(dir, -def.rear / 2))
+			if vector.distance({x = bed.x, y = pos.y, z = bed.z}, pos) <= LOAD_R + def.half
+					or vector.distance({x = p.x, y = pos.y, z = p.z}, pos) <= LOAD_R then
+				return rockmech.career_load(player, e, def)
+			end
+		end
+	end
+	return false
+end
+
+-- 右鍵：點到方塊的右鍵功能優先，再來是旁邊的車斗，否則放下手上的碎石（鎬子和空手共用）
 local function place(itemstack, placer, pointed)
 	if pointed.type ~= "node" then return itemstack end
 	local un = core.get_node(pointed.under)
@@ -160,7 +179,16 @@ local function place(itemstack, placer, pointed)
 	if def and def.on_rightclick and not placer:get_player_control().sneak then
 		return def.on_rightclick(pointed.under, un, placer, itemstack, pointed)
 	end
-	put_down(placer, pointed.above)
+	if not (carried(placer) and load_near(placer, pointed.above)) then put_down(placer, pointed.above) end
+	return itemstack
+end
+
+-- 對著天空按右鍵：看前方有沒有車斗
+local function place_air(itemstack, player)
+	if carried(player) then
+		local eye = vector.add(player:get_pos(), {x = 0, y = 1.6, z = 0})
+		load_near(player, vector.add(eye, vector.multiply(player:get_look_dir(), 3)))
+	end
 	return itemstack
 end
 
@@ -177,6 +205,7 @@ core.register_tool(PICK, {
 		damage_groups = {fleshy = 2},
 	},
 	on_place = place,
+	on_secondary_use = place_air,
 })
 
 -- 徒手：只敲得動礦石，碎石拿得起來
@@ -190,6 +219,7 @@ core.register_on_mods_loaded(function()
 			},
 			damage_groups = {fleshy = 1}},
 		on_place = place,
+		on_secondary_use = place_air,
 	})
 end)
 

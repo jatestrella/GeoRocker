@@ -190,8 +190,9 @@ local function excavator(kind, P)
 							local c, sn = math.cos(ty), math.sin(ty)
 							local lx, lz = dx * c + dz * sn, -dx * sn + dz * c
 							local td = TYPES[e.vkind]
-							if math.abs(lx) <= td.half + AIM_MARGIN and dy >= -td.half and dy <= td.bed.aim_top + AIM_MARGIN
-								and lz >= -td.rear - AIM_MARGIN and lz <= td.half + AIM_MARGIN then
+							local m = td.aim_margin or AIM_MARGIN
+							if math.abs(lx) <= td.half + m and dy >= -td.half and dy <= td.bed.aim_top + m
+								and lz >= -td.rear - m and lz <= td.half + m then
 								return {truck = e}
 							end
 						end

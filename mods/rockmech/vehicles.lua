@@ -830,7 +830,7 @@ function V.register(kind, def)
 			physical = true,
 			collide_with_objects = true,   -- 玩家擋得住、車子之間會相撞（只有碰撞箱那段；伸出去的車斗、鏟刀、挖臂不算）
 			collisionbox = {-def.half + 0.02, -def.half, -def.half + 0.02, def.half - 0.02, (def.top or def.half) - 0.02, def.half - 0.02},
-			selectionbox = def.rear and {-def.half, -def.half, -def.rear, def.half, def.top or def.half, def.half, rotate = true}
+			selectionbox = def.select_box or def.rear and {-def.half, -def.half, -def.rear, def.half, def.top or def.half, def.half, rotate = true}
 				or {-def.half, -def.half, -def.half, def.half, def.top or def.half, def.half},
 			visual = "cube",
 			-- 外觀都由零件組成：車身不能放大（掛在上面的零件位置與大小會跟著放大），
