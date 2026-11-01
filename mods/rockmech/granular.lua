@@ -24,6 +24,12 @@ function granular.surface(y, k)
 	return 8 * y - 4 + k
 end
 
+-- 超載換算高度（八分之一公尺）：上方的荷重 q (kPa) 等於多高的碎石（q / γ_r，地工的等效超載高度），
+-- 加到來源表面上，受壓的碎石就照安息角往旁邊擠
+function granular.surcharge(q, gamma)
+	return 8 * q / gamma
+end
+
 -- 由表面高度反推所在格與級數：回傳 y, k（1..8）
 function granular.cell_of_surface(e)
 	local y = ceil((e - 4) / 8)

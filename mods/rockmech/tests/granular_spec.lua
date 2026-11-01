@@ -71,4 +71,17 @@ describe("granular 碎石顆粒流", function()
 			assert.is_true(math.abs(h[x] - h[x + 1]) < 8 * TAN35 + 1)
 		end
 	end)
+
+	it("超載換算高度：q / γ，一格岩石（25 kPa）壓在 γ = 20 的碎石上 = 1.25 m", function()
+		assert.near(10, granular.surcharge(25, 20), 1e-12)
+		assert.near(0, granular.surcharge(0, 20), 1e-12)
+	end)
+
+	it("平的碎石面：沒有荷重不流，壓了一格岩石就往旁邊擠", function()
+		local e = granular.surface(0, 8)
+		assert.is_nil(granular.choose_flow(e, 8, {{e = e, d = 1}}, TAN35))
+		local i, a = granular.choose_flow(e + granular.surcharge(25, 20), 8, {{e = e, d = 1}}, TAN35)
+		assert.are.equal(1, i)
+		assert.is_true(a >= 1)
+	end)
 end)

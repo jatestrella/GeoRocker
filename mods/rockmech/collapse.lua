@@ -212,7 +212,8 @@ end
 
 -- 鄰欄（x, z）相對於來源頂格高度 ty 的表面高度與承接位置。
 -- 回傳 e（八分之一公尺）, land = {pos, k}（k = 承接格目前的級數，0 = 空格）；擋住回傳 nil
-local function neighbor_surface(x, z, ty, base)
+-- lift：來源受壓，滿格的鄰欄可以往上隆起
+local function neighbor_surface(x, z, ty, base, lift)
     local p = {x = x, y = ty, z = z}
     local n = core.get_node_or_nil(p)
     if not n then return nil end
@@ -220,6 +221,10 @@ local function neighbor_surface(x, z, ty, base)
     if nk then
         if nk < NLEV and rockmech.rubble_base[n.name] == base then
             return granular.surface(ty, nk), {pos = p, k = nk}
+        end
+        local up = {x = x, y = ty + 1, z = z}
+        if lift and nk == NLEV and passable(core.get_node(up).name) then
+            return granular.surface(ty, NLEV), {pos = up, k = 0}
         end
         return nil
     end
@@ -261,6 +266,41 @@ local function add_rubble(land, base, a)
     end
 end
 
+-- 碎石欄頂格 T 上方壓著的回填與落石 (kPa)。天然岩石（頂板）不算：那是應力解的反力
+local function overload(T)
+    local q, p = 0, {x = T.x, y = T.y + 1, z = T.z}
+    for _ = 1, 32 do
+        local name = core.get_node(p).name
+        local d = core.registered_nodes[name]
+        if not d or d.walkable == false or not collapse.is_excavated(p) then break end
+        local lith = rockmech.lith_of_node[name]
+        q = q + (lith and lith.gamma or rockmech.cfg.failure.gamma_other)
+        p.y = p.y + 1
+    end
+    return q
+end
+
+-- 碎石頂格 T 被擠空：壓在上面的岩石整疊往下移一格。一次移完，不留空洞：
+-- 留空洞的話旁邊的碎石馬上流回來，岩石落下又被墊高，一直循環。壓著的不全是岩石就回傳 false，照常落下
+local function sink_load(T)
+    local stack, p = {}, {x = T.x, y = T.y + 1, z = T.z}
+    for _ = 1, 32 do
+        local n = core.get_node(p)
+        local d = core.registered_nodes[n.name]
+        if not d or d.walkable == false or not collapse.is_excavated(p) then break end
+        if not rockmech.lith_of_node[n.name] then return false end
+        stack[#stack + 1] = n
+        p = {x = p.x, y = p.y + 1, z = p.z}
+    end
+    if #stack == 0 then return false end
+    collapse.mark_excavated(T)
+    for i, n in ipairs(stack) do
+        core.swap_node({x = T.x, y = T.y + i - 1, z = T.z}, {name = n.name, param2 = n.param2})
+    end
+    core.remove_node({x = T.x, y = T.y + #stack, z = T.z})
+    return true
+end
+
 local fall_with_slope_settle
 
 -- 顆粒流一步：先往下倒（下方是不滿格的同種碎石），否則依安息角流向最陡的一側。
@@ -290,17 +330,19 @@ local function granular_settle(pos, chain)
         physics_updating = prev
         next_pos = {below}
     else
+        local q = overload(T)
         local nbs, lands = {}, {}
         for i, d in ipairs(granular.DIRS) do
-            local e, land = neighbor_surface(T.x + d[1], T.z + d[2], T.y, base)
+            local e, land = neighbor_surface(T.x + d[1], T.z + d[2], T.y, base, q > 0)
             nbs[i] = {e = e, d = d[3]}
             lands[i] = land
         end
-        local i, amount = granular.choose_flow(granular.surface(T.y, k), k, nbs, SLOPE_TAN)
+        local head = granular.surcharge(q, rockmech.cfg.failure.gamma_other)
+        local i, amount = granular.choose_flow(granular.surface(T.y, k) + head, k, nbs, SLOPE_TAN)
         if not i then return end
         local land = lands[i]
         physics_updating = true
-        set_rubble(T, base, k - amount)
+        if not (q > 0 and amount == k and sink_load(T)) then set_rubble(T, base, k - amount) end
         add_rubble(land, base, amount)
         physics_updating = prev
         local d = granular.DIRS[i]
@@ -1418,7 +1460,22 @@ local function run_stability_check()
         :format(#comps, n_overhang, n_rigid, n, ms, stats.visited))
 end
 
--- 剛體落地後：碎石依安息角判定
+-- pos 的回填壓到底下的碎石：從 pos 往下找到第一格碎石，判定它會不會被擠開
+local function press_rubble(pos)
+    local p = {x = pos.x, y = pos.y - 1, z = pos.z}
+    for _ = 1, 32 do
+        local name = core.get_node(p).name
+        if rockmech.is_rubble(name) then
+            core.after(0, collapse.check_cell, {x = p.x, y = p.y, z = p.z})
+            return
+        end
+        local d = core.registered_nodes[name]
+        if not d or d.walkable == false or not collapse.is_excavated(p) then return end
+        p.y = p.y - 1
+    end
+end
+
+-- 剛體落地後：碎石依安息角判定；落地的岩石算回填，壓在碎石上會把碎石擠開
 function collapse.after_rigid_land(placed)
     -- 落地碎屑：只在底部的格子（正下方不是同一群）噴
     local own = {}
@@ -1432,6 +1489,9 @@ function collapse.after_rigid_land(placed)
     for _, it in ipairs(placed) do
         if rockmech.is_rubble(it.name) then
             check_stability_and_move(it.pos)
+        else
+            collapse.mark_excavated(it.pos)
+            press_rubble(it.pos)
         end
     end
     physics_updating = false
@@ -1539,6 +1599,8 @@ local function register_physics_events(name, intact)
     local overrides = {
         groups = new_groups,
         after_place_node = function(pos)
+            collapse.mark_excavated(pos)      -- 放上去的都是回填：沒有現地應力、壓在碎石上算荷重
+            press_rubble(pos)
             -- 玩家放置的完整岩石：換成該位置應有的節理材質變體（swap 不觸發 callback）
             local lith = rockmech.lith_of_node[core.get_node(pos).name]
             if lith then
