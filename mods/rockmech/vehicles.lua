@@ -444,6 +444,50 @@ local function slide_step(self, pos, def, dtime)
 	return v * self.slide_x, v * self.slide_z
 end
 
+-- 噴凝土路面：車底三個位置（中央、左右輪跡）有兩個踩在噴凝土上就加速
+local function on_shotcrete(pos, def, dir)
+	local gy = math.floor(pos.y - def.half + 0.5)
+	local lat = def.lat or {-0.5, 0.5}
+	local n = 0
+	for _, l in ipairs({0, lat[1], lat[#lat]}) do
+		local x, z = math.floor(pos.x + dir.z * l + 0.5), math.floor(pos.z - dir.x * l + 0.5)
+		for y = gy, gy - 1, -1 do
+			if core.get_item_group(core.get_node({x = x, y = y, z = z}).name, "shotcrete") > 0 then n = n + 1; break end
+		end
+	end
+	return n >= 2
+end
+
+-- 引擎聲：有人駕駛（或自動駕駛）才發動，怠速與運轉兩段循環音同時播，用音量切換（播放中不能改音高）。
+-- 車越重音高越低
+local ENGINE_IDLE, ENGINE_RUN, ENGINE_LOW, ENGINE_FADE = 0.4, 1.3, 0.02, 2.5
+local function engine_stop(self)
+	local e = self.engine
+	if e then
+		core.sound_stop(e.idle)
+		core.sound_stop(e.run)
+		self.engine = nil
+	end
+end
+local function engine_update(self, kind, working)
+	local g = rockmech.cfg.vehicle_sound_gain
+	if not (self.driver or self.autopilot) or g <= 0 then return engine_stop(self) end
+	local e = self.engine
+	if not e then
+		local pitch = math.max(0.65, math.min(1.15, (20 / (V.MASS[kind] or 20)) ^ 0.2))
+		local function loop(name, gain)
+			return core.sound_play(name, {object = self.object, loop = true, gain = gain * g, pitch = pitch, max_hear_distance = 48})
+		end
+		e = {idle = loop("rockmech_engine_idle", ENGINE_IDLE), run = loop("rockmech_engine_run", ENGINE_LOW), work = false}
+		self.engine = e
+	end
+	if working ~= e.work then
+		e.work = working
+		core.sound_fade(e.idle, ENGINE_FADE, (working and ENGINE_LOW * 5 or ENGINE_IDLE) * g)
+		core.sound_fade(e.run, ENGINE_FADE, (working and ENGINE_RUN or ENGINE_LOW) * g)
+	end
+end
+
 -- 車輛的自重 (t)，車種沒列的用 20
 V.MASS = {truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
 	jumbo = 30, charger = 20, drillrig = 25}
@@ -738,6 +782,7 @@ function V.register(kind, def)
 			end
 		end,
 		on_deactivate = function(self)
+			engine_stop(self)
 			remove_parts(self)
 			drop_chase(self)
 		end,
@@ -891,7 +936,10 @@ function V.register(kind, def)
 				if h > hmax and not steep then steep = ("台階太高（%.1f m > %.1f m）"):format(h, hmax) end
 			end
 			if steep ~= self.steep then self.steep = steep; update_hud(self) end
+			if ctx.speed ~= 0 and on_shotcrete(pos, def, dir) then ctx.speed = ctx.speed * rockmech.cfg.shotcrete_speed end
 			if def.move then def.move(self, ctx) end
+			engine_update(self, kind, ctx.speed ~= 0 or self.dig ~= nil or self.tip ~= nil or self.boring ~= nil
+				or (def.busy ~= nil and def.busy(self)))
 			obj:set_velocity({x = dir.x * ctx.speed + slide_x, y = vel.y, z = dir.z * ctx.speed + slide_z})
 			-- HUD 時速（每 5 km/h 更新一次）
 			if def.top_speed then

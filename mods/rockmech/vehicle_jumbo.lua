@@ -69,6 +69,7 @@ local function front_blocked(self, def, ctx, front_len)
 end
 -- 共用的行駛：作業中不能開；往前看車頭作業裝置、倒車看車尾
 local function carrier_move(def, front_len, busy)
+	def.busy = busy
 	function def.can_turn(self, pos, yaw, yaw2)
 		return not busy(self) and V.tail_can_turn(self, pos, yaw, yaw2, def)
 	end

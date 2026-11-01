@@ -1,4 +1,5 @@
--- 合成音效，輸出 sounds/rockmech_crack.<n>.ogg（岩石破裂）、rockmech_rubble.<n>.ogg（碎石滾動）。
+-- 合成音效，輸出 sounds/rockmech_crack.<n>.ogg（岩石破裂）、rockmech_rubble.<n>.ogg（碎石滾動）、
+-- rockmech_engine_idle.1.ogg／rockmech_engine_run.1.ogg（柴油引擎，循環播放）。
 -- 單聲道：Luanti 的定位音效只對單聲道有效。
 -- 遊戲不會載入這個檔案。在 rockmech 目錄下執行：lua devtools/synth_sounds.lua [原始 PCM 輸出目錄]
 --
@@ -138,6 +139,48 @@ local VARIANTS = {
 	{seed = 23, len = 1.2, band = {700, 8000}, body = 0.4, micro = 32, grains = 400, main = {{0, 0.8}}},        -- 破裂接一串細碎聲
 	{seed = 37, len = 0.9, band = {700, 8000}, body = 0.3, micro = 14, grains = 200, main = {{0, 0.9}, {0.17, 0.6}}}, -- 連續兩聲
 	{seed = 53, len = 1.1, band = {500, 7000}, body = 0.4, micro = 18, grains = 250, main = {{0, 1}}},          -- 較低沉的破裂
+}
+
+-- 柴油引擎：爆發頻率 f0 的諧波（加半階、1.5 階讓聲音粗糙）加一點進氣雜訊。
+-- 全部是 len 秒內整數週期，循環接縫沒有爆音；不加迴響也不淡出
+local function render_engine(v)
+	math.randomseed(v.seed)
+	local L = math.floor(v.len * RATE)
+	local buf = {}
+	for i = 1, L do buf[i] = 0 end
+	local function tone(f, amp)
+		local cycles = math.floor(f * v.len + 0.5)
+		local w, ph = 2 * math.pi * cycles / L, math.random() * 2 * math.pi
+		for i = 1, L do buf[i] = buf[i] + amp * math.sin(w * i + ph) end
+	end
+	for h = 1, v.harmonics do tone(v.f0 * h, 1 / h ^ v.roll) end
+	tone(v.f0 * 0.5, 0.4)
+	tone(v.f0 * 1.5, 0.3)
+	-- 循環的雜訊：濾波繞兩圈，第二圈才用
+	local n, lp, slow = {}, 0, 0
+	for i = 1, L do n[i] = 2 * math.random() - 1 end
+	local a_hi, a_lo = 1 - math.exp(-2 * math.pi * 2500 / RATE), 1 - math.exp(-2 * math.pi * 300 / RATE)
+	for pass = 1, 2 do
+		for i = 1, L do
+			lp = lp + a_hi * (n[i] - lp)
+			slow = slow + a_lo * (lp - slow)
+			if pass == 2 then buf[i] = buf[i] + v.noise * (lp - slow) end
+		end
+	end
+	-- 爆發不完全均勻：慢慢起伏
+	local rc = math.floor(v.f0 / 6 * v.len + 0.5)
+	local peak = 0
+	for i = 1, L do
+		buf[i] = buf[i] * (1 + 0.15 * math.sin(2 * math.pi * rc * i / L))
+		peak = math.max(peak, math.abs(buf[i]))
+	end
+	for i = 1, L do buf[i] = buf[i] / peak * 0.8 end
+	return buf
+end
+
+local ENGINES = {
+	idle = {seed = 101, len = 2, f0 = 36, harmonics = 24, roll = 0.9, noise = 0.5},    -- 約 700 rpm
+	run = {seed = 103, len = 2, f0 = 92, harmonics = 16, roll = 0.8, noise = 1.0},     -- 約 1800 rpm
 }
 
 local SLIDES = {
@@ -442,3 +485,5 @@ local function write(name, i, pcm)
 end
 for i, v in ipairs(VARIANTS) do write("rockmech_crack", i, render(v)) end
 for i, v in ipairs(SLIDES) do write("rockmech_rubble", i, render_slide(v)) end
+write("rockmech_engine_idle", 1, render_engine(ENGINES.idle))
+write("rockmech_engine_run", 1, render_engine(ENGINES.run))

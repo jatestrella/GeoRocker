@@ -574,6 +574,8 @@ function config.load(get)
 	cfg.rubble_squeeze = math.max(0, tonumber(get("rockmech_rubble_squeeze")) or 0.125)
 	cfg.vehicle_slide_mu = math.max(0, tonumber(get("rockmech_vehicle_slide_mu")) or 0.5)
 	cfg.rubble_sound_gain = math.max(0, tonumber(get("rockmech_rubble_sound_gain")) or 2)
+	cfg.vehicle_sound_gain = math.max(0, tonumber(get("rockmech_vehicle_sound_gain")) or 1)
+	cfg.shotcrete_speed = math.max(0.1, tonumber(get("rockmech_shotcrete_speed")) or 1.5)
 	cfg.model_scale = tonumber(get("rockmech_model_scale")) or 1
 	if cfg.model_scale <= 0 then
 		warnings[#warnings + 1] = "rockmech_model_scale ≤ 0，改為 1"

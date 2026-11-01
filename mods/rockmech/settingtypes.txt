@@ -260,6 +260,12 @@ rockmech_rubble_squeeze (Rubble squeezed per load event) float 0.125 0 8
 # Volume of the sound of moving rubble. 0 turns it off.
 rockmech_rubble_sound_gain (Rubble sound volume) float 2 0 10
 
+# Volume of vehicle engines. 0 turns them off.
+rockmech_vehicle_sound_gain (Vehicle engine volume) float 1 0 5
+
+# Speed multiplier for vehicles driving on shotcrete.
+rockmech_shotcrete_speed (Speed on shotcrete) float 1.5 0.1 5
+
 # Friction between vehicles and rubble. A vehicle on a rubble slope steeper than atan(mu) slides down it. 0 turns it off.
 rockmech_vehicle_slide_mu (Vehicle friction on rubble) float 0.5 0 2
 
