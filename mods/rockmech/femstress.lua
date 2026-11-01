@@ -107,7 +107,9 @@ local function make_coarse(pos)
 	return job
 end
 
--- 組工作：box 內的岩石格、每格的現地應力（kPa，壓為正）
+-- 組工作：box 內的岩石格、每格的現地應力（kPa，壓為正）。
+-- 現地應力是開挖前的狀態，由座標算（挖掉的算回去，所以開挖才會放出應力）；
+-- 開挖過的位置上的岩石是回填，從沒受過上覆荷重，現地應力為 0
 local function make_job(pos)
 	local r = fcfg.radius
 	local a = vector.subtract(pos, r)
@@ -118,6 +120,7 @@ local function make_job(pos)
 		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, gamma = 25}
 	local gsy, gsz = g.nx, g.nx * g.ny
 	local gam_sum, gam_n = 0, 0
+	local is_excavated_at = rockmech.collapse.is_excavated_at
 	for z = 0, n - 1 do for x = 0, n - 1 do
 		-- 這一欄的地表：岩石頂面，或 surface_y（挖掉的算回去，所以開挖才會放出應力）
 		local gx, gz = a.x + x - g.ox, a.z + z - g.oz
@@ -140,7 +143,11 @@ local function make_job(pos)
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			local sv = gamma * math.max(0, top + 0.5 - wy)     -- kPa
 			job.solid[c] = solid
-			in_situ(job, c, sv)
+			if solid and is_excavated_at(a.x + x, wy, a.z + z) then
+				job.syy[c], job.sxx[c], job.szz[c], job.sxz[c] = 0, 0, 0, 0
+			else
+				in_situ(job, c, sv)
+			end
 		end
 	end end
 	if gam_n > 0 then job.gamma = gam_sum / gam_n end
