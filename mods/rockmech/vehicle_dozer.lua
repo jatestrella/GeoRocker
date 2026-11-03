@@ -2,6 +2,8 @@
 -- 推土機（車身 3×3×3、鏟刀 3 寬伸出車頭 1 m、車尾多 1 m）。由 vehicles.lua 載入。
 --   E：放鏟／收鏟（鏟刀與推臂實際抬放）。
 --   放鏟：往前開時把鏟刀那一排（車身蓋到的 3～4 欄、高 3 層）與車身前排壓著的薄碎石推到前面，
+--   空白鍵：設計坡度（關 → 0% → +5% → +10% → −10% → −5%）。開著時放鏟往前，鏟刀把碎石削／填到設計坡面：
+--         放鏟或切換的那一刻，在鏟刀那一排、履帶底的高度起算，沿當時的車頭方向升降。多的碎石照樣推成前面那堆。
 --         那堆最高 2 格、滿了往前一排（最多 3 排），推不動就停；往前時只壓得過很薄的碎石。
 --   收鏟：不推。收鏟或倒車可爬 1 格。HUD 顯示鏟刀前那堆碎石的量
 
@@ -91,39 +93,111 @@ local function body_lat(pos, s)
 end
 local PILE_H, PILE_ROWS = 2, 3   -- 鏟刀前那堆：最高 2 格；前一排滿了往前一排倒，最多往前 3 排
 
+-- 設計坡度（像推土機的 GPS 整平系統）：空白鍵依序切換，nil 是關（鏟刀貼著地面推）。
+-- 放鏟或換坡度的那一刻，在鏟刀那一排、履帶底的高度定一個設計坡面，沿當時的車頭方向升降 grade；
+-- 坡面固定在地上，推土機轉向不會帶著轉
+local GRADES = {nil, 0, 0.05, 0.10, -0.10, -0.05}
+local N_GRADES = 6
+local function grade_text(g)
+	if not g then return "關（鏟刀貼著地面推）" end
+	return ("%+d%%"):format(math.floor(g * 100 + 0.5))
+end
+local function design_at(d, x, z) return d.h + d.g * ((x - d.x) * d.dx + (z - d.z) * d.dz) end
+
+-- 碎石（夯實碎石也算，推得動）在 c 削到只剩 keep 級，削下的加進 got／grade。
+-- 不用 remove_node：它會讓周圍 5 格的碎石重新流動，剛推出去的那堆會流回鏟刀前。
+-- 只保留開挖記錄與穩定判定（推走撐住岩石的碎石，上面的岩石照樣會掉）
+local function cut_cell(c, node, k, keep, got, grade)
+	local n = node.name
+	local road = rockmech.road_level[n]
+	local base = road and rockmech.RUBBLE or rockmech.rubble_base[n]
+	local take = k - keep
+	if take <= 0 then return end
+	local p2 = road and 0 or node.param2
+	grade[base] = rockmech.mix_grade(got[base] or 0, grade[base] or 0, take, p2)
+	got[base] = (got[base] or 0) + take
+	if keep > 0 then
+		core.swap_node(c, {name = road and (rockmech.modname .. ":road_l" .. keep) or rockmech.rubble_with_level(base, keep, p2), param2 = p2})
+		return
+	end
+	core.swap_node(c, {name = "air"})
+	collapse.mark_excavated(c)
+	collapse.queue_stability_check(c, n)
+	rockmech.shotcrete_uncover(c)
+end
+
+-- 設計坡度：鏟刀那一排每一欄，高過設計面的碎石削掉，低於設計面的用削下來的碎石補到設計面。
+-- 剩下的照樣推到前面那堆（下一排削到那堆時再拿來填）。設計面以上有岩石 → 回傳原因
+local function grade_cut(self, pos, s, lat, y0, got, grade)
+	local d = self.design
+	local cols = face_cells(pos, s, 1, 2, y0, 1, lat)
+	local low = {}
+	for _, c in ipairs(cols) do
+		local t = design_at(d, c.x, c.z)
+		for y = y0 + 2, y0 - 3, -1 do
+			local p = {x = c.x, y = y, z = c.z}
+			local node = core.get_node(p)
+			local k = rockmech.rubble_level[node.name] or rockmech.road_level[node.name]
+			if k then
+				local keep = math.max(0, math.min(k, math.floor((t - (y - 0.5)) * NLEV + 0.5)))
+				cut_cell(p, node, k, keep, got, grade)
+				if keep > 0 then break end
+			elseif not passable(node.name) then
+				if y + 0.5 > t + 0.5 / NLEV then return "鏟刀前、設計坡面以上是岩石" end
+				break
+			end
+		end
+		local top = V.ground_top(c.x, y0 + 2, c.z, 6)
+		if top and top < t - 0.5 / NLEV then low[#low + 1] = {x = c.x, z = c.z, top = top, t = t} end
+	end
+	-- 填：照缺的量從削下來的碎石補（先用最多的那種）
+	for _, f in ipairs(low) do
+		local need = math.floor((f.t - f.top) * NLEV + 0.5)
+		local cy = math.floor(f.top + 0.5)       -- 地面那一格（不滿格的碎石）或它上面那格
+		for base, lv in pairs(got) do
+			if need <= 0 then break end
+			local put = math.min(need, lv)
+			self.pile = self.pile or {}
+			local left = deposit_column(f.x, f.z, cy, base, put, 2, self.pile, grade[base])
+			got[base] = lv - (put - left)
+			if got[base] <= 0 then got[base] = nil end
+			need = need - (put - left)
+		end
+	end
+end
+
 -- 放鏟往前：把鏟刀那一排（車頭外第一排、高度 0～2 三層）與車身前排壓著的高度 0 碎石收起來，
 -- 倒到再前面（每欄最高 PILE_H 格，滿了往前一排，最多 PILE_ROWS 排），不放進車身的位置。
+-- 設計坡度開著時改成削／填到設計面（grade_cut），車身前排不動（是剛填好的路面）。
 -- 前面是岩石或倒不下 → 放回原處，回傳被擋住的原因（沒被擋住回傳 nil）
 local function push(self, pos, s)
 	local lat = body_lat(pos, s)
 	local y0 = ground_y(pos, def.half)
-	local src = face_cells(pos, s, 1, 2, y0, 3, lat)
-	local under = face_cells(pos, s, 1, 1, y0, 1, lat)
-	local blocked = false
-	for _, c in ipairs(src) do
-		local n = core.get_node(c).name
-		if not rockmech.rubble_level[n] and not passable(n) then blocked = true end   -- 岩石：推不動
-	end
-	if blocked then return "鏟刀前是岩石" end
 	local got, grade = {}, {}
-	for _, c in ipairs(under) do src[#src + 1] = c end
-	for _, c in ipairs(src) do
-		local node = core.get_node(c)
-		local n = node.name
-		local k = rockmech.rubble_level[n]
-		if k then
-			local base = rockmech.rubble_base[n]
-			grade[base] = rockmech.mix_grade(got[base] or 0, grade[base] or 0, k, node.param2)
-			got[base] = (got[base] or 0) + k
-			-- 不用 remove_node：它會讓周圍 5 格的碎石重新流動，剛推出去的那堆會流回鏟刀前。
-			-- 只保留開挖記錄與穩定判定（推走撐住岩石的碎石，上面的岩石照樣會掉）
-			core.swap_node(c, {name = "air"})
-			collapse.mark_excavated(c)
-			collapse.queue_stability_check(c, n)
-			rockmech.shotcrete_uncover(c)
+	local src
+	if self.design then
+		local why = grade_cut(self, pos, s, lat, y0, got, grade)
+		if why then return why end
+		src = face_cells(pos, s, 1, 2, y0, 1, lat)
+	else
+		src = face_cells(pos, s, 1, 2, y0, 3, lat)
+		for _, c in ipairs(src) do
+			local n = core.get_node(c).name
+			if not rockmech.rubble_level[n] and not passable(n) then return "鏟刀前是岩石" end   -- 岩石：推不動
+		end
+		for _, c in ipairs(face_cells(pos, s, 1, 1, y0, 1, lat)) do src[#src + 1] = c end
+		for _, c in ipairs(src) do
+			local node = core.get_node(c)
+			local k = rockmech.rubble_level[node.name]
+			if k then cut_cell(c, node, k, 0, got, grade) end
 		end
 	end
+	local blocked = false
 	local ycap = y0 + PILE_H - 1
+	if self.design then
+		-- 鏟刀前那堆疊在設計面上（前面還沒削的碎石上面），不是車底的高度：往上坡推時前面本來就比車底高
+		ycap = math.floor(design_at(self.design, pos.x + s.x * 3, pos.z + s.z * 3) + 0.5) + PILE_H - 1
+	end
 	for base, lv in pairs(got) do
 		local rest = lv
 		for row = 1, PILE_ROWS do
@@ -190,14 +264,16 @@ end
 
 function def.hud(self)
 	return (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石")
+		.. "\n設計坡度：" .. grade_text(self.grade) .. "（空白鍵切換，放鏟或切換時從這裡起算）"
 		.. ("\n鏟刀前碎石 %d 級（%.1f m³）"):format(self.pile_lv or 0, (self.pile_lv or 0) / NLEV)
 		.. (self.push_msg and ("\n推不動：" .. self.push_msg .. "，倒車換個方向或先推開前面") or "") .. "\nE 放鏟／收鏟"
 end
 function def.on_load(self, data)
 	if data.blade ~= nil then self.blade = data.blade else self.blade = true end
 	self.blade_h = self.blade and 0 or BLADE_UP
+	self.grade, self.design = data.grade, data.design
 end
-function def.on_save(self, data) data.blade = self.blade end
+function def.on_save(self, data) data.blade, data.grade, data.design = self.blade, self.grade, self.design end
 function def.on_spawn(self) place_blade(self, self.blade_h) end
 
 -- 推土、鏟刀與車尾伸出段撞岩石就停、越障高度、鏟刀抬放、鏟刀前碎石量
@@ -211,6 +287,11 @@ function def.move(self, ctx)
 		or (fwd < 0 and V.objects_in(self, p2, ctx.yaw, -h, h, -h - 1, -h)) then
 		ctx.speed, fwd = 0, 0
 	end
+	-- 設計坡面：放鏟後第一步定在鏟刀那一排、履帶底的高度
+	if self.blade and self.grade and not self.design then
+		local c = {x = pos.x + s.x * 2, z = pos.z + s.z * 2}
+		self.design = {x = c.x, z = c.z, h = math.floor((pos.y - def.half) * NLEV + 0.5) / NLEV, dx = s.x, dz = s.z, g = self.grade}
+	end
 	if self.blade and fwd > 0 then
 		local why = push(self, pos, s)
 		if why then ctx.speed = 0; settle_pile(self) end
@@ -222,7 +303,8 @@ function def.move(self, ctx)
 	end
 	if fwd < 0 and overhang_blocked(pos, s, -1, {1}) then ctx.speed = 0 end        -- 車尾：配重的高度
 	-- 越障高度：放鏟往前（含停著）只壓得過很薄的碎石（要推走，不是爬過去）；倒車、收鏟可爬 1 格
-	local sh = (self.blade and fwd >= 0) and 0.3 or 1.1
+	-- 設計坡度開著：前面已經削／填到設計面，順著設計面爬（碎石堆前還沒填到的地方會有一段台階）
+	local sh = (self.blade and fwd >= 0) and (self.design and 0.6 or 0.3) or 1.1
 	if sh ~= self.step_h then self.step_h = sh; obj:set_properties({stepheight = sh}) end
 	-- 鏟刀抬放
 	local goal = self.blade and 0 or BLADE_UP
@@ -244,6 +326,14 @@ function def.action(self, ctx)
 	if ctx.ctrl.aux1 then
 		self.t_act = 0.5
 		self.blade = not self.blade
+		self.design = nil
+		update_hud(self)
+	elseif ctx.ctrl.jump then
+		self.t_act = 0.4
+		local i = 1
+		for k = 1, N_GRADES do if GRADES[k] == self.grade then i = k end end
+		self.grade = GRADES[i % N_GRADES + 1]
+		self.design = nil
 		update_hud(self)
 	end
 end
