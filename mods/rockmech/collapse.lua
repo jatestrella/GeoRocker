@@ -302,6 +302,8 @@ local function overload(T)
 end
 
 local PASSIVE_K = granular.passive_k(rockmech.cfg.slope.angle)
+local COMPACT_TAN = math.tan(math.rad(rockmech.cfg.compact_phi))     -- 壓實的碎石（nodes.lua rockmech.compacted）
+local COMPACT_KP = granular.passive_k(rockmech.cfg.compact_phi)
 local SQUEEZE_CAP = math.ceil(rockmech.cfg.rubble_squeeze * NLEV)     -- 受壓時一步最多流幾級
 
 -- 坡上的垮塌（side.slump）：荷重往坡上傳，每一格剩 SLUMP_DECAY，車越重垮的範圍越大；一步可以多流 SLUMP_CAP 倍
@@ -386,6 +388,9 @@ granular_settle = function(pos, chain, q_ext, side)
         fall_with_slope_settle(T)
         return
     end
+    -- 壓實的碎石摩擦角比較高（rockmech_compact_phi）：安息角變陡，車輪也比較擠不動（懸空照樣掉）
+    local tan_r, kp = SLOPE_TAN, PASSIVE_K
+    if rockmech.compacted[tn] then tan_r, kp = COMPACT_TAN, COMPACT_KP end
     local prev = physics_updating
     local next_pos
     local bk = rubble_k(bn)
@@ -405,13 +410,13 @@ granular_settle = function(pos, chain, q_ext, side)
         local nbs, lands = {}, {}
         for i, d in ipairs(granular.DIRS) do
             local e, land = neighbor_surface(T.x + d[1], T.z + d[2], T.y, base, q > 0)
-            if e and q > 0 then e = e - granular.squeeze_head(q, gam, PASSIVE_K, (e - src) / NLEV) end
+            if e and q > 0 then e = e - granular.squeeze_head(q, gam, kp, (e - src) / NLEV) end
             if side and d[1] * side.x + d[2] * side.z <= 0 then e = nil end
             nbs[i] = {e = e, d = d[3]}
             lands[i] = land
         end
         local cap = q > 0 and SQUEEZE_CAP * (side and side.slump and SLUMP_CAP or 1) or nil
-        local i, amount = granular.choose_flow(src, k, nbs, SLOPE_TAN, cap)
+        local i, amount = granular.choose_flow(src, k, nbs, tan_r, cap)
         if not i then return end
         local land = lands[i]
         physics_updating = true

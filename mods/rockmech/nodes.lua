@@ -386,6 +386,39 @@ for _, base in ipairs(rockmech.rubble_nodes) do
 end
 for _, name in ipairs(partial_nodes) do rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name end
 
+-- 壓實的碎石（交通壓實、噴凝土）：每一種碎石（各級數、各品位段）都有一個壓實版 <名稱>_c，顏色較淡。
+-- 它還是碎石：挖土機、鏟子挖得起來（挖起來是一般碎石），推土機推得動，底下掏空會掉，礦種和品位不變；
+-- 只是自己不流動、壓不出車轍（collapse.lua granular_settle）。級數一變（被削掉一部分、上面倒碎石合併）就變回一般碎石
+rockmech.compacted = {}       -- 壓實版名稱 → true
+rockmech.compact_of = {}      -- 一般碎石名稱 → 壓實版名稱
+local compacted_nodes = {}
+for _, name in ipairs(rockmech.rubble_nodes) do
+	local def = core.registered_nodes[name]
+	local cname = name .. "_c"
+	local tiles = {}
+	for i, t in ipairs(def.tiles) do tiles[i] = (type(t) == "table" and t.name or t) .. "^[colorize:#ffffff:80" end
+	local groups = table.copy(def.groups)
+	groups.not_in_creative_inventory = 1
+	core.register_node(cname, {
+		description = def.description .. "（夯實）",
+		tiles = tiles,
+		drawtype = def.drawtype,
+		paramtype = def.paramtype,
+		paramtype2 = def.paramtype2,
+		node_box = def.node_box,
+		groups = groups,
+		sounds = def.sounds,
+		drop = def.drop,
+		is_ground_content = false,   -- 否則相鄰區塊生成時，會被 rockmech_strip_soil 當成土壤剝掉
+	})
+	rockmech.rubble_level[cname] = rockmech.rubble_level[name]
+	rockmech.rubble_base[cname] = rockmech.rubble_base[name]
+	rockmech.compacted[cname] = true
+	rockmech.compact_of[name] = cname
+	compacted_nodes[#compacted_nodes + 1] = cname
+end
+for _, name in ipairs(compacted_nodes) do rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name end
+
 -- 某種碎石（滿格名稱 base）的 k 級 node 名稱（k = 0 → nil，k ≥ 8 → 滿格）。p2：礦石碎石的品位，決定外觀的段
 function rockmech.rubble_with_level(base, k, p2)
 	if k <= 0 then return nil end
@@ -401,8 +434,8 @@ function rockmech.is_rubble(name)
 	return core.get_item_group(name, "rockmech_rubble") > 0
 end
 
--- 夯實碎石（路面）：壓實過的碎石不算碎石，不會流動、車壓不出車轍、不會溜車；高度和碎石一樣分 8 級。
--- 下方失去支撐才鬆開，變回碎石（collapse.lua）。滿格（8 級）是玩家壓實整格碎石用的
+-- 舊版的夯實碎石（路面）：另一種方塊，不算碎石，底下掏空會懸空、挖土機挖不動。
+-- 現在改用壓實的碎石（上面的 rockmech.compact_of），舊世界的這些方塊載入時換掉（最下面的 LBM）
 rockmech.road_level = {}      -- node 名稱 → 級數
 for k = 1, rockmech.RUBBLE_LEVELS do
 	local name = rockmech.modname .. ":road_l" .. k
@@ -420,6 +453,20 @@ for k = 1, rockmech.RUBBLE_LEVELS do
 	})
 	rockmech.road_level[name] = k
 end
+core.register_lbm({
+	label = "rockmech: 舊版夯實碎石換成壓實的碎石",
+	name = "rockmech:road_to_compacted_rubble",
+	nodenames = (function()
+		local t = {}
+		for n in pairs(rockmech.road_level) do t[#t + 1] = n end
+		return t
+	end)(),
+	run_at_every_load = false,
+	action = function(pos, node)
+		local k = rockmech.road_level[node.name]
+		core.swap_node(pos, {name = rockmech.compact_of[rockmech.rubble_with_level(rockmech.RUBBLE, k)]})
+	end,
+})
 
 -- 某個岩石 node 破碎後變成哪種碎石（碎石本身不變；不滿格的碎石回傳其滿格種類）
 function rockmech.rubble_for(nodename)

@@ -315,9 +315,14 @@ rockmech_crusher_rate (Crusher throughput) float 2 0.1 100
 rockmech_crusher_fee (Crusher processing fee) float 30 0 100000
 
 # Traffic compaction: rubble driven over this many times by a vehicle at least this heavy (gross tonnes, load included)
-# becomes compacted rubble and no longer ruts. The mass limit only keeps hand carts out.
+# becomes compacted rubble (lighter colour, higher friction angle). It is still rubble: diggable, pushable, and it falls
+# when undermined. The mass limit only keeps hand carts out.
 rockmech_compact_mass (Traffic compaction: minimum gross mass) float 10 0 1000
 rockmech_compact_passes (Traffic compaction: passes) int 4 1 100
+
+# Friction angle of compacted rubble (degrees). Loose rubble uses the angle of repose (35). A higher angle makes slopes stand steeper and resists wheel ruts:
+# in this game a loaded truck stops rutting at about 54 degrees and a loaded haul truck at about 74 degrees.
+rockmech_compact_phi (Traffic compaction: friction angle) float 75 1 89
 
 # Friction between vehicles and rubble. A vehicle on a rubble slope steeper than atan(mu) slides down it. 0 turns it off.
 rockmech_vehicle_slide_mu (Vehicle friction on rubble) float 0.5 0 2
