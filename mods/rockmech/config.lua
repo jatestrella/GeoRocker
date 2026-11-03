@@ -670,6 +670,9 @@ function config.load(get)
 	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)
+	-- 交通壓實（vehicles.lua）：車子總重（含載重）多少噸以上才壓得實（排除手推車）、壓幾趟變成夯實碎石
+	cfg.compact_mass = math.max(0, tonumber(get("rockmech_compact_mass")) or 10)
+	cfg.compact_passes = math.max(1, math.floor(tonumber(get("rockmech_compact_passes")) or 4))
 	cfg.model_scale = tonumber(get("rockmech_model_scale")) or 1
 	if cfg.model_scale <= 0 then
 		warnings[#warnings + 1] = "rockmech_model_scale ≤ 0，改為 1"

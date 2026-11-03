@@ -402,9 +402,9 @@ function rockmech.is_rubble(name)
 end
 
 -- 夯實碎石（路面）：壓實過的碎石不算碎石，不會流動、車壓不出車轍、不會溜車；高度和碎石一樣分 8 級。
--- 下方失去支撐才鬆開，變回碎石（collapse.lua）
+-- 下方失去支撐才鬆開，變回碎石（collapse.lua）。滿格（8 級）是玩家壓實整格碎石用的
 rockmech.road_level = {}      -- node 名稱 → 級數
-for k = 1, rockmech.RUBBLE_LEVELS - 1 do
+for k = 1, rockmech.RUBBLE_LEVELS do
 	local name = rockmech.modname .. ":road_l" .. k
 	local rubble = core.registered_nodes[rockmech.RUBBLE]
 	core.register_node(name, {

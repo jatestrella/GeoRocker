@@ -314,6 +314,11 @@ rockmech_crusher_rate (Crusher throughput) float 2 0.1 100
 # Crusher processing fee per tonne. Waste rock pays this and earns nothing.
 rockmech_crusher_fee (Crusher processing fee) float 30 0 100000
 
+# Traffic compaction: rubble driven over this many times by a vehicle at least this heavy (gross tonnes, load included)
+# becomes compacted rubble and no longer ruts. The mass limit only keeps hand carts out.
+rockmech_compact_mass (Traffic compaction: minimum gross mass) float 10 0 1000
+rockmech_compact_passes (Traffic compaction: passes) int 4 1 100
+
 # Friction between vehicles and rubble. A vehicle on a rubble slope steeper than atan(mu) slides down it. 0 turns it off.
 rockmech_vehicle_slide_mu (Vehicle friction on rubble) float 0.5 0 2
 

@@ -564,14 +564,32 @@ function V.ground_pressure(self, def, kind)
 	return kn / (2 * (def.half + (def.rear or def.half)))
 end
 
+-- 交通壓實：碎石被車（總重 ≥ compact_mass）壓過 compact_passes 趟就變成夯實碎石，不再有車轍。
+-- 壓實前也不擠出車轍（先擠低再壓硬，車轍會固定在路面上）；級數（路面高度）不變。
+-- 夯實碎石不分種類（煤壓成路面就不算礦了）。趟數只記在記憶體裡，重開遊戲從頭算
+local passes = {}             -- 格子 hash → 已壓過的趟數
+local function compact(p, name)
+	local h = core.hash_node_position(p)
+	local n = (passes[h] or 0) + 1
+	if n < rockmech.cfg.compact_passes then passes[h] = n; return end
+	passes[h] = nil
+	core.swap_node(p, {name = rockmech.modname .. ":road_l" .. rockmech.rubble_level[name]})
+end
+-- 總重（t）：自重＋車上的碎石
+local function gross_mass(self, kind)
+	return (V.MASS[kind] or 20) + load_total(self) / NLEV * rockmech.cfg.failure.gamma_other / 10
+end
+
 -- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
 -- 在碎石坡上（tanθ > 0.35）整個車寬都判定、往下坡擠：坡在安息角附近時，加上車重就往下垮，並往坡上傳。
+-- 夠重的車不擠車轍，整個車寬都算壓實的趟數；陡的碎石坡上照樣往下垮（那是邊坡破壞，不是車轍）。
 -- 車速快時一步走超過 1 m，沿著這一步的路徑逐格補上
 function V.press_rubble(self, kind, def, pos, dir, f)
 	local j = f > 0 and def.half or -(def.rear or def.half)
 	local cx, cz = pos.x + dir.x * j, pos.z + dir.z * j
 	local gy = math.floor(pos.y - def.half + 0.5)
 	local q = V.ground_pressure(self, def, kind)
+	local heavy = gross_mass(self, kind) >= rockmech.cfg.compact_mass
 	self.pressed = self.pressed or {}
 	local last = self.press_at or {x = cx, z = cz}
 	self.press_at = {x = cx, z = cz}
@@ -580,7 +598,7 @@ function V.press_rubble(self, kind, def, pos, dir, f)
 		local px, pz = last.x + (cx - last.x) * t / steps, last.z + (cz - last.z) * t / steps
 		local lat = def.lat or {-0.5, 0.5}
 		local downhill = (self.slope_t or 0) > 0.35
-		for _, l in ipairs(downhill and lat or {lat[1], lat[#lat]}) do
+		for _, l in ipairs((downhill or heavy) and lat or {lat[1], lat[#lat]}) do
 			local x, z = math.floor(px + dir.z * l + 0.5), math.floor(pz - dir.x * l + 0.5)
 			local key = x + 65536 * z
 			if self.pressed[l] ~= key then
@@ -591,8 +609,13 @@ function V.press_rubble(self, kind, def, pos, dir, f)
 					local name = core.get_node(p).name
 					if rockmech.rubble_level[name] then
 						rockmech.collapse.rubble_sound(p, 1)      -- 壓過就有聲音，空車擠不動碎石也一樣
-						rockmech.collapse.squeeze(p, q, downhill and {x = self.slope_x, z = self.slope_z, slump = true}
-							or {x = dir.z * l, z = -dir.x * l})
+						if downhill then
+							rockmech.collapse.squeeze(p, q, {x = self.slope_x, z = self.slope_z, slump = true})
+						elseif heavy then
+							compact(p, name)
+						else
+							rockmech.collapse.squeeze(p, q, {x = dir.z * l, z = -dir.x * l})   -- 輪跡
+						end
 						break
 					end
 					if not V.passable(name) then break end
