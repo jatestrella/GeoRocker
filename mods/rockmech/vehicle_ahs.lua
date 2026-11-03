@@ -79,12 +79,19 @@ local function dir_in(a)
 	if l < 1e-6 then return {x = 0, z = 1} end
 	return {x = dx / l, z = dz / l}
 end
--- 第 i 個傾倒位置（0 起算；超出傾倒區回傳 nil）。破碎站只有一個位置：車尾後面的第一排倒在格柵中心
+-- 倒進受料倉時車身中心離倉中心多遠：車尾伸到倉中心前 1 m，但車身（碰撞箱）要留在倉口外的地面上。
+-- 倉口是方的，斜著倒車時倉口比較遠
+local function hopper_back(a, def)
+	local d = a.hopper.d
+	local rim = rockmech.HOPPER_HALF / math.max(math.abs(d.x), math.abs(d.z))
+	return math.max(def.rear + 1, rim + def.half + 0.5)
+end
+-- 第 i 個傾倒位置（0 起算；超出傾倒區回傳 nil）。破碎站只有一個位置：倒車對準倉的中心
 local function spot_pos(a, def, i)
 	if i >= DUMP_SPOTS then return nil end
 	local d = dir_in(a)
 	if a.hopper then
-		local back = def.rear + 1
+		local back = hopper_back(a, def)
 		return {x = a.hopper.x - d.x * back, y = a.dump.y, z = a.hopper.z - d.z * back}
 	end
 	local lat = LATERAL[i + 1] * (2 * def.half + 1)
@@ -233,10 +240,34 @@ local function hopper_busy(self, a)
 	for _, o in ipairs(core.get_objects_inside_radius(a.hopper, QUEUE_R)) do
 		local t = o:get_luaentity()
 		local ta = t and t ~= self and t.ahs
-		if ta and ta.on and ta.hopper and ta.hopper.x == a.hopper.x and ta.hopper.z == a.hopper.z and AT_DUMP[ta.phase] then
+		if ta and ta.on and ta.hopper and flat_dist(ta.hopper, a.hopper) < 3 and AT_DUMP[ta.phase] then   -- 擴建過的倉中心會差 1 m
 			return true
 		end
 	end
+end
+-- 傾倒點在破碎站旁邊：記下格柵中心和進格柵的方向（破碎站的倉擴建過、或錄完才蓋，都要重新找）
+local function find_hopper(a)
+	local c = rockmech.grate_center(a.dump)
+	if not c then return nil end
+	local from = a.route[1]
+	for i = #a.route, 1, -1 do
+		if flat_dist(a.route[i], c) >= APPROACH then from = a.route[i]; break end
+	end
+	local dx, dz = c.x - from.x, c.z - from.z
+	local l = math.sqrt(dx * dx + dz * dz)
+	c.d = l < 1e-6 and {x = 0, z = 1} or {x = dx / l, z = dz / l}
+	-- 從機身那一側來的話，倒車會頂到機身、料倒不進倉：改從旁邊倒進去
+	local b = core.find_node_near(c, 7, "rockmech:crusher")
+	if b then
+		local bx, bz = b.x - c.x, b.z - c.z
+		local bl = math.sqrt(bx * bx + bz * bz)
+		bx, bz = bx / bl, bz / bl
+		if -(c.d.x * bx + c.d.z * bz) > 0.5 then
+			local side = c.d.z * bx - c.d.x * bz >= 0 and 1 or -1
+			c.d = {x = -bz * side, z = bx * side}
+		end
+	end
+	return c
 end
 
 -- 每一步：錄製路線點；無人駕駛時決定下一步的操作（self.autopilot）
@@ -285,7 +316,7 @@ function AHS.step(self, def, ctx)
 			target = a.route[a.idx]
 		end
 		-- 破碎站：路線畫到格柵上，開到倒車的距離就夠了
-		if fwd and a.hopper and flat_dist(pos, a.hopper) < def.rear + 1 + STANDOFF + reach then target = nil end
+		if fwd and a.hopper and flat_dist(pos, a.hopper) < hopper_back(a, def) + STANDOFF + reach then target = nil end
 		if target then
 			drive_to(self, def, ctx, a, ap, target)
 		elseif fwd then
@@ -293,6 +324,7 @@ function AHS.step(self, def, ctx)
 				say(self, a, "等前車倒完")
 			else
 				-- 到了傾倒點：找這一趟的傾倒位置
+				if a.hopper then a.hopper = find_hopper(a) or a.hopper end
 				a.fails = 0
 				a.target = next_spot(a, def)
 				set_phase(self, a.target and "to_spot" or "full")
@@ -483,31 +515,6 @@ core.register_globalstep(function(dtime)
 	for name, a in pairs(lines) do draw_line(name, a) end
 end)
 core.register_on_leaveplayer(function(player) lines[player:get_player_name()] = nil end)
-
--- 傾倒點在破碎站旁邊：記下格柵中心和進格柵的方向
-local function find_hopper(a)
-	local c = rockmech.grate_center(a.dump)
-	if not c then return nil end
-	local from = a.route[1]
-	for i = #a.route, 1, -1 do
-		if flat_dist(a.route[i], c) >= APPROACH then from = a.route[i]; break end
-	end
-	local dx, dz = c.x - from.x, c.z - from.z
-	local l = math.sqrt(dx * dx + dz * dz)
-	c.d = l < 1e-6 and {x = 0, z = 1} or {x = dx / l, z = dz / l}
-	-- 從機身那一側來的話，倒車會頂到機身、料倒不進倉：改從旁邊倒進去
-	local b = core.find_node_near(c, 7, "rockmech:crusher")
-	if b then
-		local bx, bz = b.x - c.x, b.z - c.z
-		local bl = math.sqrt(bx * bx + bz * bz)
-		bx, bz = bx / bl, bz / bl
-		if -(c.d.x * bx + c.d.z * bz) > 0.5 then
-			local side = c.d.z * bx - c.d.x * bz >= 0 and 1 or -1
-			c.d = {x = -bz * side, z = bx * side}
-		end
-	end
-	return c
-end
 
 -- 存下來的路線：名稱 → {route, load, dump, bound}，所有車共用
 local ROUTES_KEY = "ahs_routes"

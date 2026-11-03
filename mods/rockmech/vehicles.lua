@@ -171,7 +171,7 @@ V.ground_top = ground_top
 -- 爬坡：行進方向上（f = 1 前進、−1 倒車）從後端接地點到前端前方 1 m 的平均坡度（rad，上坡為正）。
 -- 沿車身每 0.5 m 量地面高度，取任兩點斜率的中位數（Theil-Sen）。只比兩點差一格就差很多；
 -- 最小平方法會把一個台階當成斜坡，車頭爬上去、車尾還沒上去時被「坡太陡」卡住。地面在車底往上 1.6 m 以內找。
--- 前進時車尾後面有一格以上的斷崖就只量斷崖以前的：車尾懸在坑上（受料倉口），不是在爬那個坑。
+-- 前進時車身底下或車尾後面有一格以上的斷崖就只量斷崖以前的：車尾懸在坑上（受料倉口），不是在爬那個坑。
 -- 只看斷崖，不能用「比車底低多少」過濾：車尾較平的地面拿掉，中位數反而變陡（車轍坡實測 12.7° 變 20.6°）
 local function travel_grade(p, yaw, def, f)
 	local t = def.tilt
@@ -187,7 +187,7 @@ local function travel_grade(p, yaw, def, f)
 	local first = 1
 	if f > 0 then
 		for i = 1, #zs - 1 do
-			if zs[i + 1] <= 0 and hs[i + 1] - hs[i] >= 1 then first = i + 1 end
+			if zs[i + 1] <= def.half and hs[i + 1] - hs[i] >= 1 then first = i + 1 end
 		end
 	end
 	if #zs - first < 2 then return 0 end

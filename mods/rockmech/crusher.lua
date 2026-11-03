@@ -1,5 +1,5 @@
 -- rockmech/crusher.lua
--- 破碎站（賣礦）：放在平地上，朝玩家的方向挖一個受料倉：7×7 m、深 3 m 的階梯漏斗，壁坡 45° 比安息角陡，
+-- 破碎站（賣礦）：放在平地上，朝玩家的方向挖一個受料倉：9×9 m、深 4 m 的階梯漏斗，壁坡 45° 比安息角陡，
 -- 碎石不會留在壁上。底部 3×3 m 是格柵（給料口），只從這裡吃料，上方的料靠碎石流動自己補進來。
 -- 卡車、挖土機、推土機倒進來都一樣；每秒最多 rockmech_crusher_rate 噸，倒太快就在倉裡排隊。
 -- 過磅入帳：收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），見 config.crush_income。廢石的品位是 0，
@@ -10,12 +10,14 @@ local V = rockmech.vehicles
 local storage = rockmech.collapse.storage
 
 local CRUSHER, GRATE = "rockmech:crusher", "rockmech:crusher_grate"
-local SIZE, FEEDER = 7, 3    -- 受料倉開口、底部格柵的邊長 (m)
+local SIZE, FEEDER = 9, 3    -- 受料倉開口、底部格柵的邊長 (m)
 local DEPTH = (SIZE - FEEDER) / 2 + 1              -- 倉深 (m)：每往下一層四邊各內縮 1 m（壁坡 45°），最底層就是格柵的大小
-local CAPACITY = (SIZE ^ 2 + (SIZE - 2) ^ 2 + FEEDER ^ 2) * rockmech.vehicles.NLEV   -- 容量（級），裝到倉口
+local CAPACITY = 0          -- 容量（級），裝到倉口
+for dy = 0, DEPTH - 1 do CAPACITY = CAPACITY + (SIZE - 2 * dy) ^ 2 * rockmech.vehicles.NLEV end
 local PILE = 8              -- 格柵上往上找幾格碎石
-local FIND_R = 12           -- 傾倒點離格柵中心多近（水平距離）算在破碎站
+local FIND_R = 15           -- 傾倒點離格柵中心多近（水平距離）算在破碎站
 rockmech.HOPPER_RANGE = FIND_R
+rockmech.HOPPER_HALF = SIZE / 2   -- 倉口中心到邊 (m)
 local STEP = 1              -- 每幾秒吃一次
 local MONEY = "money:"      -- mod storage 的鍵
 
@@ -189,6 +191,48 @@ end
 -- 方塊
 ---------------------------------------------------------------------------
 
+-- 機身在 pos、受料倉朝 (dx, dz)：挖階梯漏斗（每往下一層四邊各內縮 1 m）、放格柵、記到機身的 meta。
+-- 倉裡原有的碎石不挖，之後逐欄疊到新的倉底（舊倉擴建）
+local function dig_hopper(pos, dx, dz)
+	local half = (SIZE - 1) / 2
+	local cx, cz = pos.x + dx * (2 + half), pos.z + dz * (2 + half)    -- 受料倉中心，緊貼機身
+	local gy = pos.y - 1 - DEPTH
+	for dy = 0, DEPTH - 1 do
+		local r = half - dy
+		for x = cx - r, cx + r do for z = cz - r, cz + r do
+			local p = {x = x, y = pos.y - 1 - dy, z = z}
+			if not rockmech.rubble_level[core.get_node(p).name] then
+				rockmech.collapse.mark_excavated(p)
+				core.swap_node(p, {name = "air"})
+			end
+		end end
+	end
+	local r = (FEEDER - 1) / 2
+	for x = cx - r, cx + r do for z = cz - r, cz + r do
+		core.swap_node({x = x, y = gy, z = z}, {name = GRATE})
+	end end
+	-- 懸空的碎石往下疊：每欄由下往上，保留種類、級數、品位
+	for x = cx - half, cx + half do for z = cz - half, cz + half do
+		local floor, stack = nil, {}
+		for y = gy, pos.y + PILE do
+			local p = {x = x, y = y, z = z}
+			local n = core.get_node(p)
+			if rockmech.rubble_level[n.name] then
+				stack[#stack + 1] = n
+				core.swap_node(p, {name = "air"})
+			elseif n.name ~= "air" and #stack == 0 then
+				floor = y
+			end
+		end
+		for i, n in ipairs(stack) do core.swap_node({x = x, y = floor + i, z = z}, n) end
+	end end
+	local meta = core.get_meta(pos)
+	meta:set_int("gx", cx - r)
+	meta:set_int("gy", gy)
+	meta:set_int("gz", cz - r)
+	meta:set_int("size", SIZE)
+end
+
 -- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false
 function rockmech.crusher_build(pos, dx, dz, name)
 	local half = (SIZE - 1) / 2
@@ -206,26 +250,10 @@ function rockmech.crusher_build(pos, dx, dz, name)
 			if solid({x = x, y = y, z = z}) then return false end
 		end
 	end end
-	-- 階梯漏斗：每往下一層，四邊各內縮 1 m
-	for dy = 0, DEPTH - 1 do
-		local r = half - dy
-		for x = cx - r, cx + r do for z = cz - r, cz + r do
-			local p = {x = x, y = pos.y - 1 - dy, z = z}
-			rockmech.collapse.mark_excavated(p)
-			core.swap_node(p, {name = "air"})
-		end end
-	end
-	local gy = pos.y - 1 - DEPTH
-	local r = (FEEDER - 1) / 2
-	for x = cx - r, cx + r do for z = cz - r, cz + r do
-		core.swap_node({x = x, y = gy, z = z}, {name = GRATE})
-	end end
 	core.set_node(pos, {name = CRUSHER})
+	dig_hopper(pos, dx, dz)
 	local meta = core.get_meta(pos)
 	meta:set_string("owner", name)
-	meta:set_int("gx", cx - r)
-	meta:set_int("gy", gy)
-	meta:set_int("gz", cz - r)
 	meta:set_string("infotext", "破碎站（右鍵查看）")
 	core.get_node_timer(pos):start(STEP)
 	if not storage:contains(MONEY .. name) then rockmech.add_money(name, 0) end
@@ -243,7 +271,7 @@ core.register_node(GRATE, {
 })
 
 core.register_node(CRUSHER, {
-	description = "Crusher (破碎站)\n對著平地按右鍵放置，朝自己的方向挖 7×7 m 受料倉\n碎石倒進倉裡就過磅入帳；廢石要賠處理費",
+	description = "Crusher (破碎站)\n對著平地按右鍵放置，朝自己的方向挖 " .. SIZE .. "×" .. SIZE .. " m 受料倉\n碎石倒進倉裡就過磅入帳；廢石要賠處理費",
 	drawtype = "nodebox",
 	paramtype = "light",
 	node_box = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}},
@@ -260,7 +288,7 @@ core.register_node(CRUSHER, {
 		else dz = look.z > 0 and -1 or 1 end
 		local name = placer:get_player_name()
 		if not rockmech.crusher_build(pos, dx, dz, name) then
-			core.chat_send_player(name, "[破碎站] 要放在平地上：機身 3×3 m 和前方 7×7 m 要平坦、地下是實心、上方淨空")
+			core.chat_send_player(name, "[破碎站] 要放在平地上：機身 3×3 m 和前方 " .. SIZE .. "×" .. SIZE .. " m 要平坦、地下是實心、上方淨空")
 			return itemstack
 		end
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
@@ -278,4 +306,28 @@ core.register_node(CRUSHER, {
 			if core.get_node(c).name == GRATE then core.swap_node(c, {name = rockmech.RUBBLE}) end
 		end
 	end,
+})
+
+-- 舊版小倉擴建成現在的大小：舊格柵回填成下面的岩石，再照新尺寸挖（倉裡的碎石留著，疊到新的倉底）
+local function enlarge(pos)
+	local meta = core.get_meta(pos)
+	if core.get_node(pos).name ~= CRUSHER or meta:get_int("size") >= SIZE then return end
+	local old = hopper_center(meta)
+	local dx, dz = 0, 0
+	if math.abs(old.x - pos.x) > math.abs(old.z - pos.z) then dx = old.x > pos.x and 1 or -1
+	else dz = old.z > pos.z and 1 or -1 end
+	local reach = 2 + SIZE
+	core.load_area({x = pos.x - reach, y = pos.y - DEPTH - 2, z = pos.z - reach}, {x = pos.x + reach, y = pos.y + PILE, z = pos.z + reach})
+	for _, c in ipairs(grate_cells(meta)) do
+		core.swap_node(c, core.get_node({x = c.x, y = c.y - 1, z = c.z}))
+	end
+	dig_hopper(pos, dx, dz)
+	core.log("action", ("[rockmech] 受料倉擴建成 %d×%d m：機身 %s"):format(SIZE, SIZE, core.pos_to_string(pos)))
+end
+core.register_lbm({
+	label = "rockmech: 舊版受料倉擴建",
+	name = "rockmech:hopper_size_" .. SIZE,
+	nodenames = {CRUSHER},
+	run_at_every_load = false,
+	action = function(pos) core.after(0, enlarge, pos) end,
 })
