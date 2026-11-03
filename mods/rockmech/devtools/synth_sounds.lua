@@ -1,4 +1,4 @@
--- 合成音效，輸出 sounds/rockmech_crack.<n>.ogg（岩石破裂）、rockmech_engine.1.ogg（引擎，循環播放）。
+-- 合成音效，輸出 sounds/rockmech_crack.<n>.ogg（岩石破裂）、rockmech_engine.1.ogg（引擎，循環播放）、rockmech_coin.1.ogg（破碎站結算的金幣聲）。
 -- 單聲道：Luanti 的定位音效只對單聲道有效。
 -- 遊戲不會載入這個檔案。在 rockmech 目錄下執行：lua devtools/synth_sounds.lua [原始 PCM 輸出目錄]
 --
@@ -156,6 +156,38 @@ local function render_engine(v)
 end
 
 local ENGINE = {seed = 101, len = 2, f0 = 62, harmonics = 5, roll = 1.6, noise = 0.15}
+
+-- 金幣（破碎站結算）：兩枚硬幣先後落下的「叮—叮」。硬幣是薄圓板，振動模態不是基頻的整數倍（不像弦），
+-- 聽起來才像金屬而不是音符；每個模態指數衰減，越高的衰減越快。敲擊瞬間加一點極短的雜訊
+local function render_coin(v)
+	math.randomseed(v.seed)
+	local L = math.floor(v.len * RATE)
+	local buf = {}
+	for i = 1, L do buf[i] = 0 end
+	for _, hit in ipairs(v.hits) do
+		local i0 = math.floor(hit.t * RATE)
+		for _, m in ipairs(v.modes) do
+			local w, d = 2 * math.pi * hit.f0 * m.ratio / RATE, math.exp(-1 / (m.tau * RATE))
+			local e = hit.amp * m.amp
+			for i = 0, math.min(L - i0 - 1, math.floor(m.tau * 7 * RATE)) do
+				buf[i0 + i + 1] = buf[i0 + i + 1] + e * math.sin(w * i)
+				e = e * d
+			end
+		end
+		burst(buf, i0, 0.0015, hit.amp * 0.3, 3000, 12000)
+	end
+	local fade = math.floor(0.1 * RATE)
+	for i = 1, fade do buf[L - i + 1] = buf[L - i + 1] * ((i - 1) / fade) ^ 2 end
+	local peak = 0
+	for i = 1, L do peak = math.max(peak, math.abs(buf[i])) end
+	for i = 1, L do buf[i] = buf[i] / peak * 0.8 end
+	return buf
+end
+
+local COIN = {seed = 7, len = 0.9,
+	modes = {{ratio = 1, amp = 1, tau = 0.3}, {ratio = 1.505, amp = 0.6, tau = 0.22}, {ratio = 2.27, amp = 0.45, tau = 0.16},
+		{ratio = 3.1, amp = 0.3, tau = 0.11}, {ratio = 4.2, amp = 0.15, tau = 0.07}},
+	hits = {{t = 0, f0 = 1900, amp = 0.8}, {t = 0.11, f0 = 2550, amp = 1}}}
 
 
 ---------------------------------------------------------------------------
@@ -454,3 +486,4 @@ local function write(name, i, pcm)
 end
 for i, v in ipairs(VARIANTS) do write("rockmech_crack", i, render(v)) end
 write("rockmech_engine", 1, render_engine(ENGINE))
+write("rockmech_coin", 1, render_coin(COIN))

@@ -20,6 +20,7 @@ rockmech.HOPPER_RANGE = FIND_R
 rockmech.HOPPER_HALF = SIZE / 2   -- 倉口中心到邊 (m)
 local STEP = 1              -- 每幾秒吃一次
 local MONEY = "money:"      -- mod storage 的鍵
+local COIN_LEAD = 0.4       -- 金幣聲響完多久才出結算訊息 (s)
 
 ---------------------------------------------------------------------------
 -- 資金
@@ -144,11 +145,12 @@ local function crush(pos, dtime)
 	drain(hopper_center(meta))
 	local owner = meta:get_string("owner")
 	if eaten == 0 then
-		-- 吃完了：回報這一批
+		-- 吃完了：回報這一批（先響金幣聲，再出結算）
 		meta:set_float("carry", 0)
 		local bt = meta:get_float("batch_t")
 		if bt > 0 then
-			core.chat_send_player(owner, ("[破碎站] 這批 %.1f t，品位 %.0f%%，收入 $%.0f"):format(bt,
+			core.sound_play("rockmech_coin", {to_player = owner, gain = 0.8}, true)
+			core.after(COIN_LEAD, core.chat_send_player, owner, ("[破碎站] 這批 %.1f t，品位 %.0f%%，收入 $%.0f"):format(bt,
 				100 * meta:get_float("batch_q") / bt, meta:get_float("batch_m")))
 			meta:set_float("batch_t", 0)
 			meta:set_float("batch_q", 0)
