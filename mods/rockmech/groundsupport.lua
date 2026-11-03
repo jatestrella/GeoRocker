@@ -7,6 +7,7 @@
 --   噴凝土：對岩面按右鍵，噴這一面 3×3 格（用掉一袋）；噴到的空氣格變成一層薄噴凝土，這格周圍的岩面都算噴到。
 --     重複噴就加厚，最多 3 層（rockmech.SHOTCRETE_LAYERS），支護壓力 = 層數 × p_sc；孔、裝藥、岩栓都保留層數。
 --     可以挖掉（不退還）；鑿岩機對著噴凝土鑽就是鑽後面的岩面（那格噴凝土會被孔取代）。
+--     噴在碎石上：表層 3×3 格直接變成夯實碎石（路面），不必讓車壓好幾趟。
 --   噴凝土岩栓：同一格同時是岩栓與噴凝土。對岩栓噴凝土、或把岩栓裝進噴凝土鑽孔就是這個方塊。
 --   噴過凝土的孔（drilling.lua）：鑽孔、裝藥鑽孔、ANFO 鑽孔都有，功能同一般的孔，這格也算噴凝土。
 --     對孔噴凝土、或鑽穿噴凝土就是這些方塊；之後裝藥、裝岩栓都維持噴過凝土。
@@ -259,11 +260,30 @@ core.register_craftitem(BOLT_ITEM, {
 
 -- 噴凝土：對岩面按右鍵，噴這一面 3×3 格
 core.register_craftitem(SHOTCRETE, {
-	description = ("噴凝土 Shotcrete（一袋）\n對岩面按右鍵，噴這一面 3×3 格（支護壓力 %.2f MPa）\n重複噴可以加厚，最多 %d 層，壓力照層數累加")
+	description = ("噴凝土 Shotcrete（一袋）\n對岩面按右鍵，噴這一面 3×3 格（支護壓力 %.2f MPa）\n重複噴可以加厚，最多 %d 層，壓力照層數累加\n對碎石按右鍵：表層 3×3 格直接變成夯實碎石（路面）")
 		:format(scfg.shotcrete_p, MAX_LAYERS),
 	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#b8b6b0^[fill:10x2:3,3:#8e8c86^[fill:6x3:5,8:#5a6a8a",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
+		-- 噴在碎石上：表層 3×3 直接變成夯實碎石（剛性鋪面，輪壓分散開，不必壓 rockmech_compact_passes 趟）
+		local pu = core.get_node(pointed.under).name
+		if rockmech.rubble_level[pu] or rockmech.road_level[pu] then
+			local count = 0
+			for u = -1, 1 do for v = -1, 1 do
+				for y = pointed.under.y + 1, pointed.under.y - 1, -1 do
+					local p = {x = pointed.under.x + u, y = y, z = pointed.under.z + v}
+					local k = rockmech.rubble_level[core.get_node(p).name]
+					if k and core.get_node({x = p.x, y = y + 1, z = p.z}).name == "air" then
+						core.swap_node(p, {name = rockmech.modname .. ":road_l" .. k})
+						count = count + 1
+						break
+					end
+				end
+			end end
+			if count == 0 then tell(placer, "這裡的碎石已經是夯實碎石了")
+			elseif not creative(placer) then itemstack:take_item() end
+			return itemstack
+		end
 		-- 岩面 rock 與往外的法向 n：指著岩石就是那一面；指著鑽孔、岩栓就是它貼著的岩面
 		local rock, n = pointed.under, vector.subtract(pointed.above, pointed.under)
 		local un = core.get_node(rock)
