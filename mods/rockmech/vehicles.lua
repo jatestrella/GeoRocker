@@ -916,6 +916,7 @@ function V.register(kind, def)
 			local name = clicker:get_player_name()
 			if self.driver == name then get_off(self); return end
 			if self.driver then return end
+			if def.rightclick and def.rightclick(self, clicker) then return end   -- 拿著特定物品按右鍵（怪手操作員）
 			if rockmech.career_load and rockmech.career_load(clicker, self, def) then return end
 			-- 從別台車直接換過來：先把原本那台的駕駛清掉（否則兩台都聽這個玩家的）
 			local parent = clicker:get_attach()

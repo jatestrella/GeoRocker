@@ -47,6 +47,60 @@ local function hauler_def(e)
 	return hd and hd.bed and hd
 end
 
+-- 操作員（像雇人開怪手）：拿「怪手操作員」對怪手按右鍵設定截止品位、派上車／叫下車。
+-- 他坐在怪手上原地作業（不開動履帶，換工作面由玩家開過去）：在手臂範圍內挖表面露出、品位 ≥ 截止品位的碎石
+-- （最近的先挖；鏟斗會帶到旁邊的格子，界線附近的廢石一起上來就是貧化），有卡車停在手臂範圍內就倒進去
+-- （無人卡車、玩家開來的都算），沒車就拿著滿斗等。車子（自己、卡車）底下的格子不挖。有人上車駕駛就暫停
+local OP_ITEM = "rockmech:operator"
+local OP_THINK, OP_IDLE = 0.5, 2     -- 每隔幾秒想下一步；沒東西可挖時隔久一點再找 (s)
+local op_editing = {}                -- 玩家名稱 → 正在設定的怪手
+core.register_craftitem(OP_ITEM, {
+	description = "怪手操作員 Excavator operator\n拿著對怪手按右鍵：設定截止品位、派上車或叫下車",
+	inventory_image = "[fill:16x16:#00000000^[fill:6x6:5,1:#e0b080^[fill:8x7:4,7:#e8a818^[fill:8x2:4,7:#303030^[fill:2x2:7,3:#303030",
+	stack_max = 1,
+})
+local function op_form(self)
+	local op = self.op or {cutoff = 0.5}
+	local items, sel = {}, 1
+	for i = 0, 20 do
+		items[#items + 1] = (i * 5) .. "%"
+		if math.abs(i * 0.05 - op.cutoff) < 1e-6 then sel = i + 1 end
+	end
+	return table.concat({
+		"formspec_version[6]size[8,5.2]",
+		("label[0.5,0.6;%s 操作員]"):format(TYPES[self.vkind].short or "怪手"),
+		("label[0.5,1.2;狀態：%s]"):format(core.formspec_escape(op.on and (op.msg or "作業中") or "沒有操作員")),
+		"label[0.5,1.9;截止品位（只挖品位 ≥ 這個的碎石）]",
+		("dropdown[0.5,2.2;3,0.8;cutoff;%s;%d;false]"):format(table.concat(items, ","), sel),
+		("button[0.5,3.4;3.4,0.8;%s;%s]"):format(op.on and "off" or "on", op.on and "叫下車" or "派上車（開始作業）"),
+		"button_exit[4.1,3.4;3.4,0.8;close;關閉]",
+		"label[0.5,4.6;原地作業：挖完手臂範圍內的礦，把怪手開到新的工作面]",
+	})
+end
+local function op_show(self)
+	local op = self.op
+	self.object:set_properties(op and op.on and {nametag = "操作員：" .. (op.msg or "作業中") .. ("（截止品位 %d%%）"):format(op.cutoff * 100 + 0.5),
+		nametag_color = "#ffe080"} or {nametag = ""})
+end
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= OP_ITEM then return end
+	local name = player:get_player_name()
+	local self = op_editing[name]
+	if not self or not self.object:get_pos() then return true end
+	local op = self.op or {cutoff = 0.5}
+	self.op = op
+	if fields.cutoff then op.cutoff = (tonumber(fields.cutoff:match("^(%d+)")) or 50) / 100 end
+	if fields.on then op.on, op.msg, op.t = true, nil, 0
+	elseif fields.off then
+		op.on, op.msg = false, nil
+		self.autopilot = nil
+	end
+	op_show(self)
+	if fields.quit or fields.close then op_editing[name] = nil
+	else core.show_formspec(name, OP_ITEM, op_form(self)) end
+	return true
+end)
+
 local function cab_tex(c, win_w)
 	local win = ("[fill:16x16:%s^[fill:12x7:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
 	local side = ("[fill:16x16:%s^[fill:%dx6:%d,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c, win_w or 6, 14 - (win_w or 6))
@@ -239,9 +293,102 @@ local function excavator(kind, P)
 		return #list > 0 and list or nil
 	end
 
-	function def.on_load(self, data) self.swing = data.swing end
-	function def.on_save(self, data) data.swing = self.swing end
-	function def.on_spawn(self) place_arm(self, BUCKET_REST) end
+	function def.on_load(self, data) self.swing, self.op = data.swing, data.op end
+	function def.on_save(self, data) data.swing, data.op = self.swing, self.op end
+	function def.on_spawn(self) place_arm(self, BUCKET_REST); op_show(self) end
+
+	-- 拿著操作員對怪手按右鍵：設定畫面（不上車）
+	function def.rightclick(self, clicker)
+		if clicker:get_wielded_item():get_name() ~= OP_ITEM then return false end
+		local name = clicker:get_player_name()
+		op_editing[name] = self
+		core.show_formspec(name, OP_ITEM, op_form(self))
+		return true
+	end
+
+	-- 操作員：手臂搆得到 wp 嗎（和 def.action 用同一套算法，挑出來的目標一定挖得到）
+	local function in_reach(self, wp)
+		local _, _, reach = swing_to(to_local(self, wp))
+		return reach <= ARM_REACH - 0.2
+	end
+	-- 停在手臂範圍內、還裝得下、沒在開也沒在倒的有車斗的車，最近的那台
+	local function op_truck(self, pos)
+		local best, bd
+		for _, o in ipairs(core.get_objects_inside_radius(pos, ARM_REACH + 10)) do
+			local e = o:get_luaentity()
+			local td = e ~= self and hauler_def(e)
+			if td and not e.tip and load_total(e) < td.cap and vector.length(o:get_velocity()) < 0.3 then
+				local bt = V.bed_target(e)
+				local d = vector.distance(pos, bt)
+				if in_reach(self, bt) and (not bd or d < bd) then best, bd = e, d end
+			end
+		end
+		return best
+	end
+	-- 手臂範圍內表面露出、品位 ≥ 截止品位、不在車子底下的碎石，最近的那格。
+	-- 鏟斗會挖起目標周圍 dig_r 格、上下各 1 層：車子底下再往外留這一圈，才不會把車子的地基挖空
+	local SAFE = P.dig_r + 0.5
+	local function op_target(self, pos, cutoff)
+		local R = math.ceil(ARM_REACH)
+		local cars = {}
+		for _, o in ipairs(core.get_objects_inside_radius(pos, R + 12)) do
+			local e = o:get_luaentity()
+			if e and e.vkind and TYPES[e.vkind] then cars[#cars + 1] = {o:get_pos(), o:get_yaw(), TYPES[e.vkind]} end
+		end
+		local p0 = vector.round(pos)
+		local best, bd
+		for _, c in ipairs(core.find_nodes_in_area(vector.subtract(p0, {x = R, y = R, z = R}), vector.add(p0, {x = R, y = 4, z = R}), rockmech.rubble_nodes)) do
+			local node = core.get_node(c)
+			local ore = rockmech.ore_of_rubble[rockmech.rubble_base[node.name]]
+			local g = ore and node.param2 / 255 or 0
+			if g >= cutoff - 1e-6 and V.passable(core.get_node({x = c.x, y = c.y + 1, z = c.z}).name) then
+				local under = false
+				for _, car in ipairs(cars) do
+					local cp, yaw, td = car[1], car[2], car[3]
+					local dx, dz = c.x - cp.x, c.z - cp.z
+					local co, sn = math.cos(yaw), math.sin(yaw)
+					local lx, lz = dx * co + dz * sn, -dx * sn + dz * co
+					if c.y <= cp.y - td.half + 1.5 and math.abs(lx) <= td.half + SAFE
+						and lz >= -(td.rear or td.half) - SAFE and lz <= td.half + SAFE then under = true; break end
+				end
+				local d = vector.distance(pos, c)
+				if not under and (not bd or d < bd) and in_reach(self, c) then best, bd = c, d end
+			end
+		end
+		return best
+	end
+	local function op_say(self, msg)
+		if self.op.msg ~= msg then self.op.msg = msg; op_show(self) end
+	end
+	-- 每一步：決定操作員下一個動作（self.autopilot：aux1 + target 挖、jump + dump_truck 倒）
+	local function operate(self, ctx)
+		local op = self.op
+		if self.dig then self.autopilot = {}; return end
+		op.t = (op.t or 0) - ctx.dtime
+		if op.t > 0 then self.autopilot = {}; return end
+		op.t = OP_THINK
+		local pos = ctx.pos
+		if load_total(self) > 0 then
+			local truck = op_truck(self, pos)
+			if truck then
+				self.autopilot = {jump = true, dump_truck = truck}
+				op_say(self, "裝車中")
+			else
+				self.autopilot = {}
+				op_say(self, "鏟斗滿了，等卡車")
+			end
+			return
+		end
+		local target = op_target(self, pos, op.cutoff)
+		if target then
+			self.autopilot = {aux1 = true, target = target}
+			op_say(self, nil)
+		else
+			self.autopilot = {}
+			op.t = OP_IDLE
+			op_say(self, ("手臂範圍內沒有品位 ≥ %d%% 的碎石"):format(op.cutoff * 100 + 0.5))
+		end
+	end
 
 	-- 目標周圍 dig_r 格內的欄（離中心近的先）
 	local function around(a, y)
@@ -328,6 +475,7 @@ local function excavator(kind, P)
 				place_arm(self, BUCKET_REST)
 			end
 		end
+		if self.op and self.op.on and not ctx.d then operate(self, ctx) end
 		-- 第一人稱駕駛：上部結構轉向視線的水平方向（車身座標的迴轉角 ψ 往右為正，實體 yaw 往左為正）
 		local d = ctx.d
 		self.follow = d ~= nil and not self.chase
@@ -351,8 +499,9 @@ local function excavator(kind, P)
 		local ctrl, d, pos = ctx.ctrl, ctx.d, ctx.pos
 		if ctrl.aux1 and not self.dig then
 			self.t_act = DIG_TOTAL + 0.1
-			-- 滑鼠指的方塊：從相機沿視線找第一個方塊
-			local target = self.autopilot and self.autopilot.target
+			-- 滑鼠指的方塊：從相機沿視線找第一個方塊。沒人駕駛時 ctrl 就是這一步開始時的 self.autopilot
+			-- （用 ctrl，不用 self.autopilot：操作員在 def.step 裡已經換成下一步的指令了）
+			local target = ctrl.target
 			if d then
 				local hit = aim(self, d, pos, false)
 				target = hit and hit.under
@@ -373,9 +522,9 @@ local function excavator(kind, P)
 			self.t_act = DIG_TOTAL + 0.1
 			local hit
 			if d then hit = aim(self, d, pos, true)
-			elseif self.autopilot then
-				local t = self.autopilot.dump_target
-				hit = self.autopilot.dump_truck and {truck = self.autopilot.dump_truck}
+			else
+				local t = ctrl.dump_target
+				hit = ctrl.dump_truck and {truck = ctrl.dump_truck}
 					or t and {above = {x = t.x, y = t.y + 1, z = t.z}}
 			end
 			local dg
