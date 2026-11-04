@@ -56,11 +56,11 @@ end
 local function pkey(p) return p.x .. "," .. p.y .. "," .. p.z end
 
 
--- 警戒裂紋：1 < FS < max 的岩格套上一層裂紋（textures/rockmech_fswarn_0..4.png，
--- 橙色鋸齒裂縫加深色描邊；FS 越接近 1 裂縫越多越長）
+-- 警戒裂紋：1 < FS < max 的岩格套上一層裂紋，用挖礦的裂紋（crack_anylength.png 的 5 格，由淺到深）；
+-- FS 越接近 1 裂得越深。看起來就像這格已經被敲到一半
 local WARN_STAGES = 5
 local function crack_textures(stage)
-	local t = ("rockmech_fswarn_%d.png"):format(stage)
+	local t = ("crack_anylength.png^[verticalframe:%d:%d"):format(WARN_STAGES, stage)
 	return {t, t, t, t, t, t}
 end
 core.register_entity("rockmech:fswarn", {
@@ -665,3 +665,44 @@ core.register_chatcommand("rockmech_fswarn", {
 			or "[rockmech] 警戒裂紋關閉"
 	end,
 })
+
+-- 有裂紋的岩石比較好挖：接近破壞的岩石已有微裂（損傷），強度較低。挖的時間 = 原本的時間 × 係數，
+-- FS → 1 時係數是 rockmech_fswarn_dig_min，FS = max 時是 1，中間線性。
+-- 挖的時間是引擎依方塊種類算的，不能每格不同：伺服器跟著玩家按住左鍵挖的那一格計時，時間到了直接敲破
+-- （引擎自己的挖礦進度照舊，只是方塊提早破）
+local digging = {}          -- 玩家名稱 → {key, pos, t}
+local function pointed_node(player)
+	local def = player:get_wielded_item():get_definition()
+	local range = def and def.range or 4
+	local eye = vector.add(player:get_pos(), {x = 0, y = player:get_properties().eye_height or 1.625, z = 0})
+	for pt in core.raycast(eye, vector.add(eye, vector.multiply(player:get_look_dir(), range)), false, false) do
+		if pt.type == "node" then return pt.under end
+	end
+end
+core.register_globalstep(function(dtime)
+	for _, player in ipairs(core.get_connected_players()) do
+		local name = player:get_player_name()
+		local pos = player:get_player_control().dig and not player:get_attach() and pointed_node(player)
+		local w = pos and rockmech.fswarn_at(name, pos)
+		local node = w and core.get_node(pos)
+		if not (node and rockmech.lith_of_node[node.name]) then
+			digging[name] = nil
+		else
+			local k = pkey(pos)
+			local dg = digging[name]
+			if not dg or dg.key ~= k then dg = {key = k, t = 0}; digging[name] = dg end
+			dg.t = dg.t + dtime
+			local item = player:get_wielded_item()
+			local params = core.get_dig_params(core.registered_nodes[node.name].groups, item:get_tool_capabilities(), item:get_wear())
+			if params.diggable then
+				local frac = math.max(0, math.min(1, (w.fs - 1) / (cfg.fswarn.max - 1)))
+				local need = params.time * (cfg.fswarn.dig_min + (1 - cfg.fswarn.dig_min) * frac)
+				if dg.t >= need then
+					digging[name] = nil
+					core.node_dig(pos, node, player)
+				end
+			end
+		end
+	end
+end)
+core.register_on_leaveplayer(function(player) digging[player:get_player_name()] = nil end)

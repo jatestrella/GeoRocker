@@ -258,6 +258,7 @@ config.fswarn_defaults = {
 	max = 2.0,                -- FS 低於此值（且 > 1）就顯示裂紋
 	sound_gain = 3.0,         -- 裂紋出現或變嚴重時破裂聲的音量（0 = 不播，字幕也不顯示）；定位音效隨距離衰減，所以大於 1
 	sound_distance = 32,      -- 破裂聲聽得到的距離 (m)
+	dig_min = 0.25,           -- 有裂紋的岩石比較好挖（接近破壞已有微裂、強度較低）：FS → 1 時挖的時間乘上這個，FS = max 時不變，中間線性
 }
 
 -- 關鍵塊體（keyblock.lua）；設定鍵為 rockmech_keyblock_<key>
@@ -602,6 +603,7 @@ function config.load(get)
 	cfg.fswarn.max = math.max(1.01, math.min(5, cfg.fswarn.max))
 	cfg.fswarn.sound_gain = math.max(0, cfg.fswarn.sound_gain)
 	cfg.fswarn.sound_distance = math.max(1, cfg.fswarn.sound_distance)
+	cfg.fswarn.dig_min = math.max(0.01, math.min(1, cfg.fswarn.dig_min))
 
 	-- 關鍵塊體
 	cfg.keyblock = load_section("keyblock", config.keyblock_defaults)

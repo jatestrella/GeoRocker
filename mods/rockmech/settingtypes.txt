@@ -153,6 +153,10 @@ rockmech_fswarn_sound_gain (Crack sound volume) float 3 0 10
 # Distance in metres at which the crack sound can be heard.
 rockmech_fswarn_sound_distance (Crack sound distance) float 32 1 128
 
+# Cracked rock is pre-damaged and easier to dig: at FS near 1 the dig time is multiplied by this, at the warning threshold
+# it is unchanged, linear in between.
+rockmech_fswarn_dig_min (Dig time factor for cracked rock) float 0.25 0.01 1
+
 [Key blocks]
 
 # Blocks completely bounded by joints and free faces are checked under gravity:
