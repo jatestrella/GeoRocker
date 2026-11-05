@@ -34,20 +34,31 @@ local function cell_cap() return math.max(1, math.floor(cfg.conveyor_rate / cfg.
 local FRAME = "[fill:16x16:#6c6c6c^[fill:16x2:0,0:#4a4a4a"
 local RUBBER = "[fill:16x16:#262626^[fill:16x2:0,7:#363636"
 local function top_of(h) return (h + 1) / 8 - 0.5 end
-local function boxes(h, loaded)
+-- 形狀（方塊座標：皮帶往 +z 走，左邊是 −x）：從哪一側有皮帶接進來，那一側的框架就打開。
+--   ""：直的（兩側框架）；cl／cr：轉彎，料從左／右邊進來（那側打開、後端封起來）；
+--   ml／mr：直的、左／右邊另外有一條從側面併進來（那側打開）
+local SHAPES = {"", "cl", "cr", "ml", "mr"}
+local function boxes(h, loaded, sh)
 	local top, b = top_of(h), {}
 	local function add(x0, y0, z0, x1, y1, z1)
 		y0 = math.max(-0.5, y0)
 		if y1 > y0 then b[#b + 1] = {x0, y0, z0, x1, y1, z1} end
 	end
-	add(-0.42, top - 0.1, -0.5, 0.42, top, 0.5)            -- 皮帶
-	add(-0.5, top - 0.25, -0.5, -0.42, top + 0.12, 0.5)    -- 兩側框架
-	add(0.42, top - 0.25, -0.5, 0.5, top + 0.12, 0.5)
+	local open_l, open_r = sh == "cl" or sh == "ml", sh == "cr" or sh == "mr"
+	add(-0.5, top - 0.1, -0.5, 0.5, top, 0.5)              -- 皮帶
+	if not open_l then add(-0.5, top - 0.25, -0.5, -0.42, top + 0.12, 0.5) end   -- 兩側框架
+	if not open_r then add(0.42, top - 0.25, -0.5, 0.5, top + 0.12, 0.5) end
+	if sh == "cl" or sh == "cr" then add(-0.5, top - 0.25, -0.5, 0.5, top + 0.12, -0.42) end   -- 轉彎：後端封起來
 	if top - 0.25 > -0.5 then                               -- 支腳
 		add(-0.48, -0.5, -0.06, -0.4, top - 0.25, 0.06)
 		add(0.4, -0.5, -0.06, 0.48, top - 0.25, 0.06)
 	end
-	if loaded then add(-0.32, top, -0.5, 0.32, top + 0.14, 0.5) end   -- 皮帶上的料
+	if loaded then                                          -- 皮帶上的料：從進料的那一側走到前端
+		local y0, y1 = top, top + 0.14
+		if sh == "cl" or sh == "cr" then add(-0.32, y0, -0.32, 0.32, y1, 0.5) else add(-0.32, y0, -0.5, 0.32, y1, 0.5) end
+		if open_l then add(-0.5, y0, -0.32, -0.32, y1, 0.32) end
+		if open_r then add(0.32, y0, -0.32, 0.5, y1, 0.32) end
+	end
 	return b
 end
 
@@ -84,11 +95,14 @@ local function register_cell(pos)
 	cells[core.hash_node_position(pos)] = vector.new(pos)
 end
 
+local BELT_SH = {}           -- node 名稱 → 形狀（SHAPES）
 for h = 0, 7 do
 	NAME[h] = {}
 	for _, st in ipairs({"", "w", "o"}) do
-		local name = "rockmech:belt_" .. h .. (st ~= "" and ("_" .. st) or "")
-		NAME[h][st], BELT_H[name], BELT_ST[name] = name, h, st
+	NAME[h][st] = {}
+	for _, sh in ipairs(SHAPES) do
+		local name = "rockmech:belt_" .. h .. (st ~= "" and ("_" .. st) or "") .. (sh ~= "" and ("_" .. sh) or "")
+		NAME[h][st][sh], BELT_H[name], BELT_ST[name], BELT_SH[name] = name, h, st, sh
 		local ore = main_ore()
 		local top = st == "" and RUBBER or V.rubble_tex(st == "o" and ore and ore.rubble or rockmech.RUBBLE)
 		local sel = {-0.5, -0.5, -0.5, 0.5, top_of(h) + 0.12, 0.5}
@@ -98,7 +112,7 @@ for h = 0, 7 do
 			paramtype = "light",
 			paramtype2 = "4dir",
 			sunlight_propagates = true,
-			node_box = {type = "fixed", fixed = boxes(h, st ~= "")},
+			node_box = {type = "fixed", fixed = boxes(h, st ~= "", sh)},
 			selection_box = {type = "fixed", fixed = sel},
 			collision_box = {type = "fixed", fixed = sel},
 			tiles = {top, FRAME, FRAME, FRAME, FRAME, FRAME},
@@ -121,6 +135,7 @@ for h = 0, 7 do
 				loads[hh], dirty = nil, true
 			end,
 		})
+	end
 	end
 end
 
@@ -255,6 +270,22 @@ local function want_state(L)
 	return kg >= 0.5 * k and "o" or "w"
 end
 
+-- 這一格的形狀：送料進來的格子在它的左邊、右邊還是後面（方塊座標：往 +z 走，左邊是 −x）
+local function shape_of(h, n, from)
+	if not from then return "" end
+	local p, d = cells[h], dir_of(n)
+	local left, right, back = false, false, false
+	for _, hf in ipairs(from) do
+		local f = cells[hf]
+		local rx, rz = f.x - p.x, f.z - p.z
+		local lx = rx * d.z - rz * d.x          -- 右邊為正
+		if lx < 0 then left = true elseif lx > 0 then right = true else back = true end
+	end
+	if left and not right then return back and "ml" or "cl" end
+	if right and not left then return back and "mr" or "cr" end
+	return ""
+end
+
 local function tick()
 	local C = cell_cap()
 	local nodes = {}
@@ -274,7 +305,7 @@ local function tick()
 		end
 	end
 	-- 2. 往前走一格：從頭往回處理，每份料一次只走一格
-	local done = {}
+	local done, feeds = {}, {}      -- feeds[格] = 往這一格送料的格子（決定轉彎、併入的形狀）
 	for h0 in pairs(nodes) do
 		if not done[h0] then
 			local chain, seen = {}, {}
@@ -284,7 +315,10 @@ local function tick()
 				chain[#chain + 1] = h
 				local q, d, w = next_of(cells[h], nodes[h])
 				if q then
-					h = core.hash_node_position(q)
+					local hq = core.hash_node_position(q)
+					feeds[hq] = feeds[hq] or {}
+					table.insert(feeds[hq], h)
+					h = hq
 				else
 					h, head_dir, wait = nil, d, w
 				end
@@ -300,8 +334,9 @@ local function tick()
 	-- 3. 外觀：有料的格子表面換成碎石，附近有人的話加上沿著皮帶走的碎石顆粒
 	local v, np = cfg.conveyor_speed, 0
 	for h, n in pairs(nodes) do
-		local st = want_state(loads[h])
-		if BELT_ST[n.name] ~= st then core.swap_node(cells[h], {name = NAME[BELT_H[n.name]][st], param2 = n.param2}) end
+		local st, sh = want_state(loads[h]), shape_of(h, n, feeds[h])
+		local want = NAME[BELT_H[n.name]][st][sh]
+		if n.name ~= want then core.swap_node(cells[h], {name = want, param2 = n.param2}) end
 		if st ~= "" and np < PARTICLE_MAX and near_player(cells[h]) then
 			np = np + 1
 			local p = cells[h]
@@ -453,7 +488,7 @@ core.register_craftitem(ITEM, {
 			return itemstack
 		end
 		if core.is_protected(p, name) then core.record_protection_violation(p, name); return itemstack end
-		core.set_node(p, {name = NAME[h][""], param2 = fd})
+		core.set_node(p, {name = NAME[h][""][""], param2 = fd})
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack
 	end,
