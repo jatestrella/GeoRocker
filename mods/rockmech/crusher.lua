@@ -4,12 +4,16 @@
 -- 卡車、挖土機、推土機倒進來都一樣；每秒最多 rockmech_crusher_rate 噸，倒太快就在倉裡排隊。
 -- 過磅入帳：收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），見 config.crush_income。廢石的品位是 0，
 -- 運來破碎只會賠處理費，這就是貧化與截止品位。錢記在放置破碎站的玩家身上。
+-- 右鍵可以切換成廢石場：倒進來的碎石直接棄置，不收入，每噸付 rockmech_dump_fee（預設 0）。
+-- 受料倉、格柵、強制載入給選礦場（plant.lua）共用：rockmech.hopper_lib
 
 local cfg = rockmech.cfg
 local V = rockmech.vehicles
 local storage = rockmech.collapse.storage
 
 local CRUSHER, GRATE = "rockmech:crusher", "rockmech:crusher_grate"
+local PLANT = "rockmech:plant"     -- 選礦場（plant.lua），同一種受料倉
+local HOPPER_BODY = {[CRUSHER] = true, [PLANT] = true}
 local SIZE, FEEDER = 9, 3    -- 受料倉開口、底部格柵的邊長 (m)
 local DEPTH = (SIZE - FEEDER) / 2 + 1              -- 倉深 (m)：每往下一層四邊各內縮 1 m（壁坡 45°），最底層就是格柵的大小
 local CAPACITY = 0          -- 容量（級），裝到倉口
@@ -121,11 +125,13 @@ end
 -- 每級碎石的噸數：1/8 m³，密度用 γ/10
 local function tons_of(levels) return levels / V.NLEV * cfg.failure.gamma_other / 10 end
 
-local function crush(pos, dtime)
+-- 從格柵吃料：這一步最多 rate (t/s) × dtime，也不超過 limit 級（選礦場的倉快滿了）。
+-- 每吃一塊呼叫 take(級數, 碎石種類, 品位 param2)；回傳吃了幾級。倉裡的料順便往格柵流一步
+local function eat(pos, dtime, rate, limit, take)
 	local meta = core.get_meta(pos)
-	local budget = meta:get_float("carry") + cfg.crusher_rate * dtime / tons_of(1)
-	local want = math.floor(budget)
-	local eaten, income, ore_t = 0, 0, 0
+	local budget = meta:get_float("carry") + rate * dtime / tons_of(1)
+	local want = math.min(math.floor(budget), limit or math.huge)
+	local eaten = 0
 	local cells = grate_cells(meta)
 	local start = meta:get_int("next")
 	for i = 1, #cells do
@@ -133,35 +139,50 @@ local function crush(pos, dtime)
 		local p = top_rubble(cells[(start + i - 1) % #cells + 1])
 		if p then
 			local t, base, p2 = V.take_rubble(p, want)
-			local ore = rockmech.ore_of_rubble[base]
-			local grade = ore and p2 / 255 or 0
 			want = want - t
 			eaten = eaten + t
-			income = income + rockmech.config.crush_income(tons_of(t), grade, ore, cfg.crusher_fee)
-			ore_t = ore_t + tons_of(t) * grade
+			take(t, base, p2)
 			meta:set_int("next", (start + i) % #cells)
 		end
 	end
 	drain(hopper_center(meta))
+	meta:set_float("carry", eaten > 0 and budget - math.floor(budget) or 0)
+	if eaten > 0 then rockmech.collapse.rubble_sound(pos, eaten) end
+	return eaten
+end
+
+local function crush(pos, dtime)
+	local meta = core.get_meta(pos)
+	local dump = meta:get_string("mode") == "dump"
+	local income, ore_t = 0, 0
+	local eaten = eat(pos, dtime, cfg.crusher_rate, nil, function(t, base, p2)
+		local ore = rockmech.ore_of_rubble[base]
+		local grade = ore and p2 / 255 or 0
+		if dump then income = income - tons_of(t) * cfg.dump_fee
+		else income = income + rockmech.config.crush_income(tons_of(t), grade, ore, cfg.crusher_fee) end
+		ore_t = ore_t + tons_of(t) * grade
+	end)
 	local owner = meta:get_string("owner")
 	if eaten == 0 then
-		-- 吃完了：回報這一批（先響金幣聲，再出結算）
-		meta:set_float("carry", 0)
+		-- 吃完了：回報這一批（破碎：先響金幣聲，再出結算）
 		local bt = meta:get_float("batch_t")
 		if bt > 0 then
-			core.sound_play("rockmech_coin", {to_player = owner, gain = 0.8}, true)
-			core.after(COIN_LEAD, core.chat_send_player, owner, ("[破碎站] 這批 %.1f t，品位 %.0f%%，收入 $%.0f"):format(bt,
-				100 * meta:get_float("batch_q") / bt, meta:get_float("batch_m")))
+			if dump then
+				core.chat_send_player(owner, ("[廢石場] 這批 %.1f t 棄置%s"):format(bt,
+					cfg.dump_fee > 0 and ("，棄置費 $%.0f"):format(-meta:get_float("batch_m")) or ""))
+			else
+				core.sound_play("rockmech_coin", {to_player = owner, gain = 0.8}, true)
+				core.after(COIN_LEAD, core.chat_send_player, owner, ("[破碎站] 這批 %.1f t，品位 %.0f%%，收入 $%.0f"):format(bt,
+					100 * meta:get_float("batch_q") / bt, meta:get_float("batch_m")))
+			end
 			meta:set_float("batch_t", 0)
 			meta:set_float("batch_q", 0)
 			meta:set_float("batch_m", 0)
 		end
 		return
 	end
-	meta:set_float("carry", budget - math.floor(budget))
 	local t = tons_of(eaten)
-	rockmech.add_money(owner, income)
-	rockmech.collapse.rubble_sound(pos, eaten)
+	if income ~= 0 then rockmech.add_money(owner, income) end
 	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_m = income, total_t = t, total_q = ore_t, total_m = income}) do
 		meta:set_float(key, meta:get_float(key) + v)
 	end
@@ -171,15 +192,18 @@ local function formspec(pos)
 	local meta = core.get_meta(pos)
 	local queue = hopper_levels(hopper_center(meta))
 	local total = meta:get_float("total_t")
+	local dump = meta:get_string("mode") == "dump"
 	local prices = {}
 	for _, ore in pairs(cfg.ores) do
 		prices[#prices + 1] = ("%s 品位 100%% 每噸 $%g，回收率 %.0f%%"):format(ore.label, ore.price, ore.recovery * 100)
 	end
 	return table.concat({
-		"formspec_version[6]size[9,6]",
-		"label[0.5,0.6;破碎站]",
-		("label[0.5,1.2;處理能力：%g t/s　處理費：每噸 $%g]"):format(cfg.crusher_rate, cfg.crusher_fee),
-		("label[0.5,1.8;%s]"):format(core.formspec_escape(table.concat(prices, "；"))),
+		"formspec_version[6]size[9,7]",
+		("label[0.5,0.6;%s]"):format(dump and "廢石場（倒進來的碎石直接棄置，不收入）" or "破碎站"),
+		dump and ("label[0.5,1.2;處理能力：%g t/s　棄置費：每噸 $%g]"):format(cfg.crusher_rate, cfg.dump_fee)
+			or ("label[0.5,1.2;處理能力：%g t/s　處理費：每噸 $%g]"):format(cfg.crusher_rate, cfg.crusher_fee),
+		("label[0.5,1.8;%s]"):format(core.formspec_escape(dump and "礦石倒進來也當廢石丟掉" or table.concat(prices, "；"))),
+		("button[0.5,5.8;8,0.8;mode;%s]"):format(dump and "切換成破碎站（賣礦）" or ("切換成廢石場（棄置，每噸 $%g）"):format(cfg.dump_fee)),
 		("label[0.5,2.4;受料倉：%.1f / %.0f t]"):format(tons_of(queue), tons_of(CAPACITY)),
 		("label[0.5,3.0;累計處理：%.1f t，平均品位 %.0f%%]"):format(total, total > 0 and 100 * meta:get_float("total_q") / total or 0),
 		("label[0.5,3.6;累計收入：$%.0f]"):format(meta:get_float("total_m")),
@@ -188,6 +212,21 @@ local function formspec(pos)
 		"button_exit[3,4.8;3,0.8;ok;關閉]",
 	})
 end
+local editing = {}          -- 玩家名稱 → 正在看的破碎站
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= CRUSHER then return end
+	local name = player:get_player_name()
+	local pos = editing[name]
+	if not pos or core.get_node(pos).name ~= CRUSHER then return true end
+	if fields.mode then
+		local meta = core.get_meta(pos)
+		meta:set_string("mode", meta:get_string("mode") == "dump" and "" or "dump")
+		meta:set_string("infotext", meta:get_string("mode") == "dump" and "廢石場（右鍵查看）" or "破碎站（右鍵查看）")
+		core.show_formspec(name, CRUSHER, formspec(pos))
+	end
+	if fields.quit or fields.ok then editing[name] = nil end
+	return true
+end)
 
 ---------------------------------------------------------------------------
 -- 方塊
@@ -251,15 +290,15 @@ local function each_block(pos, fn)
 end
 local function keep_loaded(pos)
 	local meta = core.get_meta(pos)
-	if core.get_node(pos).name ~= CRUSHER or meta:get_int("forceload") == 1 then return end
+	if not HOPPER_BODY[core.get_node(pos).name] or meta:get_int("forceload") == 1 then return end
 	local n = 0
 	each_block(pos, function(p) n = n + 1; core.forceload_block(p, false, -1) end)
 	meta:set_int("forceload", 1)
-	core.log("action", ("[rockmech] 破碎站 %s 強制載入 %d 個區塊"):format(core.pos_to_string(pos), n))
+	core.log("action", ("[rockmech] %s %s 強制載入 %d 個區塊"):format(core.get_node(pos).name, core.pos_to_string(pos), n))
 end
 
--- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false
-function rockmech.crusher_build(pos, dx, dz, name)
+-- 機身在 pos、受料倉朝 (dx, dz) 的地形可以蓋嗎：機身 3×3 m 和受料倉要平坦、地下是實心、上方淨空
+local function site_ok(pos, dx, dz)
 	local half = (SIZE - 1) / 2
 	local cx, cz = pos.x + dx * (2 + half), pos.z + dz * (2 + half)    -- 受料倉中心，緊貼機身
 	local function solid(p) return not V.passable(core.get_node(p).name) end
@@ -275,6 +314,12 @@ function rockmech.crusher_build(pos, dx, dz, name)
 			if solid({x = x, y = y, z = z}) then return false end
 		end
 	end end
+	return true
+end
+
+-- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false
+function rockmech.crusher_build(pos, dx, dz, name)
+	if not site_ok(pos, dx, dz) then return false end
 	core.set_node(pos, {name = CRUSHER})
 	dig_hopper(pos, dx, dz)
 	local meta = core.get_meta(pos)
@@ -321,6 +366,7 @@ core.register_node(CRUSHER, {
 		return itemstack
 	end,
 	on_rightclick = function(pos, node, clicker)
+		editing[clicker:get_player_name()] = pos
 		core.show_formspec(clicker:get_player_name(), CRUSHER, formspec(pos))
 	end,
 	on_timer = function(pos, elapsed)
@@ -367,3 +413,10 @@ core.register_lbm({
 	run_at_every_load = false,
 	action = function(pos) core.after(1, keep_loaded, pos) end,
 })
+
+-- 給選礦場（plant.lua）共用
+rockmech.hopper_lib = {
+	SIZE = SIZE, PILE = PILE, STEP = STEP, GRATE = GRATE, tons_of = tons_of, eat = eat,
+	hopper_center = hopper_center, hopper_levels = hopper_levels, grate_cells = grate_cells, dig_hopper = dig_hopper,
+	site_ok = site_ok, keep_loaded = keep_loaded, each_block = each_block,
+}

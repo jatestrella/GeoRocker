@@ -308,7 +308,7 @@ end)
 ---------------------------------------------------------------------------
 
 local function shop_form(name)
-	local out = {"formspec_version[6]size[13.5,12]",
+	local out = {"formspec_version[6]size[13.5,13.2]",
 		("label[0.5,0.6;供應商　資金 $%.0f]"):format(rockmech.money(name))}
 	local col, row = 0, 0
 	for i, it in ipairs(cfg.shop) do
@@ -318,7 +318,7 @@ local function shop_form(name)
 		out[#out + 1] = ("label[%g,%g;%s%s]"):format(x + 1, y + 0.4, it.label, it.count and (" ×" .. it.count) or "")
 		out[#out + 1] = ("button[%g,%g;2.2,0.8;buy_%d;%s]"):format(x + 3.9, y, i, core.formspec_escape(price))
 		row = row + 1
-		if row >= 11 then col, row = col + 1, 0 end
+		if row >= 12 then col, row = col + 1, 0 end
 	end
 	return table.concat(out)
 end

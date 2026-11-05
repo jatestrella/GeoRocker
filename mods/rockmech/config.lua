@@ -74,6 +74,7 @@ config.shop = {
 	{key = "truck", item = "rockmech:truck_item", label = "卡車", price = 10000},
 	{key = "excavator", item = "rockmech:excavator_item", label = "怪手", price = 15000},
 	{key = "crusher", item = "rockmech:crusher", label = "破碎站", price = 20000},
+	{key = "plant", item = "rockmech:plant", label = "選礦場", price = 30000},
 	{key = "dozer", item = "rockmech:dozer_item", label = "推土機", price = 35000},
 	{key = "bulktruck", item = "rockmech:bulktruck_item", label = "裝藥車", price = 40000},
 	{key = "charger", item = "rockmech:charger_item", label = "裝藥台車", price = 40000},
@@ -675,6 +676,13 @@ function config.load(get)
 	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)
+	cfg.dump_fee = math.max(0, tonumber(get("rockmech_dump_fee")) or 0)            -- 破碎站切換成廢石場：每噸棄置費
+	-- 選礦場（plant.lua）：處理能力 (t/s)、煤回收率、矸石混入率、每座儲料塔容量 (m³)、放料速度 (t/s)
+	cfg.plant_rate = math.max(0.1, tonumber(get("rockmech_plant_rate")) or 3)
+	cfg.plant_recovery = math.max(0, math.min(1, tonumber(get("rockmech_plant_recovery")) or 0.95))
+	cfg.plant_misplaced = math.max(0, math.min(1, tonumber(get("rockmech_plant_misplaced")) or 0.10))
+	cfg.plant_bin = math.max(1, tonumber(get("rockmech_plant_bin")) or 50)
+	cfg.plant_load_rate = math.max(0.1, tonumber(get("rockmech_plant_load_rate")) or 4)
 	-- 交通壓實（vehicles.lua）：車子總重（含載重）多少噸以上才壓得實（排除手推車）、壓幾趟壓實、壓實後的摩擦角 (deg)
 	cfg.compact_mass = math.max(0, tonumber(get("rockmech_compact_mass")) or 10)
 	cfg.compact_passes = math.max(1, math.floor(tonumber(get("rockmech_compact_passes")) or 4))

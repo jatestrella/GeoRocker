@@ -318,6 +318,24 @@ rockmech_crusher_rate (Crusher throughput) float 2 0.1 100
 # Crusher processing fee per tonne. Waste rock pays this and earns nothing.
 rockmech_crusher_fee (Crusher processing fee) float 30 0 100000
 
+# The crusher can be switched to a waste dump (right-click it). Fee per tonne dumped there; 0 makes dumping free.
+rockmech_dump_fee (Waste dump fee) float 0 0 100000
+
+# Ore plant (coal preparation plant): feed rate in tonnes per second.
+rockmech_plant_rate (Plant feed rate) float 3 0.1 100
+
+# Fraction of the coal in the feed that reports to the clean coal bin.
+rockmech_plant_recovery (Plant coal recovery) float 0.95 0 1
+
+# Fraction of the rock in the feed that is misplaced into the clean coal bin.
+rockmech_plant_misplaced (Plant rock misplaced to clean coal) float 0.1 0 1
+
+# Capacity of each plant bin in cubic metres. The plant stops feeding when either bin is full.
+rockmech_plant_bin (Plant bin capacity) float 50 1 10000
+
+# Rate at which a plant chute loads a truck parked under it, tonnes per second.
+rockmech_plant_load_rate (Plant chute loading rate) float 4 0.1 100
+
 # Traffic compaction: rubble driven over this many times by a vehicle at least this heavy (gross tonnes, load included)
 # becomes compacted rubble (lighter colour, higher friction angle). It is still rubble: diggable, pushable, and it falls
 # when undermined. The mass limit only keeps hand carts out.
