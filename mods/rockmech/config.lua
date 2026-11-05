@@ -677,6 +677,7 @@ function config.load(get)
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)
 	cfg.dump_fee = math.max(0, tonumber(get("rockmech_dump_fee")) or 0)            -- 破碎站切換成廢石場：每噸棄置費
+	cfg.rubble_density = math.max(0.1, tonumber(get("rockmech_rubble_density")) or 2.5)   -- 計價用的碎石密度 (t/m³)
 	-- 選礦場（plant.lua）：處理能力 (t/s)、煤回收率、矸石混入率、每座儲料塔容量 (m³)、放料速度 (t/s)
 	cfg.plant_rate = math.max(0.1, tonumber(get("rockmech_plant_rate")) or 3)
 	cfg.plant_recovery = math.max(0, math.min(1, tonumber(get("rockmech_plant_recovery")) or 0.95))

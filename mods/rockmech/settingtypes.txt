@@ -321,6 +321,9 @@ rockmech_crusher_fee (Crusher processing fee) float 30 0 100000
 # The crusher can be switched to a waste dump (right-click it). Fee per tonne dumped there; 0 makes dumping free.
 rockmech_dump_fee (Waste dump fee) float 0 0 100000
 
+# Density used to turn rubble volume into tonnes for selling and display (tonnes per cubic metre). Vehicle load physics is unchanged.
+rockmech_rubble_density (Rubble density for tonnage) float 2.5 0.1 10
+
 # Ore plant (coal preparation plant): feed rate in tonnes per second.
 rockmech_plant_rate (Plant feed rate) float 3 0.1 100
 

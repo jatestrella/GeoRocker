@@ -123,7 +123,8 @@ local function hopper_center(meta)
 end
 
 -- 每級碎石的噸數：1/8 m³，密度用 γ/10
-local function tons_of(levels) return levels / V.NLEV * cfg.failure.gamma_other / 10 end
+-- 計價用：1/8 m³ 一級，密度 rockmech_rubble_density（t/m³，預設 2.5）。只管錢和顯示的噸數，車輛載重的物理照舊
+local function tons_of(levels) return levels / V.NLEV * cfg.rubble_density end
 
 -- 從格柵吃料：這一步最多 rate (t/s) × dtime，也不超過 limit 級（選礦場的倉快滿了）。
 -- 每吃一塊呼叫 take(級數, 碎石種類, 品位 param2)；回傳吃了幾級。倉裡的料順便往格柵流一步
@@ -154,36 +155,49 @@ end
 local function crush(pos, dtime)
 	local meta = core.get_meta(pos)
 	local dump = meta:get_string("mode") == "dump"
-	local income, ore_t = 0, 0
+	-- 這一步的帳：礦的噸數、礦的貨款（噸 × 價格 × 回收率）、處理費（全部噸數 × 每噸處理費；廢石場是棄置費）
+	local ore_t, gross, fee = 0, 0, 0
 	local eaten = eat(pos, dtime, cfg.crusher_rate, nil, function(t, base, p2)
 		local ore = rockmech.ore_of_rubble[base]
+		local tons = tons_of(t)
 		local grade = ore and p2 / 255 or 0
-		if dump then income = income - tons_of(t) * cfg.dump_fee
-		else income = income + rockmech.config.crush_income(tons_of(t), grade, ore, cfg.crusher_fee) end
-		ore_t = ore_t + tons_of(t) * grade
+		ore_t = ore_t + tons * grade
+		if dump then fee = fee + tons * cfg.dump_fee
+		else
+			if ore then gross = gross + tons * grade * ore.recovery * ore.price end
+			fee = fee + tons * cfg.crusher_fee
+		end
 	end)
+	local income = gross - fee
 	local owner = meta:get_string("owner")
 	if eaten == 0 then
 		-- 吃完了：回報這一批（破碎：先響金幣聲，再出結算）
 		local bt = meta:get_float("batch_t")
 		if bt > 0 then
+			local bq, bg, bf = meta:get_float("batch_q"), meta:get_float("batch_g"), meta:get_float("batch_f")
 			if dump then
 				core.chat_send_player(owner, ("[廢石場] 這批 %.1f t 棄置%s"):format(bt,
-					cfg.dump_fee > 0 and ("，棄置費 $%.0f"):format(-meta:get_float("batch_m")) or ""))
+					cfg.dump_fee > 0 and ("，棄置費 %.1f t × 每噸 $%g = −$%.0f"):format(bt, cfg.dump_fee, bf) or ""))
 			else
+				local ore = next(cfg.ores) and select(2, next(cfg.ores))
+				local lines = {("[破碎站] 這批 %.1f t"):format(bt)}
+				if ore then
+					lines[#lines + 1] = ("　%s %.1f t × 每噸 $%g × 回收率 %.0f%% = $%.0f"):format(ore.label, bq, ore.price, ore.recovery * 100, bg)
+				end
+				lines[#lines + 1] = ("　廢石 %.1f t"):format(bt - bq)
+				lines[#lines + 1] = ("　處理費 %.1f t × 每噸 $%g = −$%.0f"):format(bt, cfg.crusher_fee, bf)
+				lines[#lines + 1] = ("　淨收入 %s$%.0f"):format(bg - bf < 0 and "−" or "", math.abs(bg - bf))
 				core.sound_play("rockmech_coin", {to_player = owner, gain = 0.8}, true)
-				core.after(COIN_LEAD, core.chat_send_player, owner, ("[破碎站] 這批 %.1f t，品位 %.0f%%，收入 $%.0f"):format(bt,
-					100 * meta:get_float("batch_q") / bt, meta:get_float("batch_m")))
+				core.after(COIN_LEAD, core.chat_send_player, owner, table.concat(lines, "\n"))
 			end
-			meta:set_float("batch_t", 0)
-			meta:set_float("batch_q", 0)
-			meta:set_float("batch_m", 0)
+			for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m"}) do meta:set_float(k, 0) end
 		end
 		return
 	end
 	local t = tons_of(eaten)
 	if income ~= 0 then rockmech.add_money(owner, income) end
-	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_m = income, total_t = t, total_q = ore_t, total_m = income}) do
+	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_g = gross, batch_f = fee, batch_m = income,
+			total_t = t, total_q = ore_t, total_g = gross, total_f = fee, total_m = income}) do
 		meta:set_float(key, meta:get_float(key) + v)
 	end
 end
@@ -206,7 +220,7 @@ local function formspec(pos)
 		("button[0.5,5.8;8,0.8;mode;%s]"):format(dump and "切換成破碎站（賣礦）" or ("切換成廢石場（棄置，每噸 $%g）"):format(cfg.dump_fee)),
 		("label[0.5,2.4;受料倉：%.1f / %.0f m³（%.1f t）]"):format(queue / V.NLEV, CAPACITY / V.NLEV, tons_of(queue)),
 		("label[0.5,3.0;累計處理：%.1f t，平均品位 %.0f%%]"):format(total, total > 0 and 100 * meta:get_float("total_q") / total or 0),
-		("label[0.5,3.6;累計收入：$%.0f]"):format(meta:get_float("total_m")),
+		("label[0.5,3.6;累計：貨款 $%.0f − 處理費 $%.0f = 淨收入 $%.0f]"):format(meta:get_float("total_g"), meta:get_float("total_f"), meta:get_float("total_m")),
 		("label[0.5,4.2;資金（%s）：$%.0f]"):format(core.formspec_escape(meta:get_string("owner")),
 			storage:get_float(MONEY .. meta:get_string("owner"))),
 		"button_exit[3,4.8;3,0.8;ok;關閉]",
