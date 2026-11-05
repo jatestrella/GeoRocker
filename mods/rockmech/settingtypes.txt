@@ -339,6 +339,9 @@ rockmech_plant_bin (Plant bin capacity) float 50 1 10000
 # Rate at which a plant chute loads a truck parked under it, tonnes per second.
 rockmech_plant_load_rate (Plant chute loading rate) float 4 0.1 100
 
+# How far (horizontal metres) each plant loading arm reaches. A truck or haul truck standing still with its bed within this range gets loaded.
+rockmech_plant_reach (Plant loading arm reach) float 8 1 30
+
 # Traffic compaction: rubble driven over this many times by a vehicle at least this heavy (gross tonnes, load included)
 # becomes compacted rubble (lighter colour, higher friction angle). It is still rubble: diggable, pushable, and it falls
 # when undermined. The mass limit only keeps hand carts out.

@@ -3,8 +3,9 @@
 -- rockmech.hopper_lib），機身左右各一座 6 m 高的儲料塔：一座出精煤、一座出矸石。
 -- 分選（重介質分選的分配曲線簡化成兩個數）：原料裡的煤有 rockmech_plant_recovery 進精煤，
 -- 矸石有 rockmech_plant_misplaced 混進精煤，其餘進矸石。品位 30% 的原料 → 精煤約 80%、矸石約 2%。
--- 放料口只裝車（裝車倉的閘門）：有斗的車（卡車、礦卡）停好、車斗在放料口正下方才放料，不會倒在地上或旁邊的漏斗，
--- 所以就算蓋在破碎站、廢石場旁邊，還是要用卡車搬。兩座塔任何一座滿了就停止吃料。
+-- 放料臂（裝車溜槽）：每座塔頂外側一支會轉的放料臂，有斗的車（卡車、礦卡）停在 rockmech_plant_reach m 內不動，
+-- 放料臂就轉過去、伸到車斗上方放料。只裝車，不會倒在地上或旁邊的漏斗，所以就算蓋在破碎站、廢石場旁邊，
+-- 還是要用卡車搬。兩座塔任何一座滿了就停止吃料。
 -- 選礦場本身不收錢也不付錢：精煤載去破碎站賣，矸石載去廢石場（破碎站切換成廢石場）丟。
 
 local cfg = rockmech.cfg
@@ -14,7 +15,9 @@ local NLEV = V.NLEV
 
 local PLANT, CHUTE = "rockmech:plant", "rockmech:plant_chute"
 local BIN = {p = "rockmech:plant_bin_p", r = "rockmech:plant_bin_r"}
-local TOWER_H = 6           -- 塔高 (m)，放料口在塔頂外側
+local TOWER_H = 6           -- 塔高 (m)，放料臂的轉軸在塔頂外側
+local BOOM = "rockmech:plant_boom"
+local BOOM_REST = 3         -- 沒車時放料臂朝外伸出多長 (m)
 local TOWER_OFF = 4         -- 塔中心離機身中心（左右）
 local SIDES = {{key = "p", s = 1, label = "精煤"}, {key = "r", s = -1, label = "矸石"}}
 
@@ -32,18 +35,45 @@ local function layout(pos, dx, dz, s)
 end
 local function bin_cap() return cfg.plant_bin * NLEV end
 
--- 放料口下面停好、車斗在正下方、還裝得下的車
-local function truck_under(chute)
-	local ground = {x = chute.x, y = chute.y - TOWER_H + 1, z = chute.z}
-	for _, o in ipairs(core.get_objects_inside_radius(ground, 10)) do
+-- 放料臂搆得到、停著不動、還裝得下的車（最近的那台）：回傳 車, 車斗上離轉軸最近的那一點
+local function truck_in_reach(pivot)
+	local best, bp, bd
+	for _, o in ipairs(core.get_objects_inside_radius(pivot, cfg.plant_reach + 8)) do
 		local e = o:get_luaentity()
 		local td = e and e.vkind and V.TYPES[e.vkind]
 		if td and td.bed and not td.pushed and (td.cap or 0) > V.load_total(e) and not e.tip
 				and vector.length(o:get_velocity()) < 0.3 then
-			local bt = V.bed_target(e, chute)
-			if math.sqrt((bt.x - chute.x) ^ 2 + (bt.z - chute.z) ^ 2) <= td.bed.size.x / 2 then return e end
+			local bt = V.bed_target(e, pivot)
+			local d = math.sqrt((bt.x - pivot.x) ^ 2 + (bt.z - pivot.z) ^ 2)
+			if d <= cfg.plant_reach and bt.y < pivot.y + 0.5 and (not bd or d < bd) then best, bp, bd = e, bt, d end
 		end
 	end
+	return best, bp
+end
+
+-- 放料臂的樣子：一根從轉軸伸到 tip 的黃色方桿（實體，不存檔，計時器每一步補上、擺到位）
+core.register_entity(BOOM, {
+	initial_properties = {
+		visual = "cube", visual_size = {x = 0.45, y = 0.45, z = 1},
+		textures = (function()
+			local t = "[fill:16x16:#c8a020^[fill:16x2:0,7:#303030"
+			return {t, t, t, t, "[fill:16x16:#303030", "[fill:16x16:#303030"}
+		end)(),
+		physical = false, collide_with_objects = false, pointable = false, static_save = false,
+	},
+})
+local booms = {}            -- 「機身座標:side」→ 放料臂實體
+local function place_boom(key, pivot, tip)
+	local o = booms[key]
+	if not (o and o:get_pos()) then
+		o = core.add_entity(pivot, BOOM)
+		booms[key] = o
+		if not o then return end
+	end
+	local d = vector.subtract(tip, pivot)
+	o:set_pos(vector.add(pivot, vector.multiply(d, 0.5)))
+	o:set_properties({visual_size = {x = 0.45, y = 0.45, z = math.max(0.5, vector.length(d))}})
+	o:set_rotation(vector.dir_to_rotation(d))
 end
 
 -- 存量用 m³（跟車斗一樣），括號附噸數
@@ -80,18 +110,25 @@ local function step(pos, dtime)
 	local dx, dz = meta:get_int("dx"), meta:get_int("dz")
 	for _, sd in ipairs(SIDES) do
 		local lv, coal = meta:get_float(sd.key .. "_lv"), meta:get_float(sd.key .. "_coal")
+		local _, chute, out = layout(pos, dx, dz, sd.s)
+		local key = core.pos_to_string(pos) .. sd.key
+		local e, bt = truck_in_reach(chute)
+		if e then
+			place_boom(key, chute, {x = bt.x, y = bt.y + 0.4, z = bt.z})   -- 伸到車斗上方
+		else
+			place_boom(key, chute, {x = chute.x + out.x * BOOM_REST, y = chute.y - 0.8, z = chute.z + out.z * BOOM_REST})
+		end
 		if lv >= 1 then
-			local _, chute = layout(pos, dx, dz, sd.s)
-			local e = truck_under(chute)
 			if e then
+				local tip = {x = bt.x, y = bt.y + 0.4, z = bt.z}
 				local n = math.min(math.floor(lv), per_step, V.TYPES[e.vkind].cap - V.load_total(e))
 				local g = coal / lv
 				V.load_put(e, ore.rubble, n, math.floor(g * 255 + 0.5))
 				meta:set_float(sd.key .. "_lv", lv - n)
 				meta:set_float(sd.key .. "_coal", coal - n * g)
-				rockmech.collapse.rubble_sound(chute, n)
+				rockmech.collapse.rubble_sound(tip, n)
 				core.add_particlespawner({amount = 12, time = dtime, glow = 3,
-					pos = {min = vector.subtract(chute, {x = 0.3, y = 0.6, z = 0.3}), max = vector.add(chute, {x = 0.3, y = -0.4, z = 0.3})},
+					pos = {min = vector.subtract(tip, {x = 0.3, y = 0.3, z = 0.3}), max = vector.add(tip, {x = 0.3, y = 0, z = 0.3})},
 					vel = {min = {x = -0.2, y = -6, z = -0.2}, max = {x = 0.2, y = -4, z = 0.2}}, exptime = 0.5, size = 3,
 					texture = "default_gravel.png^[colorize:" .. (sd.key == "p" and ore.pure or ore.waste_color) .. ":160"})
 			end
@@ -110,7 +147,7 @@ local function formspec(pos)
 		("label[0.5,1.8;分選：煤 %.0f%% 進精煤，矸石 %.0f%% 混進精煤]"):format(cfg.plant_recovery * 100, cfg.plant_misplaced * 100),
 		("label[0.5,2.5;%s]"):format(core.formspec_escape(parts[1])),
 		("label[0.5,3.1;%s]"):format(core.formspec_escape(parts[2])),
-		"label[0.5,3.7;卡車或礦卡倒車，讓車斗停在放料口正下方就會裝]",
+		("label[0.5,3.7;卡車或礦卡停在放料臂 %g m 內不動，放料臂就會轉過去裝]"):format(cfg.plant_reach),
 		"button_exit[3,4.3;3,0.8;ok;關閉]",
 	})
 end
@@ -146,7 +183,7 @@ local function build(pos, dx, dz, name)
 		cm:set_string("plant", core.pos_to_string(pos))
 		cm:set_float("ux", out.x)
 		cm:set_float("uz", out.z)
-		cm:set_string("infotext", sd.label .. "放料口：車斗停在正下方")
+		cm:set_string("infotext", ("%s放料臂：卡車停在 %g m 內就裝"):format(sd.label, cfg.plant_reach))
 	end
 	local meta = core.get_meta(pos)
 	meta:set_string("owner", name)
@@ -170,10 +207,13 @@ local function remove_towers(pos, meta)
 			end
 		end end
 		if core.get_node(chute).name == CHUTE then core.remove_node(chute) end
+		local o = booms[core.pos_to_string(pos) .. sd.key]
+		if o and o:get_pos() then o:remove() end
 	end
 end
 
--- 無人駕駛（vehicle_ahs.lua）：p 附近 r m 內的放料口，回傳 {x, y, z, u = 朝外的方向}；沒有回傳 nil
+rockmech.PLANT_REACH = function() return cfg.plant_reach end
+-- 無人駕駛（vehicle_ahs.lua）：p 附近 r m 內的放料臂轉軸，回傳 {x, y, z, u = 朝外的方向}；沒有回傳 nil
 function rockmech.plant_chute_near(p, r)
 	local c = core.find_node_near(p, r, CHUTE, true)
 	if not c then return nil end
@@ -201,7 +241,7 @@ core.register_node(CHUTE, {
 
 core.register_node(PLANT, {
 	description = ("Ore plant (選礦場)\n對著平地按右鍵放置：朝自己的方向挖 %d×%d m 受料倉，機身左右各一座儲料塔\n"
-		.. "分選成精煤和矸石；卡車或礦卡停在放料口下面裝料"):format(H.SIZE, H.SIZE),
+		.. "分選成精煤和矸石；卡車或礦卡停在放料臂範圍內裝料"):format(H.SIZE, H.SIZE),
 	drawtype = "nodebox",
 	paramtype = "light",
 	node_box = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}},
