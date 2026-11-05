@@ -55,10 +55,19 @@ end
 
 
 -- 車斗中心上方（挖土機倒進來的位置，世界座標）
-function V.bed_target(e)
+-- near（可選）：倒料的怪手的位置。給了就倒在車斗上離它最近的那一段（車斗兩端各留 BED_INSET m），
+-- 像實際裝車倒在靠近的那一段、料自己在斗裡攤開；長車斗（礦卡 6.6 m）手臂短的怪手才搆得到
+local BED_INSET = 1
+function V.bed_target(e, near)
 	local bed = TYPES[e.vkind].bed
 	local tp, ty = e.object:get_pos(), e.object:get_yaw()
 	local bz = bed.hinge.z + bed.size.z / 2
+	if near then
+		-- near 在車身軸上的位置（車身座標 z），夾在車斗範圍內
+		local lz = -(near.x - tp.x) * math.sin(ty) + (near.z - tp.z) * math.cos(ty)
+		local z0, z1 = bed.hinge.z + BED_INSET, bed.hinge.z + bed.size.z - BED_INSET
+		bz = math.max(math.min(z0, z1), math.min(math.max(z0, z1), lz))
+	end
 	local by = bed.hinge.y + bed.size.y + 0.8
 	return {x = tp.x - bz * math.sin(ty), y = tp.y + by, z = tp.z + bz * math.cos(ty)}   -- 車身 +Z → (−sin, cos)
 end

@@ -364,7 +364,7 @@ local function excavator(kind, P)
 			local e = o:get_luaentity()
 			local td = e ~= self and hauler_def(e)
 			if td and not e.tip and load_total(e) < td.cap and vector.length(o:get_velocity()) < 0.3 then
-				local bt = V.bed_target(e)
+				local bt = V.bed_target(e, pos)
 				local d = vector.distance(pos, bt)
 				if in_reach(self, bt) and (not bd or d < bd) then best, bd = e, d end
 			end
@@ -629,7 +629,7 @@ local function excavator(kind, P)
 			end
 			local dg
 			if hit and hit.truck then
-				dg = {t = 0, mode = "dump", truck = hit.truck, to = to_local(self, V.bed_target(hit.truck))}
+				dg = {t = 0, mode = "dump", truck = hit.truck, to = to_local(self, V.bed_target(hit.truck, pos))}
 			elseif hit and hit.above then
 				local a = hit.above
 				dg = {t = 0, mode = "dump", target = a, to = to_local(self, {x = a.x, y = a.y + 0.8, z = a.z})}
