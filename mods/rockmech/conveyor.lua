@@ -179,10 +179,50 @@ local function move(ha, hb, C)
 	dirty = true
 end
 
+-- 粒子：皮帶上滾動的碎石顆粒、頭端倒出去的料流。只給附近（PARTICLE_R m 內）有玩家的格子，一步最多 PARTICLE_MAX 格
+local PARTICLE_R, PARTICLE_MAX = 64, 80
+local function near_player(p)
+	for _, pl in ipairs(core.get_connected_players()) do
+		local pp = pl:get_pos()
+		if pp and vector.distance(pp, p) <= PARTICLE_R then return true end
+	end
+	return false
+end
+-- 顆粒的顏色：以礦為主是礦的顏色，否則是廢石的顏色
+local function bits_tex(L)
+	local k, kg = 0, 0
+	for _, q in ipairs(L) do
+		k = k + q.k
+		if rockmech.ore_of_rubble[q.b] then kg = kg + q.k * q.g / 255 end
+	end
+	local ore = main_ore()
+	local c = ore and (kg >= 0.5 * k and ore.pure or ore.waste_color) or "#6a6058"
+	return "default_gravel.png^[colorize:" .. c .. ":160"
+end
+-- 頭端倒料：從皮帶前緣以帶速拋出去、往下掉的料流
+local function discharge_particles(p, d, h, out, tex)
+	local v = cfg.conveyor_speed
+	local edge = {x = p.x + d.x * 0.5, y = p.y + top_of(h) + 0.1, z = p.z + d.z * 0.5}
+	local lat = {x = math.abs(d.z) * 0.3, y = 0, z = math.abs(d.x) * 0.3}
+	core.add_particlespawner({amount = math.min(40, 6 + out * 2), time = 1 / v,
+		pos = {min = vector.subtract(edge, lat), max = vector.add(vector.add(edge, lat), {x = 0, y = 0.12, z = 0})},
+		vel = {min = {x = d.x * v * 0.7, y = -0.2, z = d.z * v * 0.7}, max = {x = d.x * v * 1.1, y = 0.4, z = d.z * v * 1.1}},
+		acc = {x = 0, y = -9.81, z = 0},
+		exptime = {min = 0.6, max = 1.2}, size = {min = 1.5, max = 3},
+		collisiondetection = true, collision_removal = true, texture = tex})
+	-- 落地揚起的灰
+	core.add_particlespawner({amount = math.min(12, 2 + out), time = 1 / v,
+		pos = {min = vector.subtract(edge, {x = 0.6, y = 1.5, z = 0.6}), max = vector.add(edge, {x = 0.6 + d.x, y = -0.5, z = 0.6 + d.z})},
+		vel = {min = {x = -0.3, y = 0.2, z = -0.3}, max = {x = 0.3, y = 0.6, z = 0.3}},
+		exptime = {min = 1, max = 2}, size = {min = 3, max = 6},
+		texture = "default_gravel.png^[colorize:#8a8070:200^[opacity:110"})
+end
+
 -- 頭：往前倒出去（前方那格或再上一格是空的才倒；前面堆滿了皮帶就停）
 local function discharge(p, d)
 	local L = loads[core.hash_node_position(p)]
 	if not L then return end
+	local tex = bits_tex(L)
 	local f = {x = p.x + d.x, y = p.y, z = p.z + d.z}
 	local fu = {x = f.x, y = f.y + 1, z = f.z}
 	local nf, nu = core.get_node_or_nil(f), core.get_node_or_nil(fu)
@@ -201,6 +241,7 @@ local function discharge(p, d)
 	if out > 0 then
 		dirty = true
 		rockmech.collapse.rubble_sound(f, out)
+		if near_player(f) then discharge_particles(p, d, BELT_H[core.get_node(p).name] or 0, out, tex) end
 	end
 end
 
@@ -256,10 +297,25 @@ local function tick()
 			for _, hc in ipairs(chain) do done[hc] = true end
 		end
 	end
-	-- 3. 外觀：有料的格子表面換成碎石
+	-- 3. 外觀：有料的格子表面換成碎石，附近有人的話加上沿著皮帶走的碎石顆粒
+	local v, np = cfg.conveyor_speed, 0
 	for h, n in pairs(nodes) do
 		local st = want_state(loads[h])
 		if BELT_ST[n.name] ~= st then core.swap_node(cells[h], {name = NAME[BELT_H[n.name]][st], param2 = n.param2}) end
+		if st ~= "" and np < PARTICLE_MAX and near_player(cells[h]) then
+			np = np + 1
+			local p = cells[h]
+			local q, d = next_of(p, n)
+			local m = q and core.get_node(q)
+			local rise = m and BELT_H[m.name] and (surf(q, m) - surf(p, n)) / 8 or 0   -- 往下一格的升降 (m)
+			local y = p.y + top_of(BELT_H[n.name]) + 0.16
+			local lat = {x = math.abs(d.z) * 0.25, y = 0, z = math.abs(d.x) * 0.25}
+			local c = {x = p.x - d.x * 0.4, y = y, z = p.z - d.z * 0.4}
+			core.add_particlespawner({amount = 3, time = 1 / v,
+				pos = {min = vector.subtract(c, lat), max = vector.add(vector.add(c, lat), {x = d.x * 0.6, y = 0.05, z = d.z * 0.6})},
+				vel = {min = {x = d.x * v, y = rise * v, z = d.z * v}, max = {x = d.x * v, y = rise * v, z = d.z * v}},
+				exptime = 1 / v, size = {min = 1, max = 2}, texture = bits_tex(loads[h])})
+		end
 	end
 end
 
