@@ -64,6 +64,7 @@ end
 local REARCAM_HUD = {x = 62, y = 10, w = 36, h = 20.25}
 local function views_of(kind)
 	local def = TYPES[kind]
+	if not def.mirror then return {} end      -- 沒設後照鏡位置的車就不畫（不然上車就當掉）
 	local v = {mirror_view(-1, def.mirror), mirror_view(1, def.mirror)}
 	if def.rearcam then
 		v[3] = {o = def.rearcam, dir = 0, down = math.rad(24), hfov = math.rad(80), vfov = math.rad(42),

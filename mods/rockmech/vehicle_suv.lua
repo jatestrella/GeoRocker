@@ -13,6 +13,7 @@ local def = {desc = "四輪驅動休旅車 4WD SUV", short = "休旅車", color 
 	max_grade = math.rad(30),     -- 四輪驅動
 	tire = 0.75,
 	half = 1.0, top = 0.8, lat = {-0.6, 0.6}, eye_up = 0.75, eye_fwd = 0.15, rear = 3.5,
+	mirror = {x = 1.1, y = 0.5, z = -0.1}, rearcam = {x = 0, y = 0.6, z = -3.6},   -- 後照鏡（A 柱旁）、倒車攝影機（車尾）
 	tilt = {front = 0.9, rear = -3.0, side_z = -1.2, side_x = 0.8},
 	tail_lat = {-0.8, 0, 0.8}, tail_dy = {0.6, 1.2},
 	item_desc = "右鍵上車（代步用，四輪驅動，爬坡可到 30°）"}
