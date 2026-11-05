@@ -116,7 +116,7 @@ local function hauler(def, spec)
 		local ore, grade = V.load_ore(self)
 		local mix = ore and "\n" .. rockmech.ore_text(ore, grade) or ""
 		self.object:set_properties({
-			nametag = ("載量 %d / %d 級（%.1f / %.0f m³）"):format(t, cap, t / NLEV, cap / NLEV) .. mix .. (st and ("\n" .. st) or ""),
+			nametag = "載量 " .. V.volume_text(t, cap) .. mix .. (st and ("\n" .. st) or ""),
 			nametag_color = t >= cap and "#ff8060" or "#ffffff",
 		})
 		if not self.tip then place_bed(self, 0) end

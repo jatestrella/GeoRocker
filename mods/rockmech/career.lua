@@ -73,7 +73,7 @@ local function show_carry(player, c)
 	local text = ""
 	if c then
 		local ore = rockmech.ore_of_rubble[c.base]
-		text = ("手上：%s　%d / %d 級%s"):format(core.registered_nodes[c.base].description:gsub("\n.*", ""), c.lv, NLEV,
+		text = ("手上：%s　%s%s"):format(core.registered_nodes[c.base].description:gsub("\n.*", ""), V.volume_text(c.lv, NLEV),
 			ore and ("　" .. rockmech.ore_text(ore, c.p2 / 255)) or "")
 	end
 	if carry_hud[name] then

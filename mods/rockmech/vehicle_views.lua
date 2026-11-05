@@ -17,7 +17,7 @@ local function hud_text(self)
 	local s = def.desc
 	if def.cap > 0 then
 		local t = V.load_total(self)
-		s = s .. ("　載量 %d / %d 級（%.1f / %.0f m³）"):format(t, def.cap, t / NLEV, def.cap / NLEV)
+		s = s .. "　載量 " .. V.volume_text(t, def.cap)
 		local ore, grade = V.load_ore(self)
 		if ore then s = s .. "　" .. rockmech.ore_text(ore, grade) end
 	end

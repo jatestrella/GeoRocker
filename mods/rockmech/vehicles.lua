@@ -438,6 +438,13 @@ local function load_total(self)
 	return t
 end
 V.load_total = load_total
+-- 載量給人看：m³（1 級 = 1/8 m³，級是程式內部的單位）和噸（計價用的密度 rockmech_rubble_density，跟破碎站結算一致）。
+-- cap 可省略
+function V.volume_text(lv, cap)
+	local s = ("%.1f"):format(lv / NLEV)
+	if cap then s = s .. (" / %.0f"):format(cap / NLEV) end
+	return s .. (" m³（%.0f t）"):format(lv / NLEV * rockmech.cfg.rubble_density)
+end
 
 -- 爬台階：def.tire（輪胎直徑，m）的車最高爬輪胎的一半，但至少爬得上一格方塊（否則地形的 1 m 台階都上不去）。
 -- 台階低於 STEP_FREE 不減速（車轍、碎石的小高低差），越接近上限掉得越快，到上限剩 STEP_CRAWL（1 km/h）

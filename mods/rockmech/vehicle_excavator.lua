@@ -321,7 +321,7 @@ local function excavator(kind, P)
 		local truck = p and find_truck(p, select(2, V.dirs(self.object:get_yaw())))
 		if truck then
 			local tt, cap = load_total(truck), TYPES[truck.vkind].cap
-			s = s .. ("\n前方%s：%d / %d 級（%.1f / %.0f m³）"):format(TYPES[truck.vkind].short, tt, cap, tt / NLEV, cap / NLEV)
+			s = s .. ("\n前方%s：%s"):format(TYPES[truck.vkind].short, V.volume_text(tt, cap))
 		end
 		if self.msg then s = s .. "\n" .. self.msg end
 		return s .. "\nE 挖滑鼠指的位置　空白鍵 倒在滑鼠指的位置（指著卡車就倒進卡車）"
