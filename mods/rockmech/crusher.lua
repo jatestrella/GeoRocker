@@ -217,7 +217,7 @@ local function show_bill(name, title, rows)
 	end
 	local n = #rows + 2
 	add({type = "image", alignment = {x = -1, y = 1}, offset = {x = -8, y = -6}, scale = {x = 450, y = ROW_H * n + 12},
-		text = "[fill:1x1:#000000a8"})
+		text = "[fill:1x1:#101010f4"})   -- 幾乎不透明：後面場景裡的名牌（怪手、卡車）不會透出來疊到字
 	add({type = "text", alignment = {x = 1, y = 1}, offset = {x = COLS[1][1], y = 0}, text = title, number = GOLD})
 	for c, head in ipairs({"項目", "數量", "單價", "金額"}) do
 		add({type = "text", alignment = {x = COLS[c][2], y = 1}, offset = {x = COLS[c][1], y = ROW_H}, text = head, number = 0xB0B0B0})
