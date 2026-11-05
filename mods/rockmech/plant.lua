@@ -15,6 +15,7 @@ local NLEV = V.NLEV
 
 local PLANT, CHUTE = "rockmech:plant", "rockmech:plant_chute"
 local BIN = {p = "rockmech:plant_bin_p", r = "rockmech:plant_bin_r"}
+local BIN_FULL = {p = "rockmech:plant_bin_p_full", r = "rockmech:plant_bin_r_full"}   -- 裝著料的那幾層（從底下往上）
 local TOWER_H = 6           -- 塔高 (m)，放料臂的轉軸在塔頂外側
 local BOOM = "rockmech:plant_boom"
 local BOOM_REST = 3         -- 沒車時放料臂朝外伸出多長 (m)
@@ -88,6 +89,23 @@ local function info(meta)
 	return parts
 end
 
+-- 塔身顯示存量：裝了幾成就從底下往上幾層換成料的顏色（有變才換）
+local function show_fill(pos, meta, sd)
+	local lv = meta:get_float(sd.key .. "_lv")
+	local k = lv < 1 and 0 or math.max(1, math.min(TOWER_H, math.ceil(lv / bin_cap() * TOWER_H)))
+	if meta:get_int(sd.key .. "_shown") == k + 1 then return end      -- 存 k + 1：0 是還沒畫過
+	local tc = layout(pos, meta:get_int("dx"), meta:get_int("dz"), sd.s)
+	for i = 0, TOWER_H - 1 do
+		local want = i < k and BIN_FULL[sd.key] or BIN[sd.key]
+		for x = tc.x - 1, tc.x + 1 do for z = tc.z - 1, tc.z + 1 do
+			local p = {x = x, y = pos.y + i, z = z}
+			local n = core.get_node(p).name
+			if n ~= want and (n == BIN[sd.key] or n == BIN_FULL[sd.key]) then core.swap_node(p, {name = want}) end
+		end end
+	end
+	meta:set_int(sd.key .. "_shown", k + 1)
+end
+
 local function step(pos, dtime)
 	local meta = core.get_meta(pos)
 	local cap = bin_cap()
@@ -139,6 +157,7 @@ local function step(pos, dtime)
 			end
 		end
 	end
+	for _, sd in ipairs(SIDES) do show_fill(pos, meta, sd) end
 	meta:set_string("infotext", "選礦場（右鍵查看）\n" .. table.concat(info(meta), "\n"))
 end
 
@@ -208,7 +227,8 @@ local function remove_towers(pos, meta)
 		for x = tc.x - 1, tc.x + 1 do for z = tc.z - 1, tc.z + 1 do
 			for y = pos.y, pos.y + TOWER_H - 1 do
 				local p = {x = x, y = y, z = z}
-				if core.get_node(p).name == BIN[sd.key] then core.remove_node(p) end
+				local n = core.get_node(p).name
+				if n == BIN[sd.key] or n == BIN_FULL[sd.key] then core.remove_node(p) end
 			end
 		end end
 		if core.get_node(chute).name == CHUTE then core.remove_node(chute) end
@@ -239,14 +259,19 @@ end
 
 local BODY = "[fill:16x16:#2f7f8f^[fill:16x2:0,0:#303030^[fill:16x2:0,14:#303030"
 local function bin_tex(c) return ("[fill:16x16:%s^[fill:16x1:0,0:#303030^[fill:1x16:0,0:#303030"):format(c) end
-core.register_node(BIN.p, {
-	description = "Plant bin (選礦場精煤塔)", tiles = {bin_tex("#3c6a3c")}, groups = {not_in_creative_inventory = 1},
-	diggable = false, is_ground_content = false, drop = "",
-})
-core.register_node(BIN.r, {
-	description = "Plant bin (選礦場矸石塔)", tiles = {bin_tex("#7a5a3c")}, groups = {not_in_creative_inventory = 1},
-	diggable = false, is_ground_content = false, drop = "",
-})
+-- 裝了料的那幾層：料的顏色（精煤黑、矸石灰），框線用塔原本的顏色
+local function full_tex(material, paint) return ("[fill:16x16:%s^[fill:16x2:0,0:%s^[fill:2x16:0,0:%s"):format(material, paint, paint) end
+local PAINT = {p = "#3c6a3c", r = "#7a5a3c"}
+local MATERIAL = {p = main_ore().pure, r = main_ore().waste_color}
+for _, sd in ipairs(SIDES) do
+	local k = sd.key
+	for _, v in ipairs({{BIN[k], bin_tex(PAINT[k]), ""}, {BIN_FULL[k], full_tex(MATERIAL[k], PAINT[k]), "，裝著料"}}) do
+		core.register_node(v[1], {
+			description = ("Plant bin (選礦場%s塔%s)"):format(sd.label, v[3]), tiles = {v[2]}, groups = {not_in_creative_inventory = 1},
+			diggable = false, is_ground_content = false, drop = "",
+		})
+	end
+end
 core.register_node(CHUTE, {
 	description = "Plant chute (選礦場放料口)",
 	drawtype = "nodebox", paramtype = "light",
