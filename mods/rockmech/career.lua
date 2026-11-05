@@ -225,10 +225,11 @@ local function load_near(player, pos)
 	for _, o in ipairs(core.get_objects_inside_radius(pos, LOAD_R + 3)) do
 		local e = o:get_luaentity()
 		local def = e and e.vkind and V.TYPES[e.vkind]
-		if def and (def.cap or 0) > V.load_total(e) and not e.driver then
+		-- 只找有車斗的車（卡車、礦卡、手推車）：怪手的鏟斗也有容量，但沒有車斗、也沒有車尾長度
+		if def and def.bed and (def.cap or 0) > V.load_total(e) and not e.driver then
 			local p = o:get_pos()
 			local dir = core.yaw_to_dir(o:get_yaw())
-			local bed = vector.add(p, vector.multiply(dir, -def.rear / 2))
+			local bed = vector.add(p, vector.multiply(dir, -(def.rear or def.half) / 2))
 			if vector.distance({x = bed.x, y = pos.y, z = bed.z}, pos) <= LOAD_R + def.half
 					or vector.distance({x = p.x, y = pos.y, z = p.z}, pos) <= LOAD_R then
 				return rockmech.career_load(player, e, def)
