@@ -71,6 +71,7 @@ config.shop = {
 	{key = "pick", item = "rockmech:pick", label = "挖礦鎬", price = 0},
 	{key = "shovel", item = "rockmech:shovel", label = "鏟子", price = 100},
 	{key = "cart", item = "rockmech:cart_item", label = "手推車", price = 500},
+	{key = "suv", item = "rockmech:suv_item", label = "休旅車", price = 3000},
 	{key = "truck", item = "rockmech:truck_item", label = "卡車", price = 10000},
 	{key = "excavator", item = "rockmech:excavator_item", label = "怪手", price = 15000},
 	{key = "crusher", item = "rockmech:crusher", label = "破碎站", price = 20000},

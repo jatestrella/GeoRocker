@@ -584,7 +584,7 @@ end
 
 -- 車輛的自重 (t)，車種沒列的用 20
 V.MASS = {cart = 0.2, truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
-	jumbo = 30, charger = 20, drillrig = 25}
+	jumbo = 30, charger = 20, drillrig = 25, suv = 2.5}
 
 -- 接地壓力 (kPa) = (自重 + 車上的碎石) / 兩條輪跡的面積（各寬 1 m、長 = 車長），g 取 10。
 -- 重量都在輪子或履帶下面，不能平均到整個車身
@@ -1113,7 +1113,8 @@ function V.register(kind, def)
 				end
 			end
 			if def.tire and ctx.fwd ~= 0 then
-				local h, hmax = step_ahead(pos, dir, def, ctx.fwd, ctx.speed), V.max_step(def)
+				-- 往前看的距離照實際車速（不是想開的速度：在坡上被減速成慢爬時還照極速往前看，坡本身就一直被當成台階）
+				local h, hmax = step_ahead(pos, dir, def, ctx.fwd, math.sqrt(vel.x * vel.x + vel.z * vel.z)), V.max_step(def)
 				ctx.speed = V.step_speed(ctx.speed, h, hmax)
 				if h > hmax and not steep then steep = ("台階太高（%.1f m > %.1f m）"):format(h, hmax) end
 			end
@@ -1191,3 +1192,4 @@ dofile(rockmech.modpath .. "/vehicle_dozer.lua")
 dofile(rockmech.modpath .. "/vehicle_jumbo.lua")
 dofile(rockmech.modpath .. "/vehicle_drillrig.lua")
 dofile(rockmech.modpath .. "/vehicle_bulktruck.lua")
+dofile(rockmech.modpath .. "/vehicle_suv.lua")
