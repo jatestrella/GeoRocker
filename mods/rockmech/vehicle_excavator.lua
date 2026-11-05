@@ -125,8 +125,11 @@ core.register_craftitem(RADIO, {
 
 local function op_show(self)
 	local op = self.op
-	self.object:set_properties(op and op.on and {nametag = "操作員：" .. (op.msg or "作業中") .. ("（截止品位 %d%%）"):format(op.cutoff * 100 + 0.5),
-		nametag_color = "#ffe080"} or {nametag = ""})
+	if op and op.on then
+		rockmech.vehicles.nametag(self, "操作員：" .. (op.msg or "作業中") .. ("（截止品位 %d%%）"):format(op.cutoff * 100 + 0.5), "#ffe080")
+	else
+		rockmech.vehicles.nametag(self, "")
+	end
 end
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= OP_ITEM then return end

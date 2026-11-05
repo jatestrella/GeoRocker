@@ -115,10 +115,7 @@ local function hauler(def, spec)
 		local st = V.ahs.status(self)
 		local ore, grade = V.load_ore(self)
 		local mix = ore and "\n" .. rockmech.ore_text(ore, grade) or ""
-		self.object:set_properties({
-			nametag = "載量 " .. V.volume_text(t, cap) .. mix .. (st and ("\n" .. st) or ""),
-			nametag_color = t >= cap and "#ff8060" or "#ffffff",
-		})
+		V.nametag(self, "載量 " .. V.volume_text(t, cap) .. mix .. (st and ("\n" .. st) or ""), t >= cap and "#ff8060" or "#ffffff")
 		if not self.tip then place_bed(self, 0) end
 	end
 	function def.hud(self) return "\n空白鍵 把車斗倒在車尾　E 無人駕駛設定" end

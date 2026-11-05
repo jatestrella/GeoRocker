@@ -446,6 +446,30 @@ function V.volume_text(lv, cap)
 	return s .. (" m³（%.0f t）"):format(lv / NLEV * rockmech.cfg.rubble_density)
 end
 
+-- 名牌：離最近的玩家超過 NAMETAG_R 就先不顯示（名牌畫在所有 HUD 上面，遠處一堆車會蓋住右上角的結算表），
+-- 走近再出現。V.nametag 記下想顯示的字，車子的 on_step 每秒檢查一次距離
+local NAMETAG_R = 40
+local function nametag_near(pos)
+	if not pos then return false end
+	for _, p in ipairs(core.get_connected_players()) do
+		local pp = p:get_pos()
+		if pp and vector.distance(pp, pos) <= NAMETAG_R then return true end
+	end
+	return false
+end
+local function nametag_apply(self)
+	local want = self.tag_text or ""
+	local show = want ~= "" and nametag_near(self.object:get_pos())
+	local text, color = show and want or "", self.tag_color or "#ffffff"
+	if text == self.tag_shown and color == self.tag_shown_color then return end
+	self.tag_shown, self.tag_shown_color = text, color
+	self.object:set_properties({nametag = text, nametag_color = color})
+end
+function V.nametag(self, text, color)
+	self.tag_text, self.tag_color = text or "", color
+	nametag_apply(self)
+end
+
 -- 爬台階：def.tire（輪胎直徑，m）的車最高爬輪胎的一半，但至少爬得上一格方塊（否則地形的 1 m 台階都上不去）。
 -- 台階低於 STEP_FREE 不減速（車轍、碎石的小高低差），越接近上限掉得越快，到上限剩 STEP_CRAWL（1 km/h）
 local STEP_FREE, STEP_CRAWL = 0.25, 1 / 3.6
@@ -1017,6 +1041,8 @@ function V.register(kind, def)
 			local yaw = obj:get_yaw()
 			local vel = obj:get_velocity()
 			keep_area(self, pos)
+			self.t_tag = (self.t_tag or 0) + dtime
+			if self.t_tag >= 1 then self.t_tag = 0; nametag_apply(self) end
 			-- 零件被引擎拆掉了（見 PART 的 on_step）：每秒檢查一次，少了就整組重新生成
 			if self.part_list then
 				self.t_parts = (self.t_parts or 0) + dtime
