@@ -7,7 +7,7 @@
 -- 坡度：皮帶表面的高度以 1/8 m 為單位（皮帶方塊有 8 種高度），每格最多升降 r/8 m，
 -- r = floor(8·tan(最大傾角))，最大傾角 rockmech_conveyor_max_angle：碎石在皮帶上不往回滑的上限
 -- （料和皮帶之間的摩擦，實務上約 15–18°）。轉彎的那一格是平的。
--- 拿著皮帶左鍵切換坡度，右鍵放：點在皮帶上就從那一格往前接，點在地上就從地面開始。
+-- 拿著皮帶右鍵放：點在皮帶上就從那一格往前接，點在地上就從地面開始；左鍵點皮帶收回那一格，點別的地方切換坡度。
 -- 有皮帶的區塊一直載入（每格放的時候強制載入它的區塊，拆掉時放掉）。
 
 local cfg = rockmech.cfg
@@ -319,15 +319,27 @@ local function slope_text(r)
 	return ("%s坡 %.0f°"):format(r > 0 and "上" or "下", math.deg(math.atan(math.abs(r) / 8)))
 end
 local function describe(stack, r)
-	stack:get_meta():set_string("description", ("皮帶輸送機（%s）\n左鍵切換坡度，右鍵放：點皮帶從那格往前接，點地面從地上開始"):format(slope_text(r)))
+	stack:get_meta():set_string("description", ("皮帶輸送機（%s）\n右鍵放：點皮帶從那格往前接，點地面從地上開始\n左鍵點皮帶收回那一格，點別的地方切換坡度"):format(slope_text(r)))
 end
 
 core.register_craftitem(ITEM, {
-	description = "皮帶輸送機\n左鍵切換坡度，右鍵放：點皮帶從那格往前接，點地面從地上開始",
+	description = "皮帶輸送機\n右鍵放：點皮帶從那格往前接，點地面從地上開始\n左鍵點皮帶收回那一格，點別的地方切換坡度",
 	inventory_image = "[fill:16x16:#00000000^[fill:16x6:0,5:#6c6c6c^[fill:14x3:1,6:#262626^[fill:2x5:2,11:#4a4a4a^[fill:2x5:12,11:#4a4a4a",
 	stack_max = 99,
-	on_use = function(itemstack, user)
+	on_use = function(itemstack, user, pointed)
 		if not user then return end
+		-- 左鍵點在皮帶上：收回這一格（上面的料倒在原地）
+		if pointed and pointed.type == "node" and BELT_H[core.get_node(pointed.under).name] then
+			local p, name = pointed.under, user:get_player_name()
+			if core.is_protected(p, name) then core.record_protection_violation(p, name); return end
+			core.remove_node(p)
+			local left = itemstack:add_item(ItemStack(ITEM))
+			if not left:is_empty() then
+				left = user:get_inventory():add_item("main", left)
+				if not left:is_empty() then core.add_item(p, left) end
+			end
+			return itemstack
+		end
 		local list = slopes()
 		local cur = itemstack:get_meta():get_int("slope")
 		local i = 1
