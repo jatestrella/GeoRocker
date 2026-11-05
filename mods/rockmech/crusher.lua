@@ -4,7 +4,7 @@
 -- 卡車、挖土機、推土機倒進來都一樣；每秒最多 rockmech_crusher_rate 噸，倒太快就在倉裡排隊。
 -- 過磅入帳：收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），見 config.crush_income。廢石的品位是 0，
 -- 運來破碎只會賠處理費，這就是貧化與截止品位。錢記在放置破碎站的玩家身上。
--- 礦價每個遊戲日（早上 6 點）浮動一次：rockmech.ore_price。
+-- 礦價每個交易日（rockmech_price_period 秒）浮動一次：rockmech.ore_price。
 -- 右鍵可以切換成廢石場：倒進來的碎石直接棄置，不收入，每噸付 rockmech_dump_fee（預設 0）。
 -- 受料倉、格柵、強制載入給選礦場（plant.lua）共用：rockmech.hopper_lib
 
@@ -29,14 +29,14 @@ local COIN_LEAD = 0.4       -- 金幣聲響完多久才出結算訊息 (s)
 local BATCH_IDLE = 3         -- 倉裡連續幾秒沒料才結算這一批 (s)
 
 ---------------------------------------------------------------------------
--- 礦價：每個遊戲日早上 6 點開盤換一次（遊戲一天預設 20 分鐘）。
+-- 礦價：每個交易日開盤換一次。交易日用遊戲實際經過的時間算（rockmech_price_period 秒，預設 20 分鐘 = 預設的遊戲一天），
+-- 不看天色時鐘：time_speed = 0（時間停住、一直白天）時照樣會開盤。
 -- 價格 = 基準價（config.ores 的 price）× 倍率；倍率的對數走均值回歸的隨機漫步（Ornstein–Uhlenbeck）：
 --   x ← x − θ·x + σ·N(0, 1)，θ = rockmech_price_revert、σ = rockmech_price_vol，
 -- 再夾在 rockmech_price_min ～ rockmech_price_max 倍之間。偏離基準越多拉回越大，不會一路漲上天或跌到零
 ---------------------------------------------------------------------------
 
 local PRICE, PRICE_PREV, PRICE_DAY = "price:", "price_prev:", "price_day"
-local OPEN = 0.25           -- 開盤時間（一天的比例：0.25 = 早上 6 點）
 
 local function factor(ore) return storage:contains(PRICE .. ore.key) and storage:get_float(PRICE .. ore.key) or 1 end
 -- 現在的價格（每噸、品位 100%）
@@ -56,9 +56,9 @@ end
 local function gauss()
 	return math.sqrt(-2 * math.log(1 - math.random())) * math.cos(2 * math.pi * math.random())
 end
--- 現在是第幾個交易日：早上 6 點之前還算前一天
+-- 現在是第幾個交易日（世界開始後經過的遊戲時間 ÷ 交易日長度）
 local function market_day()
-	return core.get_day_count() - (core.get_timeofday() < OPEN and 1 or 0)
+	return math.floor(core.get_gametime() / cfg.price_period)
 end
 
 ---------------------------------------------------------------------------
