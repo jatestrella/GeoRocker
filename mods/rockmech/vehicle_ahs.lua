@@ -13,7 +13,8 @@
 --   倉裡放不下這一車就在待命點等。
 --   綁定怪手：裝載點跟著怪手走，像真的礦場由怪手決定停車位置（spotting）。回到路線起點後直線開向怪手，在怪手前方
 --   掉頭、倒車到車尾離怪手車身 rockmech_ahs_tail_gap，車斗在這台怪手的手臂範圍內，車頭朝外，裝滿直接開走。怪手移動就重新停車；前一台還在裝就在旁邊排隊。
---   選礦場：裝載點設在選礦場放料臂範圍內，回到裝載點停著等，放料臂會轉過來裝（不必綁定怪手，有綁定的會解除）。
+--   選礦場：裝載點設在選礦場附近（放料臂轉軸 20 m 內），回到裝載點後放料臂搆不到就自己開近，停著等它裝
+--   （不必綁定怪手，有綁定的會解除）。選礦場停機（沒原料或另一座倉滿了）連續 10 秒、這座倉也空了，車上有半車以上就先走。
 --   會車：無人車被另一台無人車擋住，優先權低的那台往旁邊讓路，等對方過去再回來。裝滿出發的車最優先，再來是
 --   正在裝的車，其他的最低；一樣就比編號。不然兩台會面對面互等。
 --   路線共用：教好的路線（含傾倒點、綁定的怪手）按「儲存路線」存成「路線1」，別台車選它、按「套用路線」再啟動就好，
@@ -34,7 +35,7 @@ local DUMP_SPOTS = #LATERAL
 local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾公尺
 local APPROACH = 16         -- 進格柵的方向：看路線上離格柵這麼遠的點，別被最後幾公尺的轉彎帶偏
 local HOPPER_WAIT = "受料倉滿了，等待中"
-local CHUTE_R = 12           -- 裝載點（車身中心）離選礦場放料臂轉軸多近，就算在選礦場裝 (m)
+local CHUTE_R = 20           -- 裝載點（車身中心）離選礦場放料臂轉軸多近，就算在選礦場裝（搆不到的話到了會自己開近）(m)
 local QUEUE_R, QUEUE_SIDE = 25, 10  -- 排隊的位置：離怪手多遠、離進出的路線多遠 (m)
 local ARM_USE = 0.9         -- 車斗中心要在手臂長度的這個比例內
 local TAIL_MIN = 0.6        -- 手臂再短，車尾離怪手車身也至少留這麼多 (m)
@@ -309,6 +310,18 @@ function AHS.step(self, def, ctx)
 			set_phase(self, "to_dump")
 		elseif a.bound and flat_dist(exc_spot(a, def), a.spot_at or pos) > cfg.ahs_follow then
 			set_phase(self, "to_exc")       -- 怪手走了，跟過去
+		elseif a.chute then
+			-- 選礦場：放料臂搆不到就往轉軸開近；選礦場停機、這座倉也空了，車上有半車以上就先走（不然等下一批原料）
+			local st = rockmech.plant_chute_state and rockmech.plant_chute_state(a.chute)
+			if st and st.stalled and st.lv < 1 and V.load_total(self) >= def.cap / 2 then
+				a.idx = 2
+				set_phase(self, "to_dump")
+			elseif flat_dist(V.bed_target(self, a.chute), a.chute) > cfg.plant_reach - 1 then
+				drive_to(self, def, ctx, a, ap, a.chute)
+				if not a.wait_msg then say(self, a, "靠近放料臂") end
+			elseif a.wait_msg == "靠近放料臂" then
+				say(self, a, nil)
+			end
 		end
 	elseif a.phase == "to_dump" or a.phase == "to_load" then
 		local fwd = a.phase == "to_dump"

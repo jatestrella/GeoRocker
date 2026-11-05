@@ -18,6 +18,7 @@ local BIN = {p = "rockmech:plant_bin_p", r = "rockmech:plant_bin_r"}
 local TOWER_H = 6           -- 塔高 (m)，放料臂的轉軸在塔頂外側
 local BOOM = "rockmech:plant_boom"
 local BOOM_REST = 3         -- 沒車時放料臂朝外伸出多長 (m)
+local STALL_T = 10          -- 連續停機多久才算停機 (s)
 local TOWER_OFF = 4         -- 塔中心離機身中心（左右）
 local SIDES = {{key = "p", s = 1, label = "精煤"}, {key = "r", s = -1, label = "矸石"}}
 
@@ -93,9 +94,10 @@ local function step(pos, dtime)
 	local R, m = cfg.plant_recovery, cfg.plant_misplaced
 	-- 1. 吃料、分選：兩座倉都還放得下才吃（每吃 1 級，每座倉最多多 1 級）
 	local room = math.min(cap - meta:get_float("p_lv"), cap - meta:get_float("r_lv"))
+	local eaten = 0
 	if room >= 1 then
 		local add = {p_lv = 0, p_coal = 0, r_lv = 0, r_coal = 0}
-		H.eat(pos, dtime, cfg.plant_rate, math.floor(room), function(t, base, p2)
+		eaten = H.eat(pos, dtime, cfg.plant_rate, math.floor(room), function(t, base, p2)
 			local g = rockmech.ore_of_rubble[base] and p2 / 255 or 0
 			local coal = t * g
 			local prod = R * coal + m * (t - coal)
@@ -104,6 +106,9 @@ local function step(pos, dtime)
 		end)
 		for k, v in pairs(add) do if v ~= 0 then meta:set_float(k, meta:get_float(k) + v) end end
 	end
+	-- 停機（受料倉沒料，或有一座倉滿了）連續 STALL_T 秒：在放料臂下等的車看到這個，車上有半車以上就先走（vehicle_ahs.lua）。
+	-- 要連續停：倉裡零星的殘料一點一點流下來時會停停走走，車子不該每次只裝一點就跑
+	if dtime > 0 then meta:set_float("stall_t", eaten == 0 and meta:get_float("stall_t") + dtime or 0) end
 	-- 2. 放料：車斗停在放料口下面就裝
 	local ore = main_ore()
 	local per_step = math.max(1, math.floor(cfg.plant_load_rate * dtime / H.tons_of(1)))
@@ -212,7 +217,18 @@ local function remove_towers(pos, meta)
 	end
 end
 
-rockmech.PLANT_REACH = function() return cfg.plant_reach end
+-- 無人駕駛（vehicle_ahs.lua）：放料臂 c 那座倉的存量（級）、選礦場是不是停機了；找不到選礦場回傳 nil
+function rockmech.plant_chute_state(c)
+	local pos = core.string_to_pos(core.get_meta(c):get_string("plant"))
+	if not pos or core.get_node(pos).name ~= PLANT then return nil end
+	local meta = core.get_meta(pos)
+	for _, sd in ipairs(SIDES) do
+		local _, chute = layout(pos, meta:get_int("dx"), meta:get_int("dz"), sd.s)
+		if chute.x == c.x and chute.y == c.y and chute.z == c.z then
+			return {lv = meta:get_float(sd.key .. "_lv"), stalled = meta:get_float("stall_t") >= STALL_T}
+		end
+	end
+end
 -- 無人駕駛（vehicle_ahs.lua）：p 附近 r m 內的放料臂轉軸，回傳 {x, y, z, u = 朝外的方向}；沒有回傳 nil
 function rockmech.plant_chute_near(p, r)
 	local c = core.find_node_near(p, r, CHUTE, true)
