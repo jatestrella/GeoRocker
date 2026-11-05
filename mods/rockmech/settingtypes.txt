@@ -324,6 +324,16 @@ rockmech_dump_fee (Waste dump fee) float 0 0 100000
 # Density used to turn rubble volume into tonnes for selling and display (tonnes per cubic metre). Vehicle load physics is unchanged.
 rockmech_rubble_density (Rubble density for tonnage) float 2.5 0.1 10
 
+# Floating ore price: changes once per game day at 6 am. Daily volatility (standard deviation of the log price).
+rockmech_price_vol (Ore price daily volatility) float 0.08 0 1
+
+# Fraction of the log-price deviation from the base price pulled back each day (mean reversion).
+rockmech_price_revert (Ore price mean reversion) float 0.15 0 1
+
+# Price limits as multiples of the base price.
+rockmech_price_min (Ore price lower limit) float 0.5 0.01 10
+rockmech_price_max (Ore price upper limit) float 2 0.01 100
+
 # Ore plant (coal preparation plant): feed rate in tonnes per second.
 rockmech_plant_rate (Plant feed rate) float 3 0.1 100
 

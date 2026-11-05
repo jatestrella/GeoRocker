@@ -4,6 +4,7 @@
 -- 卡車、挖土機、推土機倒進來都一樣；每秒最多 rockmech_crusher_rate 噸，倒太快就在倉裡排隊。
 -- 過磅入帳：收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），見 config.crush_income。廢石的品位是 0，
 -- 運來破碎只會賠處理費，這就是貧化與截止品位。錢記在放置破碎站的玩家身上。
+-- 礦價每個遊戲日（早上 6 點）浮動一次：rockmech.ore_price。
 -- 右鍵可以切換成廢石場：倒進來的碎石直接棄置，不收入，每噸付 rockmech_dump_fee（預設 0）。
 -- 受料倉、格柵、強制載入給選礦場（plant.lua）共用：rockmech.hopper_lib
 
@@ -25,6 +26,40 @@ rockmech.HOPPER_HALF = SIZE / 2   -- 倉口中心到邊 (m)
 local STEP = 1              -- 每幾秒吃一次
 local MONEY = "money:"      -- mod storage 的鍵
 local COIN_LEAD = 0.4       -- 金幣聲響完多久才出結算訊息 (s)
+local BATCH_IDLE = 3         -- 倉裡連續幾秒沒料才結算這一批 (s)
+
+---------------------------------------------------------------------------
+-- 礦價：每個遊戲日早上 6 點開盤換一次（遊戲一天預設 20 分鐘）。
+-- 價格 = 基準價（config.ores 的 price）× 倍率；倍率的對數走均值回歸的隨機漫步（Ornstein–Uhlenbeck）：
+--   x ← x − θ·x + σ·N(0, 1)，θ = rockmech_price_revert、σ = rockmech_price_vol，
+-- 再夾在 rockmech_price_min ～ rockmech_price_max 倍之間。偏離基準越多拉回越大，不會一路漲上天或跌到零
+---------------------------------------------------------------------------
+
+local PRICE, PRICE_PREV, PRICE_DAY = "price:", "price_prev:", "price_day"
+local OPEN = 0.25           -- 開盤時間（一天的比例：0.25 = 早上 6 點）
+
+local function factor(ore) return storage:contains(PRICE .. ore.key) and storage:get_float(PRICE .. ore.key) or 1 end
+-- 現在的價格（每噸、品位 100%）
+function rockmech.ore_price(ore) return ore.price * factor(ore) end
+-- 跟上一個交易日比漲跌（比例）
+local function price_change(ore)
+	local prev = storage:contains(PRICE_PREV .. ore.key) and storage:get_float(PRICE_PREV .. ore.key) or 1
+	return factor(ore) / prev - 1
+end
+local function main_ore()
+	for _, ore in pairs(cfg.ores) do return ore end
+end
+local function price_text(ore)
+	local c = price_change(ore)
+	return ("%s價 $%.0f/t（%s %.0f%%）"):format(ore.label, rockmech.ore_price(ore), c >= 0 and "▲" or "▼", math.abs(c) * 100)
+end
+local function gauss()
+	return math.sqrt(-2 * math.log(1 - math.random())) * math.cos(2 * math.pi * math.random())
+end
+-- 現在是第幾個交易日：早上 6 點之前還算前一天
+local function market_day()
+	return core.get_day_count() - (core.get_timeofday() < OPEN and 1 or 0)
+end
 
 ---------------------------------------------------------------------------
 -- 資金
@@ -34,7 +69,9 @@ local money_hud = {}        -- 玩家名稱 → HUD id
 
 local function show_money(player)
 	local name = player:get_player_name()
-	local text = ("資金 $%.0f"):format(storage:get_float(MONEY .. name))
+	local ore = main_ore()
+	local m = storage:get_float(MONEY .. name)
+	local text = ("資金 %s$%.0f"):format(m < 0 and "−" or "", math.abs(m)) .. (ore and ("\n" .. price_text(ore)) or "")
 	if money_hud[name] then
 		player:hud_change(money_hud[name], "text", text)
 	else
@@ -54,6 +91,38 @@ core.register_on_joinplayer(function(player)
 	if storage:contains(MONEY .. player:get_player_name()) then show_money(player) end
 end)
 core.register_on_leaveplayer(function(player) money_hud[player:get_player_name()] = nil end)
+
+-- 開盤：過了幾個交易日就走幾步（最多 30 步，離開很久回來不必一天一天算），換完通知所有人、更新右上角
+local function open_market()
+	local today = market_day()
+	if not storage:contains(PRICE_DAY) then storage:set_int(PRICE_DAY, today); return end
+	local days = today - storage:get_int(PRICE_DAY)
+	if days <= 0 then return end
+	storage:set_int(PRICE_DAY, today)
+	local lo, hi = math.log(cfg.price_min), math.log(cfg.price_max)
+	for _, ore in pairs(cfg.ores) do
+		local f = factor(ore)
+		storage:set_float(PRICE_PREV .. ore.key, f)
+		local x = math.log(f)
+		for _ = 1, math.min(days, 30) do
+			x = math.max(lo, math.min(hi, x - cfg.price_revert * x + cfg.price_vol * gauss()))
+		end
+		storage:set_float(PRICE .. ore.key, math.exp(x))
+		local prev = ore.price * storage:get_float(PRICE_PREV .. ore.key)
+		core.chat_send_all(("[市場] 今日%s價 $%.0f/t（昨日 $%.0f，%s %.0f%%）"):format(ore.label, rockmech.ore_price(ore), prev,
+			price_change(ore) >= 0 and "▲" or "▼", math.abs(price_change(ore)) * 100))
+	end
+	for _, player in ipairs(core.get_connected_players()) do
+		if money_hud[player:get_player_name()] then show_money(player) end
+	end
+end
+local market_t = 0
+core.register_globalstep(function(dtime)
+	market_t = market_t + dtime
+	if market_t < 5 then return end
+	market_t = 0
+	open_market()
+end)
 
 -- pos 在破碎站的容許範圍內就回傳格柵的中心，否則 nil。給 search 就改找這個距離內最近的破碎站，不管容許範圍
 function rockmech.grate_center(pos, search)
@@ -128,6 +197,51 @@ local function tons_of(levels) return levels / V.NLEV * cfg.rubble_density end
 
 -- 從格柵吃料：這一步最多 rate (t/s) × dtime，也不超過 limit 級（選礦場的倉快滿了）。
 -- 每吃一塊呼叫 take(級數, 碎石種類, 品位 param2)；回傳吃了幾級。倉裡的料順便往格柵流一步
+-- 結算單：右上角資金下面一張小表（項目／數量／單價／金額，數字靠右），BILL_TIME 秒後收掉，下一張來了就換掉。
+-- 聊天欄是比例字型排不齊，所以用 HUD 一格一格放
+local BILL_TIME = 12
+local GREEN, RED, WHITE, GOLD = 0x80FF80, 0xFF8080, 0xFFFFFF, 0xFFE080
+local COLS = {{-440, 1}, {-250, -1}, {-130, -1}, {-20, -1}}   -- 各欄離右邊的 x（px）、對齊（1 靠左、−1 靠右）
+local ROW_H = 24
+local bills = {}            -- 玩家名稱 → {ids, token}
+local function money_text(v) return (v < 0 and "−" or "+") .. ("$%.0f"):format(math.abs(v)) end
+local function show_bill(name, title, rows)
+	local player = core.get_player_by_name(name)
+	if not player then return end
+	local old = bills[name]
+	if old then for _, id in ipairs(old.ids) do player:hud_remove(id) end end
+	local ids = {}
+	local function add(def)
+		def.position, def.z_index = {x = 1, y = 0.13}, 95
+		ids[#ids + 1] = player:hud_add(def)
+	end
+	local n = #rows + 2
+	add({type = "image", alignment = {x = -1, y = 1}, offset = {x = -8, y = -6}, scale = {x = 450, y = ROW_H * n + 12},
+		text = "[fill:1x1:#000000a8"})
+	add({type = "text", alignment = {x = 1, y = 1}, offset = {x = COLS[1][1], y = 0}, text = title, number = GOLD})
+	for c, head in ipairs({"項目", "數量", "單價", "金額"}) do
+		add({type = "text", alignment = {x = COLS[c][2], y = 1}, offset = {x = COLS[c][1], y = ROW_H}, text = head, number = 0xB0B0B0})
+	end
+	for r, row in ipairs(rows) do
+		for c = 1, 4 do
+			if row[c] ~= "" then
+				add({type = "text", alignment = {x = COLS[c][2], y = 1}, offset = {x = COLS[c][1], y = ROW_H * (r + 1)}, text = row[c],
+					number = (c == 4 or r == #rows) and row[5] or WHITE})
+			end
+		end
+	end
+	local token = {}
+	bills[name] = {ids = ids, token = token}
+	core.after(BILL_TIME, function()
+		local b = bills[name]
+		if not (b and b.token == token) then return end
+		local p = core.get_player_by_name(name)
+		if p then for _, id in ipairs(b.ids) do p:hud_remove(id) end end
+		bills[name] = nil
+	end)
+end
+core.register_on_leaveplayer(function(player) bills[player:get_player_name()] = nil end)
+
 local function eat(pos, dtime, rate, limit, take)
 	local meta = core.get_meta(pos)
 	local budget = meta:get_float("carry") + rate * dtime / tons_of(1)
@@ -164,36 +278,47 @@ local function crush(pos, dtime)
 		ore_t = ore_t + tons * grade
 		if dump then fee = fee + tons * cfg.dump_fee
 		else
-			if ore then gross = gross + tons * grade * ore.recovery * ore.price end
+			if ore then gross = gross + tons * grade * ore.recovery * rockmech.ore_price(ore) end
 			fee = fee + tons * cfg.crusher_fee
 		end
 	end)
 	local income = gross - fee
 	local owner = meta:get_string("owner")
 	if eaten == 0 then
+		-- 倉裡連續 BATCH_IDLE 秒沒料才算這一批結束（殘料一點一點流下來的零頭併進同一批）
+		meta:set_float("idle_t", meta:get_float("idle_t") + dtime)
+		if meta:get_float("idle_t") < BATCH_IDLE then return end
 		-- 吃完了：回報這一批（破碎：先響金幣聲，再出結算）
 		local bt = meta:get_float("batch_t")
 		if bt > 0 then
 			local bq, bg, bf = meta:get_float("batch_q"), meta:get_float("batch_g"), meta:get_float("batch_f")
 			if dump then
-				core.chat_send_player(owner, ("[廢石場] 這批 %.1f t 棄置%s"):format(bt,
-					cfg.dump_fee > 0 and ("，棄置費 %.1f t × 每噸 $%g = −$%.0f"):format(bt, cfg.dump_fee, bf) or ""))
-			else
-				local ore = next(cfg.ores) and select(2, next(cfg.ores))
-				local lines = {("[破碎站] 這批 %.1f t"):format(bt)}
-				if ore then
-					lines[#lines + 1] = ("　%s %.1f t × 每噸 $%g × 回收率 %.0f%% = $%.0f"):format(ore.label, bq, ore.price, ore.recovery * 100, bg)
+				core.chat_send_player(owner, ("[廢石場] 這批 %.1f t 棄置%s"):format(bt, bf > 0 and ("，棄置費 −$%.0f"):format(bf) or ""))
+				if bf > 0 then
+					show_bill(owner, ("廢石場　這批 %.1f t"):format(bt), {
+						{"棄置費", ("%.1f t"):format(bt), ("$%g"):format(cfg.dump_fee), money_text(-bf), RED}})
 				end
-				lines[#lines + 1] = ("　廢石 %.1f t"):format(bt - bq)
-				lines[#lines + 1] = ("　處理費 %.1f t × 每噸 $%g = −$%.0f"):format(bt, cfg.crusher_fee, bf)
-				lines[#lines + 1] = ("　淨收入 %s$%.0f"):format(bg - bf < 0 and "−" or "", math.abs(bg - bf))
+			else
+				local ore = main_ore()
+				local rows = {}
+				if ore then
+					rows[#rows + 1] = {("%s（品位 %.0f%%）"):format(ore.label, 100 * bq / bt), ("%.1f t"):format(bq),
+						("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), ore.recovery * 100), money_text(bg), GREEN}
+				end
+				rows[#rows + 1] = {"廢石", ("%.1f t"):format(bt - bq), "", "", WHITE}
+				rows[#rows + 1] = {"處理費", ("%.1f t"):format(bt), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
+				rows[#rows + 1] = {"淨收入", "", "", money_text(bg - bf), bg >= bf and GREEN or RED}
 				core.sound_play("rockmech_coin", {to_player = owner, gain = 0.8}, true)
-				core.after(COIN_LEAD, core.chat_send_player, owner, table.concat(lines, "\n"))
+				core.after(COIN_LEAD, function()
+					core.chat_send_player(owner, ("[破碎站] 這批 %.1f t，淨收入 %s"):format(bt, money_text(bg - bf)))
+					show_bill(owner, ("破碎站結算　這批 %.1f t"):format(bt), rows)
+				end)
 			end
 			for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m"}) do meta:set_float(k, 0) end
 		end
 		return
 	end
+	meta:set_float("idle_t", 0)
 	local t = tons_of(eaten)
 	if income ~= 0 then rockmech.add_money(owner, income) end
 	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_g = gross, batch_f = fee, batch_m = income,
@@ -209,7 +334,7 @@ local function formspec(pos)
 	local dump = meta:get_string("mode") == "dump"
 	local prices = {}
 	for _, ore in pairs(cfg.ores) do
-		prices[#prices + 1] = ("%s 品位 100%% 每噸 $%g，回收率 %.0f%%"):format(ore.label, ore.price, ore.recovery * 100)
+		prices[#prices + 1] = ("%s 品位 100%% 今日每噸 $%.0f（基準 $%g），回收率 %.0f%%"):format(ore.label, rockmech.ore_price(ore), ore.price, ore.recovery * 100)
 	end
 	return table.concat({
 		"formspec_version[6]size[9,7]",

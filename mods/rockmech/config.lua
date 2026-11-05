@@ -679,6 +679,11 @@ function config.load(get)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)
 	cfg.dump_fee = math.max(0, tonumber(get("rockmech_dump_fee")) or 0)            -- 破碎站切換成廢石場：每噸棄置費
 	cfg.rubble_density = math.max(0.1, tonumber(get("rockmech_rubble_density")) or 2.5)   -- 計價用的碎石密度 (t/m³)
+	-- 浮動礦價（crusher.lua）：每個遊戲日的波動（對數的標準差）、往基準價拉回的比例、價格上下限（基準價的倍數）
+	cfg.price_vol = math.max(0, tonumber(get("rockmech_price_vol")) or 0.08)
+	cfg.price_revert = math.max(0, math.min(1, tonumber(get("rockmech_price_revert")) or 0.15))
+	cfg.price_min = math.max(0.01, tonumber(get("rockmech_price_min")) or 0.5)
+	cfg.price_max = math.max(cfg.price_min, tonumber(get("rockmech_price_max")) or 2)
 	-- 選礦場（plant.lua）：處理能力 (t/s)、煤回收率、矸石混入率、每座儲料塔容量 (m³)、放料速度 (t/s)
 	cfg.plant_rate = math.max(0.1, tonumber(get("rockmech_plant_rate")) or 3)
 	cfg.plant_recovery = math.max(0, math.min(1, tonumber(get("rockmech_plant_recovery")) or 0.95))
