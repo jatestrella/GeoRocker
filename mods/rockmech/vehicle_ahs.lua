@@ -545,10 +545,17 @@ local function use_route(a, name)
 	a.on, a.rec, a.spot, a.spot_at, a.yield = false, false, 0, nil, nil
 	a.hopper = find_hopper(a)
 end
+-- 刪掉存著的路線（已經套用的車上有自己的一份，照常跑）。這台車的路線名稱就是它的話也拿掉，再存會取新名字
+local function delete_route(a, name)
+	routes[name] = nil
+	storage:set_string(ROUTES_KEY, core.serialize(routes))
+	if a.route_name == name then a.route_name = nil end
+end
 
 -- 設定畫面
 local editing = {}
 local picked = {}           -- 玩家名稱 → 下拉選單選到的路線
+local deleting = {}         -- 玩家名稱 → 按過一次「刪除」、等確認的路線
 local function fmt(p) return p and ("(%d, %d, %d)"):format(math.floor(p.x + 0.5), math.floor(p.y + 0.5), math.floor(p.z + 0.5)) or "未設定" end
 local function formspec(self, name)
 	local a = self.ahs or {}
@@ -562,7 +569,7 @@ local function formspec(self, name)
 			or "錄製路線中（開到傾倒點後按「設為傾倒點」）")
 		or a.on and (a.wait_msg or PHASE[a.phase] or "") or "停止"
 	return table.concat({
-		"formspec_version[6]size[9,10.2]",
+		"formspec_version[6]size[9,11.1]",
 		"label[0.5,0.6;無人駕駛（AHS）]",
 		("label[0.5,1.2;裝載點：%s]"):format(a.bound and "跟著怪手" or a.chute and (fmt(a.load) .. "（選礦場放料臂）") or fmt(a.load)),
 		("label[0.5,1.7;傾倒點：%s%s]"):format(fmt(a.dump), a.hopper and "（破碎站受料倉）" or ""),
@@ -581,7 +588,9 @@ local function formspec(self, name)
 		"button[0.5,8.6;2.6,0.8;save;儲存路線]",
 		("dropdown[3.2,8.6;2.7,0.8;route_pick;%s;%d;false]"):format(#names > 0 and table.concat(names, ",") or NO_ROUTE, sel),
 		"button[6,8.6;2.5,0.8;use;套用路線]",
-		"label[0.5,9.7;裝滿 → 沿路線到傾倒線，倒車進這趟的位置倒土 → 開回裝載點；前方有人或車會停]",
+		("button[0.5,9.5;8,0.8;delete;%s]"):format(deleting[name] and deleting[name] == (picked[name] or a.route_name)
+			and ("再按一次確認刪除" .. deleting[name]) or "刪除選到的路線（要按兩次）"),
+		"label[0.5,10.6;裝滿 → 沿路線到傾倒線，倒車進這趟的位置倒土 → 開回裝載點；前方有人或車會停]",
 	})
 end
 function AHS.open(self, player)
@@ -680,10 +689,20 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			lines[name] = a
 			msg = "已套用" .. pick .. "：按「啟動」後下車"
 		end
+	elseif fields.delete then
+		local pick = picked[name] or a.route_name
+		if not routes[pick or ""] then msg = "沒有選到存著的路線"
+		elseif deleting[name] ~= pick then deleting[name] = pick     -- 第一次：等確認
+		else
+			delete_route(a, pick)
+			deleting[name], picked[name] = nil, nil
+			msg = "已刪除" .. pick .. "（已經套用的車照常跑）"
+		end
 	end
+	if not fields.delete then deleting[name] = nil end      -- 按了別的就取消刪除
 	if msg then core.chat_send_player(name, "[無人駕駛] " .. msg) end
 	V.refresh(self)
-	if fields.quit or fields.ok then editing[name], picked[name] = nil, nil
+	if fields.quit or fields.ok then editing[name], picked[name], deleting[name] = nil, nil, nil
 	else core.show_formspec(name, "rockmech:ahs", formspec(self, name)) end
 	return true
 end)
