@@ -235,6 +235,29 @@ local function dig_hopper(pos, dx, dz)
 	meta:set_int("size", SIZE)
 end
 
+-- 破碎站不管人在哪裡都要運作：引擎只在玩家附近的區塊跑節點計時器，人到礦場去了倉裡的料就停著。
+-- 機身和受料倉（含倉上 PILE 格）所在的區塊強制載入，存在世界裡；一座最多 8 塊（引擎上限 max_forceloaded_blocks，預設 16）
+local function each_block(pos, fn)
+	local meta = core.get_meta(pos)
+	local c, h = hopper_center(meta), (SIZE - 1) / 2
+	local a = {x = math.min(pos.x - 1, c.x - h), y = meta:get_int("gy"), z = math.min(pos.z - 1, c.z - h)}
+	local b = {x = math.max(pos.x + 1, c.x + h), y = pos.y + PILE, z = math.max(pos.z + 1, c.z + h)}
+	for bx = math.floor(a.x / 16), math.floor(b.x / 16) do
+		for by = math.floor(a.y / 16), math.floor(b.y / 16) do
+			for bz = math.floor(a.z / 16), math.floor(b.z / 16) do fn({x = bx * 16, y = by * 16, z = bz * 16}) end
+		end
+	end
+end
+local function keep_loaded(pos)
+	local meta = core.get_meta(pos)
+	if core.get_node(pos).name ~= CRUSHER or meta:get_int("forceload") == 1 then return end
+	local ok, n = true, 0
+	each_block(pos, function(p) n = n + 1; ok = core.forceload_block(p, false) and ok end)
+	meta:set_int("forceload", 1)
+	core.log(ok and "action" or "warning", ("[rockmech] 破碎站 %s 強制載入 %d 個區塊%s"):format(core.pos_to_string(pos), n,
+		ok and "" or "：超過上限 max_forceloaded_blocks，人走遠時有些區塊會停"))
+end
+
 -- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false
 function rockmech.crusher_build(pos, dx, dz, name)
 	local half = (SIZE - 1) / 2
@@ -258,6 +281,7 @@ function rockmech.crusher_build(pos, dx, dz, name)
 	meta:set_string("owner", name)
 	meta:set_string("infotext", "破碎站（右鍵查看）")
 	core.get_node_timer(pos):start(STEP)
+	keep_loaded(pos)
 	if not storage:contains(MONEY .. name) then rockmech.add_money(name, 0) end
 	return true
 end
@@ -304,9 +328,11 @@ core.register_node(CRUSHER, {
 		return true
 	end,
 	on_destruct = function(pos)
-		for _, c in ipairs(grate_cells(core.get_meta(pos))) do
+		local meta = core.get_meta(pos)
+		for _, c in ipairs(grate_cells(meta)) do
 			if core.get_node(c).name == GRATE then core.swap_node(c, {name = rockmech.RUBBLE}) end
 		end
+		if meta:get_int("forceload") == 1 then each_block(pos, function(p) core.forceload_free_block(p, false) end) end
 	end,
 })
 
@@ -332,4 +358,12 @@ core.register_lbm({
 	nodenames = {CRUSHER},
 	run_at_every_load = false,
 	action = function(pos) core.after(0, enlarge, pos) end,
+})
+-- 舊世界的破碎站：走近一次就補上強制載入（在擴建之後，區塊照新的倉算）
+core.register_lbm({
+	label = "rockmech: 破碎站強制載入",
+	name = "rockmech:crusher_forceload",
+	nodenames = {CRUSHER},
+	run_at_every_load = false,
+	action = function(pos) core.after(1, keep_loaded, pos) end,
 })
