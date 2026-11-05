@@ -77,6 +77,49 @@ local function op_form(self)
 		"label[0.5,4.6;原地作業：挖完手臂範圍內的礦，把怪手開到新的工作面]",
 	})
 end
+-- 對講機：左鍵點怪手選定，再左鍵點地面叫那台的操作員開過去（op.go）；點正在移動的那台叫它停下。
+-- 只有派了操作員的怪手聽得到。走法見 op_drive
+local RADIO = "rockmech:radio"
+local radio_sel = {}        -- 玩家名稱 → 選定的怪手 uid
+local function radio_tell(name, msg) if name then core.chat_send_player(name, "[對講機] " .. msg) end end
+local function excavator_of(ref)
+	for _ = 1, 3 do                          -- 點到手臂、駕駛室這些零件：往上找車身
+		local e = ref and ref:get_luaentity()
+		if e and e.vkind then return e.vkind:find("excavator", 1, true) and e or nil end
+		ref = ref and ref:get_attach()
+	end
+end
+core.register_craftitem(RADIO, {
+	description = "對講機 Radio\n左鍵點怪手選定，再左鍵點地面：叫怪手的操作員開過去\n點正在移動的那台：叫它停下",
+	inventory_image = "[fill:16x16:#00000000^[fill:6x11:5,4:#303030^[fill:4x3:6,6:#70c070^[fill:1x4:9,0:#303030^[fill:4x3:6,11:#555555",
+	stack_max = 1,
+	range = 64,
+	on_use = function(itemstack, user, pointed)
+		local name = user:get_player_name()
+		if pointed.type == "object" then
+			local e = excavator_of(pointed.ref)
+			if not e then radio_tell(name, "要點怪手"); return end
+			if e.op and e.op.go and radio_sel[name] == e.uid then
+				e.op.go, e.op.esc, e.op.msg = nil, nil, nil
+				e.autopilot = {}
+				radio_tell(name, "停下來了")
+				return
+			end
+			radio_sel[name] = e.uid
+			radio_tell(name, (e.op and e.op.on) and "選定這台怪手，點地面叫它開過去" or "選定這台怪手，但上面沒有操作員（先用怪手操作員派人上車）")
+		elseif pointed.type == "node" then
+			local e = radio_sel[name] and V.by_uid[radio_sel[name]]
+			if not (e and e.object:get_pos()) then radio_tell(name, "先點一台怪手"); return end
+			if not (e.op and e.op.on) then radio_tell(name, "那台怪手上沒有操作員"); return end
+			local g = pointed.above
+			e.op.go, e.op.by, e.op.tries, e.op.esc, e.op.prog = {x = g.x, y = g.y, z = g.z}, name, 0, nil, nil
+			core.add_particlespawner({amount = 30, time = 2, pos = {min = vector.subtract(g, 0.3), max = vector.add(g, {x = 0.3, y = 2, z = 0.3})},
+				vel = {x = 0, y = 1, z = 0}, exptime = 1, size = 3, texture = "[fill:4x4:#40a0ff", glow = 14, playername = name})
+			radio_tell(name, ("收到，前往 (%d, %d, %d)，%d m"):format(g.x, g.y, g.z, vector.distance(e.object:get_pos(), g)))
+		end
+	end,
+})
+
 local function op_show(self)
 	local op = self.op
 	self.object:set_properties(op and op.on and {nametag = "操作員：" .. (op.msg or "作業中") .. ("（截止品位 %d%%）"):format(op.cutoff * 100 + 0.5),
@@ -360,10 +403,64 @@ local function excavator(kind, P)
 	local function op_say(self, msg)
 		if self.op.msg ~= msg then self.op.msg = msg; op_show(self) end
 	end
+	-- 對講機叫他開到 op.go：原地轉向目標再直線開過去（爬坡、台階照車輛本身的限制）。
+	-- 想往前開卻 STUCK_T 秒沒前進 1 m 就脫困一次：倒車、往左或右（輪流）轉、再往前開；試 STUCK_TRIES 次還過不去就停下回報。
+	-- 不會繞過大障礙（坑、岩壁）：那要玩家分段指揮
+	local ARRIVE, STUCK_T, STUCK_TRIES = math.max(1.5, def.half), 4, 4
+	local function op_drive(self, ctx)
+		local op, pos = self.op, ctx.pos
+		local g = op.go
+		local dx, dz = g.x - pos.x, g.z - pos.z
+		local dist = math.sqrt(dx * dx + dz * dz)
+		if dist < ARRIVE then
+			op.go, op.esc, op.prog = nil, nil, nil
+			self.autopilot = {}
+			op_say(self, nil)
+			radio_tell(op.by, "到了，開始作業")
+			return
+		end
+		local esc = op.esc
+		if esc then
+			esc.t = esc.t - ctx.dtime
+			if esc.t > 0 then self.autopilot = esc.steps[esc.i]; return end
+			esc.i = esc.i + 1
+			if esc.steps[esc.i] then esc.t = esc.times[esc.i]; self.autopilot = esc.steps[esc.i]; return end
+			op.esc = nil
+		end
+		local diff = (atan2(-dx, dz) - ctx.yaw + math.pi) % (2 * math.pi) - math.pi
+		local ap = {}
+		if diff > 0.08 then ap.left = true elseif diff < -0.08 then ap.right = true end
+		if math.abs(diff) < 0.6 then ap.up = true end
+		if ap.up then
+			local pr = op.prog
+			if not pr then pr = {p = vector.copy(pos), t = 0}; op.prog = pr end
+			pr.t = pr.t + ctx.dtime
+			if vector.distance(pos, pr.p) > 1 then
+				op.prog = nil
+			elseif pr.t > STUCK_T then
+				op.prog = nil
+				op.tries = (op.tries or 0) + 1
+				if op.tries > STUCK_TRIES then
+					op.go = nil
+					self.autopilot = {}
+					op_say(self, nil)
+					radio_tell(op.by, ("過不去，停在這裡（還差 %d m）"):format(dist + 0.5))
+					return
+				end
+				local side = op.tries % 2 == 1 and "left" or "right"
+				op.esc = {i = 1, t = 1.5, times = {1.5, 1.2, 2.5}, steps = {{down = true}, {[side] = true}, {up = true}}}
+			end
+		else
+			op.prog = nil
+		end
+		self.autopilot = ap
+		op_say(self, ("前往指定地點（還有 %d m）"):format(dist + 0.5))
+	end
 	-- 每一步：決定操作員下一個動作（self.autopilot：aux1 + target 挖、jump + dump_truck 倒）
 	local function operate(self, ctx)
 		local op = self.op
 		if self.dig then self.autopilot = {}; return end
+		if op.go then op_drive(self, ctx); return end
 		op.t = (op.t or 0) - ctx.dtime
 		if op.t > 0 then self.autopilot = {}; return end
 		op.t = OP_THINK

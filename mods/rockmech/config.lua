@@ -82,6 +82,7 @@ config.shop = {
 	{key = "haul", item = "rockmech:haul_item", label = "礦卡", price = 150000},
 	{key = "excavator_big", item = "rockmech:excavator_big_item", label = "礦用怪手", price = 200000},
 	{key = "operator", item = "rockmech:operator", label = "怪手操作員", price = 0},
+	{key = "radio", item = "rockmech:radio", label = "對講機", price = 0},
 	{key = "drill", item = "rockmech:rock_drill", label = "鑿岩機", price = 500},
 	{key = "detonator", item = "rockmech:detonator", label = "起爆器", price = 500},
 	{key = "emulsion", item = "rockmech:emulsion", label = "乳膠炸藥", price = 500, count = 10},
