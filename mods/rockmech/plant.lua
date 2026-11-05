@@ -46,13 +46,13 @@ local function truck_under(chute)
 	end
 end
 
+-- 存量用 m³（跟車斗一樣），括號附噸數
 local function info(meta)
-	local cap = H.tons_of(bin_cap())
 	local parts = {}
 	for _, sd in ipairs(SIDES) do
 		local lv, coal = meta:get_float(sd.key .. "_lv"), meta:get_float(sd.key .. "_coal")
-		parts[#parts + 1] = ("%s倉 %.0f / %.0f t%s"):format(sd.label, H.tons_of(lv), cap,
-			lv >= 1 and ("（品位 %.0f%%）"):format(100 * coal / lv) or "")   -- 不到 1 級的零頭放不出來，品位也沒意義
+		parts[#parts + 1] = ("%s倉 %.0f / %.0f m³（%.0f t%s）"):format(sd.label, lv / NLEV, cfg.plant_bin, H.tons_of(lv),
+			lv >= 1 and ("，品位 %.0f%%"):format(100 * coal / lv) or "")   -- 不到 1 級的零頭放不出來，品位也沒意義
 	end
 	return parts
 end

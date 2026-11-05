@@ -204,7 +204,7 @@ local function formspec(pos)
 			or ("label[0.5,1.2;處理能力：%g t/s　處理費：每噸 $%g]"):format(cfg.crusher_rate, cfg.crusher_fee),
 		("label[0.5,1.8;%s]"):format(core.formspec_escape(dump and "礦石倒進來也當廢石丟掉" or table.concat(prices, "；"))),
 		("button[0.5,5.8;8,0.8;mode;%s]"):format(dump and "切換成破碎站（賣礦）" or ("切換成廢石場（棄置，每噸 $%g）"):format(cfg.dump_fee)),
-		("label[0.5,2.4;受料倉：%.1f / %.0f t]"):format(tons_of(queue), tons_of(CAPACITY)),
+		("label[0.5,2.4;受料倉：%.1f / %.0f m³（%.1f t）]"):format(queue / V.NLEV, CAPACITY / V.NLEV, tons_of(queue)),
 		("label[0.5,3.0;累計處理：%.1f t，平均品位 %.0f%%]"):format(total, total > 0 and 100 * meta:get_float("total_q") / total or 0),
 		("label[0.5,3.6;累計收入：$%.0f]"):format(meta:get_float("total_m")),
 		("label[0.5,4.2;資金（%s）：$%.0f]"):format(core.formspec_escape(meta:get_string("owner")),
