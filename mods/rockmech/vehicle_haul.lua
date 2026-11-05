@@ -13,7 +13,7 @@ local def = {desc = "礦卡 Haul truck", short = "礦卡", color = "#d89818", ca
 	tire = 2.4,
 	half = 2.5, top = 1.5, lat = {-2, -1, 0, 1, 2}, eye_up = 1.3, eye_fwd = 2.4, rear = 7.5,
 	mirror = {x = 2.45, y = 1.3, z = 2.2}, rearcam = {x = 0, y = 1.4, z = -7.7},
-	tilt = {front = 1.0, rear = -4.6, side_z = -4.6, side_x = 1.7}, max_grade = math.rad(12),   -- 重載礦卡約 20%
+	tilt = {front = 1.0, rear = -4.6, side_z = -4.6, side_x = 1.7}, max_grade = math.rad(rockmech.cfg.haul_max_grade),   -- 比真實的重載礦卡（約 15–20%）寬，讓一般坑道上得去
 	item_desc = "右鍵上車；空白鍵把車斗倒在車尾（載量 36 m³）"}
 do   -- 圖示：大車斗（前端的遮罩蓋到駕駛室上方）、大輪胎
 	local c, r = def.color, {}

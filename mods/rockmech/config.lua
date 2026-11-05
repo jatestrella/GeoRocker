@@ -651,6 +651,7 @@ function config.load(get)
 	-- 岩體強度：相似比 N、擾動 D、各岩性的 GSI 剖面與 mi
 	cfg.rubble_squeeze = math.max(0, tonumber(get("rockmech_rubble_squeeze")) or 0.125)
 	cfg.vehicle_slide_mu = math.max(0, tonumber(get("rockmech_vehicle_slide_mu")) or 0.5)
+	cfg.haul_max_grade = math.max(1, math.min(45, tonumber(get("rockmech_haul_max_grade")) or 17))   -- 礦卡最大爬坡角 (deg)
 	cfg.rubble_sound_gain = math.max(0, tonumber(get("rockmech_rubble_sound_gain")) or 1)
 	cfg.vehicle_sound_gain = math.max(0, tonumber(get("rockmech_vehicle_sound_gain")) or 1)
 	cfg.shotcrete_speed = math.max(0.1, tonumber(get("rockmech_shotcrete_speed")) or 1.5)

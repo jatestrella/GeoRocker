@@ -331,6 +331,10 @@ rockmech_compact_phi (Traffic compaction: friction angle) float 75 1 89
 # Friction between vehicles and rubble. A vehicle on a rubble slope steeper than atan(mu) slides down it. 0 turns it off.
 rockmech_vehicle_slide_mu (Vehicle friction on rubble) float 0.5 0 2
 
+# Steepest grade a haul truck can climb (degrees, averaged over its length). Real loaded haul trucks manage about
+# 15-20 % (9-11 degrees) and haul roads are built at 8-10 %; the default is looser so ordinary pit ramps work.
+rockmech_haul_max_grade (Haul truck maximum grade) float 17 1 45
+
 [Stability]
 
 # When something is removed, rock groups no longer connected to the rock mass
