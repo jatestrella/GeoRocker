@@ -122,7 +122,8 @@ local function step(pos, dtime)
 	-- 1. 吃料、分選：兩座倉都還放得下才吃（每吃 1 級，每座倉最多多 1 級）
 	local room = math.min(cap - meta:get_float("p_lv"), cap - meta:get_float("r_lv"))
 	local eaten = 0
-	if room >= 1 then
+	local stopped = meta:get_int("stopped") == 1     -- 右鍵選單按「停止」：不吃料也不放料
+	if room >= 1 and not stopped then
 		local add = {p_lv = 0, p_coal = 0, r_lv = 0, r_coal = 0}
 		eaten = H.eat(pos, dtime, cfg.plant_rate, math.floor(room), function(t, base, p2)
 			local g = rockmech.ore_of_rubble[base] and p2 / 255 or 0
@@ -144,10 +145,11 @@ local function step(pos, dtime)
 		local lv, coal = meta:get_float(sd.key .. "_lv"), meta:get_float(sd.key .. "_coal")
 		local _, chute, out = layout(pos, dx, dz, sd.s)
 		local key = core.pos_to_string(pos) .. sd.key
-		local e, bt = truck_in_reach(chute)
+		local e, bt
+		if not stopped then e, bt = truck_in_reach(chute) end
 		-- 沒有車：放到搆得到的皮帶上（conveyor.lua）
 		local belt, by
-		if not e and rockmech.belt_near then belt, by = rockmech.belt_near(chute, cfg.plant_reach) end
+		if not e and not stopped and rockmech.belt_near then belt, by = rockmech.belt_near(chute, cfg.plant_reach) end
 		local tip = e and {x = bt.x, y = bt.y + 0.4, z = bt.z}          -- 伸到車斗上方
 			or belt and {x = belt.x, y = by + 0.4, z = belt.z}
 		place_boom(key, chute, tip or {x = chute.x + out.x * BOOM_REST, y = chute.y - 0.8, z = chute.z + out.z * BOOM_REST})
@@ -181,15 +183,17 @@ local function step(pos, dtime)
 		end
 	end
 	for _, sd in ipairs(SIDES) do show_fill(pos, meta, sd) end
-	meta:set_string("infotext", "選礦場（右鍵查看）\n" .. table.concat(info(meta), "\n"))
+	meta:set_string("infotext", "選礦場" .. (stopped and "（已停止）" or "") .. "（右鍵查看）\n" .. table.concat(info(meta), "\n"))
 end
 
 local function formspec(pos)
 	local meta = core.get_meta(pos)
 	local parts = info(meta)
+	local stopped = meta:get_int("stopped") == 1
 	return table.concat({
 		"formspec_version[6]size[9,5.4]",
-		"label[0.5,0.6;選礦場（選煤廠）]",
+		("label[0.5,0.6;選礦場（選煤廠）　%s]"):format(stopped and "已停止" or "運轉中"),
+		("button[6,0.2;2.6,0.8;toggle;%s]"):format(stopped and "開始運轉" or "停止"),
 		("label[0.5,1.2;處理能力：%g t/s　放料：%g t/s]"):format(cfg.plant_rate, cfg.plant_load_rate),
 		("label[0.5,1.8;分選：煤 %.0f%% 進精煤，矸石 %.0f%% 混進精煤]"):format(cfg.plant_recovery * 100, cfg.plant_misplaced * 100),
 		("label[0.5,2.5;%s]"):format(core.formspec_escape(parts[1])),
@@ -198,6 +202,22 @@ local function formspec(pos)
 		"button_exit[3,4.3;3,0.8;ok;關閉]",
 	})
 end
+
+-- 右鍵選單：停止／開始運轉
+local form_pos = {}         -- 玩家名稱 → 正在看的選礦場
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= PLANT then return end
+	local name = player:get_player_name()
+	local pos = form_pos[name]
+	if fields.quit then form_pos[name] = nil end
+	if not (fields.toggle and pos and core.get_node(pos).name == PLANT) then return true end
+	local meta = core.get_meta(pos)
+	meta:set_int("stopped", meta:get_int("stopped") == 1 and 0 or 1)
+	step(pos, 0)            -- 放料臂馬上收回、狀態文字更新
+	core.show_formspec(name, PLANT, formspec(pos))
+	return true
+end)
+core.register_on_leaveplayer(function(player) form_pos[player:get_player_name()] = nil end)
 
 -- 塔和放料口的位置可以蓋嗎：塔腳下實心、塔身與放料口淨空
 local function towers_ok(pos, dx, dz)
@@ -268,6 +288,8 @@ function rockmech.plant_chute_state(c)
 	for _, sd in ipairs(SIDES) do
 		local _, chute = layout(pos, meta:get_int("dx"), meta:get_int("dz"), sd.s)
 		if chute.x == c.x and chute.y == c.y and chute.z == c.z then
+			-- 停止中：當成停機、倉是空的（半車以上的車先走，不在臂下乾等）
+			if meta:get_int("stopped") == 1 then return {lv = 0, stalled = true} end
 			return {lv = meta:get_float(sd.key .. "_lv"), stalled = meta:get_float("stall_t") >= STALL_T}
 		end
 	end
@@ -336,7 +358,9 @@ core.register_node(PLANT, {
 		return itemstack
 	end,
 	on_rightclick = function(pos, node, clicker)
-		core.show_formspec(clicker:get_player_name(), PLANT, formspec(pos))
+		local name = clicker:get_player_name()
+		form_pos[name] = pos
+		core.show_formspec(name, PLANT, formspec(pos))
 	end,
 	on_timer = function(pos, elapsed)
 		step(pos, math.min(elapsed, 5 * H.STEP))
