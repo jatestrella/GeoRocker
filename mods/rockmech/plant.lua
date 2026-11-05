@@ -4,8 +4,8 @@
 -- 分選（重介質分選的分配曲線簡化成兩個數）：原料裡的煤有 rockmech_plant_recovery 進精煤，
 -- 矸石有 rockmech_plant_misplaced 混進精煤，其餘進矸石。品位 30% 的原料 → 精煤約 80%、矸石約 2%。
 -- 放料臂（裝車溜槽）：每座塔頂外側一支會轉的放料臂，有斗的車（卡車、礦卡）停在 rockmech_plant_reach m 內不動，
--- 放料臂就轉過去、伸到車斗上方放料。只裝車，不會倒在地上或旁邊的漏斗，所以就算蓋在破碎站、廢石場旁邊，
--- 還是要用卡車搬。兩座塔任何一座滿了就停止吃料。
+-- 放料臂就轉過去、伸到車斗上方放料；附近沒有車就放到搆得到的皮帶上（conveyor.lua）。不會倒在地上或旁邊的漏斗，
+-- 所以就算蓋在破碎站、廢石場旁邊，還是要用卡車或皮帶搬。兩座塔任何一座滿了就停止吃料。
 -- 選礦場本身不收錢也不付錢：精煤載去破碎站賣，矸石載去廢石場（破碎站切換成廢石場）丟。
 
 local cfg = rockmech.cfg
@@ -145,17 +145,31 @@ local function step(pos, dtime)
 		local _, chute, out = layout(pos, dx, dz, sd.s)
 		local key = core.pos_to_string(pos) .. sd.key
 		local e, bt = truck_in_reach(chute)
-		if e then
-			place_boom(key, chute, {x = bt.x, y = bt.y + 0.4, z = bt.z})   -- 伸到車斗上方
-		else
-			place_boom(key, chute, {x = chute.x + out.x * BOOM_REST, y = chute.y - 0.8, z = chute.z + out.z * BOOM_REST})
-		end
+		-- 沒有車：放到搆得到的皮帶上（conveyor.lua）
+		local belt, by
+		if not e and rockmech.belt_near then belt, by = rockmech.belt_near(chute, cfg.plant_reach) end
+		local tip = e and {x = bt.x, y = bt.y + 0.4, z = bt.z}          -- 伸到車斗上方
+			or belt and {x = belt.x, y = by + 0.4, z = belt.z}
+		place_boom(key, chute, tip or {x = chute.x + out.x * BOOM_REST, y = chute.y - 0.8, z = chute.z + out.z * BOOM_REST})
 		if lv >= 1 then
-			if e then
-				local tip = {x = bt.x, y = bt.y + 0.4, z = bt.z}
-				local n = math.min(math.floor(lv), per_step, V.TYPES[e.vkind].cap - V.load_total(e))
+			if tip then
+				local n = math.min(math.floor(lv), per_step)
 				local g = coal / lv
-				V.load_put(e, ore.rubble, n, math.floor(g * 255 + 0.5))
+				local gi = math.floor(g * 255 + 0.5)
+				if e then
+					n = math.min(n, V.TYPES[e.vkind].cap - V.load_total(e))
+					V.load_put(e, ore.rubble, n, gi)
+				else
+					-- 一格皮帶裝不下這一步的量：往旁邊幾格也放（belt_near 只找還有空位的格子）
+					local put, b = 0, belt
+					for _ = 1, 4 do
+						put = put + rockmech.belt_put(b, ore.rubble, n - put, gi)
+						if put >= n then break end
+						b = rockmech.belt_near(chute, cfg.plant_reach)
+						if not b then break end
+					end
+					n = put
+				end
 				meta:set_float(sd.key .. "_lv", lv - n)
 				meta:set_float(sd.key .. "_coal", coal - n * g)
 				rockmech.collapse.rubble_sound(tip, n)

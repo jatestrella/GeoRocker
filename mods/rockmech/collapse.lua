@@ -388,6 +388,8 @@ granular_settle = function(pos, chain, q_ext, side)
         fall_with_slope_settle(T)
         return
     end
+    -- 直接壓在皮帶上的那一格：皮帶兩側有擋料板（skirt board），不往旁邊流，等皮帶帶走（conveyor.lua）
+    if core.get_item_group(bn, "rockmech_belt") > 0 then return end
     -- 壓實的碎石摩擦角比較高（rockmech_compact_phi）：安息角變陡，車輪也比較擠不動（懸空照樣掉）
     local tan_r, kp = SLOPE_TAN, PASSIVE_K
     if rockmech.compacted[tn] then tan_r, kp = COMPACT_TAN, COMPACT_KP end

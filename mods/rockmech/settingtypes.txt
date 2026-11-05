@@ -352,6 +352,17 @@ rockmech_plant_load_rate (Plant chute loading rate) float 4 0.1 100
 # How far (horizontal metres) each plant loading arm reaches. A truck or haul truck standing still with its bed within this range gets loaded.
 rockmech_plant_reach (Plant loading arm reach) float 10 1 30
 
+# Belt conveyor capacity in tonnes per second. Each 1 m belt cell holds at most rate / speed tonnes.
+rockmech_conveyor_rate (Conveyor capacity) float 4 0.1 100
+
+# Belt speed in metres per second: material moves one cell every 1/speed seconds.
+rockmech_conveyor_speed (Conveyor belt speed) float 2 0.2 10
+
+# Maximum belt inclination in degrees: the steepest angle at which rubble does not roll back on the belt
+# (material-belt friction, about 15-18 degrees in practice). The belt surface rises in 1/8 m steps, so the
+# usable slope is floor(8 * tan(angle)) / 8 per metre (16 degrees gives 2/8 m per metre = 14 degrees).
+rockmech_conveyor_max_angle (Conveyor max inclination) float 16 0 45
+
 # Traffic compaction: rubble driven over this many times by a vehicle at least this heavy (gross tonnes, load included)
 # becomes compacted rubble (lighter colour, higher friction angle). It is still rubble: diggable, pushable, and it falls
 # when undermined. The mass limit only keeps hand carts out.

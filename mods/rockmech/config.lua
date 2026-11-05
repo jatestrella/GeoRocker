@@ -76,6 +76,7 @@ config.shop = {
 	{key = "excavator", item = "rockmech:excavator_item", label = "怪手", price = 15000},
 	{key = "crusher", item = "rockmech:crusher", label = "破碎站", price = 20000},
 	{key = "plant", item = "rockmech:plant", label = "選礦場", price = 30000},
+	{key = "belt", item = "rockmech:belt", label = "皮帶", price = 1000, count = 10},
 	{key = "dozer", item = "rockmech:dozer_item", label = "推土機", price = 35000},
 	{key = "bulktruck", item = "rockmech:bulktruck_item", label = "裝藥車", price = 40000},
 	{key = "charger", item = "rockmech:charger_item", label = "裝藥台車", price = 40000},
@@ -691,6 +692,10 @@ function config.load(get)
 	cfg.plant_bin = math.max(1, tonumber(get("rockmech_plant_bin")) or 50)
 	cfg.plant_load_rate = math.max(0.1, tonumber(get("rockmech_plant_load_rate")) or 4)
 	cfg.plant_reach = math.max(1, tonumber(get("rockmech_plant_reach")) or 10)     -- 放料臂伸得到的水平距離 (m)
+	-- 皮帶（conveyor.lua）：運量 (t/s)、帶速 (m/s)、最大傾角 (deg，碎石在皮帶上不往回滑的上限)
+	cfg.conveyor_rate = math.max(0.1, tonumber(get("rockmech_conveyor_rate")) or 4)
+	cfg.conveyor_speed = math.max(0.2, math.min(10, tonumber(get("rockmech_conveyor_speed")) or 2))
+	cfg.conveyor_max_angle = math.max(0, math.min(45, tonumber(get("rockmech_conveyor_max_angle")) or 16))
 	-- 交通壓實（vehicles.lua）：車子總重（含載重）多少噸以上才壓得實（排除手推車）、壓幾趟壓實、壓實後的摩擦角 (deg)
 	cfg.compact_mass = math.max(0, tonumber(get("rockmech_compact_mass")) or 10)
 	cfg.compact_passes = math.max(1, math.floor(tonumber(get("rockmech_compact_passes")) or 4))
