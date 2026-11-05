@@ -613,6 +613,8 @@ end
 -- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
 -- 在碎石坡上（tanθ > 0.35）整個車寬都判定、往下坡擠：坡在安息角附近時，加上車重就往下垮，並往坡上傳。
 -- 夠重的車整個車寬都算壓實的趟數（車轍照樣只在輪跡）。
+-- 履帶車（沒有 def.tire：推土機、怪手、鑽機）不擠車轍：履帶把重量攤在很大的面積上，接地壓力只有輪胎的十分之一左右；
+-- 推土機整坡時履帶壓在剛推好的面上，擠出車轍就整不平。陡的碎石坡照樣往下垮（那是邊坡破壞）
 -- 車速快時一步走超過 1 m，沿著這一步的路徑逐格補上
 function V.press_rubble(self, kind, def, pos, dir, f)
 	local j = f > 0 and def.half or -(def.rear or def.half)
@@ -642,7 +644,7 @@ function V.press_rubble(self, kind, def, pos, dir, f)
 						if downhill then
 							rockmech.collapse.rubble_sound(p, 1)
 							rockmech.collapse.squeeze(p, q, {x = self.slope_x, z = self.slope_z, slump = true})
-						elseif l == lat[1] or l == lat[#lat] then   -- 輪跡
+						elseif def.tire and (l == lat[1] or l == lat[#lat]) then   -- 輪跡
 							rockmech.collapse.rubble_sound(p, 1)      -- 壓過就有聲音，空車擠不動碎石也一樣
 							rockmech.collapse.squeeze(p, q, {x = dir.z * l, z = -dir.x * l})
 						end
