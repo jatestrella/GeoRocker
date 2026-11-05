@@ -15,7 +15,15 @@ local NLEV = V.NLEV
 
 local PLANT, CHUTE = "rockmech:plant", "rockmech:plant_chute"
 local BIN = {p = "rockmech:plant_bin_p", r = "rockmech:plant_bin_r"}
-local BIN_FULL = {p = "rockmech:plant_bin_p_full", r = "rockmech:plant_bin_r_full"}   -- 裝著料的那幾層（從底下往上）
+local BIN_FULL = {p = "rockmech:plant_bin_p_full", r = "rockmech:plant_bin_r_full"}   -- 整層裝滿料
+-- 存量顯示：每層再分 8 格（料位線），BIN_STAGE[side][e] 是裝了 e/8 的那一層（0 = 空、8 = 滿）
+local FILL_STEPS = 8
+local BIN_STAGE, IS_BIN = {}, {}
+for _, k in ipairs({"p", "r"}) do
+	BIN_STAGE[k], IS_BIN[k] = {[0] = BIN[k], [FILL_STEPS] = BIN_FULL[k]}, {}
+	for e = 1, FILL_STEPS - 1 do BIN_STAGE[k][e] = BIN[k] .. "_" .. e end
+	for e = 0, FILL_STEPS do IS_BIN[k][BIN_STAGE[k][e]] = true end
+end
 local TOWER_H = 6           -- 塔高 (m)，放料臂的轉軸在塔頂外側
 local BOOM = "rockmech:plant_boom"
 local BOOM_REST = 3         -- 沒車時放料臂朝外伸出多長 (m)
@@ -89,18 +97,19 @@ local function info(meta)
 	return parts
 end
 
--- 塔身顯示存量：裝了幾成就從底下往上幾層換成料的顏色（有變才換）
+-- 塔身顯示存量：塔高 TOWER_H 層、每層 FILL_STEPS 格，料位線從底下往上漲（有變才換）
 local function show_fill(pos, meta, sd)
 	local lv = meta:get_float(sd.key .. "_lv")
-	local k = lv < 1 and 0 or math.max(1, math.min(TOWER_H, math.ceil(lv / bin_cap() * TOWER_H)))
+	local steps = TOWER_H * FILL_STEPS
+	local k = lv < 1 and 0 or math.max(1, math.min(steps, math.ceil(lv / bin_cap() * steps)))
 	if meta:get_int(sd.key .. "_shown") == k + 1 then return end      -- 存 k + 1：0 是還沒畫過
 	local tc = layout(pos, meta:get_int("dx"), meta:get_int("dz"), sd.s)
 	for i = 0, TOWER_H - 1 do
-		local want = i < k and BIN_FULL[sd.key] or BIN[sd.key]
+		local want = BIN_STAGE[sd.key][math.max(0, math.min(FILL_STEPS, k - i * FILL_STEPS))]
 		for x = tc.x - 1, tc.x + 1 do for z = tc.z - 1, tc.z + 1 do
 			local p = {x = x, y = pos.y + i, z = z}
 			local n = core.get_node(p).name
-			if n ~= want and (n == BIN[sd.key] or n == BIN_FULL[sd.key]) then core.swap_node(p, {name = want}) end
+			if n ~= want and IS_BIN[sd.key][n] then core.swap_node(p, {name = want}) end
 		end end
 	end
 	meta:set_int(sd.key .. "_shown", k + 1)
@@ -228,7 +237,7 @@ local function remove_towers(pos, meta)
 			for y = pos.y, pos.y + TOWER_H - 1 do
 				local p = {x = x, y = y, z = z}
 				local n = core.get_node(p).name
-				if n == BIN[sd.key] or n == BIN_FULL[sd.key] then core.remove_node(p) end
+				if IS_BIN[sd.key][n] then core.remove_node(p) end
 			end
 		end end
 		if core.get_node(chute).name == CHUTE then core.remove_node(chute) end
@@ -265,9 +274,15 @@ local PAINT = {p = "#3c6a3c", r = "#7a5a3c"}
 local MATERIAL = {p = main_ore().pure, r = main_ore().waste_color}
 for _, sd in ipairs(SIDES) do
 	local k = sd.key
-	for _, v in ipairs({{BIN[k], bin_tex(PAINT[k]), ""}, {BIN_FULL[k], full_tex(MATERIAL[k], PAINT[k]), "，裝著料"}}) do
-		core.register_node(v[1], {
-			description = ("Plant bin (選礦場%s塔%s)"):format(sd.label, v[3]), tiles = {v[2]}, groups = {not_in_creative_inventory = 1},
+	for e = 0, FILL_STEPS do
+		-- 側面從底下塗料的顏色到 e/8 高（料位線），頂面空的是塔的顏色、滿的是料的顏色
+		local side = e == 0 and bin_tex(PAINT[k]) or e == FILL_STEPS and full_tex(MATERIAL[k], PAINT[k])
+			or ("[fill:16x16:%s^[fill:16x%d:0,%d:%s^[fill:16x1:0,0:#303030^[fill:1x16:0,0:#303030"):format(PAINT[k],
+				16 * e / FILL_STEPS, 16 - 16 * e / FILL_STEPS, MATERIAL[k])
+		local top = e == FILL_STEPS and full_tex(MATERIAL[k], PAINT[k]) or bin_tex(PAINT[k])
+		core.register_node(BIN_STAGE[k][e], {
+			description = ("Plant bin (選礦場%s塔%s)"):format(sd.label, e > 0 and ("，裝了 %d/8"):format(e) or ""),
+			tiles = {top, side, side, side, side, side}, groups = {not_in_creative_inventory = 1},
 			diggable = false, is_ground_content = false, drop = "",
 		})
 	end
