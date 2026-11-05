@@ -236,7 +236,8 @@ local function dig_hopper(pos, dx, dz)
 end
 
 -- 破碎站不管人在哪裡都要運作：引擎只在玩家附近的區塊跑節點計時器，人到礦場去了倉裡的料就停著。
--- 機身和受料倉（含倉上 PILE 格）所在的區塊強制載入，存在世界裡；一座最多 8 塊（引擎上限 max_forceloaded_blocks，預設 16）
+-- 機身和受料倉（含倉上 PILE 格）所在的區塊強制載入，存在世界裡；一座最多 8 塊。不受 max_forceloaded_blocks（預設 16）
+-- 限制：無人卡車、怪手沿途也會暫時強制載入（vehicles.lua），合起來常超過 16
 local function each_block(pos, fn)
 	local meta = core.get_meta(pos)
 	local c, h = hopper_center(meta), (SIZE - 1) / 2
@@ -251,11 +252,10 @@ end
 local function keep_loaded(pos)
 	local meta = core.get_meta(pos)
 	if core.get_node(pos).name ~= CRUSHER or meta:get_int("forceload") == 1 then return end
-	local ok, n = true, 0
-	each_block(pos, function(p) n = n + 1; ok = core.forceload_block(p, false) and ok end)
+	local n = 0
+	each_block(pos, function(p) n = n + 1; core.forceload_block(p, false, -1) end)
 	meta:set_int("forceload", 1)
-	core.log(ok and "action" or "warning", ("[rockmech] 破碎站 %s 強制載入 %d 個區塊%s"):format(core.pos_to_string(pos), n,
-		ok and "" or "：超過上限 max_forceloaded_blocks，人走遠時有些區塊會停"))
+	core.log("action", ("[rockmech] 破碎站 %s 強制載入 %d 個區塊"):format(core.pos_to_string(pos), n))
 end
 
 -- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false

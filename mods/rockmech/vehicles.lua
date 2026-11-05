@@ -73,6 +73,34 @@ local CLEAR = "[fill:1x1:#00000000"
 local PART = "rockmech:vehicle_part"
 V.CLEAR, V.PART = CLEAR, PART
 local BOARD_REACH = 4        -- 上車：人離車身邊緣（車寬、車尾較長的一邊）多遠以內 (m)
+
+-- 無人作業的車（開著的無人卡車、有操作員的怪手）走到哪裡就把周圍 ±KEEP_R m、上下 ±KEEP_DY m 的區塊暫時強制載入
+-- （不存檔、邊走邊換）：引擎只跑玩家附近的區塊，人在礦場時開往破碎站的卡車、人在破碎站時礦場的怪手都會停住。
+-- 有人駕駛、關掉無人作業、車子卸載或收起來就放掉。重開遊戲後要玩家走近一次才會再動起來
+local KEEP_R, KEEP_DY, KEEP_MOVE = 10, 4, 2
+local function keep_area(self, pos, release)
+	local on = not release and not self.driver and ((self.ahs and self.ahs.on) or (self.op and self.op.on))
+	if on and self.kept_at and math.abs(pos.x - self.kept_at.x) < KEEP_MOVE and math.abs(pos.y - self.kept_at.y) < KEEP_MOVE
+			and math.abs(pos.z - self.kept_at.z) < KEEP_MOVE then return end
+	if not on and not self.kept then return end
+	local want = {}
+	if on then
+		local f = math.floor
+		for bx = f((pos.x - KEEP_R) / 16), f((pos.x + KEEP_R) / 16) do
+			for by = f((pos.y - KEEP_DY) / 16), f((pos.y + KEEP_DY) / 16) do
+				for bz = f((pos.z - KEEP_R) / 16), f((pos.z + KEEP_R) / 16) do
+					local b = {x = bx * 16, y = by * 16, z = bz * 16}
+					want[core.hash_node_position(b)] = b
+				end
+			end
+		end
+	end
+	local had = self.kept or {}
+	for h, b in pairs(want) do if not had[h] then core.forceload_block(b, true, -1) end end
+	for h, b in pairs(had) do if not want[h] then core.forceload_free_block(b, true) end end
+	self.kept = on and want or nil
+	self.kept_at = on and vector.copy(pos) or nil
+end
 core.register_entity(PART, {
 	initial_properties = {
 		physical = false, collide_with_objects = false, pointable = false, static_save = false,
@@ -903,6 +931,7 @@ function V.register(kind, def)
 		end,
 		on_deactivate = function(self)
 			if V.by_uid[self.uid] == self then V.by_uid[self.uid] = nil end
+			if self.kept then keep_area(self, self.object:get_pos() or {x = 0, y = 0, z = 0}, true) end   -- 放掉強制載入的區塊
 			engine_stop(self)
 			remove_parts(self)
 			drop_chase(self)
@@ -978,6 +1007,7 @@ function V.register(kind, def)
 			local pos = obj:get_pos()
 			local yaw = obj:get_yaw()
 			local vel = obj:get_velocity()
+			keep_area(self, pos)
 			-- 零件被引擎拆掉了（見 PART 的 on_step）：每秒檢查一次，少了就整組重新生成
 			if self.part_list then
 				self.t_parts = (self.t_parts or 0) + dtime
