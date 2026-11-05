@@ -5,7 +5,8 @@
 --         那堆最高 2 格、滿了往前一排（最多 3 排），推不動就停；往前時只壓得過很薄的碎石。
 --   收鏟：不推。收鏟或倒車可爬 1 格。HUD 顯示鏟刀前那堆碎石的量
 --   空白鍵：設計坡度（關 → 0% → +5% → +10% → −10% → −5%）。開著時放鏟往前，鏟刀把碎石削／填到設計坡面：
---         放鏟或切換的那一刻，在鏟刀那一排、履帶底的高度起算，沿當時的車頭方向升降。多的碎石照樣推成前面那堆。
+--         切換坡度的那一刻，在鏟刀那一排、履帶底的高度起算，沿當時的車頭方向升降；之後收放鏟刀、來回推都對著同一個面，
+--         推出來的高度不跟著車子的高低走。多的碎石照樣推成前面那堆。
 
 local V = rockmech.vehicles
 local NLEV = V.NLEV
@@ -94,8 +95,8 @@ end
 local PILE_H, PILE_ROWS = 2, 3   -- 鏟刀前那堆：最高 2 格；前一排滿了往前一排倒，最多往前 3 排
 
 -- 設計坡度（像推土機的 GPS 整平系統）：空白鍵依序切換，nil 是關（鏟刀貼著地面推）。
--- 放鏟或換坡度的那一刻，在鏟刀那一排、履帶底的高度定一個設計坡面，沿當時的車頭方向升降 grade；
--- 坡面固定在地上，推土機轉向不會帶著轉
+-- 換坡度的那一刻，在鏟刀那一排、履帶底的高度定一個設計坡面，沿當時的車頭方向升降 grade；
+-- 坡面固定在地上：推土機轉向、收放鏟刀、車子被凸起抬高都不會改，再換坡度才重新起算
 local GRADES = {nil, 0, 0.05, 0.10, -0.10, -0.05}
 local N_GRADES = 6
 local function grade_text(g)
@@ -264,7 +265,8 @@ end
 
 function def.hud(self)
 	return (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石")
-		.. "\n設計坡度：" .. grade_text(self.grade) .. "（空白鍵切換，放鏟或切換時從這裡起算）"
+		.. "\n設計坡度：" .. grade_text(self.grade) .. (self.design and ("，從 (%d, %d) 高 %.1f 起算"):format(self.design.x, self.design.z, self.design.h) or "")
+		.. "（空白鍵切換，切換時從鏟刀這裡重新起算）"
 		.. ("\n鏟刀前碎石 %d 級（%.1f m³）"):format(self.pile_lv or 0, (self.pile_lv or 0) / NLEV)
 		.. (self.push_msg and ("\n推不動：" .. self.push_msg .. "，倒車換個方向或先推開前面") or "") .. "\nE 放鏟／收鏟"
 end
@@ -287,10 +289,11 @@ function def.move(self, ctx)
 		or (fwd < 0 and V.objects_in(self, p2, ctx.yaw, -h, h, -h - 1, -h)) then
 		ctx.speed, fwd = 0, 0
 	end
-	-- 設計坡面：放鏟後第一步定在鏟刀那一排、履帶底的高度
-	if self.blade and self.grade and not self.design then
+	-- 設計坡面：換坡度後第一步定在鏟刀那一排、履帶底的高度（收放鏟刀不會改）
+	if self.grade and not self.design then
 		local c = {x = pos.x + s.x * 2, z = pos.z + s.z * 2}
 		self.design = {x = c.x, z = c.z, h = math.floor((pos.y - def.half) * NLEV + 0.5) / NLEV, dx = s.x, dz = s.z, g = self.grade}
+		update_hud(self)
 	end
 	if self.blade and fwd > 0 then
 		local why = push(self, pos, s)
@@ -326,7 +329,6 @@ function def.action(self, ctx)
 	if ctx.ctrl.aux1 then
 		self.t_act = 0.5
 		self.blade = not self.blade
-		self.design = nil
 		update_hud(self)
 	elseif ctx.ctrl.jump then
 		self.t_act = 0.4
