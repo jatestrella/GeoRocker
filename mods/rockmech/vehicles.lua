@@ -72,6 +72,7 @@ V.TRACK = "[fill:16x16:#2a2a2a^[fill:16x2:0,0:#454545^[fill:16x2:0,14:#454545^[f
 local CLEAR = "[fill:1x1:#00000000"
 local PART = "rockmech:vehicle_part"
 V.CLEAR, V.PART = CLEAR, PART
+local BOARD_REACH = 4        -- 上車：人離車身邊緣（車寬、車尾較長的一邊）多遠以內 (m)
 core.register_entity(PART, {
 	initial_properties = {
 		physical = false, collide_with_objects = false, pointable = false, static_save = false,
@@ -916,7 +917,14 @@ function V.register(kind, def)
 			local name = clicker:get_player_name()
 			if self.driver == name then get_off(self); return end
 			if self.driver then return end
+			if clicker:get_wielded_item():get_name() == "rockmech:radio" then   -- 對講機：右鍵和左鍵一樣，不上車
+				rockmech.radio_click(clicker, {type = "object", ref = self.object})
+				return
+			end
 			if def.rightclick and def.rightclick(self, clicker) then return end   -- 拿著特定物品按右鍵（怪手操作員）
+			-- 上車要走到車旁邊：手上的東西指得遠（對講機 64 m）時，右鍵點得到遠處的車
+			local cp, vp = clicker:get_pos(), self.object:get_pos()
+			if math.sqrt((cp.x - vp.x) ^ 2 + (cp.z - vp.z) ^ 2) > math.max(def.half, def.rear or 0) + BOARD_REACH then return end
 			if rockmech.career_load and rockmech.career_load(clicker, self, def) then return end
 			-- 從別台車直接換過來：先把原本那台的駕駛清掉（否則兩台都聽這個玩家的）
 			local parent = clicker:get_attach()

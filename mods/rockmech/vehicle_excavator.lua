@@ -89,35 +89,38 @@ local function excavator_of(ref)
 		ref = ref and ref:get_attach()
 	end
 end
+-- 左鍵、右鍵都一樣（右鍵點車子由 vehicles.lua 轉過來，不會上車）
+function rockmech.radio_click(user, pointed)
+	local name = user:get_player_name()
+	if pointed.type == "object" then
+		local e = excavator_of(pointed.ref)
+		if not e then radio_tell(name, "要點怪手"); return end
+		if e.op and e.op.go and radio_sel[name] == e.uid then
+			e.op.go, e.op.esc, e.op.msg = nil, nil, nil
+			e.autopilot = {}
+			radio_tell(name, "停下來了")
+			return
+		end
+		radio_sel[name] = e.uid
+		radio_tell(name, (e.op and e.op.on) and "選定這台怪手，點地面叫它開過去" or "選定這台怪手，但上面沒有操作員（先用怪手操作員派人上車）")
+	elseif pointed.type == "node" then
+		local e = radio_sel[name] and V.by_uid[radio_sel[name]]
+		if not (e and e.object:get_pos()) then radio_tell(name, "先點一台怪手"); return end
+		if not (e.op and e.op.on) then radio_tell(name, "那台怪手上沒有操作員"); return end
+		local g = pointed.above
+		e.op.go, e.op.by, e.op.tries, e.op.esc, e.op.prog = {x = g.x, y = g.y, z = g.z}, name, 0, nil, nil
+		core.add_particlespawner({amount = 30, time = 2, pos = {min = vector.subtract(g, 0.3), max = vector.add(g, {x = 0.3, y = 2, z = 0.3})},
+			vel = {x = 0, y = 1, z = 0}, exptime = 1, size = 3, texture = "[fill:4x4:#40a0ff", glow = 14, playername = name})
+		radio_tell(name, ("收到，前往 (%d, %d, %d)，%d m"):format(g.x, g.y, g.z, vector.distance(e.object:get_pos(), g)))
+	end
+end
 core.register_craftitem(RADIO, {
-	description = "對講機 Radio\n左鍵點怪手選定，再左鍵點地面：叫怪手的操作員開過去\n點正在移動的那台：叫它停下",
+	description = "對講機 Radio\n點怪手選定，再點地面：叫怪手的操作員開過去（左鍵、右鍵都可以）\n點正在移動的那台：叫它停下",
 	inventory_image = "[fill:16x16:#00000000^[fill:6x11:5,4:#303030^[fill:4x3:6,6:#70c070^[fill:1x4:9,0:#303030^[fill:4x3:6,11:#555555",
 	stack_max = 1,
 	range = 64,
-	on_use = function(itemstack, user, pointed)
-		local name = user:get_player_name()
-		if pointed.type == "object" then
-			local e = excavator_of(pointed.ref)
-			if not e then radio_tell(name, "要點怪手"); return end
-			if e.op and e.op.go and radio_sel[name] == e.uid then
-				e.op.go, e.op.esc, e.op.msg = nil, nil, nil
-				e.autopilot = {}
-				radio_tell(name, "停下來了")
-				return
-			end
-			radio_sel[name] = e.uid
-			radio_tell(name, (e.op and e.op.on) and "選定這台怪手，點地面叫它開過去" or "選定這台怪手，但上面沒有操作員（先用怪手操作員派人上車）")
-		elseif pointed.type == "node" then
-			local e = radio_sel[name] and V.by_uid[radio_sel[name]]
-			if not (e and e.object:get_pos()) then radio_tell(name, "先點一台怪手"); return end
-			if not (e.op and e.op.on) then radio_tell(name, "那台怪手上沒有操作員"); return end
-			local g = pointed.above
-			e.op.go, e.op.by, e.op.tries, e.op.esc, e.op.prog = {x = g.x, y = g.y, z = g.z}, name, 0, nil, nil
-			core.add_particlespawner({amount = 30, time = 2, pos = {min = vector.subtract(g, 0.3), max = vector.add(g, {x = 0.3, y = 2, z = 0.3})},
-				vel = {x = 0, y = 1, z = 0}, exptime = 1, size = 3, texture = "[fill:4x4:#40a0ff", glow = 14, playername = name})
-			radio_tell(name, ("收到，前往 (%d, %d, %d)，%d m"):format(g.x, g.y, g.z, vector.distance(e.object:get_pos(), g)))
-		end
-	end,
+	on_use = function(itemstack, user, pointed) rockmech.radio_click(user, pointed) end,
+	on_place = function(itemstack, user, pointed) rockmech.radio_click(user, pointed); return itemstack end,
 })
 
 local function op_show(self)
