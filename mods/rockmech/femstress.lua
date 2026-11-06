@@ -495,17 +495,50 @@ local function park(cur)
 	save_parked()
 end
 
-local function pump()
+-- 同一區（fcfg.radius / 2 內）最快 INTERVAL 秒解一次：這段時間內的觸發併進同一筆（fem_queue），主執行緒組工作不必每秒都做
+local INTERVAL = rockmech.cfg.failure.interval or 5
+local recent = {}         -- 最近解過的 {pos, t}
+local pump_at             -- 已排定的下一次 pump 時間 (s)
+local function now() return core.get_us_time() / 1e6 end
+local function ready_in(p)
+	local t, wait = now(), 0
+	for i = #recent, 1, -1 do
+		local r = recent[i]
+		if t - r.t >= INTERVAL then table.remove(recent, i)
+		elseif vector.distance(r.pos, p) <= fcfg.radius / 2 then wait = math.max(wait, r.t + INTERVAL - t) end
+	end
+	return wait
+end
+local pump
+local function schedule_pump(wait)
+	local at = now() + wait
+	if pump_at and pump_at <= at + 0.01 then return end
+	pump_at = at
+	core.after(wait, function() pump_at = nil; pump() end)
+end
+
+pump = function()
 	if busy then return end
 	local cur
 	while not cur do
-		cur = table.remove(pending, 1)
-		if not cur then return end
+		-- 第一個不用等的；都要等就排在最早可以的時候
+		local best_wait, idx = math.huge, nil
+		for i, q in ipairs(pending) do
+			local w = ready_in(q.pos)
+			if w <= 0 then idx = i; best_wait = 0; break end
+			if w < best_wait then best_wait = w end
+		end
+		if not idx then
+			if #pending > 0 then schedule_pump(best_wait) end
+			return
+		end
+		cur = table.remove(pending, idx)
 		if not player_near(cur.pos) then
 			park(cur)
 			cur = nil
 		end
 	end
+	recent[#recent + 1] = {pos = cur.pos, t = now()}
 	busy = true
 	rockmech.fem_run(cur.pos, function(job, res, meta, ms, t_build)
 		local t0 = core.get_us_time()
@@ -515,8 +548,10 @@ local function pump()
 		if rockmech.fswarn_refresh then rockmech.fswarn_refresh(cur.pos) end
 		rockmech.collapse.queue_block_check(cur.pos)
 		local t_eval = (core.get_us_time() - t0) / 1000
-		core.log("action", ("[rockmech] 應力解驅動 %s 第 %d 輪：%d 輪迭代、解 %.0f ms、組工作 %.1f ms、判定 %.1f ms（%d 面）、總 %.0f ms → %d 格破壞")
-			:format(core.pos_to_string(cur.pos), cur.round, res.iters, res.ms, t_build, t_eval, faces, ms, #failed))
+		if #failed > 0 then      -- 只有真的有岩石破壞才記（每次都記 debug.txt 一天幾十 MB）
+			core.log("action", ("[rockmech] 應力解驅動 %s 第 %d 輪：%d 輪迭代、解 %.0f ms、組工作 %.1f ms、判定 %.1f ms（%d 面）、總 %.0f ms → %d 格破壞")
+				:format(core.pos_to_string(cur.pos), cur.round, res.iters, res.ms, t_build, t_eval, faces, ms, #failed))
+		end
 		if #failed > 0 then
 			rockmech.collapse.apply_failure(failed, cur.round)
 			if cur.round < cfg.failure.max_cascade then

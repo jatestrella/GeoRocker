@@ -275,6 +275,38 @@ local function body_free(q)
 	return true
 end
 V.body_free = body_free
+
+-- 車子快照：停著不動的車，引擎只在正常關機或區塊卸載時才把資料寫進地圖；伺服器被強制結束（關掉視窗）
+-- 就回到上次存的樣子（位置、載量、模組…）。每 SNAP_EVERY 秒把載入中的車整份資料（get_staticdata）連同位置、
+-- 時間（os.time）寫進 mod storage 的 vsnap:<車輛編號>；讀檔時比較地圖裡的資料（get_staticdata 也記時間）跟快照，
+-- 用比較新的那份。收車時刪掉
+local SNAP_EVERY = 60
+local SNAP = "vsnap:"
+function V.snapshot_of(uid)
+	local s = rockmech.collapse.storage:get_string(SNAP .. uid)
+	return s ~= "" and core.deserialize(s) or nil
+end
+function V.snapshot_clear(uid)
+	if uid then rockmech.collapse.storage:set_string(SNAP .. uid, "") end
+end
+function V.snapshot_all()
+	local st, n = rockmech.collapse.storage, 0
+	for uid, e in pairs(V.by_uid) do
+		local pos = e.object and e.object:get_pos()
+		if pos and e.get_staticdata then
+			st:set_string(SNAP .. uid, core.serialize({wall = os.time(), pos = pos, data = e:get_staticdata()}))
+			n = n + 1
+		end
+	end
+	return n
+end
+local snap_t = 0
+core.register_globalstep(function(dtime)
+	snap_t = snap_t + dtime
+	if snap_t < SNAP_EVERY then return end
+	snap_t = 0
+	V.snapshot_all()
+end)
 -- 玩家腳底 p（世界座標）在車身 pos、朝向 yaw 時要推到哪裡（世界座標）；不在任何一段裡回傳 nil
 function V.overhang_push(regions, pos, yaw, p)
 	local c, sn = math.cos(yaw), math.sin(yaw)
@@ -1144,6 +1176,16 @@ function V.register(kind, def)
 		on_activate = function(self, staticdata)
 			self.load, self.store, self.loadq = {}, {}, {}
 			local data = staticdata ~= "" and core.deserialize(staticdata) or nil
+			-- 快照比地圖裡的資料新（伺服器被強制結束，地圖沒存到最新的車）：用快照，車子放回快照的位置
+			local snap = data and data.uid and V.snapshot_of(data.uid)
+			if snap and snap.wall > (data.wall or 0) then
+				local sd = core.deserialize(snap.data)
+				if sd then
+					data = sd
+					if snap.pos then self.object:set_pos(snap.pos) end
+					core.log("action", ("[rockmech] %s（%s）從快照還原（地圖裡的資料比較舊）"):format(def.desc, data.uid))
+				end
+			end
 			self.uid = data and data.uid or ("%x-%x"):format(os.time(), math.random(0, 0xffffff))
 			V.by_uid[self.uid] = self
 			if data then
@@ -1177,7 +1219,7 @@ function V.register(kind, def)
 		end,
 		get_staticdata = function(self)
 			local data = {load = self.load, loadq = self.loadq, store = self.store, yaw = self.object:get_yaw(), uid = self.uid,
-				owner = self.owner}
+				owner = self.owner, wall = os.time()}
 			if def.on_save then def.on_save(self, data) end
 			return core.serialize(data)
 		end,
@@ -1253,6 +1295,7 @@ function V.register(kind, def)
 				if not l4:is_empty() then core.add_item(self.object:get_pos(), l4) end
 			end
 			if self.op and self.op.on and rockmech.wage_fire then rockmech.wage_fire(self.uid) end
+			V.snapshot_clear(self.uid)
 			remove_parts(self)
 			self.object:remove()
 			return true
