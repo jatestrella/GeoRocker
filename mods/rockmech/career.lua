@@ -584,9 +584,21 @@ for kind, c in pairs(AWNING) do
 			{-0.5, -0.05, 0.3, 0.5, 0.1, 0.5}}}})
 end
 
+-- 營地的建築都面向西（礦區那邊），跟破碎站排成一排：建築的本地座標 dx 沿長邊（往右）、dz 朝正面，
+-- 轉成世界座標：正面 +dz → 西（−x），右手 +dx → 北（+z）。facedir 的方塊跟著轉 90°（+3），攤主的 yaw = π/2
+local FACE_YAW = math.pi / 2
+function rockmech.career_placer(cx, cz, y)
+	local function at(dx, h, dz) return {x = cx - dz, y = y + h, z = cz + dx} end
+	local function set(dx, h, dz, node, p2) core.set_node(at(dx, h, dz), {name = node, param2 = ((p2 or 0) + 3) % 4}) end
+	return set, at
+end
+local OFFICE_DX, OFFICE_Z = 27, 0          -- 貨櫃辦公室中心：營地中心往東、南北位置（破碎站在往東 CRUSHER_X、z = CAMP_Z）
+rockmech.career_office_dx = OFFICE_DX
+
 local function build_market(x0)
-	local y = ground_y(x0, TENT_Z) or 0
-	local function set(dx, h, dz, node, p2) core.set_node({x = x0 + dx, y = y + h, z = TENT_Z + dz}, {name = node, param2 = p2 or 0}) end
+	local cx, cz = x0 + OFFICE_DX, OFFICE_Z
+	local y = ground_y(cx, cz) or 0
+	local set, at = rockmech.career_placer(cx, cz, y)
 	local RX, RZ = MARKET_RX, MARKET_RZ
 	-- 外殼：角柱、牆（最下一層是底樑）、屋頂、室內地板
 	for dx = -RX, RX do
@@ -621,7 +633,8 @@ local function build_market(x0)
 	for kind, bx in pairs(BOOTH_X) do
 		for _, p in ipairs(BOOTH_PROPS[kind]) do set(bx + p[1], p[3], p[2], "rockmech:camp_" .. p[4]) end
 		-- 坐著的攤主在椅面上（椅面比地面高 0.55 m），站著的在地面。攤主不存進地圖：記下位置，有人走近時才放（見下面）
-		list[#list + 1] = {kind = kind, pos = {x = x0 + bx, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = TENT_Z + 1}}
+		local p = at(bx, 0, 1)
+		list[#list + 1] = {kind = kind, pos = {x = p.x, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = p.z}, yaw = FACE_YAW}
 	end
 	storage:set_string(VENDOR_SPOTS, core.serialize(list))
 end
@@ -640,11 +653,18 @@ local function ensure_vendors(force)
 			for _, p in ipairs(players) do
 				if vector.distance(p:get_pos(), spot.pos) < VENDOR_NEAR then near = true; break end
 			end
-			if near then vendor_obj[i] = core.add_entity(spot.pos, BOOTHS[spot.kind].entity) end
+			if near then
+				vendor_obj[i] = core.add_entity(spot.pos, BOOTHS[spot.kind].entity)
+				if vendor_obj[i] and spot.yaw then vendor_obj[i]:set_yaw(spot.yaw) end
+			end
 		end
 	end
 end
 rockmech.career_ensure_vendors = ensure_vendors
+function rockmech.career_reset_vendors()      -- 攤主位置清單換了（營地搬移）：已經放的攤主收掉，重新補
+	for _, o in pairs(vendor_obj) do if o and o:get_pos() then o:remove() end end
+	vendor_obj = {}
+end
 local vendor_t = 0
 core.register_globalstep(function(dtime)
 	vendor_t = vendor_t + dtime
@@ -670,7 +690,7 @@ end
 local function build_sign(x0, text)
 	local glyph = DIGITS[text]
 	if not glyph then return end
-	local zf = TENT_Z - MARKET_RZ - 3            -- 正面（南），背面在北邊一格
+	local zf = TENT_Z - 6                        -- 正面（南），背面在北邊一格
 	local y = ground_y(x0, zf) or 0
 	local x1, x2, top = x0 - 4, x0 + 3, y + 14   -- 寬 8、高 12（y+3..y+14），下面兩根柱子
 	for _, px in ipairs({x1, x2}) do
@@ -698,6 +718,7 @@ end
 
 local function build_camp(owner, x0)
 	x0 = x0 or 0
+	storage:set_string("camp_layout2:" .. x0, "1")       -- 新配置（建築在破碎站那一排、面向西）
 	build_market(x0)
 	if rockmech.career_build_research then rockmech.career_build_research(x0) end      -- 研究帳篷（research.lua）
 	local team = owner:match("^team:(%d)$")
@@ -710,7 +731,7 @@ end
 
 -- 營地要用到的範圍
 local function camp_area(x0)
-	return {x = x0 - MARKET_RX - 4, y = -30, z = TENT_Z - MARKET_RZ - 4}, {x = x0 + CRUSHER_X + 8, y = 40, z = CAMP_Z + 8}
+	return {x = x0 - 22, y = -30, z = TENT_Z - 12}, {x = x0 + OFFICE_DX + 10, y = 40, z = CAMP_Z + 8}
 end
 
 -- 在 x0 蓋一座營地（帳篷、供應商、破碎站掛在 owner 的帳戶），地圖生成完才蓋；done(spawn) 拿到營地中心的落腳點
@@ -722,6 +743,45 @@ function rockmech.career_build_camp(owner, x0, done)
 		if done then done(rockmech.career_spawn(x0)) end
 	end)
 end
+
+-- 舊配置（貨櫃辦公室在營地中心南邊、研究帳篷在它西邊、都面向北）搬到新配置：拆掉舊的建築（地板換回下面的岩石），
+-- 清掉舊的攤主位置，在新位置蓋貨櫃辦公室和研究帳篷。資金、研究、地圖其他地方都不動
+function rockmech.career_relayout(x0)
+	storage:set_string("camp_layout2:" .. x0, "1")
+	local fy
+	for y = 40, -30, -1 do
+		if core.get_node({x = x0, y = y, z = TENT_Z}).name == "rockmech:office_floor" then fy = y; break end
+	end
+	fy = fy or ground_y(x0 - 20, TENT_Z) or 0
+	for x = x0 - 17, x0 + 8 do
+		for z = TENT_Z - 4, TENT_Z + 4 do
+			for h = 1, 7 do
+				local p = {x = x, y = fy + h, z = z}
+				local n = core.get_node(p).name
+				if n:find("^rockmech:office_") or n:find("^rockmech:camp_") or n:find("^rockmech:tent_") or n:find("^doors:")
+						or n == "default:glass" then
+					core.remove_node(p)
+				end
+			end
+			local f = {x = x, y = fy, z = z}
+			if core.get_node(f).name == "rockmech:office_floor" then
+				core.set_node(f, core.get_node({x = x, y = fy - 1, z = z}))
+			end
+		end
+	end
+	-- 舊的攤主、研究員位置（舊配置都在 z = TENT_Z 附近、x0 − 17 … x0 + 8）
+	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
+	local keep = {}
+	for _, s in ipairs(list) do
+		if not (math.abs(s.pos.z - TENT_Z) <= 3 and s.pos.x >= x0 - 17 and s.pos.x <= x0 + 8) then keep[#keep + 1] = s end
+	end
+	storage:set_string(VENDOR_SPOTS, core.serialize(keep))
+	rockmech.career_reset_vendors()
+	build_market(x0)
+	if rockmech.career_build_research then rockmech.career_build_research(x0) end
+	core.log("action", ("[rockmech] 營地 x = %d 改成新配置（建築在破碎站那一排、面向西）"):format(x0))
+end
+rockmech.career_area = camp_area
 
 -- 營地中心（帳篷和破碎站之間）的落腳點；地圖還沒生成就先給地面高度附近
 function rockmech.career_spawn(x0)

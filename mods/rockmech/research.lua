@@ -201,16 +201,16 @@ for who, npc in pairs(NPCS) do
 end
 
 ---------------------------------------------------------------------------
--- 研究帳篷：貨櫃辦公室西邊（營地中心 x0 往西 RX），7×7 的帳篷，白底藍條棚布
+-- 研究帳篷：貨櫃辦公室南邊、跟它和破碎站排成一排，面向西（礦區那邊），7×7 的帳篷，白底藍條棚布
 ---------------------------------------------------------------------------
 
-local RX = 13               -- 帳篷中心在營地中心往西幾公尺（貨櫃辦公室外牆在 −6，冷氣在 −7）
+local RES_Z = -16           -- 帳篷中心的 z（貨櫃辦公室在 z −6..6）；x 跟貨櫃辦公室一樣
 core.register_node("rockmech:tent_canvas_research", {
 	description = "Tent canvas (帳篷布)", is_ground_content = false, groups = {not_in_creative_inventory = 1},
 	tiles = {"[fill:16x16:#eef2f4^[fill:16x2:0,5:#2f6fbf^[fill:16x2:0,12:#2f6fbf"},
 })
 
--- 擺設：{dx, dz, 高度層, 節點}（dz 離帳篷中心：北 +）
+-- 擺設：{dx, dz, 高度層, 節點}（帳篷的本地座標：dz 朝正面、dx 往右；career_placer 轉成面向西）
 local PROPS = {
 	-- 機械技工（西半邊）：工作台、工具箱、木箱、油桶
 	{-2, 1, 1, "table"}, {-1, 1, 1, "table"}, {-2, 1, 2, "toolbox"}, {-3, -2, 1, "crate"}, {-3, -2, 2, "crate"},
@@ -230,29 +230,26 @@ end
 local function flag_of(x0) return "research_site:" .. x0 end
 function rockmech.career_build_research(x0)
 	storage:set_string(flag_of(x0), "1")       -- 這座營地蓋過研究帳篷了（下面補蓋時看這個）
-	local TZ = rockmech.career_tent_z
-	local cx = x0 - RX
-	local y = ground_y(cx, TZ) or 0
+	local cx, cz = x0 + rockmech.career_office_dx, RES_Z
+	local y = ground_y(cx, cz) or 0
+	local set, at = rockmech.career_placer(cx, cz, y)
 	for _, s in ipairs({{-3, -3}, {3, -3}, {-3, 3}, {3, 3}}) do
-		for h = 1, 3 do core.set_node({x = cx + s[1], y = y + h, z = TZ + s[2]}, {name = "rockmech:tent_pole"}) end
+		for h = 1, 3 do set(s[1], h, s[2], "rockmech:tent_pole") end
 	end
 	for layer = 0, 2 do
 		local r = 3 - layer
-		for x = -r, r do for z = -r, r do
-			core.set_node({x = cx + x, y = y + 4 + layer, z = TZ + z}, {name = "rockmech:tent_canvas_research"})
-		end end
+		for x = -r, r do for z = -r, r do set(x, 4 + layer, z, "rockmech:tent_canvas_research") end end
 	end
-	for _, p in ipairs(PROPS) do
-		core.set_node({x = cx + p[1], y = y + p[3], z = TZ + p[2]}, {name = "rockmech:camp_" .. p[4]})
-	end
+	for _, p in ipairs(PROPS) do set(p[1], p[3], p[2], "rockmech:camp_" .. p[4]) end
 	local key = rockmech.career_vendor_spots
 	local list = core.deserialize(storage:get_string(key)) or {}
-	list[#list + 1] = {kind = "mechanic", pos = {x = cx - 2, y = y + 0.5, z = TZ}}
-	list[#list + 1] = {kind = "geologist", pos = {x = cx + 2, y = y + 1.05, z = TZ}}
+	local m, g = at(-2, 0, 0), at(2, 0, 0)
+	list[#list + 1] = {kind = "mechanic", pos = {x = m.x, y = y + 0.5, z = m.z}, yaw = math.pi / 2}
+	list[#list + 1] = {kind = "geologist", pos = {x = g.x, y = y + 1.05, z = g.z}, yaw = math.pi / 2}
 	storage:set_string(key, core.serialize(list))
 end
 
--- 已經蓋好的營地（研究所加進來之前的世界）補上研究帳篷：出生點營地和各組營地，各補一次
+-- 已經蓋好的營地：舊配置的搬到新配置（career.lua 的 career_relayout），沒有研究帳篷的補上
 core.after(2, function()
 	local sites = {}
 	if storage:get_string("career_site") == "2" then sites[#sites + 1] = {x0 = cfg.career_camp_dx} end
@@ -265,13 +262,13 @@ core.after(2, function()
 		end
 	end
 	for _, s in ipairs(sites) do
-		if storage:get_string(flag_of(s.x0)) == "" then
-			storage:set_string(flag_of(s.x0), "1")
-			local TZ = rockmech.career_tent_z
-			core.emerge_area({x = s.x0 - RX - 6, y = -30, z = TZ - 6}, {x = s.x0 - RX + 6, y = 40, z = TZ + 6}, function(_, _, rem)
+		local old = storage:get_string("camp_layout2:" .. s.x0) == ""
+		if old or storage:get_string(flag_of(s.x0)) == "" then
+			local a, b = rockmech.career_area(s.x0)
+			core.emerge_area(a, b, function(_, _, rem)
 				if rem > 0 then return end
-				rockmech.career_build_research(s.x0)
-				core.log("action", ("[rockmech] research tent added at x = %d"):format(s.x0 - RX))
+				if old then rockmech.career_relayout(s.x0)       -- 舊配置：搬到新配置（會一起蓋研究帳篷）
+				else rockmech.career_build_research(s.x0) end
 			end)
 		end
 	end
