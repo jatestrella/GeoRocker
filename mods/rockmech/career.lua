@@ -675,7 +675,10 @@ core.register_globalstep(function(dtime)
 	ensure_vendors()
 end)
 
--- 組號看板：大帳篷南邊，面向南邊的走廊，白底大數字（3×5 點陣放大 2 倍）；背面是木板
+-- 組號看板：營地南邊的走廊上（煤層在 z < 走廊z − 漸變長/2 就沒有了，看板放在那之外，不擋往南採礦的路），
+-- 面向南邊的走廊，白底大數字（3×5 點陣放大 2 倍）；背面是木板
+local SIGN_Z = -48          -- 看板正面的 z（背面在北邊一格）
+local OLD_SIGN_Z = TENT_Z - 6   -- 舊版的看板位置（礦帶裡）
 local DIGITS = {
 	["0"] = {"111", "101", "101", "101", "111"}, ["1"] = {"010", "110", "010", "010", "111"},
 	["2"] = {"111", "001", "111", "100", "111"}, ["3"] = {"111", "001", "111", "001", "111"},
@@ -692,7 +695,7 @@ end
 local function build_sign(x0, text)
 	local glyph = DIGITS[text]
 	if not glyph then return end
-	local zf = TENT_Z - 6                        -- 正面（南），背面在北邊一格
+	local zf = SIGN_Z                            -- 正面（南），背面在北邊一格
 	local y = ground_y(x0, zf) or 0
 	local x1, x2, top = x0 - 4, x0 + 3, y + 14   -- 寬 8、高 12（y+3..y+14），下面兩根柱子
 	for _, px in ipairs({x1, x2}) do
@@ -718,7 +721,31 @@ local function build_sign(x0, text)
 	end
 end
 
+-- 拆掉舊位置的看板（只拆看板方塊和兩根柱子）
+local function remove_old_sign(x0)
+	local zf = OLD_SIGN_Z
+	for x = x0 - 4, x0 + 3 do
+		for yy = -30, 40 do        -- 不能用 ground_y：看板本身會被當成地面
+			for z = zf, zf + 1 do
+				local p = {x = x, y = yy, z = z}
+				local n = core.get_node(p).name
+				if n:find("^rockmech:sign_") or ((x == x0 - 4 or x == x0 + 3) and z == zf + 1 and n == "rockmech:tent_pole") then
+					core.remove_node(p)
+				end
+			end
+		end
+	end
+end
+-- 已經蓋好的營地：看板搬到走廊（每座營地做一次）
+function rockmech.career_move_sign(x0, team)
+	storage:set_string("sign2:" .. x0, "1")
+	remove_old_sign(x0)
+	build_sign(x0, team)
+	core.log("action", ("[rockmech] 營地 x = %d 的組號看板搬到 z = %d"):format(x0, SIGN_Z))
+end
+
 local function build_camp(owner, x0)
+	storage:set_string("sign2:" .. x0, "1")
 	x0 = x0 or 0
 	storage:set_string("camp_layout2:" .. x0, "1")       -- 新配置（建築在破碎站那一排、面向西）
 	build_market(x0)
@@ -734,7 +761,7 @@ end
 
 -- 營地要用到的範圍
 local function camp_area(x0)
-	return {x = x0 - 22, y = -30, z = TENT_Z - 12}, {x = x0 + OFFICE_DX + 10, y = 40, z = CAMP_Z + 8}
+	return {x = x0 - 22, y = -30, z = math.min(TENT_Z - 12, SIGN_Z - 2)}, {x = x0 + OFFICE_DX + 10, y = 40, z = CAMP_Z + 8}
 end
 
 -- 在 x0 蓋一座營地（帳篷、供應商、破碎站掛在 owner 的帳戶），地圖生成完才蓋；done(spawn) 拿到營地中心的落腳點
@@ -823,3 +850,26 @@ core.register_on_leaveplayer(function(player)
 	local name = player:get_player_name()
 	carry_hud[name], carry_img[name], arms[name], loaded_at[name] = nil, nil, nil, nil
 end)
+
+-- 已經蓋好的營地：組號看板從礦帶裡（舊位置）搬到南邊的走廊
+if cfg.career then
+	core.after(2.5, function()
+		local sites = {}
+		if storage:get_string("career_site") == "2" then sites[#sites + 1] = {x0 = cfg.career_camp_dx, t = "0"} end
+		if rockmech.team_site_x then
+			for i = 1, cfg.career_teams do
+				local t = tostring(i)
+				if storage:get_string("team_site:" .. t) == "1" then sites[#sites + 1] = {x0 = rockmech.team_site_x(t), t = t} end
+			end
+		end
+		for _, s in ipairs(sites) do
+			if storage:get_string("sign2:" .. s.x0) == "" then
+				local a, b = camp_area(s.x0)
+				core.emerge_area(a, b, function(_, _, rem)
+					if rem > 0 then return end
+					if storage:get_string("sign2:" .. s.x0) == "" then rockmech.career_move_sign(s.x0, s.t) end
+				end)
+			end
+		end
+	end)
+end
