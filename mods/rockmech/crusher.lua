@@ -67,6 +67,7 @@ end
 local function market_day()
 	return math.floor(core.get_gametime() / cfg.price_period)
 end
+rockmech.market_day = market_day
 
 ---------------------------------------------------------------------------
 -- 資金
@@ -367,19 +368,30 @@ local function report(meta, owner, dump, day)
 		end
 		rows[#rows + 1] = {"廢石", ("%.1f t"):format(bt - bq), "", "", WHITE}
 		rows[#rows + 1] = {"處理費", ("%.1f t"):format(bt), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
-		rows[#rows + 1] = {"淨收入", "", "", money_text(bg - bf), bg >= bf and GREEN or RED}
+		-- 人事費（wages.lua：雇員薪水在組員在線時已經陸續扣了，這裡列出來、算進淨收入）
+		local wage = 0
+		local wamt, wsec = rockmech.wage_take and rockmech.wage_take(rockmech.account_of(owner), day)
+		if wamt and wamt > 0 then
+			local r = rockmech.wage_row(wamt, wsec)
+			rows[#rows + 1] = {r[1], r[2], r[3], money_text(r[4]), RED}
+			wage = wamt
+		end
+		local net = bg - bf - wage
+		rows[#rows + 1] = {"淨收入", "", "", money_text(net), net >= 0 and GREEN or RED}
 		for _, m in ipairs(members) do
 			core.sound_play("rockmech_coin", {to_player = m, gain = 0.8}, true)
 		end
 		core.after(COIN_LEAD, function()
 			for _, m in ipairs(members) do
-				core.chat_send_player(m, ("[破碎站] 日結 %.1f t，淨收入 %s"):format(bt, money_text(bg - bf)))
+				core.chat_send_player(m, ("[破碎站] 日結 %.1f t，淨收入 %s"):format(bt, money_text(net)))
 				show_bill(m, "破碎站日結　" .. title, rows)
 			end
 		end)
 	end
 	for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m"}) do meta:set_float(k, 0) end
 end
+
+rockmech.show_bill, rockmech.money_text = show_bill, money_text     -- wages.lua 的人事費單子
 
 local function crush(pos, dtime)
 	local meta = core.get_meta(pos)

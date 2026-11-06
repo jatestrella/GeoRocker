@@ -1154,6 +1154,10 @@ function V.register(kind, def)
 				rockmech.radio_click(clicker, {type = "object", ref = self.object})
 				return
 			end
+			if clicker:get_wielded_item():get_name() == "rockmech:ahs_module" then   -- 自動駕駛模組：裝到這台車上
+				if V.ahs and V.ahs.install then V.ahs.install(self, clicker) end
+				return
+			end
 			if def.rightclick and def.rightclick(self, clicker) then return end   -- 拿著特定物品按右鍵（怪手操作員）
 			-- 上車要走到車旁邊：手上的東西指得遠（對講機 64 m）時，右鍵點得到遠處的車
 			local cp, vp = clicker:get_pos(), self.object:get_pos()
@@ -1205,6 +1209,12 @@ function V.register(kind, def)
 					if not l3:is_empty() then core.add_item(self.object:get_pos(), l3) end
 				end
 			end
+			-- 裝了自動駕駛模組：模組一起還給他；有雇操作員：解雇（停止計薪）
+			if self.ahs_mod then
+				local l4 = inv:add_item("main", ItemStack("rockmech:ahs_module"))
+				if not l4:is_empty() then core.add_item(self.object:get_pos(), l4) end
+			end
+			if self.op and self.op.on and rockmech.wage_fire then rockmech.wage_fire(self.uid) end
 			remove_parts(self)
 			self.object:remove()
 			return true

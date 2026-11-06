@@ -46,6 +46,7 @@ local cfg = rockmech.cfg
 
 local AHS = {}
 V.ahs = AHS
+local module_price      -- 自動駕駛模組的價格（下面定義）
 
 local PHASE = {wait = "在裝載點等裝滿", to_dump = "前往傾倒點", to_spot = "前往傾倒位置", align = "對準傾倒位置",
 	back_in = "倒車進傾倒位置", dumping = "倒土", pull_out = "離開傾倒位置", to_route = "倒完，回到路線",
@@ -57,6 +58,45 @@ local function round(p) return {x = math.floor(p.x * 10 + 0.5) / 10, y = math.fl
 -- 方向差（rad，−π..π）：從 yaw 轉到朝向水平向量 (hx, hz)
 local function heading_diff(yaw, hx, hz)
 	return (V.atan2(-hx, hz) - yaw + math.pi) % (2 * math.pi) - math.pi
+end
+
+---------------------------------------------------------------------------
+-- 自動駕駛模組：經營模式要裝了模組的車（self.ahs_mod）才能無人駕駛。拿著模組對卡車、礦卡按右鍵安裝，
+-- 一個模組一台車，裝了就跟著車（存在車的資料裡；/god 把車收起來時模組還給他）
+---------------------------------------------------------------------------
+local MODULE = "rockmech:ahs_module"
+module_price = function()
+	for _, it in ipairs(rockmech.cfg.shop or {}) do
+		if it.key == "ahs_module" then return it.price end
+	end
+	return 8000
+end
+core.register_craftitem(MODULE, {
+	description = "自動駕駛模組 Autonomous haulage kit\n拿著對卡車或礦卡按右鍵安裝（一個模組裝一台），裝了才能用無人駕駛",
+	inventory_image = "[fill:16x16:#00000000^[fill:14x10:1,3:#2a3a4a^[fill:12x8:2,4:#3a5a7a^[fill:4x4:3,6:#60e0ff"
+		.. "^[fill:2x2:9,6:#f0c040^[fill:2x2:12,6:#f0c040^[fill:2x2:9,9:#80ff80^[fill:1x3:7,0:#c0c0c0",
+	stack_max = 1,
+})
+function AHS.needs_module(self) return rockmech.cfg.career and not self.ahs_mod end
+function AHS.install(self, player)
+	local name = player:get_player_name()
+	local d = V.TYPES[self.vkind]
+	if not (d and d.bed and not d.no_ahs) then
+		core.chat_send_player(name, "[無人駕駛] 自動駕駛模組只能裝在卡車、礦卡上")
+		return
+	end
+	if self.ahs_mod then
+		core.chat_send_player(name, "[無人駕駛] 這台車已經裝了自動駕駛模組")
+		return
+	end
+	local st = player:get_wielded_item()
+	if st:get_name() ~= MODULE then return end
+	st:take_item(1)
+	player:set_wielded_item(st)
+	self.ahs_mod = true
+	V.refresh(self)
+	core.log("action", ("[rockmech] %s 在 %s（%s）裝上自動駕駛模組"):format(name, d.desc, tostring(self.uid)))
+	core.chat_send_player(name, ("[無人駕駛] %s 裝上自動駕駛模組：上車按 E 設定路線"):format(d.desc))
 end
 
 -- 名牌上的無人駕駛狀態
@@ -277,6 +317,7 @@ end
 function AHS.step(self, def, ctx)
 	local a = self.ahs
 	if not a then return end
+	if AHS.needs_module(self) then a.on, a.rec = false, false; return end    -- 沒裝模組（或模組被拆掉）：不跑
 	local pos = ctx.pos
 	if a.rec and ctx.d then
 		local last = a.route[#a.route]
@@ -608,6 +649,17 @@ local function formspec(self, name)
 end
 function AHS.open(self, player)
 	local name = player:get_player_name()
+	if AHS.needs_module(self) then
+		core.show_formspec(name, "rockmech:ahs_need", table.concat({
+			"formspec_version[6]size[9,3.6]",
+			"label[0.5,0.6;無人駕駛（AHS）]",
+			("label[0.5,1.3;%s]"):format(core.formspec_escape(
+				("這台車還沒裝自動駕駛模組：向機械設備課長買（$%d）"):format(module_price()))),
+			("label[0.5,1.8;%s]"):format(core.formspec_escape("拿著模組對這台車按右鍵就裝上（一個模組裝一台）")),
+			"button_exit[3,2.5;3,0.8;ok;知道了]",
+		}))
+		return
+	end
 	editing[name] = self
 	core.show_formspec(name, "rockmech:ahs", formspec(self, name))
 end
@@ -721,8 +773,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	return true
 end)
 
-function AHS.save(self, data) data.ahs = self.ahs end
+function AHS.save(self, data) data.ahs, data.ahs_mod = self.ahs, self.ahs_mod end
 function AHS.load(self, data)
+	self.ahs_mod = data.ahs_mod
 	if type(data.ahs) == "table" then
 		self.ahs = data.ahs
 		self.ahs.rec = false

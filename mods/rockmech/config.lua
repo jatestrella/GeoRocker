@@ -90,7 +90,8 @@ config.shop = {
 	{key = "excavator_big", shop = "vehicle", item = "rockmech:excavator_big_item", label = "礦用怪手", price = 200000},
 	-- 終極目標：買下時全服廣播（career.lua）
 	{key = "miner", shop = "vehicle", item = "rockmech:miner_item", label = "連續採礦機", price = 1500000, final = true},
-	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = "怪手操作員", price = 0},
+	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = "怪手操作員（雇用另付日薪）", price = 0},
+	{key = "ahs_module", shop = "vehicle", item = "rockmech:ahs_module", label = "自動駕駛模組（卡車、礦卡）", price = 8000},
 	{key = "radio", shop = "vehicle", item = "rockmech:radio", label = "對講機", price = 0},
 	{key = "drill", shop = "blast", item = "rockmech:rock_drill", label = "鑿岩機", price = 500},
 	{key = "detonator", shop = "blast", item = "rockmech:detonator", label = "起爆器", price = 500},
@@ -714,6 +715,8 @@ function config.load(get)
 	cfg.ahs_back_in = math.max(0.5, tonumber(get("rockmech_ahs_back_in")) or 3)
 	cfg.ahs_follow = math.max(1, tonumber(get("rockmech_ahs_follow")) or 6)
 	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)
+	-- 怪手操作員日薪（wages.lua）：每個交易日 $，按雇用時間比例、只在組員在線時計
+	cfg.operator_wage = math.max(0, tonumber(get("rockmech_operator_wage")) or 3000)
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_big_rate = math.max(0.1, tonumber(get("rockmech_crusher_big_rate")) or 10)   -- 大型破碎站 (t/s)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)

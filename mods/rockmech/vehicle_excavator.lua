@@ -59,22 +59,30 @@ core.register_craftitem(OP_ITEM, {
 	inventory_image = "[fill:16x16:#00000000^[fill:6x6:5,1:#e0b080^[fill:8x7:4,7:#e8a818^[fill:8x2:4,7:#303030^[fill:2x2:7,3:#303030",
 	stack_max = 1,
 })
+-- 經營模式（車子有主人）：操作員要雇用，付日薪（wages.lua），解雇才停止計薪
+local function op_paid(self) return rockmech.cfg.career and self.owner and self.owner ~= "" and rockmech.wage_hire end
 local function op_form(self)
 	local op = self.op or {cutoff = 0.5}
+	local paid = op_paid(self)
+	local on_label = paid and ("雇用（日薪 $%g）"):format(rockmech.operator_wage()) or "派上車（開始作業）"
 	local items, sel = {}, 1
 	for i = 0, 20 do
 		items[#items + 1] = (i * 5) .. "%"
 		if math.abs(i * 0.05 - op.cutoff) < 1e-6 then sel = i + 1 end
 	end
 	return table.concat({
-		"formspec_version[6]size[8,5.2]",
+		"formspec_version[6]size[8,5.7]",
 		("label[0.5,0.6;%s 操作員]"):format(TYPES[self.vkind].short or "怪手"),
 		("label[0.5,1.2;狀態：%s]"):format(core.formspec_escape(op.on and (op.msg or "作業中") or "沒有操作員")),
 		"label[0.5,1.9;截止品位（只挖品位 ≥ 這個的碎石）]",
 		("dropdown[0.5,2.2;3,0.8;cutoff;%s;%d;false]"):format(table.concat(items, ","), sel),
-		("button[0.5,3.4;3.4,0.8;%s;%s]"):format(op.on and "off" or "on", op.on and "叫下車" or "派上車（開始作業）"),
+		("button[0.5,3.4;3.4,0.8;%s;%s]"):format(op.on and "off" or "on", op.on and (paid and "解雇" or "叫下車") or on_label),
 		"button_exit[4.1,3.4;3.4,0.8;close;關閉]",
-		"label[0.5,4.6;原地作業：挖完手臂範圍內的礦，把怪手開到新的工作面]",
+		paid and ("label[0.5,4.6;%s]label[0.5,5.1;%s]"):format(
+			core.formspec_escape(("日薪 $%g（一個交易日 %d 分鐘），組員在線時按比例扣"):format(
+				rockmech.operator_wage(), math.floor(rockmech.cfg.price_period / 60 + 0.5))),
+			core.formspec_escape("列在每日結算；解雇才停止計薪"))
+			or "label[0.5,4.6;原地作業：挖完手臂範圍內的礦，把怪手開到新的工作面]",
 	})
 end
 -- 對講機：左鍵點怪手選定，再左鍵點地面叫那台的操作員開過去（op.go）；點正在移動的那台叫它停下。
@@ -140,10 +148,17 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local op = self.op or {cutoff = 0.5}
 	self.op = op
 	if fields.cutoff then op.cutoff = (tonumber(fields.cutoff:match("^(%d+)")) or 50) / 100 end
-	if fields.on then op.on, op.msg, op.t = true, nil, 0
-	elseif fields.off then
+	if fields.on and not op.on then
+		op.on, op.msg, op.t = true, nil, 0
+		if op_paid(self) then
+			rockmech.wage_hire(self.uid, self.owner)
+			core.chat_send_player(name, ("[人事] 雇用怪手操作員，日薪 $%g（組員在線時計薪），不用時記得解雇"):format(rockmech.operator_wage()))
+		end
+	elseif fields.off and op.on then
 		op.on, op.msg = false, nil
 		self.autopilot = nil
+		if rockmech.wage_fire then rockmech.wage_fire(self.uid) end
+		if op_paid(self) then core.chat_send_player(name, "[人事] 已解雇怪手操作員，停止計薪") end
 	end
 	op_show(self)
 	if fields.quit or fields.close then op_editing[name] = nil
