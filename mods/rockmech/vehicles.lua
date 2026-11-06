@@ -14,6 +14,22 @@ local collapse = rockmech.collapse
 local V = {NLEV = NLEV}
 rockmech.vehicles = V
 
+-- 經營模式：車子記下放置者的帳戶（分組時是整組，見 crusher.lua 的 rockmech.account_of），
+-- 別組的人不能上車、收車、用對講機指揮；老師（server 權限）都可以。沒有記錄的舊車誰都能開
+function V.may_use(self, name)
+	if not self.owner or self.owner == "" or not rockmech.account_of then return true end
+	if rockmech.account_of(name) == self.owner then return true end
+	if core.check_player_privs(name, {server = true}) then return true end
+	core.chat_send_player(name, ("這是%s的車，別組不能開"):format(rockmech.account_label(self.owner)))
+	return false
+end
+function V.set_owner(self, acc)
+	self.owner = acc
+	if acc and acc ~= "" and rockmech.account_label then
+		self.object:set_properties({infotext = rockmech.account_label(acc) .. "的車"})
+	end
+end
+
 -- 各種車的設定（各車的檔案用 V.register 加入）。
 -- desc、color；cap：載量（級）；speed：m/s；half：碰撞箱半邊長；lat：車頭外一排的橫向位置（相對中心）；
 -- eye_up／eye_fwd／eye_side：相機在車身中心上方、沿視線往前、往右（負 = 左）的距離（m）；mirror：右後照鏡位置（車身座標，左鏡 x 取負）；
@@ -947,6 +963,7 @@ function V.register(kind, def)
 				self.loadq = data.loadq or {}
 				self.store = data.store or {}
 				if data.yaw then self.object:set_yaw(data.yaw) end
+				if data.owner then V.set_owner(self, data.owner) end
 			end
 			if def.on_load then def.on_load(self, data or {}) end
 			self.object:set_acceleration({x = 0, y = -9.81, z = 0})
@@ -970,7 +987,8 @@ function V.register(kind, def)
 			drop_chase(self)
 		end,
 		get_staticdata = function(self)
-			local data = {load = self.load, loadq = self.loadq, store = self.store, yaw = self.object:get_yaw(), uid = self.uid}
+			local data = {load = self.load, loadq = self.loadq, store = self.store, yaw = self.object:get_yaw(), uid = self.uid,
+				owner = self.owner}
 			if def.on_save then def.on_save(self, data) end
 			return core.serialize(data)
 		end,
@@ -979,6 +997,7 @@ function V.register(kind, def)
 			local name = clicker:get_player_name()
 			if self.driver == name then get_off(self); return end
 			if self.driver then return end
+			if not V.may_use(self, name) then return end
 			if clicker:get_wielded_item():get_name() == "rockmech:radio" then   -- 對講機：右鍵和左鍵一樣，不上車
 				rockmech.radio_click(clicker, {type = "object", ref = self.object})
 				return
@@ -1011,6 +1030,9 @@ function V.register(kind, def)
 		end,
 		on_punch = function(self, puncher)
 			if not puncher or not puncher:is_player() or self.driver then return true end
+			-- 經營模式：車放出來就收不回身上了（跟真的一樣），只有開了 /god 的人可以收
+			if rockmech.cfg.career and puncher:get_meta():get_int("godmode:on") ~= 1 then return true end
+			if not V.may_use(self, puncher:get_player_name()) then return true end
 			if rockmech.cfg.career and load_total(self) > 0 then    -- 經營模式碎石不進物品欄
 				core.chat_send_player(puncher:get_player_name(), "車上還有碎石，先倒掉才能收起來")
 				return true
@@ -1200,7 +1222,7 @@ function V.register(kind, def)
 		end,
 	})
 	core.register_craftitem(ename .. "_item", {
-		description = def.desc .. "\n" .. def.item_desc,
+		description = def.desc .. "\n" .. def.item_desc .. (rockmech.cfg.career and "\n放出來就收不回背包，先選好位置再放" or ""),
 		inventory_image = def.inv_image,
 		stack_max = 1,
 		on_place = function(itemstack, placer, pointed)
@@ -1210,6 +1232,11 @@ function V.register(kind, def)
 			local off = odd and 0 or 0.5
 			local obj = core.add_entity({x = a.x + off, y = a.y - 0.5 + def.half, z = a.z + off}, ename)
 			if obj and placer then obj:set_yaw(placer:get_look_horizontal() + (def.pushed and math.pi or 0)) end
+			-- 經營模式：車歸放置者的帳戶（分組時是整組）
+			if obj and placer and rockmech.cfg.career and rockmech.account_of then
+				local e = obj:get_luaentity()
+				if e then V.set_owner(e, rockmech.account_of(placer:get_player_name())) end
+			end
 			if not core.is_creative_enabled(placer and placer:get_player_name() or "") then itemstack:take_item() end
 			return itemstack
 		end,
@@ -1226,3 +1253,4 @@ dofile(rockmech.modpath .. "/vehicle_jumbo.lua")
 dofile(rockmech.modpath .. "/vehicle_drillrig.lua")
 dofile(rockmech.modpath .. "/vehicle_bulktruck.lua")
 dofile(rockmech.modpath .. "/vehicle_suv.lua")
+dofile(rockmech.modpath .. "/vehicle_miner.lua")

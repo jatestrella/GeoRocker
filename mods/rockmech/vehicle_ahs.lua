@@ -260,7 +260,7 @@ local function find_hopper(a)
 	local l = math.sqrt(dx * dx + dz * dz)
 	c.d = l < 1e-6 and {x = 0, z = 1} or {x = dx / l, z = dz / l}
 	-- 從機身那一側來的話，倒車會頂到機身、料倒不進倉：改從旁邊倒進去
-	local b = core.find_node_near(c, 7, {"rockmech:crusher", "rockmech:plant"})
+	local b = core.find_node_near(c, 7, {"rockmech:crusher", "rockmech:crusher_big", "rockmech:plant"})
 	if b then
 		local bx, bz = b.x - c.x, b.z - c.z
 		local bl = math.sqrt(bx * bx + bz * bz)
@@ -671,7 +671,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local best, bd
 			for _, o in ipairs(core.get_objects_inside_radius(pos, cfg.ahs_max_dist)) do
 				local e = o:get_luaentity()
-				if e and e.uid and e.vkind and e.vkind:find("excavator", 1, true) then
+				-- 怪手，或其他會裝車的機器（連續採礦機：def.loader）
+				if e and e.uid and e.vkind and (e.vkind:find("excavator", 1, true) or (V.TYPES[e.vkind] and V.TYPES[e.vkind].loader)) then
 					local d = vector.distance(pos, o:get_pos())
 					if not bd or d < bd then best, bd = e, d end
 				end

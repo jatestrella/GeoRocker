@@ -235,6 +235,14 @@ local function towers_ok(pos, dx, dz)
 	return true
 end
 
+-- 放置預覽（preview.lua）：能不能蓋、兩座塔的中心
+function rockmech.plant_site_ok(pos, dx, dz) return H.site_ok(pos, dx, dz) and towers_ok(pos, dx, dz) end
+function rockmech.plant_towers(pos, dx, dz)
+	local out = {}
+	for _, sd in ipairs(SIDES) do out[#out + 1] = (layout(pos, dx, dz, sd.s)) end
+	return out, TOWER_H
+end
+
 local function build(pos, dx, dz, name)
 	if not (H.site_ok(pos, dx, dz) and towers_ok(pos, dx, dz)) then return false end
 	core.set_node(pos, {name = PLANT})
@@ -253,7 +261,7 @@ local function build(pos, dx, dz, name)
 		cm:set_string("infotext", ("%s放料臂：卡車停在 %g m 內就裝"):format(sd.label, cfg.plant_reach))
 	end
 	local meta = core.get_meta(pos)
-	meta:set_string("owner", name)
+	meta:set_string("owner", rockmech.account_of(name))     -- 分組時歸整組
 	meta:set_int("dx", dx)
 	meta:set_int("dz", dz)
 	core.get_node_timer(pos):start(H.STEP)
@@ -356,6 +364,9 @@ core.register_node(PLANT, {
 		end
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack
+	end,
+	can_dig = function(pos, player)
+		return player and rockmech.owner_ok(core.get_meta(pos):get_string("owner"), player:get_player_name())
 	end,
 	on_rightclick = function(pos, node, clicker)
 		local name = clicker:get_player_name()

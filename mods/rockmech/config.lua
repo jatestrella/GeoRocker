@@ -66,33 +66,37 @@ config.ores = {
 		label = "煤", default = 191, price = 120, recovery = 0.9},
 }
 
--- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個
+-- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個；
+-- shop：哪一攤賣（vehicle 機械設備課長、blast 爆破主任、tools 工具室管理員）
 config.shop = {
-	{key = "pick", item = "rockmech:pick", label = "挖礦鎬", price = 0},
-	{key = "shovel", item = "rockmech:shovel", label = "鏟子", price = 100},
-	{key = "cart", item = "rockmech:cart_item", label = "手推車", price = 500},
-	{key = "suv", item = "rockmech:suv_item", label = "休旅車", price = 3000},
-	{key = "truck", item = "rockmech:truck_item", label = "卡車", price = 10000},
-	{key = "excavator", item = "rockmech:excavator_item", label = "怪手", price = 15000},
-	{key = "crusher", item = "rockmech:crusher", label = "破碎站", price = 20000},
-	{key = "plant", item = "rockmech:plant", label = "選礦場", price = 30000},
-	{key = "belt", item = "rockmech:belt", label = "皮帶", price = 1000, count = 10},
-	{key = "dozer", item = "rockmech:dozer_item", label = "推土機", price = 35000},
-	{key = "bulktruck", item = "rockmech:bulktruck_item", label = "裝藥車", price = 40000},
-	{key = "charger", item = "rockmech:charger_item", label = "裝藥台車", price = 40000},
-	{key = "drillrig", item = "rockmech:drillrig_item", label = "鑽機", price = 50000},
-	{key = "jumbo", item = "rockmech:jumbo_item", label = "鑽孔台車", price = 60000},
-	{key = "haul", item = "rockmech:haul_item", label = "礦卡", price = 150000},
-	{key = "excavator_big", item = "rockmech:excavator_big_item", label = "礦用怪手", price = 200000},
-	{key = "operator", item = "rockmech:operator", label = "怪手操作員", price = 0},
-	{key = "radio", item = "rockmech:radio", label = "對講機", price = 0},
-	{key = "drill", item = "rockmech:rock_drill", label = "鑿岩機", price = 500},
-	{key = "detonator", item = "rockmech:detonator", label = "起爆器", price = 500},
-	{key = "emulsion", item = "rockmech:emulsion", label = "乳膠炸藥", price = 500, count = 10},
-	{key = "anfo", item = "rockmech:anfo", label = "ANFO", price = 1000, count = 10},
-	{key = "bolt", item = "rockmech:rock_bolt", label = "岩栓", price = 300, count = 10},
-	{key = "shotcrete", item = "rockmech:shotcrete", label = "噴凝土", price = 800, count = 10},
-	{key = "compass", item = "rockmech:compass", label = "地質羅盤", price = 200},
+	{key = "pick", shop = "tools", item = "rockmech:pick", label = "挖礦鎬", price = 0},
+	{key = "shovel", shop = "tools", item = "rockmech:shovel", label = "鏟子", price = 100},
+	{key = "cart", shop = "vehicle", item = "rockmech:cart_item", label = "手推車", price = 500},
+	{key = "suv", shop = "vehicle", item = "rockmech:suv_item", label = "休旅車", price = 3000},
+	{key = "truck", shop = "vehicle", item = "rockmech:truck_item", label = "卡車", price = 10000},
+	{key = "excavator", shop = "vehicle", item = "rockmech:excavator_item", label = "怪手", price = 15000},
+	{key = "crusher", shop = "vehicle", item = "rockmech:crusher", label = "破碎站", price = 20000},
+	{key = "crusher_big", shop = "vehicle", item = "rockmech:crusher_big", label = "大型破碎站", price = 300000},
+	{key = "plant", shop = "vehicle", item = "rockmech:plant", label = "選礦場", price = 30000},
+	{key = "belt", shop = "vehicle", item = "rockmech:belt", label = "輸送帶", price = 1000, count = 10},
+	{key = "dozer", shop = "vehicle", item = "rockmech:dozer_item", label = "推土機", price = 35000},
+	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = "裝藥車", price = 40000},
+	{key = "charger", shop = "blast", item = "rockmech:charger_item", label = "裝藥台車", price = 40000},
+	{key = "drillrig", shop = "blast", item = "rockmech:drillrig_item", label = "鑽機", price = 50000},
+	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = "鑽孔台車", price = 60000},
+	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = "礦卡", price = 150000},
+	{key = "excavator_big", shop = "vehicle", item = "rockmech:excavator_big_item", label = "礦用怪手", price = 200000},
+	-- 終極目標：買下時全服廣播（career.lua）
+	{key = "miner", shop = "vehicle", item = "rockmech:miner_item", label = "連續採礦機", price = 1500000, final = true},
+	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = "怪手操作員", price = 0},
+	{key = "radio", shop = "vehicle", item = "rockmech:radio", label = "對講機", price = 0},
+	{key = "drill", shop = "blast", item = "rockmech:rock_drill", label = "鑿岩機", price = 500},
+	{key = "detonator", shop = "blast", item = "rockmech:detonator", label = "起爆器", price = 500},
+	{key = "emulsion", shop = "blast", item = "rockmech:emulsion", label = "乳膠炸藥", price = 500, count = 10},
+	{key = "anfo", shop = "blast", item = "rockmech:anfo", label = "ANFO", price = 1000, count = 10},
+	{key = "bolt", shop = "tools", item = "rockmech:rock_bolt", label = "岩栓", price = 300, count = 10},
+	{key = "shotcrete", shop = "tools", item = "rockmech:shotcrete", label = "噴凝土", price = 800, count = 10},
+	{key = "compass", shop = "tools", item = "rockmech:compass", label = "地質羅盤", price = 200},
 }
 
 -- 破碎站的收入：噸數 ×（品位 × 回收率 × 價格 − 處理費）。ore = nil 是廢石，只付處理費
@@ -462,6 +466,22 @@ function config.load(get)
 		local dip, dd = math.rad(seam[1]), math.rad(seam[2])
 		cfg.coal_seam = {t = seam[3], y0 = seam[4], x0 = seam[5] or 0, z0 = seam[6] or 0,
 			tan_dip = math.tan(dip), cos_dip = math.cos(dip), sin_dd = math.sin(dd), cos_dd = math.cos(dd)}
+		-- 礦帶 rockmech_coal_seam_lanes = 寬度,kmin,kmax：沿 x 每 W 公尺一條礦帶（第 k 帶中心 x = k·W），
+		-- 每帶一條一模一樣的煤層（帶內座標 x − k·W），只在自己的帶內；kmin..kmax 以外沒有煤
+		local lanes = numbers("rockmech_coal_seam_lanes", 3)
+		if lanes and lanes[1] > 0 then
+			cfg.coal_seam.lane_w, cfg.coal_seam.lane_min, cfg.coal_seam.lane_max = lanes[1], lanes[2], lanes[3]
+			-- 礦帶地形 rockmech_lane_terrain = 脊高,脊半寬,山丘高,山丘西界,山丘東界,走廊z,漸變長（m，x 是帶內座標）：
+			-- 帶與帶交界一道山脊；山丘西界..東界之間是礦區的山丘（煤層從中間切過）；z < 走廊z 是相連的平地（沒有煤）
+			local t = numbers("rockmech_lane_terrain", 7)
+			if t then
+				cfg.lane_terrain = {ridge_h = t[1], ridge_hw = t[2], hill_h = t[3], hill_lx0 = t[4], hill_lx1 = t[5],
+					z0 = t[6], taper = math.max(1, t[7])}
+				-- 煤層離帶的西邊界留幾公尺：隔壁帶的煤不會在交界上露出來
+				cfg.coal_seam.lane_margin = 12
+				cfg.coal_seam.z_min = t[6] - t[7] / 2
+			end
+		end
 	end
 	local pit = numbers("rockmech_open_pit", 6)
 	if pit then
@@ -661,6 +681,14 @@ function config.load(get)
 	-- 經營模式（career.lua）
 	cfg.career = get("rockmech_career") == "true" or get("rockmech_career") == true
 	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 23000)
+	-- 分組（team.lua）：組數（A, B, …）、各組營地沿 z 相隔幾公尺、名單檔（世界資料夾裡）、名單外的名稱能不能登入
+	cfg.career_teams = math.max(1, math.min(26, math.floor(tonumber(get("rockmech_career_teams")) or 8)))
+	cfg.career_site_spacing = math.max(60, tonumber(get("rockmech_career_site_spacing")) or 150)
+	-- 營地（帳篷、破碎站、落腳點）離礦帶中心往東幾公尺：礦區在西半邊，營地放東邊一點
+	cfg.career_camp_dx = tonumber(get("rockmech_career_camp_dx")) or 0
+	cfg.career_roster = get("rockmech_career_roster") or "students.csv"
+	if cfg.career_roster == "" then cfg.career_roster = "students.csv" end
+	cfg.career_roster_only = get("rockmech_career_roster_only") ~= "false" and get("rockmech_career_roster_only") ~= false
 	cfg.hand_ore_time = math.max(0.1, tonumber(get("rockmech_hand_ore_time")) or 60)
 	cfg.hand_rubble_time = math.max(0.1, tonumber(get("rockmech_hand_rubble_time")) or 4)
 	cfg.pick_rock_time = math.max(0.1, tonumber(get("rockmech_pick_rock_time")) or 8)
@@ -677,6 +705,7 @@ function config.load(get)
 	cfg.ahs_follow = math.max(1, tonumber(get("rockmech_ahs_follow")) or 6)
 	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
+	cfg.crusher_big_rate = math.max(0.1, tonumber(get("rockmech_crusher_big_rate")) or 10)   -- 大型破碎站 (t/s)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)
 	cfg.dump_fee = math.max(0, tonumber(get("rockmech_dump_fee")) or 0)            -- 破碎站切換成廢石場：每噸棄置費
 	cfg.rubble_density = math.max(0.1, tonumber(get("rockmech_rubble_density")) or 2.5)   -- 計價用的碎石密度 (t/m³)
@@ -694,7 +723,7 @@ function config.load(get)
 	cfg.plant_bin = math.max(1, tonumber(get("rockmech_plant_bin")) or 50)
 	cfg.plant_load_rate = math.max(0.1, tonumber(get("rockmech_plant_load_rate")) or 4)
 	cfg.plant_reach = math.max(1, tonumber(get("rockmech_plant_reach")) or 10)     -- 放料臂伸得到的水平距離 (m)
-	-- 皮帶（conveyor.lua）：運量 (t/s)、帶速 (m/s)、最大傾角 (deg，碎石在皮帶上不往回滑的上限)
+	-- 輸送帶（conveyor.lua）：運量 (t/s)、帶速 (m/s)、最大傾角 (deg，碎石在輸送帶上不往回滑的上限)
 	cfg.conveyor_rate = math.max(0.1, tonumber(get("rockmech_conveyor_rate")) or 4)
 	cfg.conveyor_speed = math.max(0.2, math.min(10, tonumber(get("rockmech_conveyor_speed")) or 2))
 	cfg.conveyor_max_angle = math.max(0, math.min(45, tonumber(get("rockmech_conveyor_max_angle")) or 16))

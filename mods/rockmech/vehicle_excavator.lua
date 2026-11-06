@@ -95,6 +95,7 @@ function rockmech.radio_click(user, pointed)
 	if pointed.type == "object" then
 		local e = excavator_of(pointed.ref)
 		if not e then radio_tell(name, "要點怪手"); return end
+		if not rockmech.vehicles.may_use(e, name) then return end
 		if e.op and e.op.go and radio_sel[name] == e.uid then
 			e.op.go, e.op.esc, e.op.msg = nil, nil, nil
 			e.autopilot = {}

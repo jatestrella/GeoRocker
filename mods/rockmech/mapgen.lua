@@ -144,6 +144,19 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 
 	local t0 = os.clock()
 	local changed, n, stripped = false, 0, 0
+	-- 礦帶地形：地面以上的山丘先填成 stone，下面的迴圈再換成岩性（含節理與煤層）
+	if cfg.lane_terrain then
+		local sy = math.floor(cfg.surface_y)
+		for z = minp.z, maxp.z do
+			for x = minp.x, maxp.x do
+				local top = sy + math.floor(stress.lane_terrain(cfg, x, z) + 0.5)
+				for y = math.max(minp.y, sy + 1), math.min(maxp.y, top) do
+					local vi = area:index(x, y, z)
+					if data[vi] == c_air then data[vi] = c_stone; stripped = stripped + 1 end
+				end
+			end
+		end
+	end
 	for z = minp.z, maxp.z do
 		for y = minp.y, maxp.y do
 			local cv = var_y[y]

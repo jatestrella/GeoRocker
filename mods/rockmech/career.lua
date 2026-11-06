@@ -17,6 +17,7 @@ local PICK = "rockmech:pick"
 local SHOVEL = "rockmech:shovel"
 local CARRY_KEY = "rockmech:carry"
 local SITE_KEY = "career_site"
+local VENDOR_SPOTS = "career_vendor_spots"   -- 三攤攤主的位置（build_market 記下，ensure_vendors 補人）
 local SHOP = "rockmech:shop"
 local VENDOR = "rockmech:vendor"
 local CAMP_Z = 14           -- 破碎站在出生點北邊幾公尺
@@ -25,7 +26,13 @@ local TENT_Z = -14          -- 帳篷在出生點南邊幾公尺，遠離往受�
 local OLD_TENT_Z = 14       -- 舊版的帳篷位置
 
 -- 主選單的創造模式開關是全域設定，不見得跟著世界走：經營模式一律不是創造模式
-function core.is_creative_enabled() return false end
+-- 例外：開了 /god（godmode 存在玩家 meta）或有 creative 權限的人（老師）可以用創造模式的物品欄
+function core.is_creative_enabled(name)
+	if not name or name == "" then return false end
+	if core.check_player_privs(name, {creative = true}) then return true end
+	local p = core.get_player_by_name(name)
+	return p ~= nil and p:get_meta():get_int("godmode:on") == 1
+end
 
 ---------------------------------------------------------------------------
 -- 世界不掉落岩石和碎石
@@ -304,21 +311,39 @@ core.register_on_mods_loaded(function()
 end)
 
 ---------------------------------------------------------------------------
--- 帳篷下的供應商
+-- 帳篷下的供應商：三攤各賣一類（config.shop 的 shop 欄），舊世界的 VENDOR 什麼都賣
 ---------------------------------------------------------------------------
 
-local function shop_form(name)
-	local out = {"formspec_version[6]size[13.5,13.2]",
-		("label[0.5,0.6;供應商　資金 $%.0f]"):format(rockmech.money(name))}
+-- kind → 攤位：名牌（職稱）、顏色、坐著還是站著
+local BOOTHS = {
+	vehicle = {entity = "rockmech:vendor_vehicle", title = "機械設備課長", sells = "車輛・破碎站・輸送帶",
+		color = "#80b0ff", tint = "#2050a0", sit = true},
+	blast = {entity = "rockmech:vendor_blast", title = "爆破主任", sells = "鑽孔・炸藥・裝藥",
+		color = "#ff8060", tint = "#c03020", sit = false},
+	tools = {entity = "rockmech:vendor_tools", title = "工具室管理員", sells = "手工具・支護・儀器",
+		color = "#a0e080", tint = "#407020", sit = true},
+}
+local shop_kind = {}        -- 玩家名稱 → 正在看哪一攤（nil：全部）
+
+local function shop_form(name, kind)
+	local booth = BOOTHS[kind]
+	local who = booth and booth.title or "供應商"
+	local team = rockmech.team_of(name)
+	local head = team and ("%s　第 %s 組資金 $%.0f"):format(who, team, rockmech.money(name))
+		or rockmech.has_account(name) and ("%s　資金 $%.0f"):format(who, rockmech.money(name))
+		or who .. "　你還沒分組，請老師分組後才有資金"
+	local out = {"formspec_version[6]size[13.5,13.2]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local col, row = 0, 0
 	for i, it in ipairs(cfg.shop) do
-		local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
-		local price = it.price == 0 and "免費" or ("$%d"):format(it.price)
-		out[#out + 1] = ("item_image[%g,%g;0.8,0.8;%s]"):format(x, y, it.item)
-		out[#out + 1] = ("label[%g,%g;%s%s]"):format(x + 1, y + 0.4, it.label, it.count and (" ×" .. it.count) or "")
-		out[#out + 1] = ("button[%g,%g;2.2,0.8;buy_%d;%s]"):format(x + 3.9, y, i, core.formspec_escape(price))
-		row = row + 1
-		if row >= 12 then col, row = col + 1, 0 end
+		if not kind or it.shop == kind then
+			local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
+			local price = it.price == 0 and "免費" or ("$%d"):format(it.price)
+			out[#out + 1] = ("item_image[%g,%g;0.8,0.8;%s]"):format(x, y, it.item)
+			out[#out + 1] = ("label[%g,%g;%s%s]"):format(x + 1, y + 0.4, it.label, it.count and (" ×" .. it.count) or "")
+			out[#out + 1] = ("button[%g,%g;2.2,0.8;buy_%d;%s]"):format(x + 3.9, y, i, core.formspec_escape(price))
+			row = row + 1
+			if row >= 12 then col, row = col + 1, 0 end
+		end
 	end
 	return table.concat(out)
 end
@@ -326,9 +351,10 @@ end
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= SHOP then return end
 	local name = player:get_player_name()
+	local kind = shop_kind[name]
 	for key in pairs(fields) do
 		local it = cfg.shop[tonumber(key:match("^buy_(%d+)$"))]
-		if it then
+		if it and (not kind or it.shop == kind) then
 			local stack = ItemStack(it.item .. " " .. (it.count or 1))
 			local inv = player:get_inventory()
 			if rockmech.money(name) < it.price then
@@ -338,14 +364,38 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			else
 				inv:add_item("main", stack)
 				rockmech.add_money(name, -it.price)
-				core.chat_send_player(name, ("[供應商] 買了 %s"):format(it.label))
-				core.show_formspec(name, SHOP, shop_form(name))
+				local acc = rockmech.account_of(name)
+				if acc ~= name then
+					-- 整組共用的錢：組員都看得到誰買了什麼
+					for _, m in ipairs(rockmech.account_members(acc)) do
+						core.chat_send_player(m, ("[%s] %s 買了 %s（$%d）"):format(rockmech.account_label(acc), name, it.label, it.price))
+					end
+					core.log("action", ("[rockmech] %s (%s) bought %s for $%d"):format(name, acc, it.key, it.price))
+				else
+					core.chat_send_player(name, ("[供應商] 買了 %s"):format(it.label))
+				end
+				if it.final then
+					-- 終極目標：全服廣播
+					core.chat_send_all(("★★★ %s 購入「%s」！ ★★★"):format(rockmech.account_label(acc), it.label))
+					core.log("action", ("[rockmech] FINAL: %s (%s) bought %s"):format(name, acc, it.key))
+					for _, p in ipairs(core.get_connected_players()) do
+						core.sound_play("rockmech_coin", {to_player = p:get_player_name(), gain = 1.0}, true)
+					end
+				end
+				core.show_formspec(name, SHOP, shop_form(name, kind))
 			end
 		end
 	end
 	return true
 end)
 
+local function open_shop(clicker, kind)
+	local name = clicker:get_player_name()
+	shop_kind[name] = kind
+	core.show_formspec(name, SHOP, shop_form(name, kind))
+end
+
+-- 舊版：一個人什麼都賣（舊世界的帳篷）
 core.register_entity(VENDOR, {
 	initial_properties = {
 		physical = true, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
@@ -357,12 +407,28 @@ core.register_entity(VENDOR, {
 		self.object:set_armor_groups({immortal = 1})
 		self.object:set_animation({x = 0, y = 79}, 30)
 	end,
-	on_rightclick = function(self, clicker)
-		local name = clicker:get_player_name()
-		core.show_formspec(name, SHOP, shop_form(name))
-	end,
+	on_rightclick = function(self, clicker) open_shop(clicker) end,
 	on_punch = function() return true end,
 })
+
+-- 三攤的攤主：坐著的用坐姿（character.b3d 第 81–160 格），臉朝北（+z，營地中心）
+for kind, b in pairs(BOOTHS) do
+	core.register_entity(b.entity, {
+		initial_properties = {
+			physical = true, collisionbox = b.sit and {-0.3, 0, -0.3, 0.3, 1.2, 0.3} or {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
+			visual = "mesh", mesh = "character.b3d", textures = {"character.png^[colorize:" .. b.tint .. ":70"},
+			nametag = b.title, nametag_color = b.color, static_save = false,
+		},
+		on_activate = function(self)
+			self.object:set_armor_groups({immortal = 1})
+			self.object:set_yaw(0)
+			if b.sit then self.object:set_animation({x = 81, y = 160}, 30)
+			else self.object:set_animation({x = 0, y = 79}, 30) end
+		end,
+		on_rightclick = function(self, clicker) open_shop(clicker, kind) end,
+		on_punch = function() return true end,
+	})
+end
 
 local CANVAS = {"[fill:16x16:#d8c8a0^[fill:16x2:0,6:#c04030^[fill:16x2:0,13:#c04030"}
 core.register_node("rockmech:tent_canvas", {
@@ -375,6 +441,69 @@ core.register_node("rockmech:tent_pole", {
 	groups = {not_in_creative_inventory = 1},
 })
 
+-- 三攤各自的棚布
+local CANVASES = {
+	vehicle = "[fill:16x16:#3060b0^[fill:16x2:0,6:#e0e8f0^[fill:16x2:0,13:#e0e8f0",
+	blast = "[fill:16x16:#e8e0d0^[fill:16x4:0,0:#c02020^[fill:16x4:0,8:#c02020",
+	tools = "[fill:16x16:#4a7a3a^[fill:16x2:0,6:#d8c8a0^[fill:16x2:0,13:#d8c8a0",
+}
+for kind, tex in pairs(CANVASES) do
+	core.register_node("rockmech:tent_canvas_" .. kind, {
+		description = "Tent canvas (帳篷布)", tiles = {tex}, is_ground_content = false,
+		groups = {not_in_creative_inventory = 1},
+	})
+end
+
+-- 攤位的擺設（裝飾用，挖不掉）
+local WOOD, DARK = "default_wood.png", "[fill:16x16:#2a2a2a"
+local function prop(name, def)
+	def.drawtype = "nodebox"
+	def.paramtype = "light"
+	def.paramtype2 = "facedir"
+	def.is_ground_content = false
+	def.sunlight_propagates = true
+	def.groups = {not_in_creative_inventory = 1}
+	def.selection_box = def.node_box
+	core.register_node("rockmech:camp_" .. name, def)
+end
+prop("table", {description = "桌子", tiles = {WOOD}, node_box = {type = "fixed", fixed = {
+	{-0.5, 0.3, -0.5, 0.5, 0.45, 0.5},
+	{-0.45, -0.5, -0.45, -0.35, 0.3, -0.35}, {0.35, -0.5, -0.45, 0.45, 0.3, -0.35},
+	{-0.45, -0.5, 0.35, -0.35, 0.3, 0.45}, {0.35, -0.5, 0.35, 0.45, 0.3, 0.45}}}})
+-- 椅子：椅背在南邊（−z），坐的人臉朝北
+prop("chair", {description = "椅子", tiles = {WOOD}, node_box = {type = "fixed", fixed = {
+	{-0.35, -0.05, -0.35, 0.35, 0.05, 0.35},
+	{-0.35, 0.05, -0.35, 0.35, 0.8, -0.25},
+	{-0.35, -0.5, -0.35, -0.25, -0.05, -0.25}, {0.25, -0.5, -0.35, 0.35, -0.05, -0.25},
+	{-0.35, -0.5, 0.25, -0.25, -0.05, 0.35}, {0.25, -0.5, 0.25, 0.35, -0.05, 0.35}}}})
+prop("crate", {description = "木箱",
+	tiles = {WOOD .. "^[fill:16x1:0,0:#5a3a18^[fill:16x1:0,15:#5a3a18^[fill:1x16:0,0:#5a3a18^[fill:1x16:15,0:#5a3a18"},
+	node_box = {type = "fixed", fixed = {-0.45, -0.5, -0.45, 0.45, 0.35, 0.45}}})
+prop("explosives", {description = "炸藥箱",
+	tiles = {"[fill:16x16:#b02020^[fill:16x3:0,6:#f0d020^[fill:16x1:0,0:#601010^[fill:16x1:0,15:#601010"},
+	node_box = {type = "fixed", fixed = {-0.4, -0.5, -0.3, 0.4, 0.1, 0.3}}})
+prop("barrel", {description = "油桶", tiles = {"[fill:16x16:#2a5a9a^[fill:16x1:0,3:#18385a^[fill:16x1:0,12:#18385a"},
+	node_box = {type = "fixed", fixed = {{-0.35, -0.5, -0.25, 0.35, 0.45, 0.25}, {-0.25, -0.5, -0.35, 0.25, 0.45, 0.35}}}})
+prop("tires", {description = "輪胎", tiles = {DARK .. "^[fill:6x6:5,5:#555555"},
+	node_box = {type = "fixed", fixed = {{-0.45, -0.5, -0.3, 0.45, 0.45, 0.3}, {-0.3, -0.5, -0.45, 0.3, 0.45, 0.45}}}})
+prop("cone", {description = "三角錐", tiles = {"[fill:16x16:#f07010^[fill:16x2:0,7:#f0f0f0"},
+	node_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.3, 0.3, -0.4, 0.3}, {-0.15, -0.4, -0.15, 0.15, 0.0, 0.15},
+		{-0.08, 0.0, -0.08, 0.08, 0.3, 0.08}}}})
+-- 工具架：正面（+z）擺著工具
+prop("shelf", {description = "工具架",
+	tiles = {WOOD, WOOD, WOOD, WOOD, WOOD .. "^default_tool_steelpick.png^default_tool_steelshovel.png", WOOD},
+	node_box = {type = "fixed", fixed = {{-0.5, -0.5, -0.5, 0.5, 0.5, -0.3}, {-0.5, -0.5, -0.5, -0.4, 0.5, 0.2},
+		{0.4, -0.5, -0.5, 0.5, 0.5, 0.2}, {-0.5, -0.1, -0.5, 0.5, 0.0, 0.2}, {-0.5, 0.4, -0.5, 0.5, 0.5, 0.2},
+		{-0.5, -0.5, -0.5, 0.5, -0.4, 0.2}}}})
+prop("toolbox", {description = "工具箱", tiles = {"[fill:16x16:#c03020^[fill:16x2:0,5:#202020"},
+	node_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.15, 0.3, -0.2, 0.15}, {-0.1, -0.2, -0.03, 0.1, -0.1, 0.03}}}})
+prop("papers", {description = "文件",
+	tiles = {"[fill:16x16:#f0f0e8^[fill:12x1:2,4:#8090a0^[fill:12x1:2,8:#8090a0^[fill:8x1:2,12:#8090a0"},
+	node_box = {type = "fixed", fixed = {{-0.25, -0.5, -0.2, 0.15, -0.45, 0.2}, {-0.05, -0.45, -0.15, 0.3, -0.42, 0.15}}}})
+prop("helmets", {description = "安全帽", tiles = {"[fill:16x16:#f0c020"},
+	node_box = {type = "fixed", fixed = {{-0.4, -0.5, -0.15, -0.05, -0.3, 0.15}, {-0.32, -0.3, -0.1, -0.13, -0.22, 0.1},
+		{0.05, -0.5, -0.15, 0.4, -0.3, 0.15}, {0.13, -0.3, -0.1, 0.32, -0.22, 0.1}}}})
+
 local function ground_y(x, z)
 	for y = 40, -30, -1 do
 		local n = core.get_node({x = x, y = y, z = z}).name
@@ -382,39 +511,229 @@ local function ground_y(x, z)
 	end
 end
 
--- 帳篷（四根柱子撐三層布）和供應商
-local function build_tent()
-	local y = ground_y(0, TENT_Z) or 0
+-- 帳篷（四根柱子撐三層布）和供應商。x0：營地中心（出生點是 0，各組的礦帶見 team.lua）
+local function build_tent(x0)
+	x0 = x0 or 0
+	local y = ground_y(x0, TENT_Z) or 0
 	for _, s in ipairs({{-3, -3}, {3, -3}, {-3, 3}, {3, 3}}) do
-		for h = 1, 3 do core.set_node({x = s[1], y = y + h, z = TENT_Z + s[2]}, {name = "rockmech:tent_pole"}) end
+		for h = 1, 3 do core.set_node({x = x0 + s[1], y = y + h, z = TENT_Z + s[2]}, {name = "rockmech:tent_pole"}) end
 	end
 	for layer = 0, 2 do
 		local r = 3 - layer
 		for x = -r, r do for z = -r, r do
-			core.set_node({x = x, y = y + 4 + layer, z = TENT_Z + z}, {name = "rockmech:tent_canvas"})
+			core.set_node({x = x0 + x, y = y + 4 + layer, z = TENT_Z + z}, {name = "rockmech:tent_canvas"})
 		end end
 	end
-	core.add_entity({x = 0, y = y + 0.5, z = TENT_Z}, VENDOR)
+	core.add_entity({x = x0, y = y + 0.5, z = TENT_Z}, VENDOR)
 end
 
-local function build_camp(owner)
-	build_tent()
-	local y = ground_y(CRUSHER_X, CAMP_Z) or 0
-	if not rockmech.crusher_build({x = CRUSHER_X, y = y + 1, z = CAMP_Z}, -1, 0, owner) then
-		core.log("warning", "[rockmech] 起始破碎站蓋不起來：地形不平")
+-- 營地南邊（z = TENT_Z）一間貨櫃辦公室，三個攤位並排：機械設備課長、爆破主任、工具室管理員。
+-- 每攤前面（北邊）一排桌子，攤主在桌子後面（坐的有椅子），後面和兩側擺設。
+-- 擺設：{dx, dz, 高度層, 節點}，高度層 1 是地面上第一格
+local BOOTH_X = {vehicle = -4, blast = 0, tools = 4}   -- 三位攤主在貨櫃辦公室裡的位置（離中心）
+-- 擺設：{dx, dz, 高度層, 節點}，dx 離攤主、dz 離辦公室中心線（正面窗口在 dz = 3，櫃台在 2，攤主在 1，後牆在 −3）
+local BOOTH_PROPS = {
+	vehicle = {     -- 機械設備課長：坐在辦公桌後，後面堆輪胎、油桶
+		{-1, 2, 1, "table"}, {0, 2, 1, "table"}, {1, 2, 1, "table"}, {0, 2, 2, "papers"}, {0, 1, 1, "chair"},
+		{-1, -2, 1, "tires"}, {-1, -2, 2, "tires"}, {-1, -1, 1, "tires"}, {0, -2, 1, "barrel"}, {1, -2, 1, "barrel"},
+	},
+	blast = {       -- 爆破主任：站著，後面一排炸藥箱
+		{-1, 2, 1, "table"}, {0, 2, 1, "table"}, {1, 2, 1, "table"}, {1, 2, 2, "helmets"}, {-1, 2, 2, "papers"},
+		{-1, -2, 1, "crate"}, {-1, -2, 2, "explosives"}, {0, -2, 1, "explosives"}, {1, -2, 1, "crate"}, {1, -2, 2, "explosives"},
+	},
+	tools = {       -- 工具室管理員：坐著，後面兩層工具架
+		{-1, 2, 1, "table"}, {0, 2, 1, "table"}, {1, 2, 1, "table"}, {-1, 2, 2, "toolbox"}, {0, 1, 1, "chair"},
+		{-1, -2, 1, "shelf"}, {0, -2, 1, "shelf"}, {1, -2, 1, "shelf"}, {-1, -2, 2, "shelf"}, {1, -2, 2, "shelf"},
+	},
+}
+
+-- 貨櫃辦公室：兩個 40 呎貨櫃併成一間（外部 13×7 m、室內高 3 m），米白波浪鋼板、深灰角柱與底樑、灰色屋頂。
+-- 正面（北邊，朝營地）三個櫃台窗口，上面各一片條紋遮陽棚（攤位的識別色）；東側木門，背面、西側玻璃窗，
+-- 西側牆外一台冷氣室外機；室內地板、天花板燈。在窗口外面就能右鍵攤主買東西，也可以從門走進去。
+local MARKET_RX, MARKET_RZ = 6, 3          -- 外牆離中心（x：東西兩端、z：南北兩面）
+local AWNING = {vehicle = "#2f6fbf", blast = "#c03020", tools = "#3f8a3a"}
+local WALL = "[fill:16x16:#e6e0cf^[fill:2x16:1,0:#c8c2b0^[fill:2x16:6,0:#c8c2b0^[fill:2x16:11,0:#c8c2b0"
+local function plain(name, desc, tiles, extra)
+	local def = {description = desc, tiles = tiles, is_ground_content = false, groups = {not_in_creative_inventory = 1}}
+	for k, v in pairs(extra or {}) do def[k] = v end
+	core.register_node("rockmech:" .. name, def)
+end
+plain("office_wall", "貨櫃屋外牆", {WALL})
+plain("office_wall_base", "貨櫃屋外牆（底樑）", {WALL .. "^[fill:16x4:0,12:#4a4e52"})
+plain("office_post", "貨櫃屋角柱", {"[fill:16x16:#4a4e52^[fill:4x4:6,6:#2a2c2e"})
+plain("office_roof", "貨櫃屋屋頂", {"[fill:16x16:#9a9ea2^[fill:16x1:0,0:#7a7e82^[fill:16x1:0,8:#7a7e82",
+	"[fill:16x16:#d8d4c8", "[fill:16x16:#4a4e52", "[fill:16x16:#4a4e52", "[fill:16x16:#4a4e52", "[fill:16x16:#4a4e52"})
+plain("office_floor", "貨櫃屋地板", {"[fill:16x16:#7a6a58^[fill:16x1:0,4:#6a5a48^[fill:16x1:0,12:#6a5a48"})
+plain("camp_lamp", "天花板燈", {"[fill:16x16:#fff8d8"}, {drawtype = "nodebox", paramtype = "light",
+	node_box = {type = "fixed", fixed = {-0.4, 0.4, -0.15, 0.4, 0.5, 0.15}}, light_source = 13,
+	sunlight_propagates = true, walkable = false})
+-- 冷氣室外機：灰白機殼、正面圓形風扇格柵
+plain("office_ac", "冷氣室外機", {"[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc",
+	"[fill:16x16:#d0d0cc^[fill:10x10:3,3:#505458^[fill:10x1:3,6:#808488^[fill:10x1:3,9:#808488", "[fill:16x16:#d0d0cc"},
+	{drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
+	node_box = {type = "fixed", fixed = {{-0.45, -0.5, -0.25, 0.45, 0.35, 0.25}, {-0.4, -0.5, -0.3, -0.3, -0.4, 0.3}, {0.3, -0.5, -0.3, 0.4, -0.4, 0.3}}}})
+for kind, c in pairs(AWNING) do
+	-- 遮陽棚：從牆頂往外斜下來的條紋布（攤位識別色＋白）
+	plain("office_awning_" .. kind, "遮陽棚", {("[fill:16x16:#f0f0f0^[fill:4x16:0,0:%s^[fill:4x16:8,0:%s"):format(c, c)},
+		{drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
+		node_box = {type = "fixed", fixed = {{-0.5, 0.35, -0.5, 0.5, 0.45, -0.1}, {-0.5, 0.15, -0.1, 0.5, 0.3, 0.3},
+			{-0.5, -0.05, 0.3, 0.5, 0.1, 0.5}}}})
+end
+
+local function build_market(x0)
+	local y = ground_y(x0, TENT_Z) or 0
+	local function set(dx, h, dz, node, p2) core.set_node({x = x0 + dx, y = y + h, z = TENT_Z + dz}, {name = node, param2 = p2 or 0}) end
+	local RX, RZ = MARKET_RX, MARKET_RZ
+	-- 外殼：角柱、牆（最下一層是底樑）、屋頂、室內地板
+	for dx = -RX, RX do
+		for dz = -RZ, RZ do
+			local edge_x, edge_z = math.abs(dx) == RX, math.abs(dz) == RZ
+			for h = 1, 3 do
+				if edge_x and edge_z then set(dx, h, dz, "rockmech:office_post")
+				elseif edge_x or edge_z then set(dx, h, dz, h == 1 and "rockmech:office_wall_base" or "rockmech:office_wall")
+				else set(dx, h, dz, "air") end
+			end
+			set(dx, 4, dz, "rockmech:office_roof")
+			if not edge_x and not edge_z then set(dx, 0, dz, "rockmech:office_floor") end
+		end
 	end
+	for kind, bx in pairs(BOOTH_X) do
+		-- 正面：攤主前面的櫃台窗口（3 寬、h 2–3，h 1 的牆當櫃台），外面一片遮陽棚
+		for dx = -1, 1 do
+			for h = 2, 3 do set(bx + dx, h, RZ, "air") end
+			set(bx + dx, 4, RZ + 1, "rockmech:office_awning_" .. kind)          -- 高的一邊貼著牆（南），往北斜下
+		end
+		set(bx, 3, 0, "rockmech:camp_lamp")
+	end
+	-- 背面高處一排玻璃窗、西側一扇玻璃窗
+	for _, dx in ipairs({-5, -4, -3, 3, 4, 5}) do set(dx, 3, -RZ, "default:glass") end
+	set(-RX, 2, -1, "default:glass"); set(-RX, 2, 0, "default:glass")
+	-- 東側木門（朝東開），門外兩個三角錐；西側牆外冷氣室外機
+	set(RX, 1, 0, "doors:door_wood_a", 3)
+	set(RX, 2, 0, "doors:hidden", 3)
+	set(RX + 1, 1, 2, "rockmech:camp_cone"); set(RX + 1, 1, -2, "rockmech:camp_cone")
+	set(-RX - 1, 1, 1, "rockmech:office_ac", 3)       -- facedir 3：風扇朝西
+	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
+	for kind, bx in pairs(BOOTH_X) do
+		for _, p in ipairs(BOOTH_PROPS[kind]) do set(bx + p[1], p[3], p[2], "rockmech:camp_" .. p[4]) end
+		-- 坐著的攤主在椅面上（椅面比地面高 0.55 m），站著的在地面。攤主不存進地圖：記下位置，有人走近時才放（見下面）
+		list[#list + 1] = {kind = kind, pos = {x = x0 + bx, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = TENT_Z + 1}}
+	end
+	storage:set_string(VENDOR_SPOTS, core.serialize(list))
+end
+
+-- 攤主：地圖剛生成、附近沒有人時放的 entity 不一定留得住，所以改成玩家走到 VENDOR_NEAR 公尺內、
+-- 攤主不在就補一個（entity 不存檔，離開後跟著地圖區塊一起卸下，回來再補）
+local VENDOR_NEAR = 32
+local vendor_obj = {}       -- 攤位序號 → entity
+local function ensure_vendors(force)
+	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
+	local players = core.get_connected_players()
+	for i, spot in ipairs(list) do
+		local o = vendor_obj[i]
+		if not (o and o:get_pos()) then
+			local near = force
+			for _, p in ipairs(players) do
+				if vector.distance(p:get_pos(), spot.pos) < VENDOR_NEAR then near = true; break end
+			end
+			if near then vendor_obj[i] = core.add_entity(spot.pos, BOOTHS[spot.kind].entity) end
+		end
+	end
+end
+rockmech.career_ensure_vendors = ensure_vendors
+local vendor_t = 0
+core.register_globalstep(function(dtime)
+	vendor_t = vendor_t + dtime
+	if vendor_t < 2 then return end
+	vendor_t = 0
+	ensure_vendors()
+end)
+
+-- 組號看板：大帳篷南邊，面向南邊的走廊，白底大數字（3×5 點陣放大 2 倍）；背面是木板
+local DIGITS = {
+	["0"] = {"111", "101", "101", "101", "111"}, ["1"] = {"010", "110", "010", "010", "111"},
+	["2"] = {"111", "001", "111", "100", "111"}, ["3"] = {"111", "001", "111", "001", "111"},
+	["4"] = {"101", "101", "111", "001", "001"}, ["5"] = {"111", "100", "111", "001", "111"},
+	["6"] = {"111", "100", "111", "101", "111"}, ["7"] = {"111", "001", "001", "001", "001"},
+	["8"] = {"111", "101", "111", "101", "111"}, ["9"] = {"111", "101", "111", "001", "111"},
+}
+for _, n in ipairs({{"board", "#f0f0e8", "看板"}, {"digit", "#203a80", "看板數字"}, {"back", "#6a4a28", "看板背面"}}) do
+	core.register_node("rockmech:sign_" .. n[1], {
+		description = n[3], tiles = {"[fill:16x16:" .. n[2]}, is_ground_content = false,
+		groups = {not_in_creative_inventory = 1},
+	})
+end
+local function build_sign(x0, text)
+	local glyph = DIGITS[text]
+	if not glyph then return end
+	local zf = TENT_Z - MARKET_RZ - 3            -- 正面（南），背面在北邊一格
+	local y = ground_y(x0, zf) or 0
+	local x1, x2, top = x0 - 4, x0 + 3, y + 14   -- 寬 8、高 12（y+3..y+14），下面兩根柱子
+	for _, px in ipairs({x1, x2}) do
+		for h = 1, 2 do
+			core.set_node({x = px, y = y + h, z = zf + 1}, {name = "rockmech:tent_pole"})
+		end
+	end
+	for x = x1, x2 do
+		for yy = y + 3, top do
+			core.set_node({x = x, y = yy, z = zf}, {name = "rockmech:sign_board"})
+			core.set_node({x = x, y = yy, z = zf + 1}, {name = "rockmech:sign_back"})
+		end
+	end
+	-- 從南邊看過來：往北看時東（+x）在右手邊，所以第 c 欄就是 x 由小到大，不會左右顛倒
+	for r = 0, 4 do
+		for c = 0, 2 do
+			if glyph[r + 1]:sub(c + 1, c + 1) == "1" then
+				for dx = 0, 1 do for dy = 0, 1 do
+					core.set_node({x = x1 + 1 + 2 * c + dx, y = top - 1 - 2 * r - dy, z = zf}, {name = "rockmech:sign_digit"})
+				end end
+			end
+		end
+	end
+end
+
+local function build_camp(owner, x0)
+	x0 = x0 or 0
+	build_market(x0)
+	local team = owner:match("^team:(%d)$")
+	if team then build_sign(x0, team) end
+	local y = ground_y(x0 + CRUSHER_X, CAMP_Z) or 0
+	if not rockmech.crusher_build({x = x0 + CRUSHER_X, y = y + 1, z = CAMP_Z}, -1, 0, owner) then
+		core.log("warning", ("[rockmech] 營地 x = %d 的破碎站蓋不起來：地形不平"):format(x0))
+	end
+end
+
+-- 營地要用到的範圍
+local function camp_area(x0)
+	return {x = x0 - MARKET_RX - 4, y = -30, z = TENT_Z - MARKET_RZ - 4}, {x = x0 + CRUSHER_X + 8, y = 40, z = CAMP_Z + 8}
+end
+
+-- 在 x0 蓋一座營地（帳篷、供應商、破碎站掛在 owner 的帳戶），地圖生成完才蓋；done(spawn) 拿到營地中心的落腳點
+function rockmech.career_build_camp(owner, x0, done)
+	local a, b = camp_area(x0)
+	core.emerge_area(a, b, function(_, _, rem)
+		if rem > 0 then return end
+		build_camp(owner, x0)
+		if done then done(rockmech.career_spawn(x0)) end
+	end)
+end
+
+-- 營地中心（帳篷和破碎站之間）的落腳點；地圖還沒生成就先給地面高度附近
+function rockmech.career_spawn(x0)
+	local y = ground_y(x0, 0)
+	return {x = x0, y = (y or 10) + 1, z = 0}
 end
 
 core.register_on_joinplayer(function(player)
 	local name = player:get_player_name()
 	show_carry(player, carried(player))
 	local site = storage:get_string(SITE_KEY)
-	local a, b = {x = -8, y = -30, z = TENT_Z - 8}, {x = CRUSHER_X + 8, y = 40, z = CAMP_Z + 8}
+	local a, b = camp_area(0)
 	if site == "" then
-		rockmech.add_money(name, cfg.career_start)
-		core.emerge_area(a, b, function(_, _, rem)
-			if rem == 0 then build_camp(name) end
-		end)
+		-- 世界第一次有人進來：出生點的營地。分了組的玩家另有自己組的營地（team.lua），這座歸第一個進來的人
+		local owner = rockmech.team_of(name) and "camp:spawn" or name
+		rockmech.add_money(owner, rockmech.team_of(name) and 0 or cfg.career_start)
+		rockmech.career_build_camp(owner, cfg.career_camp_dx)
 	elseif site == "1" then
 		-- 舊版的世界：帳篷搬走（NPC 在 on_activate 自己消失）
 		core.emerge_area(a, b, function(_, _, rem)

@@ -33,6 +33,19 @@ local function show_hud(player, on)
 	end
 end
 
+-- 物品欄跟著換：經營模式下開了 /god 才有創造模式的物品頁（rockmech/career.lua 的 core.is_creative_enabled）
+local function refresh_inventory(player)
+	if not rawget(_G, "sfinv") then return end
+	core.after(0, function()
+		if not player:is_player() then return end
+		if sfinv.get_page(player):sub(1, 9) == "creative:" then
+			sfinv.set_page(player, sfinv.get_homepage_name(player))
+		else
+			sfinv.set_player_inventory_formspec(player)
+		end
+	end)
+end
+
 local function enable(player)
 	local name = player:get_player_name()
 	local meta = player:get_meta()
@@ -58,6 +71,7 @@ local function enable(player)
 	meta:set_int(META_ON, 1)
 	set_immortal(player, true)
 	show_hud(player, true)
+	refresh_inventory(player)
 end
 
 local function disable(player)
@@ -70,6 +84,7 @@ local function disable(player)
 	meta:set_int(META_ON, 0)
 	set_immortal(player, false)
 	show_hud(player, false)
+	refresh_inventory(player)
 end
 
 core.register_chatcommand("god", {

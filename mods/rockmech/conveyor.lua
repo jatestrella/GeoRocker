@@ -1,14 +1,14 @@
 -- rockmech/conveyor.lua
--- 皮帶輸送機：一格一格的方塊，每格 1 m，朝放的人面對的方向輸送；換個方向接就是轉彎。
--- 裝料：碎石落在任何一格皮帶上（卡車倒的、怪手放的、旁邊料堆流下來的、選礦場放料臂放的）就被帶走。
+-- 輸送帶：一格一格的方塊，每格 1 m，朝放的人面對的方向輸送；換個方向接就是轉彎。
+-- 裝料：碎石落在任何一格輸送帶上（卡車倒的、怪手放的、旁邊料堆流下來的、選礦場放料臂放的）就被帶走。
 -- 每格最多載「運量 ÷ 帶速」的料（rockmech_conveyor_rate t/s ÷ rockmech_conveyor_speed m/s），每 1/帶速 秒往前走一格；
 -- 前面那格滿了就停著等，下游塞住整條會跟著停。最後一格往前倒出去，變回地上的碎石（品位跟著料走）：
--- 底下是破碎站、選礦場的受料倉或另一條皮帶，就接著處理。
--- 坡度：皮帶表面的高度以 1/8 m 為單位（皮帶方塊有 8 種高度），每格最多升降 r/8 m，
--- r = floor(8·tan(最大傾角))，最大傾角 rockmech_conveyor_max_angle：碎石在皮帶上不往回滑的上限
--- （料和皮帶之間的摩擦，實務上約 15–18°）。轉彎的那一格是平的。
--- 拿著皮帶右鍵放：點在皮帶上就從那一格往前接，點在地上就從地面開始；左鍵點皮帶收回那一格，點別的地方切換坡度。
--- 有皮帶的區塊一直載入（每格放的時候強制載入它的區塊，拆掉時放掉）。
+-- 底下是破碎站、選礦場的受料倉或另一條輸送帶，就接著處理。
+-- 坡度：輸送帶表面的高度以 1/8 m 為單位（輸送帶方塊有 8 種高度），每格最多升降 r/8 m，
+-- r = floor(8·tan(最大傾角))，最大傾角 rockmech_conveyor_max_angle：碎石在輸送帶上不往回滑的上限
+-- （料和輸送帶之間的摩擦，實務上約 15–18°）。轉彎的那一格是平的。
+-- 拿著輸送帶右鍵放：點在輸送帶上就從那一格往前接，點在地上就從地面開始；左鍵點輸送帶收回那一格，點別的地方切換坡度。
+-- 有輸送帶的區塊一直載入（每格放的時候強制載入它的區塊，拆掉時放掉）。
 
 local cfg = rockmech.cfg
 local V = rockmech.vehicles
@@ -17,7 +17,7 @@ local storage = rockmech.collapse.storage
 
 local ITEM = "rockmech:belt"
 local BELT_H, BELT_ST, NAME = {}, {}, {}    -- node 名稱 → 表面高度 h（0..7，表面在 (h+1)/8 m）、外觀狀態（"" 空、"w" 載廢石、"o" 載礦）
-local SAVE_EVERY = 10       -- 皮帶上的料多久存檔一次 (s)
+local SAVE_EVERY = 10       -- 輸送帶上的料多久存檔一次 (s)
 
 local function main_ore()
 	for _, ore in pairs(cfg.ores) do return ore end
@@ -34,7 +34,7 @@ local function cell_cap() return math.max(1, math.floor(cfg.conveyor_rate / cfg.
 local FRAME = "[fill:16x16:#6c6c6c^[fill:16x2:0,0:#4a4a4a"
 local RUBBER = "[fill:16x16:#262626^[fill:16x2:0,7:#363636"
 local function top_of(h) return (h + 1) / 8 - 0.5 end
--- 形狀（方塊座標：皮帶往 +z 走，左邊是 −x）：從哪一側有皮帶接進來，那一側的框架就打開。
+-- 形狀（方塊座標：輸送帶往 +z 走，左邊是 −x）：從哪一側有輸送帶接進來，那一側的框架就打開。
 --   ""：直的（兩側框架）；cl／cr：轉彎，料從左／右邊進來（那側打開、後端封起來）；
 --   ml／mr：直的、左／右邊另外有一條從側面併進來（那側打開）
 local SHAPES = {"", "cl", "cr", "ml", "mr"}
@@ -45,7 +45,7 @@ local function boxes(h, loaded, sh)
 		if y1 > y0 then b[#b + 1] = {x0, y0, z0, x1, y1, z1} end
 	end
 	local open_l, open_r = sh == "cl" or sh == "ml", sh == "cr" or sh == "mr"
-	add(-0.5, top - 0.1, -0.5, 0.5, top, 0.5)              -- 皮帶
+	add(-0.5, top - 0.1, -0.5, 0.5, top, 0.5)              -- 輸送帶
 	if not open_l then add(-0.5, top - 0.25, -0.5, -0.42, top + 0.12, 0.5) end   -- 兩側框架
 	if not open_r then add(0.42, top - 0.25, -0.5, 0.5, top + 0.12, 0.5) end
 	if sh == "cl" or sh == "cr" then add(-0.5, top - 0.25, -0.5, 0.5, top + 0.12, -0.42) end   -- 轉彎：後端封起來
@@ -53,7 +53,7 @@ local function boxes(h, loaded, sh)
 		add(-0.48, -0.5, -0.06, -0.4, top - 0.25, 0.06)
 		add(0.4, -0.5, -0.06, 0.48, top - 0.25, 0.06)
 	end
-	if loaded then                                          -- 皮帶上的料：從進料的那一側走到前端
+	if loaded then                                          -- 輸送帶上的料：從進料的那一側走到前端
 		local y0, y1 = top, top + 0.14
 		if sh == "cl" or sh == "cr" then add(-0.32, y0, -0.32, 0.32, y1, 0.5) else add(-0.32, y0, -0.5, 0.32, y1, 0.5) end
 		if open_l then add(-0.5, y0, -0.32, -0.32, y1, 0.32) end
@@ -62,7 +62,7 @@ local function boxes(h, loaded, sh)
 	return b
 end
 
-local cells = {}            -- 位置 hash → 位置（目前知道的皮帶格）
+local cells = {}            -- 位置 hash → 位置（目前知道的輸送帶格）
 local loads = {}            -- 位置 hash → {{b = 碎石種類, k = 級數, g = 品位 param2}, ...}（空的不存）
 local dirty = false
 do
@@ -107,7 +107,7 @@ for h = 0, 7 do
 		local top = st == "" and RUBBER or V.rubble_tex(st == "o" and ore and ore.rubble or rockmech.RUBBLE)
 		local sel = {-0.5, -0.5, -0.5, 0.5, top_of(h) + 0.12, 0.5}
 		core.register_node(name, {
-			description = "皮帶輸送機",
+			description = "輸送帶",
 			drawtype = "nodebox",
 			paramtype = "light",
 			paramtype2 = "4dir",
@@ -139,9 +139,9 @@ for h = 0, 7 do
 	end
 end
 
--- 載入的區塊裡的皮帶記到 cells（重開遊戲後，強制載入的區塊一開始就會載入）
+-- 載入的區塊裡的輸送帶記到 cells（重開遊戲後，強制載入的區塊一開始就會載入）
 core.register_lbm({
-	label = "rockmech: 皮帶登記",
+	label = "rockmech: 輸送帶登記",
 	name = "rockmech:belt_register",
 	nodenames = {"group:rockmech_belt"},
 	run_at_every_load = true,
@@ -159,7 +159,7 @@ end
 local function surf(p, n) return p.y * 8 + BELT_H[n.name] end   -- 表面高度（1/8 m 為單位）
 local function dir_of(n) return core.fourdir_to_dir(n.param2 % 4) end
 
--- 下一格皮帶：前方那一欄、表面高度差不超過 rmax、不是迎面對著的。
+-- 下一格輸送帶：前方那一欄、表面高度差不超過 rmax、不是迎面對著的。
 -- 回傳 位置（或 nil = 這格是頭）, 方向, 前方還沒載入（"wait"）
 local function next_of(p, n)
 	local d = dir_of(n)
@@ -194,7 +194,7 @@ local function move(ha, hb, C)
 	dirty = true
 end
 
--- 粒子：皮帶上滾動的碎石顆粒、頭端倒出去的料流。只給附近（PARTICLE_R m 內）有玩家的格子，一步最多 PARTICLE_MAX 格
+-- 粒子：輸送帶上滾動的碎石顆粒、頭端倒出去的料流。只給附近（PARTICLE_R m 內）有玩家的格子，一步最多 PARTICLE_MAX 格
 local PARTICLE_R, PARTICLE_MAX = 64, 80
 local function near_player(p)
 	for _, pl in ipairs(core.get_connected_players()) do
@@ -214,7 +214,7 @@ local function bits_tex(L)
 	local c = ore and (kg >= 0.5 * k and ore.pure or ore.waste_color) or "#6a6058"
 	return "default_gravel.png^[colorize:" .. c .. ":160"
 end
--- 頭端倒料：從皮帶前緣以帶速拋出去、往下掉的料流
+-- 頭端倒料：從輸送帶前緣以帶速拋出去、往下掉的料流
 local function discharge_particles(p, d, h, out, tex)
 	local v = cfg.conveyor_speed
 	local edge = {x = p.x + d.x * 0.5, y = p.y + top_of(h) + 0.1, z = p.z + d.z * 0.5}
@@ -233,7 +233,7 @@ local function discharge_particles(p, d, h, out, tex)
 		texture = "default_gravel.png^[colorize:#8a8070:200^[opacity:110"})
 end
 
--- 頭：往前倒出去（前方那格或再上一格是空的才倒；前面堆滿了皮帶就停）
+-- 頭：往前倒出去（前方那格或再上一格是空的才倒；前面堆滿了輸送帶就停）
 local function discharge(p, d)
 	local L = loads[core.hash_node_position(p)]
 	if not L then return end
@@ -293,7 +293,7 @@ local function tick()
 	for h, p in pairs(cells) do
 		local n, is = belt_at(p)
 		if n and not is then
-			cells[h] = nil          -- 已經不是皮帶了（被別的東西蓋掉）
+			cells[h] = nil          -- 已經不是輸送帶了（被別的東西蓋掉）
 		elseif n then
 			nodes[h] = n
 			local room = C - total(loads[h])
@@ -331,7 +331,7 @@ local function tick()
 			for _, hc in ipairs(chain) do done[hc] = true end
 		end
 	end
-	-- 3. 外觀：有料的格子表面換成碎石，附近有人的話加上沿著皮帶走的碎石顆粒
+	-- 3. 外觀：有料的格子表面換成碎石，附近有人的話加上沿著輸送帶走的碎石顆粒
 	local v, np = cfg.conveyor_speed, 0
 	for h, n in pairs(nodes) do
 		local st, sh = want_state(loads[h]), shape_of(h, n, feeds[h])
@@ -373,7 +373,7 @@ core.register_on_shutdown(function() storage:set_string("belt_loads", core.seria
 -- 給選礦場的放料臂（plant.lua）
 ---------------------------------------------------------------------------
 
--- 離 pivot 水平 r 以內、表面在 pivot 下方、還有空位的皮帶格（最近的那格）：回傳 位置, 表面的 y
+-- 離 pivot 水平 r 以內、表面在 pivot 下方、還有空位的輸送帶格（最近的那格）：回傳 位置, 表面的 y
 function rockmech.belt_near(pivot, r)
 	local C, best, bd = cell_cap(), nil, nil
 	for h, p in pairs(cells) do
@@ -386,7 +386,7 @@ function rockmech.belt_near(pivot, r)
 	if not best then return nil end
 	return best, best.y + top_of(BELT_H[core.get_node(best).name])
 end
--- 放 k 級到這格皮帶上，回傳實際放了幾級
+-- 放 k 級到這格輸送帶上，回傳實際放了幾級
 function rockmech.belt_put(p, b, k, g)
 	local h = core.hash_node_position(p)
 	local put = math.min(k, cell_cap() - total(loads[h]))
@@ -410,16 +410,16 @@ local function slope_text(r)
 	return ("%s坡 %.0f°"):format(r > 0 and "上" or "下", math.deg(math.atan(math.abs(r) / 8)))
 end
 local function describe(stack, r)
-	stack:get_meta():set_string("description", ("皮帶輸送機（%s）\n右鍵放：點皮帶從那格往前接，點地面從地上開始\n左鍵點皮帶收回那一格，點別的地方切換坡度"):format(slope_text(r)))
+	stack:get_meta():set_string("description", ("輸送帶（%s）\n右鍵放：點輸送帶從那格往前接，點地面從地上開始\n左鍵點輸送帶收回那一格，點別的地方切換坡度"):format(slope_text(r)))
 end
 
 core.register_craftitem(ITEM, {
-	description = "皮帶輸送機\n右鍵放：點皮帶從那格往前接，點地面從地上開始\n左鍵點皮帶收回那一格，點別的地方切換坡度",
+	description = "輸送帶\n右鍵放：點輸送帶從那格往前接，點地面從地上開始\n左鍵點輸送帶收回那一格，點別的地方切換坡度",
 	inventory_image = "[fill:16x16:#00000000^[fill:16x6:0,5:#6c6c6c^[fill:14x3:1,6:#262626^[fill:2x5:2,11:#4a4a4a^[fill:2x5:12,11:#4a4a4a",
 	stack_max = 99,
 	on_use = function(itemstack, user, pointed)
 		if not user then return end
-		-- 左鍵點在皮帶上：收回這一格（上面的料倒在原地）
+		-- 左鍵點在輸送帶上：收回這一格（上面的料倒在原地）
 		if pointed and pointed.type == "node" and BELT_H[core.get_node(pointed.under).name] then
 			local p, name = pointed.under, user:get_player_name()
 			if core.is_protected(p, name) then core.record_protection_violation(p, name); return end
@@ -438,7 +438,7 @@ core.register_craftitem(ITEM, {
 		local r = list[i % #list + 1]
 		itemstack:get_meta():set_int("slope", r)
 		describe(itemstack, r)
-		core.chat_send_player(user:get_player_name(), ("[皮帶] 坡度：%s（最大傾角 %g°）"):format(slope_text(r), cfg.conveyor_max_angle))
+		core.chat_send_player(user:get_player_name(), ("[輸送帶] 坡度：%s（最大傾角 %g°）"):format(slope_text(r), cfg.conveyor_max_angle))
 		return itemstack
 	end,
 	on_place = function(itemstack, placer, pointed)
@@ -449,11 +449,11 @@ core.register_craftitem(ITEM, {
 			return udef.on_rightclick(pointed.under, un, placer, itemstack, pointed) or itemstack
 		end
 		local name = placer:get_player_name()
-		local function say(s) core.chat_send_player(name, "[皮帶] " .. s) end
+		local function say(s) core.chat_send_player(name, "[輸送帶] " .. s) end
 		local look = placer:get_look_dir()
 		local fd = core.dir_to_fourdir({x = look.x, y = 0, z = look.z})
 		local d = core.fourdir_to_dir(fd)
-		-- 從哪一格接過來：點到的皮帶，或前方正好指向這一欄的皮帶
+		-- 從哪一格接過來：點到的輸送帶，或前方正好指向這一欄的輸送帶
 		local fpos, fnode
 		if BELT_H[un.name] then
 			fpos, fnode = pointed.under, un

@@ -89,6 +89,11 @@ rockmech_gsi (GSI profile, all lithologies) string
 # Coal seam in new terrain: dip,dipdir,true thickness,y0[,x0,z0], a plane through (x0, y0, z0). Empty = no seam.
 rockmech_coal_seam (Coal seam) string
 
+# Coal seam lanes: width,kmin,kmax. Every width m along x is a lane (lane k centred on x = k*width), each with an
+# identical copy of the coal seam (and grade) that stays inside its lane; lanes outside kmin..kmax have no coal.
+# Career teams get one lane each (A = -1, B = +1, C = -2, ...). Empty = one seam everywhere.
+rockmech_coal_seam_lanes (Coal seam lanes) string
+
 # Open pit cut into new terrain: x0,z0,floor radius,depth,bench height,bench width[,ramp grade %, default 10]. Horizontal benches, crossed by one spiral haul ramp. Empty = no pit.
 rockmech_open_pit (Open pit) string
 
@@ -294,6 +299,20 @@ rockmech_career (Career mode) bool false
 # Career mode: starting money.
 rockmech_career_start (Career starting money) float 23000 0 100000000
 
+# Career mode, class server: number of teams (A, B, C, ...). Each team shares one account and gets its own camp
+# (tent, vendor, crusher) along the coal seam strike (z axis): A at -spacing, B at +spacing, C at -2*spacing, ...
+rockmech_career_teams (Career teams) int 8 1 26
+
+# Career mode, class server: distance between team camps along z (m).
+rockmech_career_site_spacing (Career camp spacing) float 150 60 2000
+
+# Career mode, class server: roster file in the world folder. One line per student: name,password,team
+# Accounts that do not exist yet are created with that password at server start; the team is (re)applied.
+rockmech_career_roster (Career roster file) string students.csv
+
+# Career mode, class server: when the roster file exists, only names that already have an account may join.
+rockmech_career_roster_only (Roster names only) bool true
+
 # Career mode: seconds to break a block of ore by hand. Hands cannot break other rock.
 rockmech_hand_ore_time (Bare hand time on ore) float 60 0.1 600
 
@@ -314,6 +333,9 @@ rockmech_cart_blocks (Hand cart capacity) int 3 1 12
 
 # Crusher throughput in tonnes per second. Rubble dumped faster than this queues on the grate.
 rockmech_crusher_rate (Crusher throughput) float 2 0.1 100
+
+# Large crusher throughput (t/s): same hopper, bought for when the surface miner outpaces the normal crusher.
+rockmech_crusher_big_rate (Large crusher throughput) float 10 0.1 100
 
 # Crusher processing fee per tonne. Waste rock pays this and earns nothing.
 rockmech_crusher_fee (Crusher processing fee) float 30 0 100000

@@ -3,7 +3,7 @@
 -- 碎石不會留在壁上。底部 3×3 m 是格柵（給料口），只從這裡吃料，上方的料靠碎石流動自己補進來。
 -- 卡車、挖土機、推土機倒進來都一樣；每秒最多 rockmech_crusher_rate 噸，倒太快就在倉裡排隊。
 -- 過磅入帳：收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），見 config.crush_income。廢石的品位是 0，
--- 運來破碎只會賠處理費，這就是貧化與截止品位。錢記在放置破碎站的玩家身上。
+-- 運來破碎只會賠處理費，這就是貧化與截止品位。錢記在放置破碎站的玩家的帳戶（分了組就是整組，見 team.lua）。
 -- 礦價每個交易日（rockmech_price_period 秒）浮動一次：rockmech.ore_price。
 -- 右鍵可以切換成廢石場：倒進來的碎石直接棄置，不收入，每噸付 rockmech_dump_fee（預設 0）。
 -- 受料倉、格柵、強制載入給選礦場（plant.lua）共用：rockmech.hopper_lib
@@ -14,7 +14,11 @@ local storage = rockmech.collapse.storage
 
 local CRUSHER, GRATE = "rockmech:crusher", "rockmech:crusher_grate"
 local PLANT = "rockmech:plant"     -- 選礦場（plant.lua），同一種受料倉
-local HOPPER_BODY = {[CRUSHER] = true, [PLANT] = true}
+local CRUSHER_BIG = "rockmech:crusher_big"   -- 大型破碎站：同一種受料倉，處理能力 rockmech_crusher_big_rate
+local CRUSHERS = {[CRUSHER] = true, [CRUSHER_BIG] = true}
+local HOPPER_BODY = {[CRUSHER] = true, [CRUSHER_BIG] = true, [PLANT] = true}
+local function rate_of(pos) return core.get_node(pos).name == CRUSHER_BIG and cfg.crusher_big_rate or cfg.crusher_rate end
+local function title_of(pos) return core.get_node(pos).name == CRUSHER_BIG and "大型破碎站" or "破碎站" end
 local SIZE, FEEDER = 9, 3    -- 受料倉開口、底部格柵的邊長 (m)
 local DEPTH = (SIZE - FEEDER) / 2 + 1              -- 倉深 (m)：每往下一層四邊各內縮 1 m（壁坡 45°），最底層就是格柵的大小
 local CAPACITY = 0          -- 容量（級），裝到倉口
@@ -65,13 +69,55 @@ end
 -- 資金
 ---------------------------------------------------------------------------
 
+-- 帳戶：分了組的玩家（team.lua，mod storage 的 team_of:<玩家>）用整組共用的帳戶 "team:<組>"，
+-- 沒分組就是玩家自己的帳戶（單人模式的 singleplayer）。玩家名稱不能有冒號，"team:1" 不會撞到玩家
+local TEAM_OF = "team_of:"
+function rockmech.team_of(name)
+	local t = storage:get_string(TEAM_OF .. name)
+	return t ~= "" and t or nil
+end
+function rockmech.account_of(name)
+	if name:find(":", 1, true) then return name end
+	local t = rockmech.team_of(name)
+	return t and ("team:" .. t) or name
+end
+function rockmech.account_label(acc)
+	if acc == "camp:spawn" then return "出生點公用" end     -- 第一個進世界的人已分組時，出生點營地的帳戶（career.lua）
+	local t = acc:match("^team:(.+)$")
+	return t and ("第 " .. t .. " 組") or acc
+end
+-- 帳戶在線上的成員
+function rockmech.account_members(acc)
+	local out = {}
+	for _, p in ipairs(core.get_connected_players()) do
+		if rockmech.account_of(p:get_player_name()) == acc then out[#out + 1] = p:get_player_name() end
+	end
+	return out
+end
+
+-- 設施（破碎站、選礦場）的主人是不是這個玩家（自己的帳戶、自己的組，或老師）；不是就告訴他
+function rockmech.owner_ok(owner, name)
+	if owner == "" or owner == name or owner == rockmech.account_of(name) then return true end
+	if core.check_player_privs(name, {server = true}) then return true end
+	core.chat_send_player(name, ("這是%s的設施，別組不能動"):format(rockmech.account_label(owner)))
+	return false
+end
+
 local money_hud = {}        -- 玩家名稱 → HUD id
 
+-- 右上角的資金；帳戶還沒開（沒有資金紀錄）就收起來
 local function show_money(player)
 	local name = player:get_player_name()
+	local acc = rockmech.account_of(name)
+	if not storage:contains(MONEY .. acc) then
+		if money_hud[name] then player:hud_change(money_hud[name], "text", "") end
+		return
+	end
 	local ore = main_ore()
-	local m = storage:get_float(MONEY .. name)
-	local text = ("資金 %s$%.0f"):format(m < 0 and "−" or "", math.abs(m)) .. (ore and ("\n" .. price_text(ore)) or "")
+	local m = storage:get_float(MONEY .. acc)
+	local team = rockmech.team_of(name)
+	local text = ("%s資金 %s$%.0f"):format(team and ("第 " .. team .. " 組　") or "", m < 0 and "−" or "", math.abs(m))
+		.. (ore and ("\n" .. price_text(ore)) or "")
 	if money_hud[name] then
 		player:hud_change(money_hud[name], "text", text)
 	else
@@ -79,16 +125,19 @@ local function show_money(player)
 			number = 0xFFE080, text = text, z_index = 100})
 	end
 end
+rockmech.show_money = show_money
 
-function rockmech.money(name) return storage:get_float(MONEY .. name) end
+-- name：玩家名稱或帳戶（"team:A"）
+function rockmech.has_account(name) return storage:contains(MONEY .. rockmech.account_of(name)) end
+function rockmech.money(name) return storage:get_float(MONEY .. rockmech.account_of(name)) end
 function rockmech.add_money(name, amount)
-	storage:set_float(MONEY .. name, storage:get_float(MONEY .. name) + amount)
-	local player = core.get_player_by_name(name)
-	if player then show_money(player) end
+	local acc = rockmech.account_of(name)
+	storage:set_float(MONEY .. acc, storage:get_float(MONEY .. acc) + amount)
+	for _, n in ipairs(rockmech.account_members(acc)) do show_money(core.get_player_by_name(n)) end
 end
 
 core.register_on_joinplayer(function(player)
-	if storage:contains(MONEY .. player:get_player_name()) then show_money(player) end
+	if rockmech.has_account(player:get_player_name()) then show_money(player) end
 end)
 core.register_on_leaveplayer(function(player) money_hud[player:get_player_name()] = nil end)
 
@@ -271,7 +320,7 @@ local function crush(pos, dtime)
 	local dump = meta:get_string("mode") == "dump"
 	-- 這一步的帳：礦的噸數、礦的貨款（噸 × 價格 × 回收率）、處理費（全部噸數 × 每噸處理費；廢石場是棄置費）
 	local ore_t, gross, fee = 0, 0, 0
-	local eaten = eat(pos, dtime, cfg.crusher_rate, nil, function(t, base, p2)
+	local eaten = eat(pos, dtime, rate_of(pos), nil, function(t, base, p2)
 		local ore = rockmech.ore_of_rubble[base]
 		local tons = tons_of(t)
 		local grade = ore and p2 / 255 or 0
@@ -292,11 +341,15 @@ local function crush(pos, dtime)
 		local bt = meta:get_float("batch_t")
 		if bt > 0 then
 			local bq, bg, bf = meta:get_float("batch_q"), meta:get_float("batch_g"), meta:get_float("batch_f")
+			-- 通知帳戶所有在線上的成員（分組時是整組）
+			local members = rockmech.account_members(rockmech.account_of(owner))
 			if dump then
-				core.chat_send_player(owner, ("[廢石場] 這批 %.1f t 棄置%s"):format(bt, bf > 0 and ("，棄置費 −$%.0f"):format(bf) or ""))
-				if bf > 0 then
-					show_bill(owner, ("廢石場　這批 %.1f t"):format(bt), {
-						{"棄置費", ("%.1f t"):format(bt), ("$%g"):format(cfg.dump_fee), money_text(-bf), RED}})
+				for _, m in ipairs(members) do
+					core.chat_send_player(m, ("[廢石場] 這批 %.1f t 棄置%s"):format(bt, bf > 0 and ("，棄置費 −$%.0f"):format(bf) or ""))
+					if bf > 0 then
+						show_bill(m, ("廢石場　這批 %.1f t"):format(bt), {
+							{"棄置費", ("%.1f t"):format(bt), ("$%g"):format(cfg.dump_fee), money_text(-bf), RED}})
+					end
 				end
 			else
 				local ore = main_ore()
@@ -308,10 +361,14 @@ local function crush(pos, dtime)
 				rows[#rows + 1] = {"廢石", ("%.1f t"):format(bt - bq), "", "", WHITE}
 				rows[#rows + 1] = {"處理費", ("%.1f t"):format(bt), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
 				rows[#rows + 1] = {"淨收入", "", "", money_text(bg - bf), bg >= bf and GREEN or RED}
-				core.sound_play("rockmech_coin", {to_player = owner, gain = 0.8}, true)
+				for _, m in ipairs(members) do
+					core.sound_play("rockmech_coin", {to_player = m, gain = 0.8}, true)
+				end
 				core.after(COIN_LEAD, function()
-					core.chat_send_player(owner, ("[破碎站] 這批 %.1f t，淨收入 %s"):format(bt, money_text(bg - bf)))
-					show_bill(owner, ("破碎站結算　這批 %.1f t"):format(bt), rows)
+					for _, m in ipairs(members) do
+						core.chat_send_player(m, ("[破碎站] 這批 %.1f t，淨收入 %s"):format(bt, money_text(bg - bf)))
+						show_bill(m, ("破碎站結算　這批 %.1f t"):format(bt), rows)
+					end
 				end)
 			end
 			for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m"}) do meta:set_float(k, 0) end
@@ -332,22 +389,27 @@ local function formspec(pos)
 	local queue = hopper_levels(hopper_center(meta))
 	local total = meta:get_float("total_t")
 	local dump = meta:get_string("mode") == "dump"
+	local rate = rate_of(pos)
+	-- 排隊：倉裡還有多少、照處理能力還要多久
+	local qt = tons_of(queue)
+	local queue_text = ("排隊 %.1f t，約 %d 秒處理完"):format(qt, math.ceil(qt / rate))
 	local prices = {}
 	for _, ore in pairs(cfg.ores) do
 		prices[#prices + 1] = ("%s 品位 100%% 今日每噸 $%.0f（基準 $%g），回收率 %.0f%%"):format(ore.label, rockmech.ore_price(ore), ore.price, ore.recovery * 100)
 	end
 	return table.concat({
-		"formspec_version[6]size[9,7]",
-		("label[0.5,0.6;%s]"):format(dump and "廢石場（倒進來的碎石直接棄置，不收入）" or "破碎站"),
-		dump and ("label[0.5,1.2;處理能力：%g t/s　棄置費：每噸 $%g]"):format(cfg.crusher_rate, cfg.dump_fee)
-			or ("label[0.5,1.2;處理能力：%g t/s　處理費：每噸 $%g]"):format(cfg.crusher_rate, cfg.crusher_fee),
+		"formspec_version[6]size[11,7.6]",
+		("label[0.5,0.6;%s]"):format(dump and "廢石場（倒進來的碎石直接棄置，不收入）" or title_of(pos)),
+		dump and ("label[0.5,1.2;處理能力：%g t/s　棄置費：每噸 $%g]"):format(rate, cfg.dump_fee)
+			or ("label[0.5,1.2;處理能力：%g t/s　處理費：每噸 $%g]"):format(rate, cfg.crusher_fee),
 		("label[0.5,1.8;%s]"):format(core.formspec_escape(dump and "礦石倒進來也當廢石丟掉" or table.concat(prices, "；"))),
-		("button[0.5,5.8;8,0.8;mode;%s]"):format(dump and "切換成破碎站（賣礦）" or ("切換成廢石場（棄置，每噸 $%g）"):format(cfg.dump_fee)),
+		("textarea[0.5,6.5;10,1;;;%s]"):format(core.formspec_escape(queue_text)),
+		("button[0.5,5.5;8,0.8;mode;%s]"):format(dump and "切換成破碎站（賣礦）" or ("切換成廢石場（棄置，每噸 $%g）"):format(cfg.dump_fee)),
 		("label[0.5,2.4;受料倉：%.1f / %.0f m³（%.1f t）]"):format(queue / V.NLEV, CAPACITY / V.NLEV, tons_of(queue)),
 		("label[0.5,3.0;累計處理：%.1f t，平均品位 %.0f%%]"):format(total, total > 0 and 100 * meta:get_float("total_q") / total or 0),
 		("label[0.5,3.6;累計：貨款 $%.0f − 處理費 $%.0f = 淨收入 $%.0f]"):format(meta:get_float("total_g"), meta:get_float("total_f"), meta:get_float("total_m")),
-		("label[0.5,4.2;資金（%s）：$%.0f]"):format(core.formspec_escape(meta:get_string("owner")),
-			storage:get_float(MONEY .. meta:get_string("owner"))),
+		("label[0.5,4.2;資金（%s）：$%.0f]"):format(core.formspec_escape(rockmech.account_label(meta:get_string("owner"))),
+			rockmech.money(meta:get_string("owner"))),
 		"button_exit[3,4.8;3,0.8;ok;關閉]",
 	})
 end
@@ -356,11 +418,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= CRUSHER then return end
 	local name = player:get_player_name()
 	local pos = editing[name]
-	if not pos or core.get_node(pos).name ~= CRUSHER then return true end
-	if fields.mode then
+	if not pos or not CRUSHERS[core.get_node(pos).name] then return true end
+	if fields.mode and rockmech.owner_ok(core.get_meta(pos):get_string("owner"), name) then
 		local meta = core.get_meta(pos)
 		meta:set_string("mode", meta:get_string("mode") == "dump" and "" or "dump")
-		meta:set_string("infotext", meta:get_string("mode") == "dump" and "廢石場（右鍵查看）" or "破碎站（右鍵查看）")
+		meta:set_string("infotext", meta:get_string("mode") == "dump" and "廢石場（右鍵查看）" or (title_of(pos) .. "（右鍵查看）"))
 		core.show_formspec(name, CRUSHER, formspec(pos))
 	end
 	if fields.quit or fields.ok then editing[name] = nil end
@@ -457,16 +519,17 @@ local function site_ok(pos, dx, dz)
 end
 
 -- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false
-function rockmech.crusher_build(pos, dx, dz, name)
+function rockmech.crusher_build(pos, dx, dz, name, node)
 	if not site_ok(pos, dx, dz) then return false end
-	core.set_node(pos, {name = CRUSHER})
+	core.set_node(pos, {name = node or CRUSHER})
 	dig_hopper(pos, dx, dz)
 	local meta = core.get_meta(pos)
-	meta:set_string("owner", name)
-	meta:set_string("infotext", "破碎站（右鍵查看）")
+	local acc = rockmech.account_of(name)       -- 分了組就掛在組上，收入進整組的帳戶
+	meta:set_string("owner", acc)
+	meta:set_string("infotext", ("%s（%s，右鍵查看）"):format(title_of(pos), rockmech.account_label(acc)))
 	core.get_node_timer(pos):start(STEP)
 	keep_loaded(pos)
-	if not storage:contains(MONEY .. name) then rockmech.add_money(name, 0) end
+	if not storage:contains(MONEY .. acc) then rockmech.add_money(acc, 0) end
 	return true
 end
 
@@ -480,7 +543,7 @@ core.register_node(GRATE, {
 	drop = "",
 })
 
-core.register_node(CRUSHER, {
+local crusher_def = {
 	description = "Crusher (破碎站)\n對著平地按右鍵放置，朝自己的方向挖 " .. SIZE .. "×" .. SIZE .. " m 受料倉\n碎石倒進倉裡就過磅入帳；廢石要賠處理費",
 	drawtype = "nodebox",
 	paramtype = "light",
@@ -497,7 +560,7 @@ core.register_node(CRUSHER, {
 		if math.abs(look.x) > math.abs(look.z) then dx = look.x > 0 and -1 or 1
 		else dz = look.z > 0 and -1 or 1 end
 		local name = placer:get_player_name()
-		if not rockmech.crusher_build(pos, dx, dz, name) then
+		if not rockmech.crusher_build(pos, dx, dz, name, itemstack:get_name()) then
 			core.chat_send_player(name, "[破碎站] 要放在平地上：機身 3×3 m 和前方 " .. SIZE .. "×" .. SIZE .. " m 要平坦、地下是實心、上方淨空")
 			return itemstack
 		end
@@ -507,6 +570,9 @@ core.register_node(CRUSHER, {
 	on_rightclick = function(pos, node, clicker)
 		editing[clicker:get_player_name()] = pos
 		core.show_formspec(clicker:get_player_name(), CRUSHER, formspec(pos))
+	end,
+	can_dig = function(pos, player)
+		return player and rockmech.owner_ok(core.get_meta(pos):get_string("owner"), player:get_player_name())
 	end,
 	on_timer = function(pos, elapsed)
 		crush(pos, math.min(elapsed, 5 * STEP))
@@ -519,7 +585,16 @@ core.register_node(CRUSHER, {
 		end
 		if meta:get_int("forceload") == 1 then each_block(pos, function(p) core.forceload_free_block(p, false) end) end
 	end,
-})
+}
+core.register_node(CRUSHER, crusher_def)
+-- 大型破碎站：一樣的機身大小和受料倉，處理能力大好幾倍（深灰機身、黃黑警示條）
+local big = table.copy(crusher_def)
+local BIG_BODY = "[fill:16x16:#4a5058^[fill:16x2:0,0:#f0c020^[fill:16x2:0,14:#f0c020^[fill:2x2:2,0:#202020^[fill:2x2:8,0:#202020^[fill:2x2:14,0:#202020"
+big.description = ("Large crusher (大型破碎站)\n處理能力 %g t/s（一般破碎站 %g t/s）\n對著平地按右鍵放置，朝自己的方向挖 %d×%d m 受料倉"):format(
+	cfg.crusher_big_rate, cfg.crusher_rate, SIZE, SIZE)
+big.tiles, big.inventory_image = {BIG_BODY}, BIG_BODY
+big.node_box = {type = "fixed", fixed = {{-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}, {-0.6, 2.4, -0.6, 0.6, 2.9, 0.6}}}
+core.register_node(CRUSHER_BIG, big)
 
 -- 舊版小倉擴建成現在的大小：舊格柵回填成下面的岩石，再照新尺寸挖（倉裡的碎石留著，疊到新的倉底）
 local function enlarge(pos)
@@ -548,7 +623,7 @@ core.register_lbm({
 core.register_lbm({
 	label = "rockmech: 破碎站強制載入",
 	name = "rockmech:crusher_forceload",
-	nodenames = {CRUSHER},
+	nodenames = {CRUSHER, CRUSHER_BIG},
 	run_at_every_load = false,
 	action = function(pos) core.after(1, keep_loaded, pos) end,
 })
