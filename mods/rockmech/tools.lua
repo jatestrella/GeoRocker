@@ -28,7 +28,8 @@ local function fmt_pos(p)
 end
 
 -- 組合羅盤報告（回傳多行字串）
-local function compass_report(pos, nodename)
+local function compass_report(pos, nodename, pname)
+	local rm = not rockmech.can_see or rockmech.can_see(pname, "rockmass")    -- 岩性、材料性質要有岩體分類能力
 	local sets = rockmech.get_joint_sets()
 	local lines = {}
 	local lith = rockmech.lith_of_node[nodename]
@@ -41,9 +42,11 @@ local function compass_report(pos, nodename)
 
 	local st = rockmech.collapse.initial_stress(pos, lith)
 	lines[#lines + 1] = core.colorize("#ffd080", "[rockmech 羅盤] ") .. fmt_pos(pos) ..
-		"  " .. lith.description .. lith_note
-	lines[#lines + 1] = ("  γ=%.1f kN/m³  σci=%g MPa  σt=%g MPa  mi=%g（完整岩石）"):format(
-		lith.gamma, lith.ucs, lith.tensile, lith.mi or 0)
+		"  " .. (rm and (lith.description .. lith_note) or "岩石（要有岩體分類能力才認得出岩性）")
+	if rm then
+		lines[#lines + 1] = ("  γ=%.1f kN/m³  σci=%g MPa  σt=%g MPa  mi=%g（完整岩石）"):format(
+			lith.gamma, lith.ucs, lith.tensile, lith.mi or 0)
+	end
 	lines[#lines + 1] = ("  上覆岩層 h=%d m（地表 y=%d%s）  初始 σv=Σγ·Δh=%.3f MPa"):format(
 		st.h, st.top_y, st.extrapolated and "，外插至 y0" or "", st.sv)
 	lines[#lines + 1] = ("  初始水平主應力：σH=%.3f（K_H=%.2f%s）σh=%.3f（K_h=%.2f%s）MPa，σH 方位 %g°"):format(
@@ -126,7 +129,7 @@ core.register_tool("rockmech:compass", {
 		local name = placer:get_player_name()
 		-- 平常只回應力與 FS；蹲下才看完整資料（應力解關閉時也一樣）
 		if placer:get_player_control().sneak or not rockmech.cfg.fem.enabled then
-			core.chat_send_player(name, compass_report(pos, node.name))
+			core.chat_send_player(name, compass_report(pos, node.name, name))
 		elseif rockmech.lith_of_node[node.name] then
 			rockmech.fem_request(pos, name)
 		else
@@ -651,6 +654,10 @@ if core.get_modpath("sfinv") and sfinv then
 
 	sfinv.register_page("rockmech:settings", {
 		title = "rockmech",
+		-- 經營模式：除錯用的開關頁只給開了 /god 或有 server 權限的人
+		is_in_nav = function(self, player)
+			return not rockmech.debug_allowed or rockmech.debug_allowed(player:get_player_name())
+		end,
 		get = function(self, player, context)
 			local can = core.check_player_privs(player, {[TOGGLE_PRIV] = true})
 			-- 精簡版：每個開關一行；說明與數值在完整資訊頁

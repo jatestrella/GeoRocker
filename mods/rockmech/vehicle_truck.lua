@@ -114,7 +114,8 @@ local function hauler(def, spec)
 		local t, cap = load_total(self), def.cap
 		local st = V.ahs.status(self)
 		local ore, grade = V.load_ore(self)
-		local mix = ore and "\n" .. rockmech.ore_text(ore, grade) or ""
+		-- 名牌大家都看得到：經營模式不顯示品位（要有品位判讀能力，在駕駛 HUD 看）
+		local mix = ore and not rockmech.cfg.career and "\n" .. rockmech.ore_text(ore, grade) or ""
 		V.nametag(self, "載量 " .. V.volume_text(t, cap) .. mix .. (st and ("\n" .. st) or ""), t >= cap and "#ff8060" or "#ffffff")
 		if not self.tip then place_bed(self, 0) end
 	end

@@ -97,7 +97,9 @@ config.shop = {
 	{key = "bolt", shop = "tools", item = "rockmech:rock_bolt", label = "岩栓", price = 300, count = 10},
 	{key = "shotcrete", shop = "tools", item = "rockmech:shotcrete", label = "噴凝土", price = 800, count = 10},
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = "無人機", price = 2000},
-	{key = "compass", shop = "tools", item = "rockmech:compass", label = "地質羅盤", price = 200},
+	{key = "xrf", shop = "tools", item = "rockmech:xrf", label = "XRF 分析儀（品位）", price = 5000},
+	{key = "gsi_card", shop = "tools", item = "rockmech:gsi_card", label = "GSI 評估圖卡（岩體）", price = 1000},
+	{key = "compass", shop = "tools", item = "rockmech:compass", label = "地質羅盤（力學）", price = 200},
 }
 
 -- 破碎站的收入：噸數 ×（品位 × 回收率 × 價格 − 處理費）。ore = nil 是廢石，只付處理費

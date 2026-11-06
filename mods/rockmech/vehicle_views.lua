@@ -19,7 +19,7 @@ local function hud_text(self)
 		local t = V.load_total(self)
 		s = s .. "　載量 " .. V.volume_text(t, def.cap)
 		local ore, grade = V.load_ore(self)
-		if ore then s = s .. "　" .. rockmech.ore_text(ore, grade) end
+		if ore and (not rockmech.can_see or rockmech.can_see(self.driver, "grade")) then s = s .. "　" .. rockmech.ore_text(ore, grade) end
 	end
 	if def.hud then s = s .. def.hud(self) end
 	if def.top_speed then s = s .. ("　%d km/h"):format(self.kmh or 0) end

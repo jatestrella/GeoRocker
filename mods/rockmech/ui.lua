@@ -160,15 +160,21 @@ local function fs_short(f)
 end
 
 -- HUD 的精簡報告：岩性、應力、最低的 FS 與它的機制。詳細數值在資訊頁（/rockmech）與羅盤（蹲下＋右鍵）
+-- 經營模式要有知識能力才看得到（knowledge.lua）：岩性、GSI、上覆厚度＝岩體分類，品位＝品位判讀，應力、FS、裂紋＝岩石力學
+local function see(name, ab) return not rockmech.can_see or rockmech.can_see(name, ab) end   -- 知識能力（knowledge.lua）
 local function fmt_report_lines(r, pname)
 	local i = r.init
 	local s = r.local_state
 	local lines = {}
-	lines[#lines + 1] = ("%s%s　上覆 %d m"):format(r.lith.description:gsub("\n.*", ""),
-		s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", i.h)
+	if see(pname, "rockmass") then
+		lines[#lines + 1] = ("%s%s　上覆 %d m"):format(r.lith.description:gsub("\n.*", ""),
+			s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", i.h)
+	else
+		lines[#lines + 1] = "岩石"
+	end
 	local ore = cfg.ores[r.lith.ore]
-	if ore and r.is_rock then lines[#lines + 1] = rockmech.ore_text(ore, r.p2 / 255) end
-	if not s then return lines end
+	if ore and r.is_rock and see(pname, "grade") then lines[#lines + 1] = rockmech.ore_text(ore, r.p2 / 255) end
+	if not s or not see(pname, "mechanics") then return lines end
 	-- 應力解決定崩落時，應力與 FS 看應力解（這一格還沒解過就先用現有估算）
 	local fc = rockmech.fem_cell and rockmech.fem_cell(r.pos)
 	lines[#lines + 1] = ("σ1 %.2f　σ3 %.2f MPa"):format(fc and fc.s1 or s.s1, fc and fc.s3 or s.s3)
@@ -193,12 +199,12 @@ local function fmt_report_lines(r, pname)
 end
 rockmech.hud_lines = fmt_report_lines   -- 測試用
 
--- 指著碎石時的 HUD：種類，礦石碎石再加品位
-local function rubble_lines(node)
+-- 指著碎石時的 HUD：種類（岩體分類），礦石碎石再加品位（品位判讀）
+local function rubble_lines(node, pname)
 	local base = rockmech.rubble_base[node.name] or node.name
-	local lines = {(core.registered_nodes[base].description:gsub("\n.*", ""))}
+	local lines = {see(pname, "rockmass") and (core.registered_nodes[base].description:gsub("\n.*", "")) or "碎石"}
 	local ore = rockmech.ore_of_rubble[base]
-	if ore then lines[2] = rockmech.ore_text(ore, node.param2 / 255) end
+	if ore and see(pname, "grade") then lines[#lines + 1] = rockmech.ore_text(ore, node.param2 / 255) end
 	return lines
 end
 
@@ -258,7 +264,7 @@ core.register_globalstep(function(dtime)
 			local key = core.pos_to_string(pos)
 			-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
 			if not h or h.key ~= key or h.t > 2 then
-				hud_set(player, table.concat(rubble and rubble_lines(node)
+				hud_set(player, table.concat(rubble and rubble_lines(node, name)
 					or fmt_report_lines(rockmech.stress_report(pos), name), "\n"))
 				huds[name].key = key
 				huds[name].t = 0
@@ -482,7 +488,18 @@ function rockmech.info_formspec(name, tab, report)
 	return build(name)
 end
 
+-- 經營模式：完整資訊頁是除錯用的，只有開了 /god 或有 server 權限的人看得到
+local function debug_allowed(name)
+	if not cfg.career then return true end
+	local p = core.get_player_by_name(name)
+	return (p and p:get_meta():get_int("godmode:on") == 1) or core.check_player_privs(name, {server = true})
+end
+rockmech.debug_allowed = debug_allowed
 function rockmech.show_info(name)
+	if not debug_allowed(name) then
+		core.chat_send_player(name, "[rockmech] 資訊頁是除錯用的（開了 /god 才看得到）")
+		return
+	end
 	local player = core.get_player_by_name(name)
 	if not player then return end
 	local st = state[name] or {tab = 1}

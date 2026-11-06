@@ -1,0 +1,580 @@
+-- rockmech/knowledge.lua
+-- 知識能力（經營模式）：玩家一開始看不到品位、岩性、GSI、應力、FS 這些數字（那是除錯用的），要靠下面任一方式：
+--   1. 儀器（放在背包裡就有效，一種儀器一種能力）：XRF 分析儀 → 品位判讀、GSI 評估圖卡 → 岩體分類、地質羅盤 → 岩石力學
+--   2. 雇用地質學家（研究帳篷的地質專家）：$8,000、20 分鐘，雇用期間全組三種能力都有；只在組員在線上時倒數
+--   3. 進修（地質專家）：從題庫抽 5 題，答對 4 題就永久取得那一科的能力（個人）；沒過要等 3 分鐘才能再考同一科
+--   開了 /god 全部看得到（除錯）。不是經營模式全部看得到。
+-- 題庫：世界資料夾的 questions.txt（沒有就寫一份預設的），老師可以自己改，格式見檔案開頭。
+-- 能力：grade 品位判讀（品位）、rockmass 岩體分類（岩性、GSI、上覆厚度）、mechanics 岩石力學（σ、FS、節理、裂紋）
+
+local cfg = rockmech.cfg
+local storage = rockmech.collapse.storage
+
+local ABILITIES = {
+	{key = "grade", label = "品位判讀", item = "rockmech:xrf"},
+	{key = "rockmass", label = "岩體分類", item = "rockmech:gsi_card"},
+	{key = "mechanics", label = "岩石力學", item = "rockmech:compass"},
+}
+local AB = {}
+for _, a in ipairs(ABILITIES) do AB[a.key] = a end
+rockmech.abilities = ABILITIES
+
+local HIRE_COST, HIRE_SECS = 8000, 20 * 60
+local EXAM_N, EXAM_PASS, EXAM_COOLDOWN = 5, 4, 180
+local KNOW = "rockmech:know_"           -- 玩家 meta：考過的科目
+local COOL = "rockmech:exam_cd_"        -- 玩家 meta：這一科下次能考的時間（os.time）
+local HIRE = "hire:"                    -- mod storage：hire:<帳戶> = 剩幾秒
+local HIRED_BY = "hire_by:"             -- mod storage：hire_by:<帳戶> = 雇用者（地質學家跟著他）
+
+local function money_text(v) return ("%s$%.0f"):format(v < 0 and "−" or "", math.abs(v)) end
+local function mmss(s) s = math.max(0, math.ceil(s)); return ("%d:%02d"):format(math.floor(s / 60), s % 60) end
+
+---------------------------------------------------------------------------
+-- 看不看得到
+---------------------------------------------------------------------------
+
+local function hire_left(acc) return storage:get_float(HIRE .. acc) end
+
+-- name 這位玩家看不看得到 ability（grade／rockmass／mechanics）的資訊
+function rockmech.can_see(name, ability)
+	if not cfg.career then return true end
+	local player = name and core.get_player_by_name(name)
+	if not player then return false end
+	local meta = player:get_meta()
+	if meta:get_int("godmode:on") == 1 then return true end
+	if meta:get_string(KNOW .. ability) == "1" then return true end
+	local a = AB[ability]
+	if a and player:get_inventory():contains_item("main", a.item) then return true end
+	if rockmech.account_of and hire_left(rockmech.account_of(name)) > 0 then return true end
+	return false
+end
+
+-- 儀器（工具室管理員賣；地質羅盤在 tools.lua）
+core.register_craftitem("rockmech:xrf", {
+	description = "手持式 XRF 分析儀\n放在背包裡：看得到岩石、碎石、車斗裡的料的品位",
+	inventory_image = "[fill:16x16:#00000000^[fill:8x12:4,3:#e8e8e0^[fill:6x4:5,4:#3a6a9a^[fill:4x3:6,11:#3a3a3a^[fill:2x2:7,0:#c03020",
+	stack_max = 1,
+})
+core.register_craftitem("rockmech:gsi_card", {
+	description = "GSI 評估圖卡（Hoek & Marinos）\n放在背包裡：看得到岩性、GSI、上覆厚度",
+	inventory_image = "[fill:16x16:#00000000^[fill:14x12:1,2:#f4f0e0^[fill:12x2:2,4:#c08040^[fill:12x2:2,7:#80a060^[fill:12x2:2,10:#6080c0",
+	stack_max = 1,
+})
+
+---------------------------------------------------------------------------
+-- 雇用地質學家（全組、在線上才倒數）
+---------------------------------------------------------------------------
+
+local function tell(acc, msg)
+	for _, m in ipairs(rockmech.account_members(acc)) do core.chat_send_player(m, "[地質學家] " .. msg) end
+end
+
+function rockmech.knowledge_hire(name)
+	local acc = rockmech.account_of(name)
+	if hire_left(acc) > 0 then
+		core.chat_send_player(name, ("[地質學家] 已經雇用中，還剩 %s"):format(mmss(hire_left(acc))))
+	elseif not rockmech.has_account(name) then
+		core.chat_send_player(name, "[地質學家] 你還沒分組，沒有資金")
+	elseif rockmech.money(name) < HIRE_COST then
+		core.chat_send_player(name, ("[地質學家] 錢不夠：雇用要 %s"):format(money_text(HIRE_COST)))
+	else
+		rockmech.add_money(name, -HIRE_COST)
+		storage:set_float(HIRE .. acc, HIRE_SECS)
+		storage:set_string(HIRED_BY .. acc, name)       -- 地質學家跟著這個人
+		tell(acc, ("%s 雇用了地質學家（%s、%d 分鐘，組員在線上時才倒數）：全組看得到品位、岩性、GSI、應力和安全係數"):format(
+			name, money_text(HIRE_COST), HIRE_SECS / 60))
+	end
+end
+function rockmech.knowledge_hire_text(name)
+	local left = hire_left(rockmech.account_of(name))
+	return left > 0 and ("雇用中，還剩 %s"):format(mmss(left)) or ("%s／%d 分鐘，全組三種能力"):format(money_text(HIRE_COST), HIRE_SECS / 60)
+end
+
+-- 跟著雇用者跑的地質學家：雇用期間出現在雇用者身邊，遠了就走過去（更遠用跑的，超過 FOLLOW_TP 直接到身邊），
+-- 頭上顯示剩下的時間；雇用期滿或雇用者下線就消失（雇用者回來、還在雇用期內就再出現）
+local FOLLOWER = "rockmech:geologist_follower"
+local FOLLOW_NEAR, FOLLOW_RUN, FOLLOW_TP = 2.5, 8, 30
+local WALK, RUN = 3, 6
+local followers = {}                    -- 帳戶 → entity
+
+core.register_entity(FOLLOWER, {
+	initial_properties = {
+		physical = true, collide_with_objects = false, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
+		visual = "mesh", mesh = "character.b3d", textures = {"character.png^[colorize:#806040:80"},
+		nametag = "地質學家", nametag_color = "#e0d0a0", stepheight = 1.1, static_save = false,
+	},
+	on_activate = function(self)
+		self.object:set_armor_groups({immortal = 1})
+		self.object:set_acceleration({x = 0, y = -9.81, z = 0})
+		self.object:set_animation({x = 0, y = 79}, 30)
+	end,
+	on_step = function(self, dtime)
+		local acc = self.acc
+		local who = acc and storage:get_string(HIRED_BY .. acc)
+		local p = who and who ~= "" and core.get_player_by_name(who)
+		if not (p and hire_left(acc) > 0 and followers[acc] == self.object) then self.object:remove(); return end
+		local pos, tp = self.object:get_pos(), p:get_pos()
+		local dx, dz = tp.x - pos.x, tp.z - pos.z
+		local d = math.sqrt(dx * dx + dz * dz)
+		local vel = self.object:get_velocity()
+		if d > FOLLOW_TP or math.abs(tp.y - pos.y) > 12 or p:get_attach() and d > FOLLOW_RUN then
+			-- 太遠、或玩家在車上／無人機上跑遠了：直接到玩家身邊（後方一點）
+			local back = core.yaw_to_dir(p:get_look_horizontal())
+			self.object:set_pos({x = tp.x - back.x * 2, y = tp.y + 0.5, z = tp.z - back.z * 2})
+			self.object:set_velocity({x = 0, y = 0, z = 0})
+		elseif d > FOLLOW_NEAR then
+			local v = d > FOLLOW_RUN and RUN or WALK
+			self.object:set_velocity({x = dx / d * v, y = vel.y, z = dz / d * v})
+			self.object:set_yaw(math.atan2 and math.atan2(-dx, dz) or math.atan(-dx, dz))
+			if self.anim ~= "walk" then self.anim = "walk"; self.object:set_animation({x = 168, y = 187}, v * 10) end
+		else
+			self.object:set_velocity({x = 0, y = vel.y, z = 0})
+			self.object:set_yaw(math.atan2 and math.atan2(-dx, dz) or math.atan(-dx, dz))
+			if self.anim ~= "stand" then self.anim = "stand"; self.object:set_animation({x = 0, y = 79}, 30) end
+		end
+		self.tag_t = (self.tag_t or 1) + dtime
+		if self.tag_t >= 1 then
+			self.tag_t = 0
+			self.object:set_properties({nametag = ("地質學家　剩 %s"):format(mmss(hire_left(acc)))})
+		end
+	end,
+	on_punch = function() return true end,
+	on_rightclick = function(self, clicker)
+		if clicker and clicker:is_player() then
+			core.chat_send_player(clicker:get_player_name(), ("[地質學家] 雇用期還剩 %s。我在的期間，全組看得到品位、岩性、GSI、應力和安全係數。"):format(
+				mmss(hire_left(self.acc or ""))))
+		end
+	end,
+})
+
+local t = 0
+core.register_globalstep(function(dtime)
+	t = t + dtime
+	if t < 1 then return end
+	local dt = t
+	t = 0
+	local accs = {}
+	for _, p in ipairs(core.get_connected_players()) do accs[rockmech.account_of(p:get_player_name())] = true end
+	for acc in pairs(accs) do
+		local left = hire_left(acc)
+		if left > 0 then
+			left = left - dt
+			if left <= 0 then
+				storage:set_float(HIRE .. acc, 0)
+				tell(acc, "雇用期滿，地質學家回去了")
+				if followers[acc] and followers[acc]:get_pos() then followers[acc]:remove() end
+				followers[acc] = nil
+			else
+				storage:set_float(HIRE .. acc, left)
+				-- 雇用者在線上、地質學家不在就放一個到他身邊
+				local o = followers[acc]
+				local who = core.get_player_by_name(storage:get_string(HIRED_BY .. acc))
+				if who and not (o and o:get_pos()) then
+					local pp = who:get_pos()
+					local e = core.add_entity({x = pp.x + 1.5, y = pp.y + 0.5, z = pp.z + 1.5}, FOLLOWER)
+					if e then e:get_luaentity().acc = acc; followers[acc] = e end
+				end
+			end
+		end
+	end
+end)
+
+---------------------------------------------------------------------------
+-- 題庫：世界資料夾的 questions.txt
+---------------------------------------------------------------------------
+
+local BANK_FILE = core.get_worldpath() .. "/questions.txt"
+local DEFAULT_BANK = [[
+# Mining Mechanics 進修題庫（老師可以自己改；改完重開伺服器生效）
+#
+# 格式：
+#   [品位判讀]、[岩體分類]、[岩石力學] 開始一個科目（科目名稱要跟這三個一樣）
+#   Q: 題目（一行；要換行就寫 \n）
+#   選擇題：A: … B: … C: … D: …（兩到六個選項），ANS: 正確選項的字母（顯示時選項順序會打亂）
+#   填數字：NUM: 正確答案，TOL: 容許誤差（省略就是 0），UNIT: 單位（可省略）
+#   題目之間空一行。# 開頭是註解。
+# 每次考試從那一科隨機抽 5 題，答對 4 題就取得能力。每科最好 10 題以上，重考時題目才會不一樣。
+
+[品位判讀]
+Q: 「品位」指的是什麼？
+A: 礦石中有用成分所佔的比例
+B: 礦石的單位重
+C: 礦體的埋藏深度
+D: 礦石的單軸抗壓強度
+ANS: A
+
+Q: 「截止品位」（cutoff grade）的意思是？
+A: 礦體裡最高的品位
+B: 低於這個品位的料開採、處理不划算，當作廢石
+C: 選礦後精礦的品位
+D: 礦價跌停時的品位
+ANS: B
+
+Q: 開採時廢石混進礦石，使送去處理的料品位下降，這叫做？
+A: 回收
+B: 貧化（dilution）
+C: 富集
+D: 剝離
+ANS: B
+
+Q: 10 t 品位 60% 的礦，混進 2 t 品位 0% 的廢石，混合後品位是多少？
+NUM: 50
+TOL: 0.5
+UNIT: %
+
+Q: 5 t 品位 80% 的料和 15 t 品位 40% 的料混在一起，平均品位是多少？
+NUM: 50
+TOL: 0.5
+UNIT: %
+
+Q: 選礦「回收率」的定義是？
+A: 精礦中的有用成分 ÷ 原礦中的有用成分
+B: 精礦重量 ÷ 原礦重量
+C: 廢石重量 ÷ 原礦重量
+D: 精礦品位 ÷ 原礦品位
+ANS: A
+
+Q: 遊戲裡破碎站的收入 = 噸數 ×（品位 × 回收率 × 礦價 − 處理費）。10 t、品位 50%、回收率 90%、礦價 $120/t、處理費 $30/t，收入是多少元？
+NUM: 240
+TOL: 1
+UNIT: $
+
+Q: 手持式 XRF 分析儀量測元素含量的原理是？
+A: X 射線激發樣品放出的特徵螢光
+B: 量測樣品的磁化率
+C: 量測樣品的密度
+D: 量測超音波波速
+ANS: A
+
+Q: 煤的灰分越高，代表？
+A: 可燃成分越少，煤質越差
+B: 發熱量越高
+C: 煤越年輕
+D: 跟煤質無關
+ANS: A
+
+Q: 品位控制（grade control）的主要目的是？
+A: 把礦和廢石分開送，減少貧化和礦損
+B: 提高炸藥的威力
+C: 降低卡車油耗
+D: 增加邊坡角
+ANS: A
+
+[岩體分類]
+Q: GSI 的全名是？
+A: Geological Strength Index
+B: Ground Stress Indicator
+C: Grain Size Index
+D: General Stability Index
+ANS: A
+
+Q: GSI 是依據哪兩項來評估的？
+A: 岩體結構（塊狀程度）與不連續面的表面狀況
+B: 單軸抗壓強度與單位重
+C: 地下水壓與地應力
+D: 開挖跨度與支撐壓力
+ANS: A
+
+Q: GSI 越高代表？
+A: 岩體越完整、不連續面狀況越好，岩體強度越高
+B: 岩體越破碎
+C: 地下水越多
+D: 開挖越危險
+ANS: A
+
+Q: RQD 是長度至少多少公分的完整岩芯段，佔鑽孔長度的百分比？
+NUM: 10
+TOL: 0
+UNIT: cm
+
+Q: 鑽了 1.5 m 的岩芯，長度 ≥ 10 cm 的岩芯段加起來 1.2 m，RQD 是多少？
+NUM: 80
+TOL: 0.5
+UNIT: %
+
+Q: 頁岩屬於哪一類岩石？
+A: 沉積岩
+B: 火成岩
+C: 變質岩
+D: 礦物
+ANS: A
+
+Q: 花崗岩屬於哪一類岩石？
+A: 火成岩（深成岩）
+B: 沉積岩
+C: 變質岩
+D: 火山碎屑岩
+ANS: A
+
+Q: 一般岩石的單位重大約是多少 kN/m³？
+A: 25～27
+B: 10
+C: 50
+D: 2.5
+ANS: A
+
+Q: 不連續面（節理）的位態通常用哪兩個量表示？
+A: 傾角與傾向
+B: 間距與延續性
+C: 粗糙度與充填物
+D: 長度與寬度
+ANS: A
+
+Q: RMR 岩體評分系統是誰提出的？
+A: Bieniawski
+B: Hoek
+C: Terzaghi
+D: Barton
+ANS: A
+
+[岩石力學]
+Q: 完整岩石的 Hoek-Brown 破壞準則是哪一個？
+A: σ1 = σ3 + σci (mi σ3/σci + 1)^0.5
+B: τ = c + σn tanφ
+C: σ1 = σci + σ3
+D: σ1 = σ3 · tan²(45° + φ/2)
+ANS: A
+
+Q: Mohr-Coulomb 破壞準則是哪一個？
+A: τ = c + σn tanφ
+B: σ1 = σ3 + σci (mi σ3/σci + 1)^0.5
+C: σ = E ε
+D: τ = G γ
+ANS: A
+
+Q: 安全係數 FS 小於 1 代表？
+A: 驅動力大於抗力，會破壞
+B: 非常安全
+C: 剛好平衡
+D: 跟穩定無關
+ANS: A
+
+Q: 單位重 25 kN/m³、深 100 m 處的垂直應力 σv 是多少 MPa？
+NUM: 2.5
+TOL: 0.05
+UNIT: MPa
+
+Q: 垂直應力 σv = 2.5 MPa、側壓係數 K = 0.5，水平應力是多少 MPa？
+NUM: 1.25
+TOL: 0.02
+UNIT: MPa
+
+Q: σ1 = 10 MPa、σ3 = 2 MPa，最大剪應力是多少 MPa？
+NUM: 4
+TOL: 0.05
+UNIT: MPa
+
+Q: 邊坡發生平面滑動，除了節理面走向接近坡面以外，還需要？
+A: 節理傾角大於摩擦角、小於坡角（在坡面出露）
+B: 節理傾角小於摩擦角
+C: 節理傾角大於坡角
+D: 節理是垂直的
+ANS: A
+
+Q: 岩石的張力強度大約是單軸抗壓強度的多少？
+A: 1/10～1/20
+B: 2 倍
+C: 一樣
+D: 1/2
+ANS: A
+
+Q: Terzaghi 岩載理論中，隧道頂拱上方鬆動岩體的高度 Hp 跟什麼成正比？
+A: 隧道寬度加高度（B + Ht）
+B: 隧道長度
+C: 覆土深度的平方
+D: 地下水位
+ANS: A
+
+Q: 碎石自然堆積、不再往下滑的最大坡角叫做？
+A: 安息角
+B: 摩擦角的兩倍
+C: 傾角
+D: 剪脹角
+ANS: A
+]]
+
+local SUBJECT = {["品位判讀"] = "grade", ["岩體分類"] = "rockmass", ["岩石力學"] = "mechanics"}
+
+local function load_bank()
+	local f = io.open(BANK_FILE, "r")
+	local text
+	if f then
+		text = f:read("*a")
+		f:close()
+	else
+		text = DEFAULT_BANK
+		local w = io.open(BANK_FILE, "w")
+		if w then w:write(DEFAULT_BANK); w:close() end
+	end
+	local bank = {grade = {}, rockmass = {}, mechanics = {}}
+	local subj, q
+	local function finish()
+		if q and subj and q.text and (q.num or (#q.opts >= 2 and q.ans)) then table.insert(bank[subj], q) end
+		q = nil
+	end
+	for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+		line = line:gsub("\r", ""):gsub("^\239\187\191", "")
+		local s = line:match("^%s*(.-)%s*$")
+		if s == "" then finish()
+		elseif s:sub(1, 1) == "#" then
+		elseif s:match("^%[.+%]$") then
+			finish()
+			subj = SUBJECT[s:sub(2, -2)]
+			if not subj then core.log("warning", "[rockmech] questions.txt：不認得的科目 " .. s) end
+		else
+			local k, v = s:match("^(%u+):%s*(.*)$")
+			if k == "Q" then
+				finish()
+				q = {text = v:gsub("\\n", "\n"), opts = {}, letters = {}}
+			elseif q and k and #k == 1 and k:match("[A-F]") then
+				q.opts[#q.opts + 1] = v
+				q.letters[k] = #q.opts
+			elseif q and k == "ANS" then q.ans = q.letters[v:upper()]
+			elseif q and k == "NUM" then q.num = tonumber(v)
+			elseif q and k == "TOL" then q.tol = tonumber(v) or 0
+			elseif q and k == "UNIT" then q.unit = v
+			end
+		end
+	end
+	finish()
+	for _, a in ipairs(ABILITIES) do
+		core.log("action", ("[rockmech] 題庫 %s：%d 題"):format(a.label, #bank[a.key]))
+	end
+	return bank
+end
+local BANK = load_bank()
+
+---------------------------------------------------------------------------
+-- 考試
+---------------------------------------------------------------------------
+
+local EXAM = "rockmech:exam"
+local sessions = {}         -- 玩家名稱 → {ab, qs = {{q, order（選項顯示順序）}}}
+rockmech.knowledge_sessions = sessions     -- 測試用
+
+local function shuffle(t)
+	for i = #t, 2, -1 do local j = math.random(i); t[i], t[j] = t[j], t[i] end
+	return t
+end
+
+local function exam_form(name)
+	local s = sessions[name]
+	local out = {"formspec_version[6]size[17,16]",
+		("label[0.5,0.6;%s]"):format(core.formspec_escape(("進修考試：%s（%d 題，答對 %d 題及格）"):format(AB[s.ab].label, #s.qs, EXAM_PASS)))}
+	local y = 1.2
+	for i, e in ipairs(s.qs) do
+		out[#out + 1] = ("textarea[0.5,%g;16,1.2;;;%s]"):format(y, core.formspec_escape(("%d. %s"):format(i, e.q.text)))
+		if e.q.num then
+			out[#out + 1] = ("field[0.5,%g;4,0.8;q%d;;]"):format(y + 1.35, i)
+			if e.q.unit then out[#out + 1] = ("label[4.7,%g;%s]"):format(y + 1.75, core.formspec_escape(e.q.unit)) end
+		else
+			local items = {"（請選擇）"}
+			for _, k in ipairs(e.order) do items[#items + 1] = core.formspec_escape(e.q.opts[k]) end
+			out[#out + 1] = ("dropdown[0.5,%g;16,0.8;q%d;%s;1;true]"):format(y + 1.35, i, table.concat(items, ","))
+		end
+		y = y + 2.7
+	end
+	out[#out + 1] = ("button[6,%g;2.4,0.8;submit;交卷]button_exit[8.8,%g;2.4,0.8;cancel;放棄]"):format(y + 0.1, y + 0.1)
+	return table.concat(out)
+end
+
+function rockmech.knowledge_exam(player, ab)
+	local name = player:get_player_name()
+	local meta = player:get_meta()
+	if meta:get_string(KNOW .. ab) == "1" then
+		core.chat_send_player(name, ("[進修] 你已經通過「%s」了"):format(AB[ab].label))
+		return
+	end
+	local wait = meta:get_int(COOL .. ab) - os.time()
+	if wait > 0 then
+		core.chat_send_player(name, ("[進修] 「%s」要再等 %s 才能重考"):format(AB[ab].label, mmss(wait)))
+		return
+	end
+	local pool = BANK[ab]
+	if #pool < EXAM_N then
+		core.chat_send_player(name, ("[進修] 「%s」題庫只有 %d 題，至少要 %d 題（請老師補 questions.txt）"):format(AB[ab].label, #pool, EXAM_N))
+		return
+	end
+	local idx = {}
+	for i = 1, #pool do idx[i] = i end
+	shuffle(idx)
+	local qs = {}
+	for i = 1, EXAM_N do
+		local q = pool[idx[i]]
+		local order = {}
+		for k = 1, #q.opts do order[k] = k end
+		qs[i] = {q = q, order = shuffle(order)}
+	end
+	sessions[name] = {ab = ab, qs = qs}
+	core.show_formspec(name, EXAM, exam_form(name))
+end
+
+local function answer_text(e)
+	if e.q.num then return ("%g%s"):format(e.q.num, e.q.unit and (" " .. e.q.unit) or "") end
+	return e.q.opts[e.q.ans]
+end
+
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= EXAM then return end
+	local name = player:get_player_name()
+	local s = sessions[name]
+	if not s then return true end
+	if fields.cancel or (fields.quit and not fields.submit) then sessions[name] = nil; return true end
+	if not fields.submit then return true end
+	local right, wrong = 0, {}
+	for i, e in ipairs(s.qs) do
+		local ok = false
+		local v = fields["q" .. i]
+		if e.q.num then
+			local x = tonumber((v or ""):gsub(",", ""):match("^%s*(.-)%s*$"))
+			ok = x ~= nil and math.abs(x - e.q.num) <= (e.q.tol or 0) + 1e-9
+		else
+			local k = tonumber(v or "")          -- 選了第幾項（1 是「請選擇」）
+			ok = k and k >= 2 and e.order[k - 1] == e.q.ans or false
+		end
+		if ok then right = right + 1 else wrong[#wrong + 1] = ("%d. 正確答案：%s"):format(i, answer_text(e)) end
+	end
+	local ab = s.ab
+	sessions[name] = nil
+	local meta = player:get_meta()
+	local pass = right >= EXAM_PASS
+	local msg
+	if pass then
+		meta:set_string(KNOW .. ab, "1")
+		msg = ("答對 %d／%d 題，通過！你學會了「%s」。"):format(right, #s.qs, AB[ab].label)
+		core.log("action", ("[rockmech] exam %s passed %s (%d/%d)"):format(name, ab, right, #s.qs))
+		if rockmech.account_of then
+			for _, m in ipairs(rockmech.account_members(rockmech.account_of(name))) do
+				core.chat_send_player(m, ("[進修] %s 通過了「%s」"):format(name, AB[ab].label))
+			end
+		end
+	else
+		meta:set_int(COOL .. ab, os.time() + EXAM_COOLDOWN)
+		msg = ("答對 %d／%d 題，沒過（要答對 %d 題）。%d 分鐘後可以重考。"):format(right, #s.qs, EXAM_PASS, EXAM_COOLDOWN / 60)
+	end
+	local out = {"formspec_version[6]size[14,8]", ("label[0.5,0.7;%s]"):format(core.formspec_escape(msg))}
+	if #wrong > 0 then
+		out[#out + 1] = ("textarea[0.5,1.4;13,5.4;;答錯的題目;%s]"):format(core.formspec_escape(table.concat(wrong, "\n")))
+	end
+	out[#out + 1] = "button_exit[5.5,7;3,0.8;ok;好]"
+	core.show_formspec(name, EXAM .. "_result", table.concat(out))
+	return true
+end)
+core.register_on_leaveplayer(function(player) sessions[player:get_player_name()] = nil end)
+
+-- 地質專家畫面裡的「雇用」「進修」區塊（research.lua 呼叫）。回傳 formspec 片段、用掉的高度
+function rockmech.knowledge_form(name, y)
+	local out = {}
+	out[#out + 1] = ("label[0.5,%g;雇用地質學家：%s]"):format(y + 0.4, core.formspec_escape(rockmech.knowledge_hire_text(name)))
+	if hire_left(rockmech.account_of(name)) <= 0 then out[#out + 1] = ("button[11.4,%g;3.4,0.8;hire;雇用]"):format(y) end
+	y = y + 1.1
+	out[#out + 1] = ("label[0.5,%g;進修（考 %d 題、答對 %d 題，永久學會）：]"):format(y + 0.4, EXAM_N, EXAM_PASS)
+	y = y + 0.9
+	local player = core.get_player_by_name(name)
+	for i, a in ipairs(ABILITIES) do
+		local x = 0.5 + (i - 1) * 4.8
+		local done = player and player:get_meta():get_string(KNOW .. a.key) == "1"
+		out[#out + 1] = ("button[%g,%g;4.4,0.8;study_%s;%s]"):format(x, y, a.key, core.formspec_escape(a.label .. (done and "（已學會）" or "")))
+	end
+	return table.concat(out), 2.9
+end

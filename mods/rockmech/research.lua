@@ -95,6 +95,12 @@ local function form(name, who)
 			y = y + 1.0
 		end
 	end
+	-- 地質專家：雇用（跟著人跑的地質學家）、進修考試（knowledge.lua）
+	if who == "geologist" and rockmech.knowledge_form then
+		local fs, h = rockmech.knowledge_form(name, y + 0.4)
+		out[#out + 1] = fs
+		y = y + 0.4 + h
+	end
 	out[#out + 1] = ("button_exit[6,%g;3,0.8;close;關閉]"):format(math.max(y + 0.4, 8.6))
 	return table.concat(out)
 end
@@ -114,6 +120,19 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local name = player:get_player_name()
 	local who = viewing[name]
 	if fields.quit then viewing[name] = nil; return true end
+	if fields.hire and rockmech.knowledge_hire then
+		rockmech.knowledge_hire(name)
+		if who then core.show_formspec(name, FORM, form(name, who)) end
+		return true
+	end
+	for key in pairs(fields) do
+		local ab = key:match("^study_(%w+)$")
+		if ab and rockmech.knowledge_exam then
+			viewing[name] = nil
+			rockmech.knowledge_exam(player, ab)
+			return true
+		end
+	end
 	for key in pairs(fields) do
 		local i = tonumber(key:match("^go_(%d+)$"))
 		local it = i and ITEMS[i]

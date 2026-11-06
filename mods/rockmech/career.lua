@@ -80,8 +80,9 @@ local function show_carry(player, c)
 	local text = ""
 	if c then
 		local ore = rockmech.ore_of_rubble[c.base]
-		text = ("手上：%s　%s%s"):format(core.registered_nodes[c.base].description:gsub("\n.*", ""), V.volume_text(c.lv, NLEV),
-			ore and ("　" .. rockmech.ore_text(ore, c.p2 / 255)) or "")
+		local see = rockmech.can_see or function() return true end      -- 知識能力（knowledge.lua）
+		text = ("手上：%s　%s%s"):format(see(name, "rockmass") and core.registered_nodes[c.base].description:gsub("\n.*", "") or "碎石",
+			V.volume_text(c.lv, NLEV), ore and see(name, "grade") and ("　" .. rockmech.ore_text(ore, c.p2 / 255)) or "")
 	end
 	if carry_hud[name] then
 		player:hud_change(carry_hud[name], "text", text)
