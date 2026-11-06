@@ -48,12 +48,13 @@ core.register_entity(DRONE, {
 	},
 	on_activate = function(self)
 		self.object:set_armor_groups({immortal = 1})
-		self.rotors = {}
+		self.rotors, self.part_objs = {}, {}
 		for _, pt in ipairs(parts) do
 			local o = core.add_entity(self.object:get_pos(), PART)
 			if o then
 				o:set_properties({visual_size = pt.size, textures = pt.tex, use_texture_alpha = pt.rotor or nil})
 				o:set_attach(self.object, "", vector.multiply(pt.pos, 10), pt.rot or {x = 0, y = 0, z = 0})
+				self.part_objs[#self.part_objs + 1] = o
 				if pt.rotor then self.rotors[#self.rotors + 1] = {o = o, pos = pt.pos} end
 			end
 		end
@@ -64,6 +65,19 @@ core.register_entity(DRONE, {
 			for _, c in ipairs(self.object:get_children()) do if not c:is_player() then c:remove() end end
 			self.object:remove()
 			return
+		end
+		-- 駕駛自己看不到無人機（鏡頭就在機身上，零件貼著鏡頭會擋滿畫面）：零件只給其他玩家看，每 2 秒照線上玩家更新
+		self.obs_t = (self.obs_t or 2) + dtime
+		if self.obs_t >= 2 then
+			self.obs_t = 0
+			local obs = {}
+			for _, p in ipairs(core.get_connected_players()) do
+				local n = p:get_player_name()
+				if n ~= self.pilot then obs[n] = true end
+			end
+			for _, o in ipairs(self.part_objs or {}) do
+				if o.set_observers and o:get_pos() then o:set_observers(obs) end
+			end
 		end
 		self.spin = ((self.spin or 0) + dtime * 1500) % 360
 		for _, r in ipairs(self.rotors or {}) do
@@ -130,6 +144,7 @@ local function land(name)
 		if f.props then player:set_properties(f.props) end
 		if f.nametag then player:set_nametag_attributes(f.nametag) end
 		if f.hud then player:hud_remove(f.hud) end
+		player:hud_set_flags({wielditem = true})
 		player:set_pos(f.home)
 		player:get_meta():set_string(HOME_KEY, "")
 	end
@@ -163,7 +178,9 @@ local function take_off(player)
 	player:set_attach(d, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 	player:set_eye_offset({x = 0, y = -14, z = 0}, {x = 0, y = -10, z = -20})    -- 鏡頭在機身上
 	player:set_camera({mode = "first"})
-	f.hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.06}, alignment = {x = 0, y = 1},
+	player:hud_set_flags({wielditem = false})     -- 手上的遙控器不擋畫面
+	-- 放在快捷欄上方（畫面上方是聊天訊息和方位）
+	f.hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.86}, alignment = {x = 0, y = -1},
 		number = 0x9fe0ff, text = "", z_index = 100})
 	update_load(f, start)
 	core.chat_send_player(name, ("[無人機] 起飛！WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點（上限：起飛點上方 %d m）"):format(CEILING))
