@@ -756,6 +756,11 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 				y = y + 0.6
 			end
 			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.3, F("品位判讀：看得到品位　岩體分類：岩性、GSI、上覆厚度　岩石力學：應力、安全係數、裂紋"))
+			if rockmech.nick_formspec then
+				fs[#fs + 1] = rockmech.nick_formspec(name, y + 1.2)
+				local m = rockmech.nick_message(name)
+				if m then fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 2.6, F(m)) end
+			end
 			return sfinv.make_formspec(player, context, table.concat(fs), false)
 		end,
 	})

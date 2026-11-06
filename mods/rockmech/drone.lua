@@ -149,6 +149,7 @@ local function land(name)
 		player:set_camera({mode = "any"})
 		if f.props then player:set_properties(f.props) end
 		if f.nametag then player:set_nametag_attributes(f.nametag) end
+		if rockmech.nametag_hide then rockmech.nametag_hide(name, false) end
 		if f.hud then player:hud_remove(f.hud) end
 		player:hud_set_flags({wielditem = true})
 		-- 解除附著和傳送同時送出時，玩家端有時會先傳送、再被解除附著前的位置（空中）蓋回去，人就從天上掉下來：
@@ -195,6 +196,7 @@ local function take_off(player)
 	player:get_meta():set_string(HOME_KEY, core.serialize(home))
 	player:set_properties({visual_size = {x = 0, y = 0, z = 0}, makes_footstep_sound = false})
 	player:set_nametag_attributes({color = {a = 0, r = 255, g = 255, b = 255}, text = ""})
+	if rockmech.nametag_hide then rockmech.nametag_hide(name, true) end     -- 掛在身上的名牌（nametag.lua）
 	player:set_attach(d, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 	player:set_eye_offset({x = 0, y = -14, z = 0}, {x = 0, y = -10, z = -20})    -- 鏡頭在機身上
 	player:set_camera({mode = "first"})

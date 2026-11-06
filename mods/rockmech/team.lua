@@ -6,7 +6,7 @@
 --     給老師示範）。設了 rockmech_coal_seam_lanes 時，每帶有一條一模一樣的煤層，帶寬就是營地間距；
 --     沒設就用 rockmech_career_site_spacing。每座營地跟出生點的一樣：帳篷和供應商、一座掛在組上的破碎站。
 --     組第一次有人分進來時才發起始資金（rockmech_career_start）、蓋營地。
---   名單：世界資料夾裡的 students.csv（rockmech_career_roster），一行一位：帳號,密碼,組別
+--   名單：世界資料夾裡的 students.csv（rockmech_career_roster），一行一位：帳號,密碼,組別[,真名]（真名只顯示在老師看到的名牌上，見 nametag.lua）
 --     伺服器啟動時，還沒有的帳號用那個密碼建好；有寫組別就分進去（以名單為準）。
 --     有名單時，名單外的名稱不能登入（rockmech_career_roster_only）。密碼學生自己在 Esc 選單「變更密碼」改。
 --   道具：「回營地」旗子（每人一支，登入時沒有就補），左鍵或右鍵回自己組的營地（沒分組回出生點）。
@@ -156,6 +156,7 @@ if roster_file then roster_file:close() end
 
 local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 
+rockmech.real_names = rockmech.real_names or {}       -- 帳號 → 真名（名單第 4 欄）
 local function load_roster()
 	local f = io.open(roster_path, "r")
 	if not f then return end
@@ -174,6 +175,7 @@ local function load_roster()
 			elseif not name:match("^[%w_%-]+$") or #name > 20 then
 				bad[#bad + 1] = ("第 %d 行：帳號「%s」只能用英文字母、數字、- 和 _，最多 20 字"):format(n, name)
 			else
+				rockmech.real_names[name] = fields[4] ~= "" and fields[4] or nil     -- 第 4 欄：真名（名牌只給老師看）
 				if not auth.get_auth(name) then
 					auth.create_auth(name, pw == "" and "" or core.get_password_hash(name, pw))
 					created = created + 1
@@ -191,6 +193,7 @@ local function load_roster()
 	end
 	f:close()
 	core.log("action", ("[rockmech] roster %s: %d accounts created, %d team changes"):format(cfg.career_roster, created, moved))
+	if rockmech.nametag_refresh_all then rockmech.nametag_refresh_all() end
 	for _, b in ipairs(bad) do core.log("warning", "[rockmech] 名單 " .. b) end
 	return created, moved, bad
 end
