@@ -689,6 +689,7 @@ function config.load(get)
 	cfg.career_camp_dx = tonumber(get("rockmech_career_camp_dx")) or 0
 	-- 每日定時重開（restart.lua）："HH:MM"，空字串或沒設就不重開
 	cfg.daily_restart = get("rockmech_daily_restart")
+	cfg.drone_range = math.max(20, tonumber(get("rockmech_drone_range")) or 200)   -- 無人機最大飛行距離（離起飛點水平，m）
 	if cfg.daily_restart == "" then cfg.daily_restart = nil end
 	cfg.career_roster = get("rockmech_career_roster") or "students.csv"
 	if cfg.career_roster == "" then cfg.career_roster = "students.csv" end

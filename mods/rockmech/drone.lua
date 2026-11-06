@@ -2,18 +2,23 @@
 -- 無人機（遙控器 rockmech:drone_remote）：從空中看礦場、看別組挖得怎樣。
 --   拿著遙控器按右鍵起飛：無人機從身邊升起，玩家附在無人機上看第一人稱畫面（身體先藏起來，別人看到的是無人機）。
 --   WASD 照視線方向水平移動 SPEED m/s，按住 E 加速到 BOOST 倍；空白鍵上升、Shift 下降 CLIMB m/s；會撞到地形。
---   高度上限：起飛點上方 CEILING m。再按一次右鍵就回到起飛點。
+--   高度上限：起飛點上方 CEILING m；最大飛行距離：離起飛點水平 rockmech_drone_range m。再按一次右鍵就回到起飛點。
 --   HUD：對地高度、比起飛點高多少、速度、方位、座標。旋翼聲 rockmech_drone（devtools/synth_sounds.lua 合成），移動時大聲一點。
 --   飛行時暫時強制載入下方 ±LOAD_R m 的區塊：玩家飛高了，地上的區塊離玩家太遠會停用，上面的車就看不到了。
 --   飛行中斷線、伺服器重開：起飛點記在玩家 meta，下次登入就回到起飛點。
 
+local cfg = rockmech.cfg
 local DRONE, PART, REMOTE = "rockmech:drone", "rockmech:drone_part", "rockmech:drone_remote"
 local SPEED, BOOST, CLIMB = 12, 2, 6      -- 水平速度 (m/s)、E 加速倍數、升降速度 (m/s)
 local CEILING = 80          -- 高度上限：起飛點上方 (m)
 local LOAD_R = 40           -- 飛行時強制載入下方 ±LOAD_R m（約 80 × 80 m）
 local LOAD_DOWN, LOAD_UP = 32, 16   -- 強制載入的高度範圍：起飛點下方、上方 (m)
 local HOME_KEY = "rockmech:drone_home"
-local SOUND_HOVER, SOUND_MOVE = 0.35, 0.6   -- 旋翼聲音量：懸停、移動（跟 rockmech_vehicle_sound_gain 相乘）
+-- 旋翼聲：懸停、飛行各一段（同一個音檔，飛行的音高高 PITCH_MOVE 倍），兩段一起循環播放、交叉淡入淡出
+-- （正在播的聲音改不了音高）。音量跟 rockmech_vehicle_sound_gain 相乘
+local SOUND_HOVER, SOUND_MOVE, PITCH_MOVE = 0.2, 0.8, 1.12
+local SOUND_OFF = 0.001     -- 淡到 0 引擎會把聲音停掉，用很小的值代替
+local FADE = 2              -- 淡入淡出速度（音量／秒）
 
 local flights = {}          -- 玩家名稱 → {id, drone, home, hud, loaded = {hash → pos}, props, nametag}
 local next_id = 0           -- 飛行編號：無人機實體用它認自己的那趟（ObjectRef 不能用 == 比）
@@ -161,7 +166,8 @@ local function land(name)
 		end
 		player:get_meta():set_string(HOME_KEY, "")
 	end
-	if f.sound then core.sound_stop(f.sound) end
+	if f.snd_hover then core.sound_stop(f.snd_hover) end
+	if f.snd_move then core.sound_stop(f.snd_move) end
 	if f.drone and f.drone:get_pos() then
 		for _, c in ipairs(f.drone:get_children()) do if not c:is_player() then c:remove() end end
 		f.drone:remove()
@@ -200,10 +206,11 @@ local function take_off(player)
 	-- 旋翼聲：跟著無人機走，附近的人也聽得到
 	local g = rockmech.cfg.vehicle_sound_gain or 1
 	if g > 0 then
-		f.sound = core.sound_play("rockmech_drone", {object = d, loop = true, gain = SOUND_HOVER * g, max_hear_distance = 40})
-		f.sound_gain = SOUND_HOVER
+		f.snd_hover = core.sound_play("rockmech_drone", {object = d, loop = true, gain = SOUND_HOVER * g, max_hear_distance = 40})
+		f.snd_move = core.sound_play("rockmech_drone", {object = d, loop = true, gain = SOUND_OFF, pitch = PITCH_MOVE, max_hear_distance = 40})
+		f.moving = false
 	end
-	core.chat_send_player(name, ("[無人機] 起飛！WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點（上限：起飛點上方 %d m）"):format(CEILING))
+	core.chat_send_player(name, ("[無人機] 起飛！WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點（上限：起飛點上方 %d m、水平 %d m 內）"):format(CEILING, cfg.drone_range))
 end
 
 ---------------------------------------------------------------------------
@@ -231,12 +238,23 @@ core.register_globalstep(function(dtime)
 			local k = len > 0 and v / len or 0
 			local vy = (ctrl.jump and CLIMB or 0) - (ctrl.sneak and CLIMB or 0)
 			if vy > 0 and pos.y >= f.home.y + CEILING then vy = 0 end
-			d:set_velocity({x = (fwd * fx + side * rx) * k, y = vy, z = (fwd * fz + side * rz) * k})
-			-- 移動時旋翼聲大一點
-			local want = (len > 0 or vy ~= 0) and SOUND_MOVE or SOUND_HOVER
-			if f.sound and want ~= f.sound_gain then
-				f.sound_gain = want
-				core.sound_fade(f.sound, 2, want * (rockmech.cfg.vehicle_sound_gain or 1))
+			local vx, vz = (fwd * fx + side * rx) * k, (fwd * fz + side * rz) * k
+			-- 最大飛行距離：離起飛點水平 drone_range 以外，往外的分量拿掉（往回、沿著邊界飛照常）
+			local ox, oz = pos.x - f.home.x, pos.z - f.home.z
+			local dist = math.sqrt(ox * ox + oz * oz)
+			f.out = dist >= cfg.drone_range
+			if f.out then
+				local out = (vx * ox + vz * oz) / dist
+				if out > 0 then vx, vz = vx - out * ox / dist, vz - out * oz / dist end
+			end
+			d:set_velocity({x = vx, y = vy, z = vz})
+			-- 飛行時旋翼聲大一點、音高高一點：兩段交叉淡入淡出
+			local moving = len > 0 or vy ~= 0
+			if f.snd_hover and moving ~= f.moving then
+				f.moving = moving
+				local g = rockmech.cfg.vehicle_sound_gain or 1
+				core.sound_fade(f.snd_hover, FADE, moving and SOUND_OFF or SOUND_HOVER * g)
+				core.sound_fade(f.snd_move, FADE, moving and SOUND_MOVE * g or SOUND_OFF)
 			end
 			-- 強制載入跟著走（換了區塊才重算）
 			local bh = core.hash_node_position({x = math.floor(pos.x / 16), y = 0, z = math.floor(pos.z / 16)})
@@ -247,10 +265,12 @@ core.register_globalstep(function(dtime)
 				f.hud_t = 0
 				local vel = d:get_velocity()
 				local g = ground_below(pos)
-				player:hud_change(f.hud, "text", ("無人機　對地 %s　比起飛點 %+.0f m（上限 +%d）　%d km/h　方位 %s　座標 (%d, %d, %d)\n再按右鍵回到起飛點"):format(
-					g and ("%.0f m"):format(pos.y - g) or "—", pos.y - f.home.y, CEILING,
+				local hd = math.sqrt((pos.x - f.home.x) ^ 2 + (pos.z - f.home.z) ^ 2)
+				player:hud_change(f.hud, "text", ("無人機　對地 %s　比起飛點 %+.0f m（上限 +%d）　距離 %.0f / %d m　%d km/h　方位 %s　座標 (%d, %d, %d)\n%s"):format(
+					g and ("%.0f m"):format(pos.y - g) or "—", pos.y - f.home.y, CEILING, hd, cfg.drone_range,
 					math.floor(math.sqrt(vel.x ^ 2 + vel.y ^ 2 + vel.z ^ 2) * 3.6 + 0.5), heading_text(yaw),
-					math.floor(pos.x + 0.5), math.floor(pos.y + 0.5), math.floor(pos.z + 0.5)))
+					math.floor(pos.x + 0.5), math.floor(pos.y + 0.5), math.floor(pos.z + 0.5),
+					f.out and "已到最大飛行距離，不能再往外飛　再按右鍵回到起飛點" or "再按右鍵回到起飛點"))
 			end
 		end
 	end

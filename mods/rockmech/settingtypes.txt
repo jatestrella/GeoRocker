@@ -317,6 +317,9 @@ rockmech_career_roster_only (Roster names only) bool true
 # before; the world is saved by a normal shutdown, and start_class_server.bat backs up, git pulls and starts again. Empty = off.
 rockmech_daily_restart (Daily restart time) string
 
+# Drone: maximum horizontal distance from the take-off point (m).
+rockmech_drone_range (Drone range) float 200 20 2000
+
 # Career mode: seconds to break a block of ore by hand. Hands cannot break other rock.
 rockmech_hand_ore_time (Bare hand time on ore) float 60 0.1 600
 
