@@ -145,7 +145,19 @@ local function land(name)
 		if f.nametag then player:set_nametag_attributes(f.nametag) end
 		if f.hud then player:hud_remove(f.hud) end
 		player:hud_set_flags({wielditem = true})
-		player:set_pos(f.home)
+		-- 解除附著和傳送同時送出時，玩家端有時會先傳送、再被解除附著前的位置（空中）蓋回去，人就從天上掉下來：
+		-- 現在傳一次，下一刻、再下一刻各補一次，速度清零
+		local home = f.home
+		player:set_pos(home)
+		for _, t in ipairs({0.1, 0.3}) do
+			core.after(t, function()
+				local p = core.get_player_by_name(name)
+				if p and not p:get_attach() then
+					p:set_pos(home)
+					p:add_velocity(vector.multiply(p:get_velocity(), -1))
+				end
+			end)
+		end
 		player:get_meta():set_string(HOME_KEY, "")
 	end
 	if f.drone and f.drone:get_pos() then
