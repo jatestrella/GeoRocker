@@ -489,6 +489,7 @@ local function excavator(kind, P)
 		local pos = ctx.pos
 		if load_total(self) > 0 then
 			local truck = op_truck(self, pos)
+			op.wait_truck = not truck      -- 綁定的卡車停在搆不到的地方：它看到會重新停車（vehicle_ahs.lua）
 			if truck then
 				self.autopilot = {jump = true, dump_truck = truck}
 				op_say(self, "裝車中")
@@ -499,6 +500,8 @@ local function excavator(kind, P)
 			return
 		end
 		local target = op_target(self, pos, op.cutoff)
+		op.wait_truck = false
+		op.idle = not target     -- 沒東西可挖：綁定的無人卡車看到就帶著已經裝的先走（vehicle_ahs.lua）
 		if target then
 			self.autopilot = {aux1 = true, target = target}
 			op_say(self, nil)

@@ -988,6 +988,8 @@ function V.objects_in(self, pos, yaw, x0, x1, z0, z1, only)
 	local center = {x = pos.x + cx * c - cz * sn, y = pos.y, z = pos.z + cx * sn + cz * c}
 	local r = math.sqrt(((x1 - x0) / 2) ^ 2 + ((z1 - z0) / 2) ^ 2) + 3
 	local bottom, top = pos.y - def.half, pos.y + (def.top or def.half)
+	-- 同時擋到好幾台車時，先回報無人卡車（無人駕駛要叫它讓路；先回報旁邊的怪手的話就叫不到）
+	local first
 	for _, o in ipairs(core.get_objects_inside_radius(center, r)) do
 		local e = o:get_luaentity()
 		local p, m, lo, hi = o:get_pos()
@@ -1000,9 +1002,13 @@ function V.objects_in(self, pos, yaw, x0, x1, z0, z1, only)
 		if m and hi > bottom and lo < top then
 			local dx, dz = p.x - pos.x, p.z - pos.z
 			local lx, lz = dx * c + dz * sn, -dx * sn + dz * c
-			if lx > x0 - m and lx < x1 + m and lz > z0 - m and lz < z1 + m then return true, e end
+			if lx > x0 - m and lx < x1 + m and lz > z0 - m and lz < z1 + m then
+				if not e or not e.vkind or (e.ahs and e.ahs.on) then return true, e and e.vkind and e or nil end
+				first = first or e
+			end
 		end
 	end
+	if first then return true, first end
 	return false
 end
 

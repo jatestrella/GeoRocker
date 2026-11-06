@@ -37,6 +37,9 @@ local APPROACH = 16         -- 進格柵的方向：看路線上離格柵這麼�
 local HOPPER_WAIT = "受料倉滿了，等待中"
 local CHUTE_R = 20           -- 裝載點（車身中心）離選礦場放料臂轉軸多近，就算在選礦場裝（搆不到的話到了會自己開近）(m)
 local QUEUE_R, QUEUE_SIDE = 25, 10  -- 排隊的位置：離怪手多遠、離進出的路線多遠 (m)
+local RESPOT = {0, math.rad(25), -math.rad(25), math.rad(50), -math.rad(50)}   -- 重新停車輪流試的靠近角度
+local RESPOT_AFTER = 5      -- 怪手滿斗等多久還搆不到這台，就重新停車 (s)
+local EXC_NEAR = 15          -- 綁定怪手：回程離怪手這麼近就不走路線了，直接去怪手或排隊點 (m)
 local ARM_USE = 0.9         -- 車斗中心要在手臂長度的這個比例內
 local TAIL_MIN = 0.6        -- 手臂再短，車尾離怪手車身也至少留這麼多 (m)
 local YIELD_AFTER = 1       -- 被別台無人車擋住多久才要它讓路 (s)
@@ -186,9 +189,107 @@ local function outranks(s, b)
 	return s.uid < b.uid
 end
 -- self 開不過去：要擋路的 b 讓到路線旁邊。旁邊不能站（坑、岩壁）就換另一邊
+-- 會車灣：center 周圍 r1..r2 m 找一塊讓得開的地方——車身四角和中心的地面都跟卡車現在差不多高（不在坑壁上、坑裡），
+-- 離 avoid 裡每條路線的每一點都超過 clear m（對方要走的路）。回傳離 pos 最近的；找不到回傳 nil
+local path_ok     -- 從 a 直線開得到 b 嗎（下面定義）
+local TURN_AREA = 12     -- 對方路線兩端（裝載點、傾倒點）這麼近的地方不停：那是它掉頭、倒車進位置的空間
+local function find_bay(def, pos, center, r1, r2, avoid, clear, block, block_r, keep_off)
+	local floor_y = pos.y - def.half
+	local h = def.half
+	local best, bd
+	for r = r1, r2, 2 do
+		for k = 0, 23 do
+			local t = k * math.pi / 12
+			local q = {x = center.x + r * math.cos(t), y = pos.y, z = center.z + r * math.sin(t)}
+			local ok = true
+			for _, o in ipairs({{0, 0}, {h, h}, {h, -h}, {-h, h}, {-h, -h}}) do
+				local g = V.ground_top(q.x + o[1], floor_y + 3, q.z + o[2], 8)
+				if not (g and math.abs(g - floor_y) < 1.2) then ok = false; break end
+			end
+			for _, route in ipairs(ok and avoid or {}) do
+				for _, p in ipairs(route) do
+					if flat_dist(p, q) < clear then ok = false; break end
+				end
+				if not ok then break end
+			end
+			local d = flat_dist(pos, q)
+			-- 開得過去才算（不然會選到岩壁外面的平地，一直往牆上擠）
+			for _, k in ipairs(ok and keep_off or {}) do
+				if flat_dist(q, k) < TURN_AREA then ok = false; break end
+			end
+			-- 路上不能經過叫我讓路的那台車（block）：不然會選到對方背後的空地，開過去就頂到對方
+			if ok and block then
+				local L = flat_dist(pos, q)
+				for k = 0, math.ceil(L) do
+					local t = L > 0 and math.min(1, k / L) or 0
+					if flat_dist({x = pos.x + (q.x - pos.x) * t, z = pos.z + (q.z - pos.z) * t}, block) < block_r then ok = false; break end
+				end
+			end
+			if ok and (not bd or d < bd) and path_ok(floor_y, pos, q, h) then best, bd = q, d end
+		end
+	end
+	return best
+end
+
+-- 會車灣（道路加寬段，像真的礦場的 passing bay）：讓路的車 b 先沿著原車道往前開 s0 m 到入口（q0），再斜著切進側邊 L m 的
+-- 加寬段（q1，往前 PULL_IN m），最後往前 PULL_STRAIGHT m 擺正（q2），跟道路平行停著讓對方從旁邊過。
+-- 停車的位置要放得下整台車（車頭到車尾、左中右都是跟現在差不多高的地面，上面淨空），斜切進去那段也是。
+-- 整段（s0 + PULL_IN + PULL_STRAIGHT）不超過 max_s（兩車之間的空間）。回傳 {q0, q1, q2}；找不到回傳 nil
+local PULL_IN, PULL_STRAIGHT, ONCOMING = 8, 6, 40
+local function ground_ok(floor_y, x, z)
+	local g = V.ground_top(x, floor_y + 3, z, 8)
+	if not (g and math.abs(g - floor_y) < 1.0) then return false end
+	local y0 = math.floor(floor_y + 0.5)          -- 地面上第一格
+	for dy = 0, 1 do
+		if not V.passable(core.get_node({x = math.floor(x + 0.5), y = y0 + dy, z = math.floor(z + 0.5)}).name) then return false end
+	end
+	return true
+end
+-- 從 a 直線開到 b，車寬 2h 那條帶子都是平的
+path_ok = function(floor_y, a, b, h)
+	local d = flat_dist(a, b)
+	if d < 0.01 then return true end
+	local nx, nz = (b.z - a.z) / d, -(b.x - a.x) / d
+	for k = 1, math.ceil(d) do
+		local t = math.min(1, k / d)
+		local cx, cz = a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t
+		for _, l in ipairs({-h, 0, h}) do
+			if not ground_ok(floor_y, cx + nx * l, cz + nz * l) then return false end
+		end
+	end
+	return true
+end
+local function find_pullout(td, bp, yaw, max_s, other_half)
+	local f = {x = -math.sin(yaw), z = math.cos(yaw)}
+	local n = {x = f.z, z = -f.x}
+	local h, rear = td.half, td.rear or td.half
+	local floor_y = bp.y - h
+	local function fits(q)
+		for _, t in ipairs({-rear, -rear / 2, 0, h}) do
+			for _, l in ipairs({-h, 0, h}) do
+				if not ground_ok(floor_y, q.x + f.x * t + n.x * l, q.z + f.z * t + n.z * l) then return false end
+			end
+		end
+		return true
+	end
+	local L = h + other_half + 0.7
+	for s0 = 0, max_s - PULL_IN - PULL_STRAIGHT, 1 do
+		local q0 = {x = bp.x + f.x * s0, y = bp.y, z = bp.z + f.z * s0}
+		for _, side in ipairs({1, -1}) do
+			local q1 = {x = q0.x + f.x * PULL_IN + n.x * L * side, y = bp.y, z = q0.z + f.z * PULL_IN + n.z * L * side}
+			local q2 = {x = q1.x + f.x * PULL_STRAIGHT, y = bp.y, z = q1.z + f.z * PULL_STRAIGHT}
+			if fits(q1) and fits(q2) and path_ok(floor_y, q0, q1, h) and path_ok(floor_y, q1, q2, h) then
+				return {q0, q1, q2}
+			end
+		end
+	end
+end
+
 local function ask_yield(self, def, ctx, b)
 	local td = V.TYPES[b.vkind]
 	local bp = b.object:get_pos()
+	local y = b.ahs.yield
+	if y and y.bay and y.by == self.uid then y.left = YIELD_HOLD; return end   -- 已經找到會車灣了：繼續讓
 	local fx, fz = ctx.dir.x, ctx.dir.z
 	local rx, rz = bp.x - ctx.pos.x, bp.z - ctx.pos.z
 	local along, lat = rx * fx + rz * fz, rx * fz - rz * fx
@@ -199,14 +300,33 @@ local function ask_yield(self, def, ctx, b)
 		local x = ctx.pos.x + fx * along + fz * clear * side
 		local z = ctx.pos.z + fz * along - fx * clear * side
 		local g = V.ground_top(x, bp.y + 2, z, 6)
-		target = target or {x = x, y = bp.y, z = z}
 		if g and math.abs(g - (bp.y - td.half)) < 1.2 then
 			target = {x = x, y = bp.y, z = z}
 			break
 		end
 	end
-	-- 每次都重算：對方轉了向、車頭換了方向，上次的位置可能還擋在路上
-	b.ahs.yield = {x = target.x, y = target.y, z = target.z, left = YIELD_HOLD}
+	local bay, nxt = false, nil
+	if not target then
+		-- 兩側都不能站（單線道、坑壁）：先找前方的道路加寬段（開到兩車之間、離我的車頭至少留一個車身），再找附近的空地
+		local gap = flat_dist(ctx.pos, bp) - def.half - td.half - 2
+		local path = find_pullout(td, bp, b.object:get_yaw(), math.min(ONCOMING, gap), def.half)
+		if path then target, nxt, bay = path[1], {path[2], path[3]}, true
+		else
+			target = find_bay(td, bp, bp, 4, 14, {self.ahs.route}, (td.rear or td.half) + def.half + 0.5,
+				ctx.pos, def.half + td.half + 1, {self.ahs.load, self.ahs.dump})
+			bay = target ~= nil
+		end
+		target = target or {x = bp.x, y = bp.y, z = bp.z}
+	end
+	-- 單線道又沒有會車灣：兩台都過不去，告訴學生（要拓寬道路或挖一段加寬段）
+	local nowhere = not bay and flat_dist(target, bp) < 0.5
+	if nowhere then
+		local msg = "單線道沒有會車灣，無法錯車"
+		if b.ahs.wait_msg ~= msg then b.ahs.wait_msg = msg; V.refresh(b) end
+		if self.ahs.wait_msg ~= msg then self.ahs.wait_msg = msg; V.refresh(self) end
+	end
+	-- 每次都重算（會車灣除外）：對方轉了向、車頭換了方向，上次的位置可能還擋在路上
+	b.ahs.yield = {x = target.x, y = target.y, z = target.z, left = YIELD_HOLD, by = self.uid, bay = bay, next = nxt}
 end
 
 -- 車尾往 diff 那邊掃得過去嗎：TURN_AHEAD 以內每一段都要過，只看最遠的會漏掉中途的岩壁，以為轉得動卻一步也轉不了
@@ -220,9 +340,26 @@ local function can_swing(self, def, ctx, diff)
 end
 
 -- 朝 target 開（方向差大就原地轉，否則邊開邊修正；前方有人或車就停；卡住會顯示）。ap 是這一步的操作
-local function drive_to(self, def, ctx, a, ap, target)
+local ESC_AFTER, ESC_BACK = 3, 1.5     -- 往前開這麼久都沒前進（車頭頂到岩壁）：倒車這麼久、同時把車頭轉向目標，再往前
+local REVERSE_ANGLE = math.rad(115)     -- 讓路的目標在車後方超過這個角度：直接倒車過去（窄路掉不了頭）
+local function drive_to(self, def, ctx, a, ap, target, allow_reverse)
 	local pos = ctx.pos
 	local diff = heading_diff(ctx.yaw, target.x - pos.x, target.z - pos.z)
+	if allow_reverse and math.abs(diff) > REVERSE_ANGLE then
+		-- 倒車：車尾對準目標（轉向跟往前一樣是改車身方向），撞不撞得到由卡車的 tail_guard 管
+		local rd = heading_diff(ctx.yaw + math.pi, target.x - pos.x, target.z - pos.z)
+		if rd > DEAD then ap.left = true elseif rd < -DEAD then ap.right = true end
+		ap.down = true
+		a.stuck_t = 0
+		return
+	end
+	if a.esc_t and a.esc_t > 0 then
+		a.esc_t = a.esc_t - ctx.dtime
+		ap.down = true
+		if diff > DEAD then ap.left = true elseif diff < -DEAD then ap.right = true end
+		a.last_pos = vector.copy(pos)
+		return
+	end
 	if diff > DEAD then ap.left = true elseif diff < -DEAD then ap.right = true end
 	if math.abs(diff) >= TURN_ONLY then
 		-- 車尾會掃到東西（常是旁邊的怪手）：先往前開，拉開距離再轉
@@ -234,6 +371,25 @@ local function drive_to(self, def, ctx, a, ap, target)
 	if car and not (car.ahs and car.ahs.on) then
 		_, car = V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK_VEHICLE, "vehicle")
 	end
+	-- 對向的無人車（同一條路上 ONCOMING m 內、車頭相對）：提早叫它進會車灣，不要等到面對面才叫（那時中間沒空間了）
+	if not car then
+		local _, far = V.objects_in(self, pos, ctx.yaw, -h, h, h, h + ONCOMING, "vehicle")
+		if far and far.ahs and far.ahs.on and not far.driver then
+			local fy = far.object:get_yaw()
+			local facing = -math.sin(fy) * ctx.dir.x + math.cos(fy) * ctx.dir.z
+			local fy_ = far.ahs.yield
+			if fy_ and fy_.by == self.uid and fy_.bay and not fy_.arrived then
+				fy_.left = YIELD_HOLD
+				if a.wait_msg ~= "等對向車進會車灣" then a.wait_msg = "等對向車進會車灣"; V.refresh(self) end
+				return
+			elseif facing < -0.5 and outranks(self, far) and not fy_ then
+				ask_yield(self, def, ctx, far)
+				if far.ahs.yield and far.ahs.yield.bay then return end
+			end
+		end
+	end
+	-- 正在開進會車灣、叫我讓路的車沒堵在灣口：那台車本來就停著等，不算擋路（不然兩台面對面互等，灣口也進不去）
+	if car and a.ignore_uid and car.uid == a.ignore_uid then car = nil end
 	if car or V.objects_in(self, pos, ctx.yaw, -h, h, h, h + LOOK, "player") then
 		a.block_t = (a.block_t or 0) + ctx.dtime
 		if car and a.block_t > YIELD_AFTER and car.ahs and car.ahs.on and not car.driver and outranks(self, car) then
@@ -247,6 +403,12 @@ local function drive_to(self, def, ctx, a, ap, target)
 	-- 卡住偵測：一直想往前卻 8 秒沒前進
 	local moved = a.last_pos and flat_dist(pos, a.last_pos) or 1
 	a.stuck_t = moved < 0.05 * ctx.dtime * def.speed and (a.stuck_t or 0) + ctx.dtime or 0
+	-- 頂到東西了：倒車一下再試（每次卡住 ESC_AFTER 秒就倒一次；一直不行 8 秒後才顯示卡住）
+	a.esc_n = a.stuck_t > 0 and (a.esc_n or 0) or 0
+	if a.stuck_t > ESC_AFTER * ((a.esc_n or 0) + 1) and (a.esc_n or 0) < 3 then
+		a.esc_n = (a.esc_n or 0) + 1
+		a.esc_t = ESC_BACK
+	end
 	local msg = a.stuck_t > 8 and "卡住了（路上有東西或坡太陡）" or nil
 	if msg ~= a.wait_msg then a.wait_msg = msg; V.refresh(self) end
 end
@@ -267,6 +429,12 @@ local function exc_spot(a, def)
 	local dx, dz = start.x - b.pos.x, start.z - b.pos.z
 	local l = math.sqrt(dx * dx + dz * dz)
 	local u = l < 1 and {x = 0, z = 1} or {x = dx / l, z = dz / l}
+	-- 重新停車時換一個靠近的角度（RESPOT）：原本的方向倒車被碎石堆擋住，停在手臂範圍外
+	local r = RESPOT[(a.respot or 0) % #RESPOT + 1]
+	if r ~= 0 then
+		local c, sn = math.cos(r), math.sin(r)
+		u = {x = u.x * c - u.z * sn, z = u.x * sn + u.z * c}
+	end
 	return b.pos, u, def.rear + tail_gap(b.kind or "excavator_big", def), l
 end
 -- 怪手這裡有別台綁同一台的車：正在裝，或裝滿還沒開遠（只有一條進出的路，重車先走，不然會面對面停住）
@@ -282,6 +450,17 @@ local function exc_busy(self, a, e)
 end
 local function say(self, a, msg)
 	if a.wait_msg ~= msg then a.wait_msg = msg; V.refresh(self) end
+end
+-- 排隊點：離怪手 QUEUE_R、路線旁 QUEUE_SIDE，先試 side 那側再試另一側；地面要跟卡車現在差不多高
+-- （不在坑壁上、坑裡）。兩側都不行就在怪手周圍找會車灣（離兩台車的路線都遠），再不行就在原地等
+local function queue_point(a, def, e, u, side, pos, other)
+	local floor_y = pos.y - def.half
+	for _, s in ipairs({side, -side}) do
+		local q = {x = e.x + u.x * QUEUE_R - u.z * QUEUE_SIDE * s, y = e.y, z = e.z + u.z * QUEUE_R + u.x * QUEUE_SIDE * s}
+		local g = V.ground_top(q.x, floor_y + 3, q.z, 8)
+		if g and math.abs(g - floor_y) < 1.5 then return q end
+	end
+	return find_bay(def, pos, e, 10, 24, {a.route, other.route or {}}, def.half * 2 + 1) or vector.copy(pos)
 end
 -- 受料倉一次一台：有別台正在這座倉倒料，就在倒車的距離外等
 local function hopper_busy(self, a)
@@ -341,9 +520,38 @@ function AHS.step(self, def, ctx)
 			elseif a.phase == "align" or a.phase == "back_in" then set_phase(self, "to_spot") end   -- 回待命點重新對準
 		else
 			say(self, a, "讓路中")
-			if flat_dist(pos, a.yield) > 1.5 then
-				drive_to(self, def, ctx, a, ap, a.yield)
-				if not (ap.up or ap.left or ap.right) then ap.down = true end   -- 已經貼住了：先倒車退開
+			local y = a.yield
+			if flat_dist(pos, y) <= 1.5 and y.next and #y.next > 0 then      -- 到了入口 → 斜切進加寬段 → 往前擺正
+				local q = table.remove(y.next, 1)
+				y.x, y.z = q.x, q.z
+			end
+			if flat_dist(pos, y) <= 1.5 then y.arrived = true end
+			-- 停在會車灣裡：叫我讓的車還在旁邊（還沒整台開過去）就繼續等
+			if y.arrived and y.bay then
+				local by = y.by and V.by_uid[y.by]
+				local bpos = by and by.object:get_pos()
+				if bpos and flat_dist(pos, bpos) < (def.rear or def.half) + def.half + 7 then y.left = YIELD_HOLD end
+			end
+			if flat_dist(pos, y) > 1.5 then
+				local by = y.by and V.by_uid[y.by]
+				local bpos = by and by.object:get_pos()
+				-- 對方沒有比我更靠近會車灣（沒堵在灣口）：開進灣時不把它當障礙
+				a.ignore_uid = y.bay and bpos and flat_dist(bpos, y) >= flat_dist(pos, y) - 1 and y.by or nil
+				drive_to(self, def, ctx, a, ap, y, true)
+				a.ignore_uid = nil
+				-- 已經貼住了：先倒車退開（開往會車灣時不退：退開的話對方會跟上來把灣口堵住）
+				if not (ap.up or ap.left or ap.right) and not y.bay then ap.down = true end
+				-- 3 秒開不過去（地形、別台車）：換一個會車灣
+				local moved = a.last_pos and flat_dist(pos, a.last_pos) or 1
+				y.stuck = moved < 0.02 and (y.stuck or 0) + ctx.dtime or 0
+				if y.stuck > 3 then
+					local by = y.by and V.by_uid[y.by]
+					local bpos2 = by and by.object:get_pos()
+					local q = find_bay(def, pos, pos, 4, 14, {by and by.ahs and by.ahs.route or {}}, (def.rear or def.half) + def.half + 0.5,
+						bpos2, def.half * 2 + 1, by and by.ahs and {by.ahs.load, by.ahs.dump} or nil)
+					if q then y.x, y.z, y.bay = q.x, q.z, true end
+					y.stuck = 0
+				end
 			end
 			a.last_pos = vector.copy(pos)
 			self.autopilot = ap
@@ -351,11 +559,21 @@ function AHS.step(self, def, ctx)
 		end
 	end
 	if a.phase == "wait" then
-		if V.load_total(self) >= def.cap then
+		local ex = a.bound and V.by_uid[a.bound.uid]
+		local idle = ex and ex.op and ex.op.on and ex.op.idle and not ex.dig and V.load_total(ex) == 0
+		if V.load_total(self) >= def.cap or (idle and V.load_total(self) > 0) then
+			-- 裝滿，或綁定的怪手上的操作員沒東西可挖了（截止品位以上的挖完）：帶著已經裝的先走
 			a.idx = a.bound and 1 or 2      -- 綁定怪手、選礦場：從裝料位置先開回路線起點
 			set_phase(self, "to_dump")
 		elseif a.bound and flat_dist(exc_spot(a, def), a.spot_at or pos) > cfg.ahs_follow then
 			set_phase(self, "to_exc")       -- 怪手走了，跟過去
+		elseif ex and ex.op and ex.op.wait_truck then
+			-- 怪手滿斗卻搆不到這台（停在手臂範圍外）：過一會兒換個角度重新停車
+			a.respot_t = (a.respot_t or 0) + ctx.dtime
+			if a.respot_t > RESPOT_AFTER then
+				a.respot_t, a.respot = 0, (a.respot or 0) + 1
+				set_phase(self, "to_exc")
+			end
 		elseif a.chute then
 			-- 選礦場：放料臂搆不到就往轉軸開近；選礦場停機、這座倉也空了，車上有半車以上就先走（不然等下一批原料）
 			local st = rockmech.plant_chute_state and rockmech.plant_chute_state(a.chute)
@@ -368,9 +586,18 @@ function AHS.step(self, def, ctx)
 			elseif a.wait_msg == "靠近放料臂" then
 				say(self, a, nil)
 			end
+		else
+			a.respot_t = 0
 		end
 	elseif a.phase == "to_dump" or a.phase == "to_load" then
 		local fwd = a.phase == "to_dump"
+		-- 綁定怪手：回程開到怪手附近就直接去怪手（前一台還在裝就去排隊點），不必先開到路線起點跟正在出去的車對頭
+		if not fwd and a.bound and flat_dist(pos, a.bound.pos) < EXC_NEAR then
+			set_phase(self, "to_exc")
+			a.last_pos = vector.copy(pos)
+			self.autopilot = ap
+			return
+		end
 		local target = a.route[a.idx]
 		if target and flat_dist(pos, target) < reach then
 			a.idx = a.idx + (fwd and 1 or -1)
@@ -403,11 +630,12 @@ function AHS.step(self, def, ctx)
 			if busy then
 				-- 前一台還在裝：在路線旁邊等，站在它出去那條路的另一側（兩台的路線不同時，排隊點才不會擋路）
 				local side = (out.z - e.z) * u.x - (out.x - e.x) * u.z > 0 and -1 or 1
-				local q = {x = e.x + u.x * QUEUE_R - u.z * QUEUE_SIDE * side, y = e.y,
-					z = e.z + u.z * QUEUE_R + u.x * QUEUE_SIDE * side}
+				a.queue = a.queue or queue_point(a, def, e, u, side, pos, busy)
+				local q = a.queue
 				if flat_dist(pos, q) < reach then say(self, a, "等前一台裝完")
 				else drive_to(self, def, ctx, a, ap, q) end
 			else
+				a.queue = nil
 				local far_pt = {x = e.x + u.x * (stop + cfg.ahs_back_in), y = e.y, z = e.z + u.z * (stop + cfg.ahs_back_in)}
 				if flat_dist(pos, far_pt) < 1.5 then set_phase(self, "exc_align")
 				else drive_to(self, def, ctx, a, ap, far_pt) end
