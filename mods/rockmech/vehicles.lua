@@ -1248,6 +1248,7 @@ function V.register(kind, def)
 			end
 			-- 裝了自動駕駛模組：模組一起還給他；有雇操作員：解雇（停止計薪）
 			if self.ahs_mod then
+				if self.uid then rockmech.collapse.storage:set_string("ahsmod:" .. self.uid, "") end
 				local l4 = inv:add_item("main", ItemStack("rockmech:ahs_module"))
 				if not l4:is_empty() then core.add_item(self.object:get_pos(), l4) end
 			end

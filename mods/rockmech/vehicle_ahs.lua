@@ -65,6 +65,10 @@ end
 -- 一個模組一台車，裝了就跟著車（存在車的資料裡；/god 把車收起來時模組還給他）
 ---------------------------------------------------------------------------
 local MODULE = "rockmech:ahs_module"
+-- 裝了模組的車另外記在 mod storage（ahsmod:<車輛編號>）：車子停著不動時，引擎只在正常關機或區塊卸載時才把車的資料寫進地圖，
+-- 伺服器被強制結束（關掉視窗）就會丟掉，錢卻已經扣了。mod storage 改了就存，讀檔時兩邊有一邊有就算裝了
+local MOD_KEY = "ahsmod:"
+local function mod_store() return rockmech.collapse.storage end
 module_price = function()
 	for _, it in ipairs(rockmech.cfg.shop or {}) do
 		if it.key == "ahs_module" then return it.price end
@@ -94,6 +98,7 @@ function AHS.install(self, player)
 	st:take_item(1)
 	player:set_wielded_item(st)
 	self.ahs_mod = true
+	if self.uid then mod_store():set_string(MOD_KEY .. self.uid, "1") end
 	V.refresh(self)
 	core.log("action", ("[rockmech] %s 在 %s（%s）裝上自動駕駛模組"):format(name, d.desc, tostring(self.uid)))
 	core.chat_send_player(name, ("[無人駕駛] %s 裝上自動駕駛模組：上車按 E 設定路線"):format(d.desc))
@@ -775,7 +780,7 @@ end)
 
 function AHS.save(self, data) data.ahs, data.ahs_mod = self.ahs, self.ahs_mod end
 function AHS.load(self, data)
-	self.ahs_mod = data.ahs_mod
+	self.ahs_mod = data.ahs_mod or (self.uid and mod_store():get_string(MOD_KEY .. self.uid) == "1") or nil
 	if type(data.ahs) == "table" then
 		self.ahs = data.ahs
 		self.ahs.rec = false
