@@ -170,17 +170,35 @@ function V.overhang_push(regions, pos, yaw, p)
 	for _, r in ipairs(regions) do
 		local m = PLAYER_R
 		if lx > r.x0 - m and lx < r.x1 + m and lz > r.z0 - m and lz < r.z1 + m and ly + PLAYER_H > r.y0 and ly < r.y1 then
-			-- 往最近的開放側推（左、右、不貼車身的前或後）；剛好在上緣附近 → 站上去
-			local best, ox, oz = math.huge, 0, 0
-			local function try(d, x, z) if math.abs(d) < best then best, ox, oz = math.abs(d), x, z end end
-			try(r.x0 - m - lx, r.x0 - m - lx, 0)
-			try(r.x1 + m - lx, r.x1 + m - lx, 0)
-			if r.body ~= "z0" then try(r.z0 - m - lz, 0, r.z0 - m - lz) end
-			if r.body ~= "z1" then try(r.z1 + m - lz, 0, r.z1 + m - lz) end
-			if r.y1 - ly < math.min(best, 0.6) then
-				return {x = p.x, y = pos.y + r.y1, z = p.z}
+			-- 候選位置：左、右、不貼車身的前或後、車頂上，由近到遠；選第一個站得下人的（腳和頭那兩格都是空的）。
+			-- 不然車停在山壁、受料倉邊時，人會被推進岩石裡，看起來就是卡在車裡出不來
+			local cands = {}
+			local function add(d, x, z, top)
+				local q = top and {x = p.x, y = pos.y + r.y1, z = p.z}
+					or {x = p.x + x * c - z * sn, y = p.y, z = p.z + x * sn + z * c}
+				cands[#cands + 1] = {d = math.abs(d), q = q}
 			end
-			return {x = p.x + ox * c - oz * sn, y = p.y, z = p.z + ox * sn + oz * c}
+			add(r.x0 - m - lx, r.x0 - m - lx, 0)
+			add(r.x1 + m - lx, r.x1 + m - lx, 0)
+			if r.body ~= "z0" then add(r.z0 - m - lz, 0, r.z0 - m - lz) end
+			if r.body ~= "z1" then add(r.z1 + m - lz, 0, r.z1 + m - lz) end
+			add(r.y1 - ly - 0.4, 0, 0, true)       -- 車頂：剛好在上緣附近時最近
+			table.sort(cands, function(a, b) return a.d < b.d end)
+			-- 玩家的身體（半徑 PLAYER_R、高 PLAYER_H）蓋到的格子都要是空的
+			local function free(q)
+				for x = math.floor(q.x - PLAYER_R + 0.5), math.floor(q.x + PLAYER_R + 0.5) do
+					for z = math.floor(q.z - PLAYER_R + 0.5), math.floor(q.z + PLAYER_R + 0.5) do
+						for y = math.floor(q.y + 0.5 + 0.01), math.floor(q.y + PLAYER_H + 0.5) do
+							if not V.passable(core.get_node({x = x, y = y, z = z}).name) then return false end
+						end
+					end
+				end
+				return true
+			end
+			for _, cd in ipairs(cands) do
+				if free(cd.q) then return cd.q end
+			end
+			return {x = p.x, y = pos.y + r.y1, z = p.z}      -- 四周都被擋住：站到車頂上
 		end
 	end
 end
