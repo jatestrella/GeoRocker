@@ -30,7 +30,6 @@ rockmech.HOPPER_HALF = SIZE / 2   -- 倉口中心到邊 (m)
 local STEP = 1              -- 每幾秒吃一次
 local MONEY = "money:"      -- mod storage 的鍵
 local COIN_LEAD = 0.4       -- 金幣聲響完多久才出結算訊息 (s)
-local BATCH_IDLE = 3         -- 倉裡連續幾秒沒料才結算這一批 (s)
 
 ---------------------------------------------------------------------------
 -- 礦價：每個交易日開盤換一次。交易日用遊戲實際經過的時間算（rockmech_price_period 秒，預設 20 分鐘 = 預設的遊戲一天），
@@ -133,7 +132,10 @@ function rockmech.money(name) return storage:get_float(MONEY .. rockmech.account
 function rockmech.add_money(name, amount)
 	local acc = rockmech.account_of(name)
 	storage:set_float(MONEY .. acc, storage:get_float(MONEY .. acc) + amount)
-	for _, n in ipairs(rockmech.account_members(acc)) do show_money(core.get_player_by_name(n)) end
+	for _, n in ipairs(rockmech.account_members(acc)) do
+		local p = core.get_player_by_name(n)
+		if p then show_money(p) end
+	end
 end
 
 core.register_on_joinplayer(function(player)
@@ -315,6 +317,43 @@ local function eat(pos, dtime, rate, limit, take)
 	return eaten
 end
 
+-- 一個交易日的結算：通知帳戶所有在線上的成員（分組時是整組）；破碎先響金幣聲，再出結算表。day：結的是哪一個交易日
+local function report(meta, owner, dump, day)
+	local bt = meta:get_float("batch_t")
+	local bq, bg, bf = meta:get_float("batch_q"), meta:get_float("batch_g"), meta:get_float("batch_f")
+	local members = rockmech.account_members(rockmech.account_of(owner))
+	local title = ("第 %d 個交易日　%.1f t"):format(day + 1, bt)
+	if dump then
+		for _, m in ipairs(members) do
+			core.chat_send_player(m, ("[廢石場] 日結 %.1f t 棄置%s"):format(bt, bf > 0 and ("，棄置費 −$%.0f"):format(bf) or ""))
+			if bf > 0 then
+				show_bill(m, "廢石場日結　" .. title, {
+					{"棄置費", ("%.1f t"):format(bt), ("$%g"):format(cfg.dump_fee), money_text(-bf), RED}})
+			end
+		end
+	else
+		local ore = main_ore()
+		local rows = {}
+		if ore then
+			rows[#rows + 1] = {("%s（品位 %.0f%%）"):format(ore.label, 100 * bq / bt), ("%.1f t"):format(bq),
+				("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), ore.recovery * 100), money_text(bg), GREEN}
+		end
+		rows[#rows + 1] = {"廢石", ("%.1f t"):format(bt - bq), "", "", WHITE}
+		rows[#rows + 1] = {"處理費", ("%.1f t"):format(bt), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
+		rows[#rows + 1] = {"淨收入", "", "", money_text(bg - bf), bg >= bf and GREEN or RED}
+		for _, m in ipairs(members) do
+			core.sound_play("rockmech_coin", {to_player = m, gain = 0.8}, true)
+		end
+		core.after(COIN_LEAD, function()
+			for _, m in ipairs(members) do
+				core.chat_send_player(m, ("[破碎站] 日結 %.1f t，淨收入 %s"):format(bt, money_text(bg - bf)))
+				show_bill(m, "破碎站日結　" .. title, rows)
+			end
+		end)
+	end
+	for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m"}) do meta:set_float(k, 0) end
+end
+
 local function crush(pos, dtime)
 	local meta = core.get_meta(pos)
 	local dump = meta:get_string("mode") == "dump"
@@ -333,49 +372,13 @@ local function crush(pos, dtime)
 	end)
 	local income = gross - fee
 	local owner = meta:get_string("owner")
-	if eaten == 0 then
-		-- 倉裡連續 BATCH_IDLE 秒沒料才算這一批結束（殘料一點一點流下來的零頭併進同一批）
-		meta:set_float("idle_t", meta:get_float("idle_t") + dtime)
-		if meta:get_float("idle_t") < BATCH_IDLE then return end
-		-- 吃完了：回報這一批（破碎：先響金幣聲，再出結算）
-		local bt = meta:get_float("batch_t")
-		if bt > 0 then
-			local bq, bg, bf = meta:get_float("batch_q"), meta:get_float("batch_g"), meta:get_float("batch_f")
-			-- 通知帳戶所有在線上的成員（分組時是整組）
-			local members = rockmech.account_members(rockmech.account_of(owner))
-			if dump then
-				for _, m in ipairs(members) do
-					core.chat_send_player(m, ("[廢石場] 這批 %.1f t 棄置%s"):format(bt, bf > 0 and ("，棄置費 −$%.0f"):format(bf) or ""))
-					if bf > 0 then
-						show_bill(m, ("廢石場　這批 %.1f t"):format(bt), {
-							{"棄置費", ("%.1f t"):format(bt), ("$%g"):format(cfg.dump_fee), money_text(-bf), RED}})
-					end
-				end
-			else
-				local ore = main_ore()
-				local rows = {}
-				if ore then
-					rows[#rows + 1] = {("%s（品位 %.0f%%）"):format(ore.label, 100 * bq / bt), ("%.1f t"):format(bq),
-						("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), ore.recovery * 100), money_text(bg), GREEN}
-				end
-				rows[#rows + 1] = {"廢石", ("%.1f t"):format(bt - bq), "", "", WHITE}
-				rows[#rows + 1] = {"處理費", ("%.1f t"):format(bt), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
-				rows[#rows + 1] = {"淨收入", "", "", money_text(bg - bf), bg >= bf and GREEN or RED}
-				for _, m in ipairs(members) do
-					core.sound_play("rockmech_coin", {to_player = m, gain = 0.8}, true)
-				end
-				core.after(COIN_LEAD, function()
-					for _, m in ipairs(members) do
-						core.chat_send_player(m, ("[破碎站] 這批 %.1f t，淨收入 %s"):format(bt, money_text(bg - bf)))
-						show_bill(m, ("破碎站結算　這批 %.1f t"):format(bt), rows)
-					end
-				end)
-			end
-			for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m"}) do meta:set_float(k, 0) end
-		end
-		return
+	-- 換日（礦價開盤）後第一步結算前一個交易日（破碎站強制載入，計時器一直跑，開盤後 1 秒內就會結）
+	local today, bday = market_day(), meta:get_int("batch_day")
+	if bday ~= today then
+		if meta:get_float("batch_t") > 0 then report(meta, owner, dump, bday) end
+		meta:set_int("batch_day", today)
 	end
-	meta:set_float("idle_t", 0)
+	if eaten == 0 then return end
 	local t = tons_of(eaten)
 	if income ~= 0 then rockmech.add_money(owner, income) end
 	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_g = gross, batch_f = fee, batch_m = income,
