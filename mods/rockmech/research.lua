@@ -1,11 +1,11 @@
 -- rockmech/research.lua
 -- 研究所（經營模式）：每組營地貨櫃辦公室西邊一頂研究帳篷，裡面有「機械技工」「駐點地質師」。
 --   右鍵研究員打開研發清單（像商店，之後可以改成天賦樹）：每個項目有等級，第 n 級要 基準價 × n、基準時間 × n。
---   研發用整組的錢、效果整組共用；每組同時只能進行一項。
+--   研發用整組的錢、效果整組共用；每位研究員一次一項（不同研究員可以同時研發）。研發中的那一列有進度條和倒數。
 --   進度只在該組有組員在線上時才走（每秒）；完成時通知全組。
 --   等級存在 mod storage 的 research:<帳戶>:<項目>（crusher.lua 的 rockmech.research_level），
 --   各項的效果由 crusher.lua 的 rockmech.eff_* 算：選礦場、破碎站、輸送帶照放置那一組的等級。
---   進行中的研發存在 research_job:<帳戶> = {key, level, left（剩幾秒）}。
+--   進行中的研發存在 research_job:<研究員>:<帳戶> = {key, level, left（剩幾秒）, total}。
 
 local cfg = rockmech.cfg
 if not cfg.career then return end
@@ -52,27 +52,51 @@ local NPCS = {
 	geologist = {entity = "rockmech:npc_geologist", title = "駐點地質師", color = "#e0d0a0", tint = "#806040", sit = true},
 }
 
-local function job_of(acc)
-	local s = storage:get_string(JOB .. acc)
+-- 進行中的研發：每位研究員各自一項（同一組的機械技工、駐點地質師可以同時研發）。
+-- mod storage 的 research_job:<研究員>:<帳戶> = {key, level, left（剩幾秒）, total（總秒數）}
+local function job_of(acc, who)
+	local s = storage:get_string(JOB .. who .. ":" .. acc)
 	return s ~= "" and core.deserialize(s) or nil
 end
-local function set_job(acc, job) storage:set_string(JOB .. acc, job and core.serialize(job) or "") end
+local function set_job(acc, who, job) storage:set_string(JOB .. who .. ":" .. acc, job and core.serialize(job) or "") end
+-- 舊版（一組只有一項）：research_job:<帳戶> 搬到那個項目的研究員名下
+core.after(0, function()
+	for _, k in ipairs(storage:get_keys()) do
+		local rest = k:match("^" .. JOB .. "(.+)$")
+		local first = rest and rest:match("^([^:]+):")
+		if rest and not (first and NPCS[first]) then
+			local job = core.deserialize(storage:get_string(k))
+			local it = job and BY_KEY[job.key]
+			if it then set_job(rest, it.who, job) end
+			storage:set_string(k, "")
+		end
+	end
+end)
+
+-- 進度條：底色、已完成的部分、百分比與倒數
+local function bar(x, y, w, job)
+	local total = job.total or job.left
+	local frac = total > 0 and math.max(0, math.min(1, 1 - job.left / total)) or 1
+	return ("box[%g,%g;%g,0.35;#2a2a2a]box[%g,%g;%g,0.35;#3fbf5f]label[%g,%g;%s]"):format(
+		x, y, w, x, y, math.max(0.01, w * frac), x + w + 0.2, y + 0.18,
+		core.formspec_escape(("%d%%　剩 %s"):format(math.floor(frac * 100), mmss(job.left))))
+end
 
 local viewing = {}          -- 玩家名稱 → 正在看哪位研究員
 
 local function form(name, who)
 	local acc = rockmech.account_of(name)
 	local npc = NPCS[who]
-	local job = job_of(acc)
+	local job = job_of(acc, who)
 	local head = rockmech.team_of(name) and ("%s　第 %s 組資金 %s"):format(npc.title, rockmech.team_of(name), money_text(rockmech.money(name)))
 		or ("%s　資金 %s"):format(npc.title, money_text(rockmech.money(name)))
 	local out = {"formspec_version[6]size[15,10]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local status
 	if job then
 		local it = BY_KEY[job.key]
-		status = ("研發中：%s Lv%d，剩 %s（組員在線上時才會進行）"):format(it and it.label or job.key, job.level, mmss(job.left))
+		status = ("研發中：%s Lv%d（組員在線上時才會進行）"):format(it and it.label or job.key, job.level)
 	else
-		status = "目前沒有研發中的項目。每組同時只能研發一項。"
+		status = ("%s目前沒有研發中的項目。每位研究員同時研發一項，不同研究員可以同時進行。"):format(npc.title)
 	end
 	out[#out + 1] = ("label[0.5,1.2;%s]"):format(core.formspec_escape(status))
 	out[#out + 1] = "label[0.5,2.0;項目]label[3.6,2.0;效果]label[8.6,2.0;目前 → 下一級]label[11.4,2.0;價格／時間]"
@@ -93,6 +117,10 @@ local function form(name, who)
 				if not job then out[#out + 1] = ("button[13.5,%g;1.3,0.8;go_%d;研發]"):format(y, i) end
 			end
 			y = y + 1.0
+			if job and job.key == it.key then
+				out[#out + 1] = bar(0.5, y - 0.1, 10.5, job)
+				y = y + 0.5
+			end
 		end
 	end
 	-- 駐點地質師：雇用（跟著人跑的地質學家）、進修考試（knowledge.lua）
@@ -140,8 +168,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local acc = rockmech.account_of(name)
 			local lv = rockmech.research_level(acc, it.key)
 			local cost = cost_of(it, lv + 1)
-			if job_of(acc) then
-				core.chat_send_player(name, "[研究所] 已經有研發中的項目，一次只能研發一項")
+			if job_of(acc, who) then
+				core.chat_send_player(name, "[研究所] 已經在研發別的項目，研究員一次只能研發一項")
 			elseif lv >= it.max then
 				core.chat_send_player(name, "[研究所] 已達最高等級")
 			elseif not rockmech.has_account(name) then
@@ -150,7 +178,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				core.chat_send_player(name, ("[研究所] 錢不夠：%s Lv%d 要 %s"):format(it.label, lv + 1, money_text(cost)))
 			else
 				rockmech.add_money(name, -cost)
-				set_job(acc, {key = it.key, level = lv + 1, left = secs_of(it, lv + 1)})
+				set_job(acc, who, {key = it.key, level = lv + 1, left = secs_of(it, lv + 1), total = secs_of(it, lv + 1)})
 				tell(acc, ("%s 開始研發 %s Lv%d（%s、%d 分鐘，組員在線上時才會進行）"):format(name, it.label, lv + 1, money_text(cost), secs_of(it, lv + 1) / 60))
 				core.log("action", ("[rockmech] research %s %s Lv%d by %s ($%d)"):format(acc, it.key, lv + 1, name, cost))
 			end
@@ -174,23 +202,29 @@ core.register_globalstep(function(dtime)
 		accs[acc] = true
 	end
 	for acc in pairs(accs) do
-		local job = job_of(acc)
-		if job then
-			job.left = job.left - dt
-			if job.left <= 0 then
-				local it = BY_KEY[job.key]
-				local before = it and it.value(acc)
-				rockmech.research_set(acc, job.key, job.level)
-				set_job(acc, nil)
-				if it then tell(acc, ("%s 升到 Lv%d（%s → %s）"):format(it.label, job.level, before, it.value(acc))) end
-				core.log("action", ("[rockmech] research %s %s reached Lv%d"):format(acc, job.key, job.level))
-				for _, m in ipairs(rockmech.account_members(acc)) do
-					core.sound_play("rockmech_coin", {to_player = m, gain = 0.6}, true)
+		local any = false
+		for who in pairs(NPCS) do
+			local job = job_of(acc, who)
+			if job then
+				any = true
+				job.left = job.left - dt
+				if job.left <= 0 then
+					local it = BY_KEY[job.key]
+					local before = it and it.value(acc)
+					rockmech.research_set(acc, job.key, job.level)
+					set_job(acc, who, nil)
+					if it then tell(acc, ("%s 升到 Lv%d（%s → %s）"):format(it.label, job.level, before, it.value(acc))) end
+					core.log("action", ("[rockmech] research %s %s reached Lv%d"):format(acc, job.key, job.level))
+					for _, m in ipairs(rockmech.account_members(acc)) do
+						core.sound_play("rockmech_coin", {to_player = m, gain = 0.6}, true)
+					end
+				else
+					set_job(acc, who, job)
 				end
-			else
-				set_job(acc, job)
 			end
-			-- 開著研究畫面的人跟著更新剩餘時間
+		end
+		-- 開著研究畫面的人跟著更新進度條和倒數
+		if any then
 			for _, m in ipairs(rockmech.account_members(acc)) do
 				if viewing[m] then core.show_formspec(m, FORM, form(m, viewing[m])) end
 			end
