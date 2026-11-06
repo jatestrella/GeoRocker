@@ -73,6 +73,47 @@ core.after(0, function()
 	end
 end)
 
+---------------------------------------------------------------------------
+-- 修車（機械技工）：全組耐久不到 100% 的車（vehicles.lua 存在 vhp:<編號>），付費派技工去修，
+-- 費用 = 車價 × REPAIR_COST × 損壞比例、時間 = REPAIR_SECS × 損壞比例，一次修一台，組員在線上才倒數
+---------------------------------------------------------------------------
+
+local REPAIR_COST, REPAIR_SECS = 0.2, 5 * 60
+local REPAIR = "repair_job:"         -- repair_job:<帳戶> = {uid, kind, left, total}
+local function price_of(kind)
+	local item = "rockmech:" .. kind .. "_item"
+	for _, it in ipairs(cfg.shop) do if it.item == item then return it.price end end
+	return 10000
+end
+local function damaged_list(acc)
+	local out = {}
+	for _, k in ipairs(storage:get_keys()) do
+		local uid = k:match("^vhp:(.+)$")
+		if uid then
+			local d = core.deserialize(storage:get_string(k))
+			if d and d.owner == acc and (d.hp or 100) < 100 then
+				d.uid = uid
+				out[#out + 1] = d
+			end
+		end
+	end
+	table.sort(out, function(a, b) return (a.hp or 0) < (b.hp or 0) end)
+	return out
+end
+local function repair_quote(d)
+	local frac = 1 - math.max(0, d.hp or 0) / 100
+	return math.ceil(price_of(d.kind) * REPAIR_COST * frac), math.ceil(REPAIR_SECS * frac)
+end
+local function repair_job(acc)
+	local s2 = storage:get_string(REPAIR .. acc)
+	return s2 ~= "" and core.deserialize(s2) or nil
+end
+local function set_repair(acc, job) storage:set_string(REPAIR .. acc, job and core.serialize(job) or "") end
+local function vname(kind)
+	local d = rockmech.vehicles and rockmech.vehicles.TYPES[kind]
+	return d and d.desc:gsub(" .*", "") or kind
+end
+
 -- 進度條：底色、已完成的部分、百分比與倒數
 local function bar(x, y, w, job)
 	local total = job.total or job.left
@@ -90,7 +131,7 @@ local function form(name, who)
 	local job = job_of(acc, who)
 	local head = rockmech.team_of(name) and ("%s　第 %s 組資金 %s"):format(npc.title, rockmech.team_of(name), money_text(rockmech.money(name)))
 		or ("%s　資金 %s"):format(npc.title, money_text(rockmech.money(name)))
-	local out = {"formspec_version[6]size[15,10]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
+	local out = {"formspec_version[6]size[15,13]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local status
 	if job then
 		local it = BY_KEY[job.key]
@@ -120,6 +161,34 @@ local function form(name, who)
 			if job and job.key == it.key then
 				out[#out + 1] = bar(0.5, y - 0.1, 10.5, job)
 				y = y + 0.5
+			end
+		end
+	end
+	-- 機械技工：修車
+	if who == "mechanic" then
+		local rj = repair_job(acc)
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.5, core.formspec_escape("修車：全組受損的車（落石砸的），付費派技工去修，車不用開回來"))
+		y = y + 1.0
+		if rj then
+			out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.2, core.formspec_escape(("修理中：%s"):format(vname(rj.kind))))
+			out[#out + 1] = bar(4.0, y + 0.05, 7.0, rj)
+			y = y + 0.7
+		end
+		local list = damaged_list(acc)
+		if #list == 0 and not rj then
+			out[#out + 1] = ("label[0.5,%g;沒有受損的車]"):format(y + 0.2)
+			y = y + 0.6
+		end
+		for i, d in ipairs(list) do
+			if i > 5 then break end
+			if not (rj and rj.uid == d.uid) then
+				local cost, secs = repair_quote(d)
+				local p = d.pos and ("(%d, %d, %d)"):format(d.pos.x, d.pos.y, d.pos.z) or ""
+				out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, core.formspec_escape(("%s　%s　%s"):format(vname(d.kind),
+					(d.hp or 0) <= 0 and "報廢" or ("耐久 %d%%"):format(math.floor(d.hp + 0.5)), p)))
+				out[#out + 1] = ("label[8.6,%g;%s]"):format(y + 0.4, core.formspec_escape(("%s　%s"):format(money_text(cost), mmss(secs))))
+				if not rj then out[#out + 1] = ("button[13.0,%g;1.8,0.8;fix_%s;修理]"):format(y, d.uid) end
+				y = y + 0.9
 			end
 		end
 	end
@@ -158,6 +227,28 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		if ab and rockmech.knowledge_exam then
 			viewing[name] = nil
 			rockmech.knowledge_exam(player, ab)
+			return true
+		end
+	end
+	for key in pairs(fields) do
+		local uid = key:match("^fix_(.+)$")
+		if uid and who == "mechanic" then
+			local acc = rockmech.account_of(name)
+			local d
+			for _, x in ipairs(damaged_list(acc)) do if x.uid == uid then d = x end end
+			if repair_job(acc) then
+				core.chat_send_player(name, "[機械技工] 已經在修別台車了，一次修一台")
+			elseif d then
+				local cost, secs = repair_quote(d)
+				if rockmech.money(name) < cost then
+					core.chat_send_player(name, ("[機械技工] 錢不夠：修這台要 %s"):format(money_text(cost)))
+				else
+					rockmech.add_money(name, -cost)
+					set_repair(acc, {uid = uid, kind = d.kind, left = secs, total = secs})
+					tell(acc, ("%s 派技工去修%s（%s、%s，組員在線上時才會進行）"):format(name, vname(d.kind), money_text(cost), mmss(secs)))
+				end
+			end
+			core.show_formspec(name, FORM, form(name, who))
 			return true
 		end
 	end
@@ -221,6 +312,26 @@ core.register_globalstep(function(dtime)
 				else
 					set_job(acc, who, job)
 				end
+			end
+		end
+		-- 修車
+		local rj = repair_job(acc)
+		if rj then
+			any = true
+			rj.left = rj.left - dt
+			if rj.left <= 0 then
+				set_repair(acc, nil)
+				storage:set_string("vhp:" .. rj.uid, "")
+				local V = rockmech.vehicles
+				local e = V and V.by_uid[rj.uid]
+				if e and e.object:get_pos() then
+					e.hp = 100
+					V.update_infotext(e)
+					if V.update_hud then V.update_hud(e) end
+				end
+				tell(acc, ("%s修好了，耐久回到 100%%"):format(vname(rj.kind)))
+			else
+				set_repair(acc, rj)
 			end
 		end
 		-- 開著研究畫面的人跟著更新進度條和倒數
