@@ -151,18 +151,21 @@ core.register_craftitem("rockmech:npc_wrench", {
 	inventory_image = "[fill:16x16:#00000000^[fill:2x10:7,5:#a0a4a8^[fill:6x3:5,2:#a0a4a8^[fill:2x2:7,2:#00000000^[fill:2x2:7,14:#c03020",
 })
 
--- 各角色的配件：{bone, pos, rot, size, tex}（帽子）或 {bone, pos, rot, size, item}（手上的工具）
+-- 各角色的配件：{bone, pos, rot, size, tex}（帽子）或 {bone, pos, rot, item}（手上的工具）。
+-- 位置照 character.b3d 量的（單位 1/10 m）：Head 骨頭原點在脖子，頭的網格 y 0..4.4、x、z ±2.3（頭寬 0.46 m）；
+-- Body 繞 y 轉了 180°，所以 Head 骨頭座標裡臉朝 −z。Arm_Right 繞 x 轉 180°：+y 往手掌，手在 y ≈ 5.3
+local HEAD_TOP = 4.4
 local HARDHAT = function(c)
 	return {
-		{bone = "Head", pos = {x = 0, y = 5.6, z = 0}, size = {x = 0.58, y = 0.18, z = 0.6}, tex = c},     -- 帽頂
-		{bone = "Head", pos = {x = 0, y = 4.9, z = 0.25}, size = {x = 0.6, y = 0.03, z = 0.25}, tex = c},  -- 前緣
+		{bone = "Head", pos = {x = 0, y = HEAD_TOP + 0.45, z = 0}, size = {x = 0.5, y = 0.16, z = 0.5}, tex = c},    -- 帽殼（蓋住頭頂）
+		{bone = "Head", pos = {x = 0, y = HEAD_TOP - 0.25, z = 0}, size = {x = 0.56, y = 0.025, z = 0.56}, tex = c},  -- 一圈帽沿
 	}
 end
 local DRESS = {
 	geologist = {
-		{bone = "Head", pos = {x = 0, y = 5.0, z = 0}, size = {x = 0.85, y = 0.03, z = 0.85}, tex = "#a89060"},   -- 寬帽沿
-		{bone = "Head", pos = {x = 0, y = 5.7, z = 0}, size = {x = 0.56, y = 0.2, z = 0.56}, tex = "#b8a070"},    -- 帽頂
-		{bone = "Head", pos = {x = 0, y = 5.25, z = 0}, size = {x = 0.57, y = 0.05, z = 0.57}, tex = "#5a4028"},  -- 帽帶
+		{bone = "Head", pos = {x = 0, y = HEAD_TOP - 0.25, z = 0}, size = {x = 0.8, y = 0.025, z = 0.8}, tex = "#a89060"},   -- 寬帽沿
+		{bone = "Head", pos = {x = 0, y = HEAD_TOP + 0.7, z = 0}, size = {x = 0.48, y = 0.2, z = 0.48}, tex = "#b8a070"},    -- 帽頂
+		{bone = "Head", pos = {x = 0, y = HEAD_TOP - 0.05, z = 0}, size = {x = 0.49, y = 0.04, z = 0.49}, tex = "#5a4028"},  -- 帽帶
 		{bone = "Arm_Right", pos = {x = 0, y = 5.5, z = 3}, rot = {x = -90, y = 225, z = 90}, item = "rockmech:geo_hammer"},
 	},
 	vehicle = HARDHAT("#f4f4f0"),
@@ -173,7 +176,7 @@ local DRESS = {
 		return t
 	end)(),
 	tools = {
-		{bone = "Head", pos = {x = 0, y = 4.95, z = 0.3}, size = {x = 0.52, y = 0.03, z = 0.3}, tex = "#2f5a2f"},  -- 帽舌
+		{bone = "Head", pos = {x = 0, y = HEAD_TOP - 0.3, z = -3.45}, size = {x = 0.46, y = 0.025, z = 0.25}, tex = "#2f5a2f"},  -- 帽舌（臉朝 −z）
 	},
 }
 
