@@ -337,6 +337,7 @@ if core.get_modpath("sfinv") and sfinv then
 				end
 				y = y + 0.3
 				add("button[0,%g;4,0.8;rm_home;%s]", y, F(("回第 %s 組營地"):format(t)))
+				if rockmech.borehole_list then add("button[4.2,%g;3.8,0.8;rm_boreholes;%s]", y, F("鑽孔日誌")) end
 			else
 				add("label[0,%g;%s]", y, F(teacher and "老師（沒有分組）" or "你還沒分組，請找老師分組"))
 				y = y + 0.6
@@ -383,6 +384,10 @@ if core.get_modpath("sfinv") and sfinv then
 		on_player_receive_fields = function(self, player, context, fields)
 			local name = player:get_player_name()
 			local t = rockmech.team_of(name)
+			if fields.rm_boreholes and rockmech.borehole_list then
+				rockmech.borehole_list(name)
+				return
+			end
 			if fields.rm_home and t then
 				core.close_formspec(name, "")
 				send_home(name, t)

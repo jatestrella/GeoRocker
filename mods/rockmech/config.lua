@@ -99,6 +99,7 @@ config.shop = {
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = "無人機", price = 2000},
 	{key = "xrf", shop = "tools", item = "rockmech:xrf", label = "XRF 分析儀（品位）", price = 5000},
 	{key = "gsi_card", shop = "tools", item = "rockmech:gsi_card", label = "GSI 評估圖卡（岩體）", price = 1000},
+	{key = "core_drill", shop = "tools", item = "rockmech:core_drill", label = "岩芯鑽機", price = 3000},
 	{key = "compass", shop = "tools", item = "rockmech:compass", label = "地質羅盤（力學）", price = 200},
 }
 
