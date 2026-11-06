@@ -79,6 +79,7 @@ config.shop = {
 	{key = "crusher_big", shop = "vehicle", item = "rockmech:crusher_big", label = "大型破碎站", price = 300000},
 	{key = "plant", shop = "vehicle", item = "rockmech:plant", label = "選礦場", price = 30000},
 	{key = "belt", shop = "vehicle", item = "rockmech:belt", label = "輸送帶", price = 1000, count = 10},
+	{key = "lowboy", shop = "vehicle", item = "rockmech:lowboy_item", label = "平板拖車", price = 40000},
 	{key = "dozer", shop = "vehicle", item = "rockmech:dozer_item", label = "推土機", price = 35000},
 	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = "裝藥車", price = 40000},
 	{key = "charger", shop = "blast", item = "rockmech:charger_item", label = "裝藥台車", price = 40000},

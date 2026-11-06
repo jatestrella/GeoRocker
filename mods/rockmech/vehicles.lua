@@ -1180,6 +1180,11 @@ function V.register(kind, def)
 		end,
 		on_step = function(self, dtime)
 			local obj = self.object
+			-- 掛在別的東西上（平板拖車載著）：不自己動，只冒受損的煙
+			if obj:get_attach() then
+				damage_smoke(self, dtime)
+				return
+			end
 			local pos = obj:get_pos()
 			local yaw = obj:get_yaw()
 			local vel = obj:get_velocity()
@@ -1382,3 +1387,4 @@ dofile(rockmech.modpath .. "/vehicle_drillrig.lua")
 dofile(rockmech.modpath .. "/vehicle_bulktruck.lua")
 dofile(rockmech.modpath .. "/vehicle_suv.lua")
 dofile(rockmech.modpath .. "/vehicle_miner.lua")
+dofile(rockmech.modpath .. "/vehicle_lowboy.lua")
