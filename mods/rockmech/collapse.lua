@@ -983,6 +983,9 @@ local queue_boxes, queue_round = {}, 0
 local queue_changes = new_changes()
 local queue_scheduled = false
 local process_queue
+local last_run = -math.huge     -- 上次檢查的時間 (s)；最快 fcfg.interval 秒一次，期間的觸發合併成一批
+local LOG_FACTOR = 3            -- 超過預算這麼多倍才記 log（每次都記的話 debug.txt 一天幾十 MB）
+collapse.LOG_FACTOR = LOG_FACTOR
 
 local function enqueue(box, round, changes)
     if changes then merge_changes(queue_changes, changes) end
@@ -990,11 +993,13 @@ local function enqueue(box, round, changes)
     if round > queue_round then queue_round = round end
     if queue_scheduled then return end
     queue_scheduled = true
-    core.after(0, process_queue)
+    local wait = last_run + (fcfg.interval or 0) - core.get_us_time() / 1e6
+    core.after(math.max(0, wait), process_queue)
 end
 
 process_queue = function()
     queue_scheduled = false
+    last_run = core.get_us_time() / 1e6
     local boxes, round, changes = queue_boxes, queue_round, queue_changes
     queue_boxes, queue_round, queue_changes = {}, 0, new_changes()
     -- 遊戲中關閉破壞準則（軸差與弱面皆關）時，進行中的連鎖也一併停止
@@ -1011,7 +1016,7 @@ process_queue = function()
         core.log("action", ("[rockmech] 破壞 第 %d 輪：%d 格開挖前就 FS ≤ 1，視為既有狀態不處理")
             :format(round, skipped))
     end
-    if ms > fcfg.budget_ms then
+    if ms > fcfg.budget_ms * LOG_FACTOR then
         core.log("warning", ("[rockmech] 軸差破壞檢查 %.1f ms（預算 %g ms），第 %d 輪、%d 盒、評估 %d 格")
             :format(ms, fcfg.budget_ms, round, #boxes, stats.evaluated))
     end
@@ -1396,7 +1401,7 @@ local function run_stability_check()
         end
     end
     local ms = (core.get_us_time() - t0) / 1000
-    if ms > scfg.budget_ms then
+    if ms > scfg.budget_ms * LOG_FACTOR then
         core.log("warning", ("[rockmech] 穩定判定 %.1f ms（預算 %g ms），起點 %d、展開 %d 格")
             :format(ms, scfg.budget_ms, #starts, stats.visited))
     end

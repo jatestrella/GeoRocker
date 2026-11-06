@@ -276,7 +276,8 @@ rockmech 模組所有可調參數，依學科分類。設定名都加上前綴 `
 | `failure_initial_scan_max` | 初始應力掃描高度上限 (格) | 512 |  |
 | `failure_max_cascade` | 連鎖破壞最多輪數 | 5 |  |
 | `failure_cascade_delay` | 連鎖破壞間隔 (s) | 0.6 |  |
-| `failure_budget_ms` | 每次檢查時間預算 (ms) | 5 |  |
+| `failure_interval` | 軸差破壞檢查最快幾秒一次（期間的觸發合併成一批；連鎖每輪也至少隔這麼久） | 5 |  |
+| `failure_budget_ms` | 每次檢查時間預算 (ms)；超過 3 倍才記 log | 5 |  |
 | `keyblock_max_cells` | 關鍵塊體最大格數 | 500 |  |
 | `keyblock_mass_radius` | 大範圍滑動搜尋半徑 (格) | 28 |  |
 | `keyblock_mass_max` | 大範圍滑動最大格數 | 8000 |  |

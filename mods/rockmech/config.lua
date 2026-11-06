@@ -182,7 +182,8 @@ config.failure_defaults = {
 	strength_scale = 1.0,     -- （舊設定，改用 rockmech_model_scale）σci 額外乘上此值
 	max_cascade = 5,          -- 連鎖重算輪數上限
 	cascade_delay = 0.6,      -- 每輪間隔 (s)，讓剝落的岩塊先就位
-	budget_ms = 5,            -- 單次檢查超過此時間就記 log
+	interval = 5,             -- 檢查最快幾秒一次 (s)：這段時間內的觸發合併成一批（主執行緒負擔），連鎖每輪也至少隔這麼久
+	budget_ms = 5,            -- 單次檢查超過此時間的 3 倍就記 log
 }
 
 -- 節理材質（nodes.lua 的材質變體）；設定鍵為 rockmech_jointtex_<key>
@@ -218,7 +219,7 @@ config.stability_defaults = {
 	max_voxels = 2000,        -- 懸空群超過此格數保守視為穩定
 	rigid = true,             -- 懸空群整塊（剛體）落下；false 則逐格落下
 	rigid_max = 128,          -- 剛體落下的格數上限，超過改為逐格落下
-	budget_ms = 5,            -- 單次判定超過此時間就記 log
+	budget_ms = 5,            -- 單次判定超過此時間的 3 倍就記 log
 }
 
 -- 開挖周圍彈性應力場的原型（fem.lua、femstress.lua，只顯示）；設定鍵為 rockmech_fem_<key>
