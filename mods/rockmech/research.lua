@@ -1,5 +1,5 @@
 -- rockmech/research.lua
--- 研究所（經營模式）：每組營地貨櫃辦公室西邊一頂研究帳篷，裡面有「機械技工」「地質專家」。
+-- 研究所（經營模式）：每組營地貨櫃辦公室西邊一頂研究帳篷，裡面有「機械技工」「駐點地質師」。
 --   右鍵研究員打開研發清單（像商店，之後可以改成天賦樹）：每個項目有等級，第 n 級要 基準價 × n、基準時間 × n。
 --   研發用整組的錢、效果整組共用；每組同時只能進行一項。
 --   進度只在該組有組員在線上時才走（每秒）；完成時通知全組。
@@ -44,12 +44,12 @@ local function mmss(s) s = math.max(0, math.ceil(s)); return ("%d:%02d"):format(
 local function money_text(v) return ("%s$%.0f"):format(v < 0 and "−" or "", math.abs(v)) end
 
 ---------------------------------------------------------------------------
--- 研究員：機械技工（站著，旁邊工具箱）、地質專家（坐著，桌上岩樣和文件）
+-- 研究員：機械技工（站著，旁邊工具箱）、駐點地質師（坐著，桌上岩樣和文件）
 ---------------------------------------------------------------------------
 
 local NPCS = {
 	mechanic = {entity = "rockmech:npc_mechanic", title = "機械技工", color = "#ffb060", tint = "#c06010", sit = false},
-	geologist = {entity = "rockmech:npc_geologist", title = "地質專家", color = "#e0d0a0", tint = "#806040", sit = true},
+	geologist = {entity = "rockmech:npc_geologist", title = "駐點地質師", color = "#e0d0a0", tint = "#806040", sit = true},
 }
 
 local function job_of(acc)
@@ -95,7 +95,7 @@ local function form(name, who)
 			y = y + 1.0
 		end
 	end
-	-- 地質專家：雇用（跟著人跑的地質學家）、進修考試（knowledge.lua）
+	-- 駐點地質師：雇用（跟著人跑的地質學家）、進修考試（knowledge.lua）
 	if who == "geologist" and rockmech.knowledge_form then
 		local fs, h = rockmech.knowledge_form(name, y + 0.4)
 		out[#out + 1] = fs
@@ -235,7 +235,7 @@ local PROPS = {
 	-- 機械技工（西半邊）：工作台、工具箱、木箱、油桶
 	{-2, 1, 1, "table"}, {-1, 1, 1, "table"}, {-2, 1, 2, "toolbox"}, {-3, -2, 1, "crate"}, {-3, -2, 2, "crate"},
 	{-3, -1, 1, "barrel"}, {-2, -2, 1, "shelf"},
-	-- 地質專家（東半邊）：書桌、椅子、文件、岩樣（木箱）、工具架當書架
+	-- 駐點地質師（東半邊）：書桌、椅子、文件、岩樣（木箱）、工具架當書架
 	{1, 1, 1, "table"}, {2, 1, 1, "table"}, {2, 1, 2, "papers"}, {2, 0, 1, "chair"},
 	{3, -2, 1, "shelf"}, {3, -2, 2, "shelf"}, {2, -2, 1, "crate"}, {1, 1, 2, "helmets"},
 }

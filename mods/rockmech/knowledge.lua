@@ -1,7 +1,7 @@
 -- rockmech/knowledge.lua
 -- 知識能力（經營模式）：玩家一開始看不到品位、岩性、GSI、應力、FS 這些數字（那是除錯用的），要靠下面任一方式：
 --   1. 儀器（放在背包裡就有效，一種儀器一種能力）：XRF 分析儀 → 品位判讀、GSI 評估圖卡 → 岩體分類、地質羅盤 → 岩石力學
---   2. 雇用地質學家（研究帳篷的地質專家）：$8,000、20 分鐘，雇用期間全組三種能力都有；只在組員在線上時倒數
+--   2. 雇用地質學家（研究帳篷的駐點地質師）：$8,000、20 分鐘，雇用期間全組三種能力都有；只在組員在線上時倒數
 --   3. 進修（研究帳篷南邊的大學教授）：從題庫抽 5 題，答對 4 題就永久取得那一科的能力（個人）；沒過要等 3 分鐘才能再考同一科
 -- 背包（I）的「個人資料」分頁列出自己掌握的能力和來源。
 --   開了 /god 全部看得到（除錯）。不是經營模式全部看得到。
@@ -564,7 +564,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 end)
 core.register_on_leaveplayer(function(player) sessions[player:get_player_name()] = nil end)
 
--- 地質專家畫面裡的「雇用」「進修」區塊（research.lua 呼叫）。回傳 formspec 片段、用掉的高度
+-- 駐點地質師畫面裡的「雇用」「進修」區塊（research.lua 呼叫）。回傳 formspec 片段、用掉的高度
 function rockmech.knowledge_form(name, y)
 	local out = {}
 	out[#out + 1] = ("label[0.5,%g;雇用地質學家：%s]"):format(y + 0.4, core.formspec_escape(rockmech.knowledge_hire_text(name)))
