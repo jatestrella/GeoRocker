@@ -2,7 +2,8 @@
 -- 知識能力（經營模式）：玩家一開始看不到品位、岩性、GSI、應力、FS 這些數字（那是除錯用的），要靠下面任一方式：
 --   1. 儀器（放在背包裡就有效，一種儀器一種能力）：XRF 分析儀 → 品位判讀、GSI 評估圖卡 → 岩體分類、地質羅盤 → 岩石力學
 --   2. 雇用地質學家（研究帳篷的地質專家）：$8,000、20 分鐘，雇用期間全組三種能力都有；只在組員在線上時倒數
---   3. 進修（地質專家）：從題庫抽 5 題，答對 4 題就永久取得那一科的能力（個人）；沒過要等 3 分鐘才能再考同一科
+--   3. 進修（研究帳篷南邊的大學教授）：從題庫抽 5 題，答對 4 題就永久取得那一科的能力（個人）；沒過要等 3 分鐘才能再考同一科
+-- 背包（I）的「個人資料」分頁列出自己掌握的能力和來源。
 --   開了 /god 全部看得到（除錯）。不是經營模式全部看得到。
 -- 題庫：世界資料夾的 questions.txt（沒有就寫一份預設的），老師可以自己改，格式見檔案開頭。
 -- 能力：grade 品位判讀（品位）、rockmass 岩體分類（岩性、GSI、上覆厚度）、mechanics 岩石力學（σ、FS、節理、裂紋）
@@ -568,13 +569,217 @@ function rockmech.knowledge_form(name, y)
 	out[#out + 1] = ("label[0.5,%g;雇用地質學家：%s]"):format(y + 0.4, core.formspec_escape(rockmech.knowledge_hire_text(name)))
 	if hire_left(rockmech.account_of(name)) <= 0 then out[#out + 1] = ("button[11.4,%g;3.4,0.8;hire;雇用]"):format(y) end
 	y = y + 1.1
-	out[#out + 1] = ("label[0.5,%g;進修（考 %d 題、答對 %d 題，永久學會）：]"):format(y + 0.4, EXAM_N, EXAM_PASS)
-	y = y + 0.9
+	out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, core.formspec_escape("想自己學：去旁邊找大學教授進修"))
+	return table.concat(out), 1.9
+end
+
+---------------------------------------------------------------------------
+-- 能力的來源（個人資料頁、教授用）
+---------------------------------------------------------------------------
+
+-- 回傳 有沒有, 來源說明
+local function ability_status(name, key)
 	local player = core.get_player_by_name(name)
-	for i, a in ipairs(ABILITIES) do
-		local x = 0.5 + (i - 1) * 4.8
-		local done = player and player:get_meta():get_string(KNOW .. a.key) == "1"
-		out[#out + 1] = ("button[%g,%g;4.4,0.8;study_%s;%s]"):format(x, y, a.key, core.formspec_escape(a.label .. (done and "（已學會）" or "")))
+	if not player then return false, "" end
+	local meta = player:get_meta()
+	local a = AB[key]
+	local src = {}
+	if meta:get_string(KNOW .. key) == "1" then src[#src + 1] = "進修通過（永久）" end
+	if player:get_inventory():contains_item("main", a.item) then
+		local d = core.registered_items[a.item]
+		src[#src + 1] = "背包裡的" .. ((d and d.description or a.item):gsub("\n.*", ""))
 	end
-	return table.concat(out), 2.9
+	local left = rockmech.account_of and hire_left(rockmech.account_of(name)) or 0
+	if left > 0 then src[#src + 1] = ("雇用的地質學家（剩 %s）"):format(mmss(left)) end
+	if meta:get_int("godmode:on") == 1 then src[#src + 1] = "/god" end
+	return #src > 0, table.concat(src, "、")
+end
+local function cooldown_left(player, key) return player:get_meta():get_int(COOL .. key) - os.time() end
+
+---------------------------------------------------------------------------
+-- 大學教授：研究帳篷南邊的戶外講堂（黑板、講桌、學生椅），右鍵選科目考試
+---------------------------------------------------------------------------
+
+-- 教授的皮膚（64×32，跟 character.png 同一種排法）：灰白頭髮、眼鏡、花白鬍子、咖啡色毛呢外套、白襯衫紅領帶、深色西裝褲
+local function skin()
+	local SKIN, HAIR, JACKET, SHIRT, TIE, PANTS, SHOE, FRAME, LENS, BEARD =
+		"#d8a880", "#d4d4d0", "#6b4a2e", "#f2f2ee", "#8a1c1c", "#3a3a42", "#1a1a1a", "#202020", "#b8d0e0", "#c8c8c4"
+	local f = {"[fill:64x32:#00000000"}
+	local function r(x, y, w, h, c) f[#f + 1] = ("[fill:%dx%d:%d,%d:%s"):format(w, h, x, y, c) end
+	-- 頭：皮膚，頂上與後腦灰白頭髮，兩側上緣頭髮
+	r(0, 8, 32, 8, SKIN); r(16, 0, 8, 8, SKIN); r(8, 0, 8, 8, HAIR)
+	r(0, 8, 8, 3, HAIR); r(16, 8, 8, 3, HAIR); r(24, 8, 8, 6, HAIR); r(8, 8, 8, 1, HAIR)
+	-- 眼鏡（鏡框、鏡片、兩側鏡腳）
+	r(9, 11, 6, 3, FRAME); r(10, 12, 1, 1, LENS); r(13, 12, 1, 1, LENS)
+	r(4, 12, 4, 1, FRAME); r(16, 12, 4, 1, FRAME)
+	-- 鬍子
+	r(10, 14, 4, 1, BEARD); r(10, 15, 4, 1, BEARD); r(9, 15, 1, 1, BEARD); r(14, 15, 1, 1, BEARD)
+	-- 身體：外套；正面白襯衫 V 領、紅領帶、扣子
+	r(16, 16, 24, 16, JACKET)
+	r(22, 20, 4, 4, SHIRT); r(23, 20, 2, 7, TIE); r(23, 28, 1, 1, "#3a2a1a"); r(23, 30, 1, 1, "#3a2a1a")
+	-- 手臂：外套袖子，手掌（最下兩列）皮膚
+	r(40, 16, 16, 16, JACKET); r(40, 30, 16, 2, SKIN); r(48, 16, 4, 4, SKIN)
+	r(44, 24, 4, 3, "#5a3a22")        -- 手肘補丁
+	-- 腿：西裝褲、皮鞋
+	r(0, 16, 16, 16, PANTS); r(0, 30, 16, 2, SHOE); r(8, 16, 4, 4, SHOE)
+	return table.concat(f, "^")
+end
+local PROF_SKIN = skin()
+
+-- 講堂的擺設
+core.register_node("rockmech:camp_blackboard", {
+	description = "黑板", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", is_ground_content = false,
+	tiles = {"default_wood.png", "default_wood.png", "default_wood.png", "default_wood.png",
+		"[fill:16x16:#2f4a3a^[fill:16x1:0,0:#6a4a28^[fill:16x1:0,15:#6a4a28^[fill:10x1:2,4:#d8d8c8^[fill:6x1:3,7:#d8d8c8"
+		.. "^[fill:1x3:10,6:#d8d8c8^[fill:4x1:9,10:#d8d8c8^[fill:8x1:2,12:#d8d8c8", "default_wood.png"},
+	node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.1, 0.5, 0.5, 0.0}},
+	groups = {not_in_creative_inventory = 1},
+})
+core.register_node("rockmech:camp_lectern", {
+	description = "講桌", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", is_ground_content = false,
+	tiles = {"default_wood.png"},
+	node_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.25, 0.3, 0.3, 0.25}, {-0.4, 0.3, -0.35, 0.4, 0.42, 0.3},
+		{-0.15, 0.42, -0.1, 0.15, 0.46, 0.15}}},
+	groups = {not_in_creative_inventory = 1},
+})
+
+local PROF = "rockmech:npc_professor"
+local PROF_FORM = "rockmech:professor"
+local PROF_Z = -26          -- 講堂中心的 z（研究帳篷在 z −19..−13）；x 跟貨櫃辦公室一樣
+
+local function prof_form(name)
+	local player = core.get_player_by_name(name)
+	local out = {"formspec_version[6]size[13,7.4]",
+		"label[0.5,0.6;大學教授：進修考試]",
+		("label[0.5,1.2;%s]"):format(core.formspec_escape(("每科從題庫抽 %d 題，答對 %d 題就永久學會；沒過要等 %d 分鐘才能重考同一科。"):format(
+			EXAM_N, EXAM_PASS, EXAM_COOLDOWN / 60)))}
+	local y = 2.0
+	for _, a in ipairs(ABILITIES) do
+		local status
+		if player and player:get_meta():get_string(KNOW .. a.key) == "1" then status = "已學會"
+		elseif player and cooldown_left(player, a.key) > 0 then status = ("%s 後可以重考"):format(mmss(cooldown_left(player, a.key)))
+		else status = ("題庫 %d 題"):format(#BANK[a.key]) end
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, core.formspec_escape(a.label))
+		out[#out + 1] = ("label[3.5,%g;%s]"):format(y + 0.4, core.formspec_escape(status))
+		out[#out + 1] = ("button[9.4,%g;3,0.8;study_%s;考試]"):format(y, a.key)
+		y = y + 1.1
+	end
+	out[#out + 1] = ("button_exit[5,%g;3,0.8;close;關閉]"):format(y + 0.4)
+	return table.concat(out)
+end
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= PROF_FORM then return end
+	for key in pairs(fields) do
+		local ab = key:match("^study_(%w+)$")
+		if ab and AB[ab] then rockmech.knowledge_exam(player, ab); return true end
+	end
+	return true
+end)
+
+core.register_entity(PROF, {
+	initial_properties = {
+		physical = true, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
+		visual = "mesh", mesh = "character.b3d", textures = {PROF_SKIN},
+		nametag = "大學教授", nametag_color = "#c0d8ff", static_save = false,
+	},
+	on_activate = function(self)
+		self.object:set_armor_groups({immortal = 1})
+		self.object:set_animation({x = 0, y = 79}, 20)
+	end,
+	on_rightclick = function(self, clicker)
+		if clicker and clicker:is_player() then core.show_formspec(clicker:get_player_name(), PROF_FORM, prof_form(clicker:get_player_name())) end
+	end,
+	on_punch = function() return true end,
+})
+if rockmech.career_npcs then rockmech.career_npcs.professor = {entity = PROF, sit = false} end
+
+-- 講堂：教授站在講桌後、背後一排黑板，前面兩排學生椅（面向教授）；整個面向西（礦區那邊），跟研究帳篷排成一排
+local function prof_flag(x0) return "professor_site:" .. x0 end
+function rockmech.career_build_professor(x0)
+	if not rockmech.career_placer then return end
+	storage:set_string(prof_flag(x0), "1")
+	local cx, cz = x0 + (rockmech.career_office_dx or 27), PROF_Z
+	local y
+	for yy = 40, -30, -1 do
+		local n = core.get_node({x = cx, y = yy, z = cz}).name
+		if n ~= "air" and n ~= "ignore" then y = yy; break end
+	end
+	y = y or 0
+	local set, at = rockmech.career_placer(cx, cz, y)
+	for dx = -2, 2 do
+		set(dx, 1, -2, "rockmech:camp_blackboard"); set(dx, 2, -2, "rockmech:camp_blackboard")
+	end
+	set(0, 1, 1, "rockmech:camp_lectern")
+	for _, c in ipairs({{-2, 3}, {0, 3}, {2, 3}, {-1, 4}, {1, 4}}) do
+		set(c[1], 1, c[2], "rockmech:camp_chair", 2)       -- 學生椅轉過來面向教授
+	end
+	local key = rockmech.career_vendor_spots
+	local list = core.deserialize(storage:get_string(key)) or {}
+	local pp = at(0, 0, 0)
+	list[#list + 1] = {kind = "professor", pos = {x = pp.x, y = y + 0.5, z = pp.z}, yaw = math.pi / 2}
+	storage:set_string(key, core.serialize(list))
+end
+
+-- 已經蓋好的營地補上講堂
+if cfg.career then
+	core.after(3, function()
+		local sites = {}
+		if storage:get_string("career_site") == "2" then sites[#sites + 1] = cfg.career_camp_dx end
+		if rockmech.team_site_x then
+			for i = 1, cfg.career_teams do
+				if storage:get_string("team_site:" .. i) == "1" then sites[#sites + 1] = rockmech.team_site_x(tostring(i)) end
+			end
+		end
+		for _, x0 in ipairs(sites) do
+			if storage:get_string(prof_flag(x0)) == "" then
+				local cx = x0 + (rockmech.career_office_dx or 27)
+				core.emerge_area({x = cx - 8, y = -30, z = PROF_Z - 8}, {x = cx + 8, y = 40, z = PROF_Z + 8}, function(_, _, rem)
+					if rem > 0 then return end
+					if storage:get_string(prof_flag(x0)) == "" then
+						rockmech.career_build_professor(x0)
+						core.log("action", ("[rockmech] 營地 x = %d 加上大學教授的講堂"):format(x0))
+					end
+				end)
+			end
+		end
+	end)
+end
+
+---------------------------------------------------------------------------
+-- 個人資料頁（背包 I 的分頁）：組別、資金、三種能力有沒有、從哪來、怎麼取得
+---------------------------------------------------------------------------
+
+if core.get_modpath("sfinv") and sfinv and cfg.career then
+	local F = core.formspec_escape
+	local HOW = {
+		grade = "買 XRF 分析儀、雇用地質學家，或找大學教授考試",
+		rockmass = "買 GSI 評估圖卡、雇用地質學家，或找大學教授考試",
+		mechanics = "買地質羅盤、雇用地質學家，或找大學教授考試",
+	}
+	sfinv.register_page("rockmech:profile", {
+		title = "個人資料",
+		get = function(self, player, context)
+			local name = player:get_player_name()
+			local team = rockmech.team_of and rockmech.team_of(name)
+			local fs = {("label[0,0;%s]"):format(F(("%s　%s"):format(name, team and ("第 " .. team .. " 組") or "沒有分組")))}
+			if rockmech.has_account and rockmech.has_account(name) then
+				fs[#fs + 1] = ("label[0,0.5;%s]"):format(F(("資金 $%.0f"):format(rockmech.money(name))))
+			end
+			fs[#fs + 1] = ("label[0,1.2;%s]"):format(F("掌握的能力"))
+			local y = 1.7
+			for _, a in ipairs(ABILITIES) do
+				local has, src = ability_status(name, a.key)
+				fs[#fs + 1] = ("label[0,%g;%s]"):format(y, F((has and "● " or "○ ") .. a.label))
+				if has then
+					fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F("來源：" .. src))
+				else
+					local cd = cooldown_left(player, a.key)
+					fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F(HOW[a.key] .. (cd > 0 and ("（重考還要 " .. mmss(cd) .. "）") or "")))
+				end
+				y = y + 0.6
+			end
+			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.3, F("品位判讀：看得到品位　岩體分類：岩性、GSI、上覆厚度　岩石力學：應力、安全係數、裂紋"))
+			return sfinv.make_formspec(player, context, table.concat(fs), false)
+		end,
+	})
 end

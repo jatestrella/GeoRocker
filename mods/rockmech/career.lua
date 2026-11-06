@@ -722,6 +722,7 @@ local function build_camp(owner, x0)
 	storage:set_string("camp_layout2:" .. x0, "1")       -- 新配置（建築在破碎站那一排、面向西）
 	build_market(x0)
 	if rockmech.career_build_research then rockmech.career_build_research(x0) end      -- 研究帳篷（research.lua）
+	if rockmech.career_build_professor then rockmech.career_build_professor(x0) end    -- 大學教授的講堂（knowledge.lua）
 	local team = owner:match("^team:(%d)$")
 	if team then build_sign(x0, team) end
 	local y = ground_y(x0 + CRUSHER_X, CAMP_Z) or 0
