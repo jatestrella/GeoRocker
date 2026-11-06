@@ -1,6 +1,8 @@
--- 合成音效，輸出 sounds/rockmech_crack.<n>.ogg（岩石破裂）、rockmech_engine.1.ogg（引擎，循環播放）、rockmech_coin.1.ogg（破碎站結算的金幣聲）。
+-- 合成音效，輸出 sounds/rockmech_crack.<n>.ogg（岩石破裂）、rockmech_engine.1.ogg（引擎，循環播放）、rockmech_coin.1.ogg（破碎站結算的金幣聲）、
+-- rockmech_drone.1.ogg（無人機旋翼，循環播放）。
 -- 單聲道：Luanti 的定位音效只對單聲道有效。
--- 遊戲不會載入這個檔案。在 rockmech 目錄下執行：lua devtools/synth_sounds.lua [原始 PCM 輸出目錄]
+-- 遊戲不會載入這個檔案。在 rockmech 目錄下執行：lua devtools/synth_sounds.lua [原始 PCM 輸出目錄 [只輸出名稱含這個字的]]
+-- （要 Lua 5.3：沒有獨立的 lua 時，TeX Live 的 texlua 也可以。只重做一個音效：texlua devtools/synth_sounds.lua "" drone）
 --
 -- 聲音：主破裂（寬頻雜訊爆裂 + 裂縫傳播的細爆裂 + 低頻隆隆聲），接著一串微破裂與碎屑顆粒
 -- （發生率隨時間 ∝ 1/(t + c) 衰減，Omori 餘震律），再過一段短的地下迴響。
@@ -156,6 +158,38 @@ local function render_engine(v)
 end
 
 local ENGINE = {seed = 101, len = 2, f0 = 62, harmonics = 5, roll = 1.6, noise = 0.15}
+
+-- 無人機：四顆旋翼的葉片通過頻率（約 180 Hz）各差幾 Hz，疊起來有忽大忽小的拍頻（真的四軸機就是這樣），
+-- 諧波衰減得比引擎慢（比較尖的嗡嗡聲），再加中高頻的氣流雜訊。頻率都是 0.5 Hz 的倍數：len = 2 秒內整數週期，循環沒有接縫
+local function render_drone(v)
+	math.randomseed(v.seed)
+	local L = math.floor(v.len * RATE)
+	local buf = {}
+	for i = 1, L do buf[i] = 0 end
+	for _, f0 in ipairs(v.rotors) do
+		for h = 1, v.harmonics do
+			local cycles = math.floor(f0 * h * v.len + 0.5)
+			local w, ph, amp = 2 * math.pi * cycles / L, math.random() * 2 * math.pi, 1 / h ^ v.roll
+			for i = 1, L do buf[i] = buf[i] + amp * math.sin(w * i + ph) end
+		end
+	end
+	local n, lp, slow = {}, 0, 0
+	for i = 1, L do n[i] = 2 * math.random() - 1 end
+	local a_hi, a_lo = 1 - math.exp(-2 * math.pi * 6000 / RATE), 1 - math.exp(-2 * math.pi * 600 / RATE)
+	for pass = 1, 2 do
+		for i = 1, L do
+			lp = lp + a_hi * (n[i] - lp)
+			slow = slow + a_lo * (lp - slow)
+			if pass == 2 then buf[i] = buf[i] + v.noise * (lp - slow) end
+		end
+	end
+	local peak = 0
+	for i = 1, L do peak = math.max(peak, math.abs(buf[i])) end
+	for i = 1, L do buf[i] = buf[i] / peak * 0.8 end
+	return buf
+end
+
+local DRONE = {seed = 202, len = 2, rotors = {177, 182.5, 186, 191.5}, harmonics = 6, roll = 1.1, noise = 1.2}
 
 -- 金幣（破碎站結算）：兩枚硬幣先後落下的「叮—叮」。硬幣是薄圓板，振動模態不是基頻的整數倍（不像弦），
 -- 聽起來才像金屬而不是音符；每個模態指數衰減，越高的衰減越快。敲擊瞬間加一點極短的雜訊
@@ -475,7 +509,10 @@ end
 ---------------------------------------------------------------------------
 
 local raw_dir = arg and arg[1]
+if raw_dir == "" then raw_dir = nil end
+local only = arg and arg[2]
 local function write(name, i, pcm)
+	if only and not name:find(only, 1, true) then return end
 	local size = encode(pcm, ("sounds/%s.%d.ogg"):format(name, i))
 	print(("%s.%d：%.2f 秒，%d bytes"):format(name, i, #pcm / RATE, size))
 	if raw_dir then
@@ -487,3 +524,4 @@ end
 for i, v in ipairs(VARIANTS) do write("rockmech_crack", i, render(v)) end
 write("rockmech_engine", 1, render_engine(ENGINE))
 write("rockmech_coin", 1, render_coin(COIN))
+write("rockmech_drone", 1, render_drone(DRONE))

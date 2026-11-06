@@ -3,7 +3,7 @@
 --   拿著遙控器按右鍵起飛：無人機從身邊升起，玩家附在無人機上看第一人稱畫面（身體先藏起來，別人看到的是無人機）。
 --   WASD 照視線方向水平移動 SPEED m/s，按住 E 加速到 BOOST 倍；空白鍵上升、Shift 下降 CLIMB m/s；會撞到地形。
 --   高度上限：起飛點上方 CEILING m。再按一次右鍵就回到起飛點。
---   HUD：對地高度、比起飛點高多少、速度、方位、座標。
+--   HUD：對地高度、比起飛點高多少、速度、方位、座標。旋翼聲 rockmech_drone（devtools/synth_sounds.lua 合成），移動時大聲一點。
 --   飛行時暫時強制載入下方 ±LOAD_R m 的區塊：玩家飛高了，地上的區塊離玩家太遠會停用，上面的車就看不到了。
 --   飛行中斷線、伺服器重開：起飛點記在玩家 meta，下次登入就回到起飛點。
 
@@ -13,6 +13,7 @@ local CEILING = 80          -- 高度上限：起飛點上方 (m)
 local LOAD_R = 40           -- 飛行時強制載入下方 ±LOAD_R m（約 80 × 80 m）
 local LOAD_DOWN, LOAD_UP = 32, 16   -- 強制載入的高度範圍：起飛點下方、上方 (m)
 local HOME_KEY = "rockmech:drone_home"
+local SOUND_HOVER, SOUND_MOVE = 0.35, 0.6   -- 旋翼聲音量：懸停、移動（跟 rockmech_vehicle_sound_gain 相乘）
 
 local flights = {}          -- 玩家名稱 → {id, drone, home, hud, loaded = {hash → pos}, props, nametag}
 local next_id = 0           -- 飛行編號：無人機實體用它認自己的那趟（ObjectRef 不能用 == 比）
@@ -160,6 +161,7 @@ local function land(name)
 		end
 		player:get_meta():set_string(HOME_KEY, "")
 	end
+	if f.sound then core.sound_stop(f.sound) end
 	if f.drone and f.drone:get_pos() then
 		for _, c in ipairs(f.drone:get_children()) do if not c:is_player() then c:remove() end end
 		f.drone:remove()
@@ -195,6 +197,12 @@ local function take_off(player)
 	f.hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.86}, alignment = {x = 0, y = -1},
 		number = 0x9fe0ff, text = "", z_index = 100})
 	update_load(f, start)
+	-- 旋翼聲：跟著無人機走，附近的人也聽得到
+	local g = rockmech.cfg.vehicle_sound_gain or 1
+	if g > 0 then
+		f.sound = core.sound_play("rockmech_drone", {object = d, loop = true, gain = SOUND_HOVER * g, max_hear_distance = 40})
+		f.sound_gain = SOUND_HOVER
+	end
 	core.chat_send_player(name, ("[無人機] 起飛！WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點（上限：起飛點上方 %d m）"):format(CEILING))
 end
 
@@ -224,6 +232,12 @@ core.register_globalstep(function(dtime)
 			local vy = (ctrl.jump and CLIMB or 0) - (ctrl.sneak and CLIMB or 0)
 			if vy > 0 and pos.y >= f.home.y + CEILING then vy = 0 end
 			d:set_velocity({x = (fwd * fx + side * rx) * k, y = vy, z = (fwd * fz + side * rz) * k})
+			-- 移動時旋翼聲大一點
+			local want = (len > 0 or vy ~= 0) and SOUND_MOVE or SOUND_HOVER
+			if f.sound and want ~= f.sound_gain then
+				f.sound_gain = want
+				core.sound_fade(f.sound, 2, want * (rockmech.cfg.vehicle_sound_gain or 1))
+			end
 			-- 強制載入跟著走（換了區塊才重算）
 			local bh = core.hash_node_position({x = math.floor(pos.x / 16), y = 0, z = math.floor(pos.z / 16)})
 			if bh ~= f.block then f.block = bh; update_load(f, pos) end
