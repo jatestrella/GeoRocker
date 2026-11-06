@@ -96,6 +96,7 @@ config.shop = {
 	{key = "anfo", shop = "blast", item = "rockmech:anfo", label = "ANFO", price = 1000, count = 10},
 	{key = "bolt", shop = "tools", item = "rockmech:rock_bolt", label = "岩栓", price = 300, count = 10},
 	{key = "shotcrete", shop = "tools", item = "rockmech:shotcrete", label = "噴凝土", price = 800, count = 10},
+	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = "無人機", price = 2000},
 	{key = "compass", shop = "tools", item = "rockmech:compass", label = "地質羅盤", price = 200},
 }
 
