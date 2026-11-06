@@ -23,12 +23,80 @@ function V.may_use(self, name)
 	core.chat_send_player(name, ("這是%s的車，別組不能開"):format(rockmech.account_label(self.owner)))
 	return false
 end
+-- 指著車看到的說明：哪一組的車、耐久度
+function V.update_infotext(self)
+	local t = {}
+	if self.owner and self.owner ~= "" and rockmech.account_label then t[#t + 1] = rockmech.account_label(self.owner) .. "的車" end
+	local hp = self.hp or 100
+	if hp <= 0 then t[#t + 1] = "【報廢】找機械技工修理"
+	elseif hp < 100 then t[#t + 1] = ("耐久 %d%%"):format(math.floor(hp + 0.5)) end
+	self.object:set_properties({infotext = table.concat(t, "\n")})
+end
 function V.set_owner(self, acc)
 	self.owner = acc
-	if acc and acc ~= "" and rockmech.account_label then
-		self.object:set_properties({infotext = rockmech.account_label(acc) .. "的車"})
+	V.update_infotext(self)
+end
+
+-- 耐久度（impact.lua 的落石、之後的機械技工修理）：0–100%，存在 mod storage 的 vhp:<車輛編號>
+-- = {hp, owner, kind, pos}，車子沒載入時機械技工也查得到。100 kJ 的撞擊扣到 0（報廢）：
+-- 低於 WORN 冒黑煙、跑得慢；0 不能開、不能作業，冒濃煙
+local VHP = "vhp:"
+local HP_PER_KJ = 1          -- 每 kJ 扣幾 %
+V.WORN = 30
+local function vstorage() return rockmech.collapse.storage end
+function V.save_hp(self)
+	local st = vstorage()
+	if (self.hp or 100) >= 100 then st:set_string(VHP .. self.uid, "")
+	else
+		local p = self.object:get_pos()
+		st:set_string(VHP .. self.uid, core.serialize({hp = self.hp, owner = self.owner, kind = self.vkind,
+			pos = p and vector.round(p)}))
 	end
 end
+function V.load_hp(self)
+	local s = vstorage():get_string(VHP .. self.uid)
+	local d = s ~= "" and core.deserialize(s)
+	self.hp = d and d.hp or 100
+	V.update_infotext(self)
+end
+function V.damage(self, kj)
+	if not self or not self.uid then return end
+	local before = self.hp or 100
+	if before <= 0 then return end
+	self.hp = math.max(0, before - kj * HP_PER_KJ)
+	V.save_hp(self)
+	V.update_infotext(self)
+	if V.update_hud then V.update_hud(self) end
+	local def = V.TYPES[self.vkind]
+	local who = self.driver
+	local msg = self.hp <= 0 and ("%s被落石砸到報廢了（%.0f kJ），找機械技工修理"):format(def.desc, kj)
+		or ("%s被落石砸到（%.0f kJ），耐久剩 %d%%"):format(def.desc, kj, math.floor(self.hp + 0.5))
+	if self.owner and rockmech.account_members then
+		for _, m in ipairs(rockmech.account_members(self.owner)) do core.chat_send_player(m, "[車輛] " .. msg) end
+	elseif who then core.chat_send_player(who, "[車輛] " .. msg) end
+end
+-- 受損的車冒煙（沒有人開也冒）
+local function damage_smoke(self, dtime)
+	local hp = self.hp or 100
+	if hp >= V.WORN then return end
+	self.dsmoke_t = (self.dsmoke_t or 0) + dtime
+	if self.dsmoke_t < 0.4 then return end
+	self.dsmoke_t = 0
+	local p = self.object:get_pos()
+	local near = false
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), p) < 64 then near = true; break end
+	end
+	if not near then return end
+	local def = V.TYPES[self.vkind]
+	local o = {x = p.x, y = p.y + (def.top or def.half) + 0.3, z = p.z}
+	core.add_particlespawner({amount = hp <= 0 and 8 or 3, time = 0.4,
+		minpos = vector.subtract(o, 0.6), maxpos = vector.add(o, 0.6),
+		minvel = {x = -0.3, y = 1.0, z = -0.3}, maxvel = {x = 0.3, y = 2.2, z = 0.3},
+		minexptime = 1.5, maxexptime = 3, minsize = 3, maxsize = hp <= 0 and 9 or 5,
+		texture = "[fill:4x4:#1a1a1a^[opacity:" .. (hp <= 0 and 200 or 140)})
+end
+V.damage_smoke = damage_smoke
 
 -- 各種車的設定（各車的檔案用 V.register 加入）。
 -- desc、color；cap：載量（級）；speed：m/s；half：碰撞箱半邊長；lat：車頭外一排的橫向位置（相對中心）；
@@ -1016,6 +1084,7 @@ function V.register(kind, def)
 				self.store = data.store or {}
 				if data.yaw then self.object:set_yaw(data.yaw) end
 				if data.owner then V.set_owner(self, data.owner) end
+				V.load_hp(self)
 			end
 			if def.on_load then def.on_load(self, data or {}) end
 			self.object:set_acceleration({x = 0, y = -9.81, z = 0})
@@ -1159,6 +1228,8 @@ function V.register(kind, def)
 				end
 			end
 			local fwd, turn = 0, 0
+			damage_smoke(self, dtime)
+			local wrecked = (self.hp or 100) <= 0
 			-- self.autopilot：沒有駕駛時的控制輸入（測試、指令用），格式同 get_player_control
 			local ctrl = d and d:get_player_control() or self.autopilot or {}
 			local driven = d or self.autopilot
@@ -1168,6 +1239,7 @@ function V.register(kind, def)
 				if def.pushed then fwd = -fwd end
 				turn = (ctrl.left and 1 or 0) - (ctrl.right and 1 or 0)
 			end
+			if wrecked then fwd, turn = 0, 0 end                                   -- 報廢：不能開、不能轉
 			-- 手推車沒有方向盤：人看哪裡就推向哪裡
 			if def.pushed and d then
 				local rel = (d:get_look_horizontal() - yaw) % (2 * math.pi) - math.pi
@@ -1197,7 +1269,7 @@ function V.register(kind, def)
 			local slide_x, slide_z = slide_step(self, pos, def, dtime)
 			if fwd ~= 0 or (self.slide or 0) > 0 then V.press_rubble(self, kind, def, pos, dir, fwd ~= 0 and fwd or 1) end
 			-- 直線前進一段時間後慢慢加速到 top_speed；轉彎時減速回 speed，停下、倒車就回到 speed
-			local speed = def.speed * fwd
+			local speed = def.speed * fwd * ((self.hp or 100) < V.WORN and 0.6 or 1)   -- 受損：跑得慢
 			if def.top_speed then
 				local cur = self.cruise or def.speed
 				if fwd > 0 and turn == 0 then cur = math.min(def.top_speed, cur + def.accel * dtime)
@@ -1274,7 +1346,7 @@ function V.register(kind, def)
 			end
 			-- 作業鍵（防連按：各車自己設 self.t_act）
 			self.t_act = self.t_act - dtime
-			if driven and self.t_act <= 0 and def.action then def.action(self, ctx) end
+			if driven and self.t_act <= 0 and def.action and not wrecked then def.action(self, ctx) end
 		end,
 	})
 	core.register_craftitem(ename .. "_item", {

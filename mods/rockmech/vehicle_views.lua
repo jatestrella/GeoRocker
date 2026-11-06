@@ -23,6 +23,9 @@ local function hud_text(self)
 	end
 	if def.hud then s = s .. def.hud(self) end
 	if def.top_speed then s = s .. ("　%d km/h"):format(self.kmh or 0) end
+	local hp = self.hp or 100
+	if hp <= 0 then s = s .. "\n" .. core.colorize("#ff6040", "【報廢】不能開，找機械技工修理")
+	elseif hp < 100 then s = s .. core.colorize(hp < V.WORN and "#ff9040" or "#ffffff", ("　耐久 %d%%"):format(math.floor(hp + 0.5))) end
 	if self.steep then s = s .. "\n" .. self.steep end
 	return s .. (def.pushed and "　Shift 放手" or "　Z 切換視角　Shift 下車")
 end
