@@ -80,6 +80,12 @@ function rockmech.get_joint_sets()
 		rockmech.seed = rockmech.joints.seed_from_string(seed_str or "0")
 		prepared_sets = rockmech.joints.prepare(cfg.joint_sets, rockmech.seed, cfg.joint_lattice,
 			cfg.joint_persistence)
+		-- 煤層不帶節理（煤是軟弱的層狀岩，節理組只發育在頂底板的頁岩裡）：煤層裡、和煤層接觸的面都不算節理
+		local s = cfg.coal_seam
+		if s and not cfg.coal_joints then
+			local in_seam = rockmech.stress.in_seam
+			prepared_sets.skip = function(x, y, z) return in_seam(s, x, y, z) end
+		end
 	end
 	return prepared_sets
 end

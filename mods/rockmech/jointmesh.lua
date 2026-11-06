@@ -63,7 +63,10 @@ local function build_cids()
 		solid_cid[core.get_content_id(name)] = (def.drawtype == nil or def.drawtype == "normal")
 			and def.walkable ~= false
 	end
-	for _, n in ipairs(rockmech.lith_nodes) do rock_cid[core.get_content_id(n)] = true end
+	for _, n in ipairs(rockmech.lith_nodes) do
+		-- 煤層不帶節理（init.lua 的 get_joint_sets）：煤的方塊不畫節理線
+		if not ((rockmech.lith_of_node[n] or {}).name == "coal" and not rockmech.cfg.coal_joints) then rock_cid[core.get_content_id(n)] = true end
+	end
 	solid_cid[core.get_content_id("ignore")] = true
 end
 

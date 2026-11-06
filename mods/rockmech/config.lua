@@ -717,6 +717,8 @@ function config.load(get)
 	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)
 	-- 怪手操作員日薪（wages.lua）：每個交易日 $，按雇用時間比例、只在組員在線時計
 	cfg.operator_wage = math.max(0, tonumber(get("rockmech_operator_wage")) or 3000)
+	-- 煤層帶不帶節理（預設不帶：節理組只在頁岩裡）
+	cfg.coal_joints = parse_bool(get("rockmech_coal_joints")) == true
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_big_rate = math.max(0.1, tonumber(get("rockmech_crusher_big_rate")) or 10)   -- 大型破碎站 (t/s)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)

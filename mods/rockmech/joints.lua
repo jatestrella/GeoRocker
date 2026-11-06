@@ -235,7 +235,18 @@ end
 
 -- 面上是否有任何一組節理。回傳第一個成立的組索引或 nil。
 -- （階段 3 建圖用的熱路徑）
+-- sets.skip(x, y, z)（可選）：這一格不帶節理（例如煤層）。面的任一側是這種格子，面就不是節理
+local AX = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+local function skipped(sets, x, y, z, axis)
+	local skip = sets.skip
+	if not skip then return false end
+	local e = AX[axis]
+	return skip(x, y, z) or skip(x + e[1], y + e[2], z + e[3])
+end
+joints.face_skipped = skipped
+
 function joints.face_joint(sets, x, y, z, axis)
+	if skipped(sets, x, y, z, axis) then return nil end
 	for i = 1, #sets do
 		local js = sets[i]
 		local L = js.L
@@ -256,11 +267,12 @@ end
 -- 回傳 {{set=index, k=, r=, joint=bool}, ...}
 function joints.face_info(sets, x, y, z, axis)
 	local out = {}
+	local skip = skipped(sets, x, y, z, axis)
 	for i = 1, #sets do
 		local js = sets[i]
 		local k, r = joints.face_crossing(js, x, y, z, axis)
 		if k then
-			out[#out + 1] = {set = i, k = k, r = r, joint = r < js.persistence}
+			out[#out + 1] = {set = i, k = k, r = r, joint = not skip and r < js.persistence}
 		end
 	end
 	return out
