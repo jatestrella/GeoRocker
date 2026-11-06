@@ -321,7 +321,16 @@ local function show_bill(name, title, rows)
 end
 core.register_on_leaveplayer(function(player) bills[player:get_player_name()] = nil end)
 
+local eat_body
 local function eat(pos, dtime, rate, limit, take)
+	local C = rockmech.collapse
+	C.quiet = C.quiet + 1        -- 倉內作業：移除碎石不觸發岩石力學判定（倉壁有護坡）
+	local ok, eaten = pcall(function() return eat_body(pos, dtime, rate, limit, take) end)
+	C.quiet = C.quiet - 1
+	if not ok then error(eaten) end
+	return eaten
+end
+eat_body = function(pos, dtime, rate, limit, take)
 	local meta = core.get_meta(pos)
 	local budget = meta:get_float("carry") + rate * dtime / tons_of(1)
 	local want = math.min(math.floor(budget), limit or math.huge)

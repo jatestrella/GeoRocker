@@ -932,6 +932,8 @@ for k in pairs(ex_storage:to_table().fields) do
 end
 function collapse.is_excavated_at(x, y, z) return excavated[ex_id(x, y, z)] == true end
 function collapse.is_excavated(p) return excavated[ex_id(p.x, p.y, p.z)] == true end
+collapse.quiet = 0          -- > 0：受料倉內作業中，移除碎石不觸發岩石力學判定（見 on_destruct）
+
 function collapse.mark_excavated(p)
     p = vector.round(p)
     local id = ex_id(p.x, p.y, p.z)
@@ -1729,6 +1731,9 @@ local function register_physics_events(name, intact)
         on_destruct = function(pos)
             collapse.mark_excavated(pos)
             rockmech.shotcrete_uncover(pos)
+            -- 受料倉裡的作業（破碎站、選礦場吃料、倉內碎石往格柵流，crusher.lua 設 collapse.quiet）：
+            -- 倉壁有混凝土護坡，碎石怎麼動都不會露出岩面，不排穩定、破壞、應力解（原本一座破碎站一分鐘排一百多次）
+            if collapse.quiet > 0 then return end
             -- 穩定判定不受防護限制：任何移除（包括物理系統把碎石移走、
             -- 落石離開原位）都可能讓上方岩石懸空。判定很便宜，且只會讓
             -- 懸空群落下，不會無限連鎖。
