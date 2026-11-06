@@ -261,6 +261,20 @@ end
 -- 所以由伺服器每一步檢查，站進那段的玩家往最近的開放側推出去（不往車身那側推）。
 -- regions：車身座標的長方體 {x0, x1, z0, z1, y0, y1, body = "z0"／"z1"（貼著車身的那側，可省略）}
 local PLAYER_R, PLAYER_H = 0.3, 1.7
+local PUSH_CLEAR = 0.15     -- 推出去時離邊界再多留這麼多 (m)：剛好推到邊界上，浮點誤差會讓下一步又算在裡面，
+                            -- 每一步都重設位置，人就浮在半空、走不動（看起來卡在車上）
+-- 玩家的身體（半徑 PLAYER_R、高 PLAYER_H，腳底 q）蓋到的格子都是空的
+local function body_free(q)
+	for x = math.floor(q.x - PLAYER_R + 0.5), math.floor(q.x + PLAYER_R + 0.5) do
+		for z = math.floor(q.z - PLAYER_R + 0.5), math.floor(q.z + PLAYER_R + 0.5) do
+			for y = math.floor(q.y + 0.5 + 0.01), math.floor(q.y + PLAYER_H + 0.5) do
+				if not V.passable(core.get_node({x = x, y = y, z = z}).name) then return false end
+			end
+		end
+	end
+	return true
+end
+V.body_free = body_free
 -- 玩家腳底 p（世界座標）在車身 pos、朝向 yaw 時要推到哪裡（世界座標）；不在任何一段裡回傳 nil
 function V.overhang_push(regions, pos, yaw, p)
 	local c, sn = math.cos(yaw), math.sin(yaw)
@@ -272,10 +286,11 @@ function V.overhang_push(regions, pos, yaw, p)
 			-- 候選位置：左、右、不貼車身的前或後、車頂上，由近到遠；選第一個站得下人的（腳和頭那兩格都是空的）。
 			-- 不然車停在山壁、受料倉邊時，人會被推進岩石裡，看起來就是卡在車裡出不來
 			local cands = {}
+			m = PLAYER_R + PUSH_CLEAR
 			local function add(d, x, z, top)
 				local q = top and {x = p.x, y = pos.y + r.y1, z = p.z}
 					or {x = p.x + x * c - z * sn, y = p.y, z = p.z + x * sn + z * c}
-				cands[#cands + 1] = {d = math.abs(d), q = q}
+				cands[#cands + 1] = {d = math.abs(d), q = q, top = top}
 			end
 			add(r.x0 - m - lx, r.x0 - m - lx, 0)
 			add(r.x1 + m - lx, r.x1 + m - lx, 0)
@@ -283,21 +298,25 @@ function V.overhang_push(regions, pos, yaw, p)
 			if r.body ~= "z1" then add(r.z1 + m - lz, 0, r.z1 + m - lz) end
 			add(r.y1 - ly - 0.4, 0, 0, true)       -- 車頂：剛好在上緣附近時最近
 			table.sort(cands, function(a, b) return a.d < b.d end)
-			-- 玩家的身體（半徑 PLAYER_R、高 PLAYER_H）蓋到的格子都要是空的
-			local function free(q)
-				for x = math.floor(q.x - PLAYER_R + 0.5), math.floor(q.x + PLAYER_R + 0.5) do
-					for z = math.floor(q.z - PLAYER_R + 0.5), math.floor(q.z + PLAYER_R + 0.5) do
-						for y = math.floor(q.y + 0.5 + 0.01), math.floor(q.y + PLAYER_H + 0.5) do
-							if not V.passable(core.get_node({x = x, y = y, z = z}).name) then return false end
+			for _, cd in ipairs(cands) do
+				if not cd.top and body_free(cd.q) then return cd.q end
+			end
+			-- 近的都被擋住：往左右、不貼車身的那頭再外推，最多 3 m（同一高度或高一格）
+			for extra = 1, 3 do
+				for _, cd in ipairs(cands) do
+					if not cd.top then
+						local dx, dz = cd.q.x - p.x, cd.q.z - p.z
+						local len = math.sqrt(dx * dx + dz * dz)
+						if len > 1e-3 then
+							for _, dy in ipairs({0, 1}) do
+								local q = {x = cd.q.x + dx / len * extra, y = cd.q.y + dy, z = cd.q.z + dz / len * extra}
+								if body_free(q) then return q end
+							end
 						end
 					end
 				end
-				return true
 			end
-			for _, cd in ipairs(cands) do
-				if free(cd.q) then return cd.q end
-			end
-			return {x = p.x, y = pos.y + r.y1, z = p.z}      -- 四周都被擋住：站到車頂上
+			return {x = p.x, y = pos.y + r.y1 + 0.05, z = p.z}      -- 四周都被擋住：站到車頂上
 		end
 	end
 end
@@ -1070,12 +1089,30 @@ local function get_off(self)
 		d:set_camera({mode = "any"})
 		set_seated(d, false)
 		hud_clear(self, d)
-		-- 放到車身左側外 1 m（不能放進車身或碰撞塊裡，會卡住）
+		-- 放到車外站得下人的地方（不能放進車身、伸出去的車斗或岩石、碎石裡，會卡住）：
+		-- 左側、右側（車身中段、靠後）、車尾後、車頭前，依序選第一個空的；腳底在地面上（或高一格）
 		local p = self.object:get_pos()
-		local _, s = dirs(self.object:get_yaw())
-		local side = TYPES[self.vkind].half + 1
+		local yaw = self.object:get_yaw()
+		local def = TYPES[self.vkind]
+		local c, sn = math.cos(yaw), math.sin(yaw)
+		local hw = def.half + PLAYER_R + PUSH_CLEAR + 0.3
+		-- 伸出碰撞箱那段（車斗、挖臂…）的寬度也要讓開
+		for _, r in ipairs(def.overhangs or {}) do hw = math.max(hw, -r.x0 + PLAYER_R + PUSH_CLEAR, r.x1 + PLAYER_R + PUSH_CLEAR) end
+		local rear = (def.rear or def.half) + PLAYER_R + PUSH_CLEAR + 0.3
+		local cands = {{-hw, 0}, {hw, 0}, {-hw, -rear / 2}, {hw, -rear / 2}, {0, -rear}, {0, def.half + 1.2},
+			{-hw - 1.5, 0}, {hw + 1.5, 0}}
+		local feet = p.y - def.half + 0.05
+		local spot
+		for _, cd in ipairs(cands) do
+			for _, dy in ipairs({0, 1}) do
+				local q = {x = p.x + cd[1] * c - cd[2] * sn, y = feet + dy, z = p.z + cd[1] * sn + cd[2] * c}
+				if body_free(q) then spot = q; break end
+			end
+			if spot then break end
+		end
+		spot = spot or {x = p.x, y = p.y + (def.top or def.half) + 0.1, z = p.z}     -- 四周都被擋住：站到車頂上
 		core.after(0.1, function()
-			if d:get_pos() then d:set_pos({x = p.x - s.z * side, y = p.y + 0.5, z = p.z + s.x * side}) end
+			if d:get_pos() then d:set_pos(spot) end
 		end)
 	end
 	self.driver = nil
