@@ -203,12 +203,13 @@ for who, npc in pairs(NPCS) do
 	core.register_entity(npc.entity, {
 		initial_properties = {
 			physical = true, collisionbox = npc.sit and {-0.3, 0, -0.3, 0.3, 1.2, 0.3} or {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
-			visual = "mesh", mesh = "character.b3d", textures = {"character.png^[colorize:" .. npc.tint .. ":80"},
+			visual = "mesh", mesh = "character.b3d", textures = {rockmech.npc_skin(who)},      -- 造型：npc_skins.lua
 			nametag = npc.title, nametag_color = npc.color, static_save = false,
 		},
 		on_activate = function(self)
 			self.object:set_armor_groups({immortal = 1})
 			self.object:set_yaw(0)
+			rockmech.npc_dress(self.object, who)
 			if npc.sit then self.object:set_animation({x = 81, y = 160}, 30)
 			else self.object:set_animation({x = 0, y = 79}, 30) end
 		end,

@@ -101,13 +101,14 @@ local followers = {}                    -- 帳戶 → entity
 core.register_entity(FOLLOWER, {
 	initial_properties = {
 		physical = true, collide_with_objects = false, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
-		visual = "mesh", mesh = "character.b3d", textures = {"character.png^[colorize:#806040:80"},
+		visual = "mesh", mesh = "character.b3d", textures = {rockmech.npc_skin("geologist")},
 		nametag = "地質學家", nametag_color = "#e0d0a0", stepheight = 1.1, static_save = false,
 	},
 	on_activate = function(self)
 		self.object:set_armor_groups({immortal = 1})
 		self.object:set_acceleration({x = 0, y = -9.81, z = 0})
 		self.object:set_animation({x = 0, y = 79}, 30)
+		rockmech.npc_dress(self.object, "geologist")
 	end,
 	on_step = function(self, dtime)
 		local acc = self.acc
@@ -600,31 +601,7 @@ local function cooldown_left(player, key) return player:get_meta():get_int(COOL 
 -- 大學教授：研究帳篷南邊的戶外講堂（黑板、講桌、學生椅），右鍵選科目考試
 ---------------------------------------------------------------------------
 
--- 教授的皮膚（64×32，跟 character.png 同一種排法）：灰白頭髮、眼鏡、花白鬍子、咖啡色毛呢外套、白襯衫紅領帶、深色西裝褲
-local function skin()
-	local SKIN, HAIR, JACKET, SHIRT, TIE, PANTS, SHOE, FRAME, LENS, BEARD =
-		"#d8a880", "#d4d4d0", "#6b4a2e", "#f2f2ee", "#8a1c1c", "#3a3a42", "#1a1a1a", "#202020", "#b8d0e0", "#c8c8c4"
-	local f = {"[fill:64x32:#00000000"}
-	local function r(x, y, w, h, c) f[#f + 1] = ("[fill:%dx%d:%d,%d:%s"):format(w, h, x, y, c) end
-	-- 頭：皮膚，頂上與後腦灰白頭髮，兩側上緣頭髮
-	r(0, 8, 32, 8, SKIN); r(16, 0, 8, 8, SKIN); r(8, 0, 8, 8, HAIR)
-	r(0, 8, 8, 3, HAIR); r(16, 8, 8, 3, HAIR); r(24, 8, 8, 6, HAIR); r(8, 8, 8, 1, HAIR)
-	-- 眼鏡（鏡框、鏡片、兩側鏡腳）
-	r(9, 11, 6, 3, FRAME); r(10, 12, 1, 1, LENS); r(13, 12, 1, 1, LENS)
-	r(4, 12, 4, 1, FRAME); r(16, 12, 4, 1, FRAME)
-	-- 鬍子
-	r(10, 14, 4, 1, BEARD); r(10, 15, 4, 1, BEARD); r(9, 15, 1, 1, BEARD); r(14, 15, 1, 1, BEARD)
-	-- 身體：外套；正面白襯衫 V 領、紅領帶、扣子
-	r(16, 16, 24, 16, JACKET)
-	r(22, 20, 4, 4, SHIRT); r(23, 20, 2, 7, TIE); r(23, 28, 1, 1, "#3a2a1a"); r(23, 30, 1, 1, "#3a2a1a")
-	-- 手臂：外套袖子，手掌（最下兩列）皮膚
-	r(40, 16, 16, 16, JACKET); r(40, 30, 16, 2, SKIN); r(48, 16, 4, 4, SKIN)
-	r(44, 24, 4, 3, "#5a3a22")        -- 手肘補丁
-	-- 腿：西裝褲、皮鞋
-	r(0, 16, 16, 16, PANTS); r(0, 30, 16, 2, SHOE); r(8, 16, 4, 4, SHOE)
-	return table.concat(f, "^")
-end
-local PROF_SKIN = skin()
+local PROF_SKIN = rockmech.npc_skin("professor")     -- 造型：npc_skins.lua
 
 -- 講堂的擺設
 core.register_node("rockmech:camp_blackboard", {
