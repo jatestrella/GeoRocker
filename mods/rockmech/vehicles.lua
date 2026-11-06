@@ -23,8 +23,39 @@ function V.may_use(self, name)
 	core.chat_send_player(name, ("這是%s的車，別組不能開"):format(rockmech.account_label(self.owner)))
 	return false
 end
--- 指著車看到的說明：哪一組的車、耐久度
+-- 血條：受損的車頭上浮一條（永遠面向看的人），滿血時拿掉。50% 以上綠、30% 以上黃、以下紅，報廢是空的紅框
+local HPBAR = "rockmech:hpbar"
+core.register_entity(HPBAR, {
+	initial_properties = {visual = "sprite", physical = false, pointable = false, static_save = false,
+		visual_size = {x = 1.6, y = 0.22}, textures = {"[fill:32x4:#202020"}, glow = 8, use_texture_alpha = true},
+	on_detach = function(self) self.object:remove() end,
+})
+local function update_bar(self)
+	local hp = self.hp or 100
+	local bar = self.hpbar
+	if hp >= 100 then
+		if bar and bar:get_pos() then bar:remove() end
+		self.hpbar = nil
+		return
+	end
+	if not (bar and bar:get_pos()) then
+		bar = core.add_entity(self.object:get_pos(), HPBAR)
+		if not bar then return end
+		local def = V.TYPES[self.vkind]
+		bar:set_attach(self.object, "", {x = 0, y = ((def.top or def.half) + 1.0) * 10, z = 0}, {x = 0, y = 0, z = 0})
+		self.hpbar = bar
+	end
+	local w = math.max(0, math.min(30, math.floor(30 * hp / 100 + 0.5)))
+	local c = hp >= 50 and "#40d040" or hp >= 30 and "#e0c020" or "#e03020"
+	local tex = "[fill:32x4:#c02020^[fill:30x2:1,1:#202020"
+	if w > 0 then tex = tex .. ("^[fill:%dx2:1,1:%s"):format(w, c) end
+	if hp > 0 then tex = tex:gsub("#c02020", "#101010", 1) end
+	bar:set_properties({textures = {tex}})
+end
+
+-- 指著車看到的說明：哪一組的車、耐久度（血條也跟著更新）
 function V.update_infotext(self)
+	update_bar(self)
 	local t = {}
 	if self.owner and self.owner ~= "" and rockmech.account_label then t[#t + 1] = rockmech.account_label(self.owner) .. "的車" end
 	local hp = self.hp or 100
