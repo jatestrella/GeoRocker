@@ -477,6 +477,46 @@ end)
 ---------------------------------------------------------------------------
 
 -- 機身在 pos、受料倉朝 (dx, dz)：挖階梯漏斗（每往下一層四邊各內縮 1 m）、放格柵、記到機身的 meta。
+-- 受料倉的護坡：倉壁是 45° 的台階，留著原來的岩石就會被節理切成岩塊掉進倉裡（倉壁不是開挖面，是設施）。
+-- 貼著倉的那一層岩石（六個面任一面接到倉的格子）換成鋼筋混凝土護坡：不是岩石、不帶節理、不參與破壞判定，
+-- 但是實心、會承力，後面的岩石就沒有臨空面。爆破只炸岩石和碎石，護坡炸不壞；工具挖不動
+local LINING = "rockmech:hopper_lining"
+core.register_node(LINING, {
+	description = "受料倉混凝土護坡 Hopper lining\n鋼筋混凝土，擋住倉壁的岩石（不會被節理切開掉落）",
+	tiles = {"[fill:16x16:#9a9890^[fill:16x1:0,7:#86847c^[fill:1x16:7,0:#86847c^[fill:2x2:3,3:#a8a69e^[fill:2x2:11,12:#8e8c84"},
+	is_ground_content = false,
+	groups = {not_in_creative_inventory = 1},
+	drop = "",
+})
+-- 倉的範圍（meta 的 gx, gy, gz）：第 dy 層（倉口 dy = 0）是邊長 SIZE − 2·dy 的正方形
+local function line_hopper(meta)
+	local c, half = hopper_center(meta), (SIZE - 1) / 2
+	local top = meta:get_int("gy") + DEPTH
+	local function cavity(x, y, z)
+		local dy = top - y
+		if dy < 0 or dy >= DEPTH then return false end
+		return math.max(math.abs(x - c.x), math.abs(z - c.z)) <= half - dy
+	end
+	-- 整個範圍先載入（倉壁可能跨到還沒載入的區塊）；還是讀到 ignore 就回傳 nil，下次載入再補
+	core.load_area({x = c.x - half - 1, y = top - DEPTH, z = c.z - half - 1}, {x = c.x + half + 1, y = top + 1, z = c.z + half + 1})
+	local n, missing = 0, false
+	for y = top - DEPTH, top + 1 do
+		for x = c.x - half - 1, c.x + half + 1 do for z = c.z - half - 1, c.z + half + 1 do
+			if not cavity(x, y, z) and (cavity(x + 1, y, z) or cavity(x - 1, y, z) or cavity(x, y + 1, z)
+					or cavity(x, y - 1, z) or cavity(x, y, z + 1) or cavity(x, y, z - 1)) then
+				local p = {x = x, y = y, z = z}
+				local name = core.get_node(p).name
+				if name == "ignore" then missing = true
+				elseif rockmech.lith_of_node[name] then
+					core.swap_node(p, {name = LINING})
+					n = n + 1
+				end
+			end
+		end end
+	end
+	return n, missing
+end
+
 -- 倉裡原有的碎石不挖，之後逐欄疊到新的倉底（舊倉擴建）
 local function dig_hopper(pos, dx, dz)
 	local half = (SIZE - 1) / 2
@@ -516,7 +556,24 @@ local function dig_hopper(pos, dx, dz)
 	meta:set_int("gy", gy)
 	meta:set_int("gz", cz - r)
 	meta:set_int("size", SIZE)
+	local _, missing = line_hopper(meta)
+	meta:set_int("lined", missing and 0 or 1)
 end
+
+-- 已經蓋好的受料倉（破碎站、大型破碎站、選礦場）補上護坡，每座一次
+core.register_lbm({
+	label = "受料倉補上混凝土護坡",
+	name = "rockmech:hopper_lining_v1",
+	nodenames = {CRUSHER, CRUSHER_BIG, PLANT},
+	run_at_every_load = true,
+	action = function(pos)
+		local meta = core.get_meta(pos)
+		if meta:get_int("lined") == 1 or meta:get_int("size") == 0 then return end
+		local n, missing = line_hopper(meta)
+		if not missing then meta:set_int("lined", 1) end
+		core.log("action", ("[rockmech] %s 的受料倉補上護坡 %d 格"):format(core.pos_to_string(pos), n))
+	end,
+})
 
 -- 破碎站不管人在哪裡都要運作：引擎只在玩家附近的區塊跑節點計時器，人到礦場去了倉裡的料就停著。
 -- 機身和受料倉（含倉上 PILE 格）所在的區塊強制載入，存在世界裡；一座最多 8 塊。不受 max_forceloaded_blocks（預設 16）
