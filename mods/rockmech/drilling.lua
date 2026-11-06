@@ -543,7 +543,7 @@ function rockmech.fire_round(pos, player)
 		if hud then pl:hud_change(hud, "text", text)
 		else
 			hud = pl:hud_add({type = "text", position = {x = 0.5, y = 0.4}, alignment = {x = 0, y = 0},
-				text = text, number = 0xFF3030, size = {x = 8}, style = 1, z_index = 200})
+				text = text, number = 0xFF3030, size = {x = 8, y = 8}, style = 1, z_index = 200})
 		end
 	end
 	local n = math.ceil(delay)
