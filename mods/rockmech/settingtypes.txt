@@ -313,6 +313,10 @@ rockmech_career_roster (Career roster file) string students.csv
 # Career mode, class server: when the roster file exists, only names that already have an account may join.
 rockmech_career_roster_only (Roster names only) bool true
 
+# Dedicated server: restart every day at this local time ("HH:MM", e.g. 04:00). Players are warned 5 and 1 minutes
+# before; the world is saved by a normal shutdown, and start_class_server.bat backs up, git pulls and starts again. Empty = off.
+rockmech_daily_restart (Daily restart time) string
+
 # Career mode: seconds to break a block of ore by hand. Hands cannot break other rock.
 rockmech_hand_ore_time (Bare hand time on ore) float 60 0.1 600
 

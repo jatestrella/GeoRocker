@@ -686,6 +686,9 @@ function config.load(get)
 	cfg.career_site_spacing = math.max(60, tonumber(get("rockmech_career_site_spacing")) or 150)
 	-- 營地（帳篷、破碎站、落腳點）離礦帶中心往東幾公尺：礦區在西半邊，營地放東邊一點
 	cfg.career_camp_dx = tonumber(get("rockmech_career_camp_dx")) or 0
+	-- 每日定時重開（restart.lua）："HH:MM"，空字串或沒設就不重開
+	cfg.daily_restart = get("rockmech_daily_restart")
+	if cfg.daily_restart == "" then cfg.daily_restart = nil end
 	cfg.career_roster = get("rockmech_career_roster") or "students.csv"
 	if cfg.career_roster == "" then cfg.career_roster = "students.csv" end
 	cfg.career_roster_only = get("rockmech_career_roster_only") ~= "false" and get("rockmech_career_roster_only") ~= false
