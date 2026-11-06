@@ -585,6 +585,40 @@ local function engine_stop(self)
 		self.engine = nil
 	end
 end
+-- 排煙（代表吃油）：引擎發動時（有駕駛或自動駕駛）從排氣管口冒煙，怠速淡灰、作業或行駛時濃黑。
+-- 排氣管口：def.exhaust（車身座標）；沒設就在車頂右後側；def.exhaust = false 不冒煙（之後的電動車）。
+-- 跟其他粒子一樣，只給 EXHAUST_NEAR m 內有玩家的車產生
+local EXHAUST_STEP, EXHAUST_NEAR = 0.25, 64
+function V.exhaust(self, def, working, dtime)
+	if def.exhaust == false or def.pushed or not self.engine then return end
+	self.smoke_t = (self.smoke_t or 0) + dtime
+	if self.smoke_t < EXHAUST_STEP then return end
+	self.smoke_t = 0
+	local pos = self.object:get_pos()
+	local near = false
+	for _, p in ipairs(core.get_connected_players()) do
+		if vector.distance(p:get_pos(), pos) < EXHAUST_NEAR then near = true; break end
+	end
+	if not near then return end
+	local lp = def.exhaust
+	if not lp then
+		local hw = 0.5
+		for _, l in ipairs(def.lat or {0}) do hw = math.max(hw, math.abs(l) + 0.5) end
+		lp = {x = hw * 0.6, y = (def.top or def.half) + 0.2, z = -(def.rear or def.half) * 0.3}
+	end
+	local o = V.to_world(self, lp)
+	local big = (def.half or 1) >= 2.5
+	core.add_particlespawner({
+		amount = working and (big and 6 or 4) or 1, time = EXHAUST_STEP,
+		minpos = vector.subtract(o, 0.05), maxpos = vector.add(o, 0.05),
+		minvel = {x = -0.2, y = 1.2, z = -0.2}, maxvel = {x = 0.2, y = working and 2.5 or 1.5, z = 0.2},
+		minacc = {x = 0.1, y = 0.2, z = 0.1}, maxacc = {x = 0.3, y = 0.4, z = 0.3},
+		minexptime = 1.0, maxexptime = working and 2.4 or 1.6,
+		minsize = big and 3 or 2, maxsize = working and (big and 7 or 5) or 3,
+		texture = working and "[fill:4x4:#2a2a2a^[opacity:170" or "[fill:4x4:#8a8a8a^[opacity:110",
+	})
+end
+
 local function engine_update(self, kind, working)
 	local g = rockmech.cfg.vehicle_sound_gain
 	if not (self.driver or self.autopilot) or g <= 0 then return engine_stop(self) end
@@ -1178,8 +1212,12 @@ function V.register(kind, def)
 			if def.move then def.move(self, ctx) end
 			if def.pushed then
 				if d and player_api then player_api.set_animation(d, ctx.speed ~= 0 and "walk" or "stand") end
-			else engine_update(self, kind, ctx.speed ~= 0 or turn ~= 0 or self.dig ~= nil or self.tip ~= nil or self.boring ~= nil
-				or (def.busy ~= nil and def.busy(self))) end
+			else
+				local working = ctx.speed ~= 0 or turn ~= 0 or self.dig ~= nil or self.tip ~= nil or self.boring ~= nil
+					or (def.busy ~= nil and def.busy(self))
+				engine_update(self, kind, working)
+				V.exhaust(self, def, working, dtime)
+			end
 			obj:set_velocity({x = dir.x * ctx.speed + slide_x, y = vel.y, z = dir.z * ctx.speed + slide_z})
 			-- HUD 時速（每 5 km/h 更新一次）
 			if def.top_speed then

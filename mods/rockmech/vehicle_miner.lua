@@ -31,6 +31,7 @@ local def = {desc = "連續採礦機 Surface miner", short = "採礦機", color 
 	mirror = {x = 1.6, y = 1.6, z = 1.0},
 	tilt = {front = 2.0, rear = -4.0, side_z = -1.0, side_x = 1.8}, max_grade = math.rad(20),
 	stepheight = 1.1,
+	exhaust = {x = 1.2, y = 2.05, z = -3.6},   -- 排氣管口（排煙）
 	loader = true, arm_reach = LOAD_R,     -- 無人卡車可以綁定（vehicle_ahs.lua）：停車的距離照 arm_reach 算
 	-- 作業攝影機（駕駛艙上方中央的小畫面，像露天鑽機）：從車頂往前下方看切削區，紅十字 = 滾筒切到的位置
 	cam = {o = {x = 0, y = 3.2, z = 0.6}, target = {x = 0, y = -2.5, z = 3.5}, mark = {x = 0, y = -2.5, z = 3.5},
