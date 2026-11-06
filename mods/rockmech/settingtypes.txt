@@ -53,6 +53,9 @@ rockmech_zone_order (Lithology zone order) string
 # by the compass. Changing it changes the joint geometry of the world.
 rockmech_joint_lattice (Joint orientation lattice) int 8 2 16
 
+# Joint persistence: patch = joints persist in patches about one spacing in size; face = decided face by face (old).
+rockmech_joint_persistence (Joint persistence mode) enum patch patch,face
+
 # Override joint set 1: "dip,dipdir,spacing,persistence,phi"
 # (degrees, degrees clockwise from north, m >= 1, 0-1, degrees).
 # Empty = use the default in config.lua.
@@ -93,6 +96,11 @@ rockmech_coal_seam (Coal seam) string
 # identical copy of the coal seam (and grade) that stays inside its lane; lanes outside kmin..kmax have no coal.
 # Career teams get one lane each (A = -1, B = +1, C = -2, ...). Empty = one seam everywhere.
 rockmech_coal_seam_lanes (Coal seam lanes) string
+
+# Lane terrain (needs coal seam lanes): ridge height, ridge half-width, hill height, hill west edge, hill east edge,
+# corridor z, taper (m, x in lane coordinates). A ridge on every lane boundary; hills between the two edges that the seam
+# cuts through (hill and flat segments alternate along z); z < corridor z is a flat corridor joining the lanes, without coal.
+rockmech_lane_terrain (Lane terrain) string
 
 # Open pit cut into new terrain: x0,z0,floor radius,depth,bench height,bench width[,ramp grade %, default 10]. Horizontal benches, crossed by one spiral haul ramp. Empty = no pit.
 rockmech_open_pit (Open pit) string
@@ -312,6 +320,9 @@ rockmech_career_roster (Career roster file) string students.csv
 
 # Career mode, class server: when the roster file exists, only names that already have an account may join.
 rockmech_career_roster_only (Roster names only) bool true
+
+# Career mode, class server: camps (vendors, crusher, landing point) sit this far east of the lane centre (m).
+rockmech_career_camp_dx (Camp offset from lane centre) float 0 -500 500
 
 # Dedicated server: restart every day at this local time ("HH:MM", e.g. 04:00). Players are warned 5 and 1 minutes
 # before; the world is saved by a normal shutdown, and start_class_server.bat backs up, git pulls and starts again. Empty = off.
