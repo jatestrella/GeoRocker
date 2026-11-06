@@ -22,7 +22,7 @@ local TEACHER = "server"     -- 老師指令要的權限（開伺服器的人自
 
 local function team_index(t)
 	local i = tonumber(t)
-	return i and i == math.floor(i) and i >= 1 and i <= cfg.career_teams and i or nil
+	return i and i == math.floor(i) and i >= 0 and i <= cfg.career_teams and i or nil      -- 0 是老師組（出生點的營地）
 end
 local function team_name(i) return tostring(i) end
 -- 名單、指令裡寫的組別（"3"、"3.0"、" 3 "）→ 正規的組名 "3"；不是組別就原樣回傳
@@ -32,7 +32,8 @@ local function norm(t)
 end
 local function all_teams()
 	local out = {}
-	for i = 1, cfg.career_teams do out[i] = team_name(i) end
+	out[1] = "0"
+	for i = 1, cfg.career_teams do out[i + 1] = team_name(i) end
 	return out
 end
 
@@ -57,6 +58,11 @@ local function ensure_team(t)
 		core.log("action", ("[rockmech] team %s opened with $%.0f"):format(t, cfg.career_start))
 	end
 	if storage:get_string(SITE .. t) ~= "" or building[t] then return end
+	-- 老師組（第 0 組）用出生點的營地：已經蓋好就不再蓋，還沒蓋就由這裡蓋（不讓 career.lua 另外蓋一座給第一個進來的人）
+	if t == "0" then
+		if storage:get_string("career_site") ~= "" then storage:set_string(SITE .. t, "1"); return end
+		storage:set_string("career_site", "2")
+	end
 	building[t] = true
 	rockmech.career_build_camp(acc, site_x(t), function()
 		storage:set_string(SITE .. t, "1")
@@ -364,7 +370,7 @@ if core.get_modpath("sfinv") and sfinv then
 				end
 				y = y + half * 0.4 + 0.5
 				local teams = {}
-				for i = 1, cfg.career_teams do teams[i] = team_name(i) end
+				for i = 0, cfg.career_teams do teams[i + 1] = team_name(i) end
 				add("field[0.3,%g;1.9,0.8;rm_amt;%s;]", y + 0.3, F("金額（負數扣錢）"))
 				add("dropdown[2.1,%g;1.3;rm_team;%s;1]", y + 0.05, table.concat(teams, ","))
 				add("button[3.5,%g;1.6,0.8;rm_pay;%s]", y, F("加/扣錢"))
@@ -373,7 +379,7 @@ if core.get_modpath("sfinv") and sfinv then
 				-- 老師自己加入某組，用學生的身分試玩（資金、營地都是那一組的）
 				y = y + 1
 				add("label[0,%g;%s]", y + 0.15, F("老師試玩："))
-				add("dropdown[1.6,%g;1.3;rm_join_team;%s;%d]", y + 0.05, table.concat(teams, ","), team_index(t or "") or 1)
+				add("dropdown[1.6,%g;1.3;rm_join_team;%s;%d]", y + 0.05, table.concat(teams, ","), (team_index(t or "") or 0) + 1)
 				add("button[3,%g;2.3,0.8;rm_join;%s]", y, F("我加入這組"))
 				if t then add("button[5.3,%g;2.7,0.8;rm_leave;%s]", y, F("我退出分組")) end
 				y = y + 0.9

@@ -83,6 +83,7 @@ config.shop = {
 	{key = "dozer", shop = "vehicle", item = "rockmech:dozer_item", label = "推土機", price = 35000},
 	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = "裝藥車", price = 40000},
 	{key = "charger", shop = "blast", item = "rockmech:charger_item", label = "裝藥台車", price = 40000},
+	{key = "corerig", shop = "blast", item = "rockmech:corerig_item", label = "岩芯鑽探車（60 m）", price = 45000},
 	{key = "drillrig", shop = "blast", item = "rockmech:drillrig_item", label = "鑽機", price = 50000},
 	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = "鑽孔台車", price = 60000},
 	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = "礦卡", price = 150000},
@@ -100,7 +101,7 @@ config.shop = {
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = "無人機", price = 2000},
 	{key = "xrf", shop = "tools", item = "rockmech:xrf", label = "XRF 分析儀（品位）", price = 5000},
 	{key = "gsi_card", shop = "tools", item = "rockmech:gsi_card", label = "GSI 評估圖卡（岩體）", price = 1000},
-	{key = "core_drill", shop = "tools", item = "rockmech:core_drill", label = "岩芯鑽機", price = 3000},
+	{key = "core_drill", shop = "tools", item = "rockmech:core_drill", label = "手持岩芯鑽機（10 m）", price = 3000},
 	{key = "compass", shop = "tools", item = "rockmech:compass", label = "地質羅盤（力學）", price = 200},
 }
 

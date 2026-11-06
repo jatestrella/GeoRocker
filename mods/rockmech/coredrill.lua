@@ -1,16 +1,17 @@
 -- rockmech/coredrill.lua
--- 岩芯鑽探：拿著岩芯鑽機（$3,000，工具室管理員）對地面右鍵，往下鑽一個垂直孔，每公尺 SEC_PER_M 秒，最深 MAX_DEPTH m。
--- 鑽的時候要待在孔旁 STAY_R m 內、手上拿著鑽機，不然就停在那個深度。碰到空洞（開挖過的地方）或設施也停。
+-- 岩芯鑽探：手持岩芯鑽機（$3,000，工具室管理員）對地面右鍵往下鑽一個垂直孔，每公尺 SEC_PER_M 秒，最深 HAND_DEPTH m；
+-- 要待在孔旁 STAY_R m 內、手上拿著鑽機。更深的孔用岩芯鑽探車（rockmech.coredrill_start，60 m）。碰到空洞或設施就停。
+-- 鑽完：孔口留一根套管（混凝土墊、橘色套管、管蓋），岩芯裝進岩芯箱放進背包（右鍵看柱狀圖）。
 -- 每公尺記錄：岩性、品位（param2）、穿過的節理條數；RQD 由節理頻率 λ（前後 1 m 的平均，條/m）用
 -- Priest & Hudson（1976）RQD = 100·e^(−0.1λ)·(0.1λ + 1) 換算（模型裡只有明確的節理，沒有次網格裂隙）。
--- 孔口留一根套管（BH-n，第 N 組），右鍵看柱狀圖；全組共用的鑽孔日誌在背包「我的組」頁。
+-- 孔口套管右鍵、背包裡的岩芯箱右鍵都看得到柱狀圖；全組共用的鑽孔日誌在背包「我的組」頁。
 -- 柱狀圖照看的人的知識能力顯示（knowledge.lua）：岩性、節理、RQD 要岩體分類，品位要品位判讀；能力之後學會，舊的紀錄也看得到。
 
 local storage = rockmech.collapse.storage
 local joints = rockmech.joints
 
 local ITEM, CASING = "rockmech:core_drill", "rockmech:borehole"
-local SEC_PER_M, MAX_DEPTH, STAY_R = 1, 30, 3
+local SEC_PER_M, HAND_DEPTH, STAY_R = 1, 10, 3      -- 手持鑽機最深 10 m；更深要用岩芯鑽探車（vehicle_corerig.lua，60 m）
 local LOG = "bh:"            -- mod storage：bh:<帳戶> = {{n, pos, depth, rows = {{lith, grade, joints}}}, ...}
 local FORM, LIST = "rockmech:borehole", "rockmech:borehole_list"
 
@@ -103,11 +104,25 @@ end)
 -- 孔口套管
 ---------------------------------------------------------------------------
 
+-- 孔口：一塊 1 m 見方的混凝土墊、中間一根橘色套管伸出地面、上面一個深灰色管蓋。
+-- nodebox 的貼圖照每個盒子在方塊裡的位置裁切：側面貼圖由上而下是 管蓋（深灰）→ 套管（橘）→ 混凝土（灰），
+-- 頂面是混凝土、中間管蓋的深灰
+local CONCRETE, PIPE, CAP = "#a8a8a0", "#f07818", "#3a3a3a"
 core.register_node(CASING, {
-	description = "鑽孔套管", drawtype = "nodebox", paramtype = "light", is_ground_content = false,
-	tiles = {"[fill:16x16:#6a6e72^[fill:6x6:5,5:#202020", "[fill:16x16:#6a6e72", "[fill:16x16:#8a8e92^[fill:16x2:0,3:#c03020"},
-	node_box = {type = "fixed", fixed = {-0.12, -0.5, -0.12, 0.12, -0.05, 0.12}},
-	walkable = false, groups = {not_in_creative_inventory = 1, oddly_breakable_by_hand = 3},
+	description = "鑽孔套管", drawtype = "nodebox", paramtype = "light", is_ground_content = false, sunlight_propagates = true,
+	tiles = {
+		("[fill:16x16:%s^[fill:16x1:0,0:#909088^[fill:16x1:0,15:#909088^[fill:5x5:6,6:%s^[fill:1x1:8,8:#5a5a5a"):format(CONCRETE, CAP),
+		("[fill:16x16:%s"):format(CONCRETE),
+		("[fill:16x16:%s^[fill:16x2:0,3:%s^[fill:16x9:0,5:%s^[fill:16x1:0,9:#d06010^[fill:16x2:0,14:%s"):format(PIPE, CAP, PIPE, CONCRETE),
+	},
+	node_box = {type = "fixed", fixed = {
+		{-0.5, -0.5, -0.5, 0.5, -0.38, 0.5},           -- 混凝土墊
+		{-0.1, -0.38, -0.1, 0.1, 0.2, 0.1},            -- 套管（伸出地面約 0.6 m）
+		{-0.14, 0.2, -0.14, 0.14, 0.3, 0.14},          -- 管蓋
+	}},
+	selection_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0.3, 0.5}},
+	collision_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.38, 0.5}},
+	groups = {not_in_creative_inventory = 1},
 	drop = "",
 	on_rightclick = function(pos, node, clicker)
 		if not (clicker and clicker:is_player()) then return end
@@ -119,14 +134,32 @@ core.register_node(CASING, {
 	end,
 })
 
+-- 岩芯箱：鑽完放進背包，右鍵看這一孔的柱狀圖（記著帳戶和孔號）
+core.register_craftitem("rockmech:core_box", {
+	description = "岩芯箱", stack_max = 1, groups = {not_in_creative_inventory = 1},
+	inventory_image = "[fill:16x16:#00000000^[fill:14x9:1,5:#8a6a3a^[fill:12x1:2,7:#5a4020^[fill:12x1:2,10:#5a4020"
+		.. "^[fill:10x1:3,6:#6a6e72^[fill:10x1:3,9:#2a2a2a^[fill:10x1:3,12:#6a6e72",
+	on_secondary_use = function(itemstack, user) return core.registered_items["rockmech:core_box"].on_use(itemstack, user) end,
+	on_use = function(itemstack, user)
+		if not (user and user:is_player()) then return end
+		local meta = itemstack:get_meta()
+		local acc, n = meta:get_string("acc"), meta:get_int("n")
+		for _, b in ipairs(logs_of(acc)) do
+			if b.n == n then core.show_formspec(user:get_player_name(), FORM, log_form(user:get_player_name(), b)); return end
+		end
+		core.chat_send_player(user:get_player_name(), "[岩芯箱] 找不到這一孔的紀錄")
+	end,
+})
+
 ---------------------------------------------------------------------------
--- 鑽孔
+-- 鑽孔（手持鑽機、岩芯鑽探車共用）
 ---------------------------------------------------------------------------
 
-local drilling = {}         -- 玩家名稱 → {pos（孔口那一格）, top（第一格 y）, rows, t}
+local drilling = {}         -- 玩家名稱 → {collar, x, y, z, rows, t, max, ok（還能繼續鑽嗎：回傳 nil 或停下的原因）}
 
 local function finish(name, d, why)
 	drilling[name] = nil
+	if d.on_done then d.on_done() end
 	if #d.rows == 0 then
 		core.chat_send_player(name, "[岩芯鑽探] 沒鑽到東西" .. (why and ("（" .. why .. "）") or ""))
 		return
@@ -137,7 +170,7 @@ local function finish(name, d, why)
 	local bh = {n = n, pos = d.collar, depth = #d.rows, rows = d.rows, stop = why, by = name}
 	list[n] = bh
 	save_logs(acc, list)
-	-- 孔口放一根套管（空的才放）
+	-- 孔口：混凝土墊＋套管（空的才放）
 	local cp = d.collar
 	local cn = core.get_node(cp)
 	if cn.name == "air" or (core.registered_nodes[cn.name] or {}).buildable_to then
@@ -148,26 +181,48 @@ local function finish(name, d, why)
 		meta:set_string("infotext", ("BH-%d（%s）深 %d m\n右鍵看柱狀圖"):format(n,
 			rockmech.account_label and rockmech.account_label(acc) or acc, #d.rows))
 	end
+	-- 岩芯裝箱，放進背包（放不下就掉在地上）
+	local p = core.get_player_by_name(name)
+	if p then
+		local box = ItemStack("rockmech:core_box")
+		local m = box:get_meta()
+		m:set_string("acc", acc)
+		m:set_int("n", n)
+		m:set_string("description", ("岩芯箱 BH-%d（深 %d m）\n左鍵或右鍵看柱狀圖"):format(n, #d.rows))
+		local left = p:get_inventory():add_item("main", box)
+		if not left:is_empty() then core.add_item(p:get_pos(), left) end
+	end
 	if rockmech.account_members then
 		for _, m in ipairs(rockmech.account_members(acc)) do
-			core.chat_send_player(m, ("[岩芯鑽探] %s 鑽好 BH-%d，深 %d m%s（背包「我的組」→ 鑽孔日誌）"):format(name, n, #d.rows,
+			core.chat_send_player(m, ("[岩芯鑽探] %s 鑽好 BH-%d，深 %d m%s（岩芯箱在背包；我的組 → 鑽孔日誌）"):format(name, n, #d.rows,
 				why and ("，" .. why) or ""))
 		end
 	end
 	core.show_formspec(name, FORM, log_form(name, bh))
 end
 
-local function start(player, pointed)
-	local name = player:get_player_name()
-	if drilling[name] then core.chat_send_player(name, "[岩芯鑽探] 正在鑽"); return end
+-- 從 collar（孔口那一格，空的）往下鑽到 max m。ok() 每一步檢查還能不能繼續（回傳停下的原因或 nil）
+function rockmech.coredrill_start(name, collar, max, ok, on_done)
+	if drilling[name] then core.chat_send_player(name, "[岩芯鑽探] 正在鑽"); return false end
+	drilling[name] = {collar = collar, x = collar.x, y = collar.y - 1, z = collar.z, rows = {}, t = 0, max = max, ok = ok, on_done = on_done}
+	core.chat_send_player(name, ("[岩芯鑽探] 開始往下鑽（每公尺 %d 秒，最深 %d m）"):format(SEC_PER_M, max))
+	return true
+end
+function rockmech.coredrill_depth(name) local d = drilling[name]; return d and #d.rows, d and d.max end
+
+local function start_hand(player, pointed)
 	if pointed.type ~= "node" then return end
-	local under = pointed.under
-	if pointed.above.y ~= under.y + 1 then
-		core.chat_send_player(name, "[岩芯鑽探] 要對著地面（方塊的上面）往下鑽")
+	if pointed.above.y ~= pointed.under.y + 1 then
+		core.chat_send_player(player:get_player_name(), "[岩芯鑽探] 要對著地面（方塊的上面）往下鑽")
 		return
 	end
-	drilling[name] = {collar = pointed.above, x = under.x, z = under.z, y = under.y, rows = {}, t = 0}
-	core.chat_send_player(name, ("[岩芯鑽探] 開始往下鑽（每公尺 %d 秒，最深 %d m）；走開或換掉手上的鑽機就停"):format(SEC_PER_M, MAX_DEPTH))
+	local name = player:get_player_name()
+	local c = pointed.above
+	rockmech.coredrill_start(name, c, HAND_DEPTH, function()
+		local p = core.get_player_by_name(name)
+		local pp = p:get_pos()
+		if math.sqrt((pp.x - c.x) ^ 2 + (pp.z - c.z) ^ 2) > STAY_R or p:get_wielded_item():get_name() ~= ITEM then return "人離開了" end
+	end)
 end
 
 core.register_globalstep(function(dtime)
@@ -175,10 +230,11 @@ core.register_globalstep(function(dtime)
 		local p = core.get_player_by_name(name)
 		if not p then
 			drilling[name] = nil
+			if d.on_done then d.on_done() end
 		else
-			local pp = p:get_pos()
-			if math.sqrt((pp.x - d.x) ^ 2 + (pp.z - d.z) ^ 2) > STAY_R or p:get_wielded_item():get_name() ~= ITEM then
-				finish(name, d, "人離開了")
+			local why = d.ok and d.ok()
+			if why then
+				finish(name, d, why)
 			else
 				d.t = d.t + dtime
 				-- 孔口冒岩粉
@@ -201,11 +257,11 @@ core.register_globalstep(function(dtime)
 					if not row then
 						finish(name, d, node.name == "air" and "鑽到空洞" or node.name == "ignore" and "地圖還沒載入" or "碰到設施")
 					else
-						-- 這 1 m 有幾條節理穿過鑽孔（格子的上、下兩個面，上面那個算這一格）
+						-- 這 1 m 有幾條節理穿過鑽孔（格子的上面那個面）
 						local sets = rockmech.get_joint_sets()
 						row.joints = (joints.face_joint(sets, cell.x, cell.y, cell.z, 2) and 1 or 0)
 						d.rows[#d.rows + 1] = row
-						if #d.rows >= MAX_DEPTH then finish(name, d, nil) end
+						if #d.rows >= d.max then finish(name, d, nil) end
 					end
 				end
 			end
@@ -215,10 +271,10 @@ end)
 core.register_on_leaveplayer(function(player) drilling[player:get_player_name()] = nil end)
 
 core.register_tool(ITEM, {
-	description = ("岩芯鑽機\n對著地面右鍵：往下鑽一個垂直孔取岩芯（每公尺 %d 秒、最深 %d m），鑽的時候不能走開\n"
-		.. "得到鑽孔柱狀圖（岩性、品位、節理、RQD），全組共用鑽孔日誌"):format(SEC_PER_M, MAX_DEPTH),
+	description = ("手持岩芯鑽機\n對著地面右鍵：往下鑽一個垂直孔取岩芯（每公尺 %d 秒、最深 %d m，更深要用岩芯鑽探車），鑽的時候不能走開\n"
+		.. "得到岩芯箱與鑽孔柱狀圖（岩性、品位、節理、RQD），全組共用鑽孔日誌"):format(SEC_PER_M, HAND_DEPTH),
 	inventory_image = "[fill:16x16:#00000000^[fill:4x10:6,1:#d0a020^[fill:2x5:7,11:#808488^[fill:8x3:4,3:#303030^[fill:2x1:7,15:#c0c0c0",
 	stack_max = 1,
-	on_place = function(itemstack, placer, pointed) if placer then start(placer, pointed) end return itemstack end,
-	on_use = function(itemstack, user, pointed) if user then start(user, pointed) end return itemstack end,
+	on_place = function(itemstack, placer, pointed) if placer then start_hand(placer, pointed) end return itemstack end,
+	on_use = function(itemstack, user, pointed) if user then start_hand(user, pointed) end return itemstack end,
 })

@@ -87,6 +87,7 @@ end
 function rockmech.account_label(acc)
 	if acc == "camp:spawn" then return "出生點公用" end     -- 第一個進世界的人已分組時，出生點營地的帳戶（career.lua）
 	local t = acc:match("^team:(.+)$")
+	if t == "0" then return "老師組" end
 	return t and ("第 " .. t .. " 組") or acc
 end
 -- 帳戶在線上的成員
