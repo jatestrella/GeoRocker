@@ -1,0 +1,278 @@
+-- rockmech/research.lua
+-- 研究所（經營模式）：每組營地貨櫃辦公室西邊一頂研究帳篷，裡面有「機械技工」「地質專家」。
+--   右鍵研究員打開研發清單（像商店，之後可以改成天賦樹）：每個項目有等級，第 n 級要 基準價 × n、基準時間 × n。
+--   研發用整組的錢、效果整組共用；每組同時只能進行一項。
+--   進度只在該組有組員在線上時才走（每秒）；完成時通知全組。
+--   等級存在 mod storage 的 research:<帳戶>:<項目>（crusher.lua 的 rockmech.research_level），
+--   各項的效果由 crusher.lua 的 rockmech.eff_* 算：選礦場、破碎站、輸送帶照放置那一組的等級。
+--   進行中的研發存在 research_job:<帳戶> = {key, level, left（剩幾秒）}。
+
+local cfg = rockmech.cfg
+if not cfg.career then return end
+local storage = rockmech.collapse.storage
+
+local FORM = "rockmech:research"
+local JOB = "research_job:"
+
+-- 研發項目。per：每級的效果（顯示用，實際算在 crusher.lua 的 rockmech.eff_*）
+local ITEMS = {
+	{key = "plant_recovery", who = "mechanic", label = "選礦回收率", max = 5, base = 20000, minutes = 10,
+		desc = "選礦場的煤進精煤的比例 +1%",
+		value = function(acc) return ("%.0f%%"):format(rockmech.eff_plant_recovery(acc) * 100) end},
+	{key = "plant_misplaced", who = "mechanic", label = "降低精煤混入", max = 4, base = 20000, minutes = 10,
+		desc = "選礦場的矸石混進精煤的比例 −2%",
+		value = function(acc) return ("%.0f%%"):format(rockmech.eff_plant_misplaced(acc) * 100) end},
+	{key = "crusher_rate", who = "mechanic", label = "破碎機改良", max = 5, base = 30000, minutes = 15,
+		desc = "破碎站處理能力 +10%",
+		value = function(acc) return ("×%.1f"):format(rockmech.eff_crusher_mult(acc)) end},
+	{key = "conveyor_rate", who = "mechanic", label = "輸送帶改良", max = 5, base = 15000, minutes = 10,
+		desc = "輸送帶運量 +10%（之後放的、已經放的都算）",
+		value = function(acc) return ("×%.1f"):format(rockmech.eff_conveyor_mult(acc)) end},
+	{key = "ore_recovery", who = "geologist", label = "品位控制", max = 5, base = 25000, minutes = 10,
+		desc = "破碎站賣礦的回收率 +1%",
+		value = function(acc)
+			for _, ore in pairs(cfg.ores) do return ("%.0f%%"):format(rockmech.eff_ore_recovery(acc, ore) * 100) end
+			return "—"
+		end},
+}
+local BY_KEY = {}
+for _, it in ipairs(ITEMS) do BY_KEY[it.key] = it end
+
+local function cost_of(it, lv) return it.base * lv end
+local function secs_of(it, lv) return it.minutes * 60 * lv end
+local function mmss(s) s = math.max(0, math.ceil(s)); return ("%d:%02d"):format(math.floor(s / 60), s % 60) end
+local function money_text(v) return ("%s$%.0f"):format(v < 0 and "−" or "", math.abs(v)) end
+
+---------------------------------------------------------------------------
+-- 研究員：機械技工（站著，旁邊工具箱）、地質專家（坐著，桌上岩樣和文件）
+---------------------------------------------------------------------------
+
+local NPCS = {
+	mechanic = {entity = "rockmech:npc_mechanic", title = "機械技工", color = "#ffb060", tint = "#c06010", sit = false},
+	geologist = {entity = "rockmech:npc_geologist", title = "地質專家", color = "#e0d0a0", tint = "#806040", sit = true},
+}
+
+local function job_of(acc)
+	local s = storage:get_string(JOB .. acc)
+	return s ~= "" and core.deserialize(s) or nil
+end
+local function set_job(acc, job) storage:set_string(JOB .. acc, job and core.serialize(job) or "") end
+
+local viewing = {}          -- 玩家名稱 → 正在看哪位研究員
+
+local function form(name, who)
+	local acc = rockmech.account_of(name)
+	local npc = NPCS[who]
+	local job = job_of(acc)
+	local head = rockmech.team_of(name) and ("%s　第 %s 組資金 %s"):format(npc.title, rockmech.team_of(name), money_text(rockmech.money(name)))
+		or ("%s　資金 %s"):format(npc.title, money_text(rockmech.money(name)))
+	local out = {"formspec_version[6]size[15,10]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
+	local status
+	if job then
+		local it = BY_KEY[job.key]
+		status = ("研發中：%s Lv%d，剩 %s（組員在線上時才會進行）"):format(it and it.label or job.key, job.level, mmss(job.left))
+	else
+		status = "目前沒有研發中的項目。每組同時只能研發一項。"
+	end
+	out[#out + 1] = ("label[0.5,1.2;%s]"):format(core.formspec_escape(status))
+	out[#out + 1] = "label[0.5,2.0;項目]label[3.6,2.0;效果]label[8.6,2.0;目前 → 下一級]label[11.4,2.0;價格／時間]"
+	local y = 2.6
+	for i, it in ipairs(ITEMS) do
+		if it.who == who then
+			local lv = rockmech.research_level(acc, it.key)
+			local maxed = lv >= it.max
+			out[#out + 1] = ("label[0.5,%g;%s　Lv%d/%d]"):format(y + 0.4, core.formspec_escape(it.label), lv, it.max)
+			out[#out + 1] = ("label[3.6,%g;%s]"):format(y + 0.4, core.formspec_escape(it.desc))
+			local now = it.value(acc)
+			local nxt = maxed and "已達最高" or ("→ Lv" .. (lv + 1))
+			out[#out + 1] = ("label[8.6,%g;%s　%s]"):format(y + 0.4, core.formspec_escape(now), core.formspec_escape(nxt))
+			if maxed then
+				out[#out + 1] = ("label[11.4,%g;—]"):format(y + 0.4)
+			else
+				out[#out + 1] = ("label[11.4,%g;%s　%d 分鐘]"):format(y + 0.4, money_text(cost_of(it, lv + 1)), secs_of(it, lv + 1) / 60)
+				if not job then out[#out + 1] = ("button[13.5,%g;1.3,0.8;go_%d;研發]"):format(y, i) end
+			end
+			y = y + 1.0
+		end
+	end
+	out[#out + 1] = ("button_exit[6,%g;3,0.8;close;關閉]"):format(math.max(y + 0.4, 8.6))
+	return table.concat(out)
+end
+
+local function open(player, who)
+	local name = player:get_player_name()
+	viewing[name] = who
+	core.show_formspec(name, FORM, form(name, who))
+end
+
+local function tell(acc, msg)
+	for _, m in ipairs(rockmech.account_members(acc)) do core.chat_send_player(m, "[研究所] " .. msg) end
+end
+
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= FORM then return end
+	local name = player:get_player_name()
+	local who = viewing[name]
+	if fields.quit then viewing[name] = nil; return true end
+	for key in pairs(fields) do
+		local i = tonumber(key:match("^go_(%d+)$"))
+		local it = i and ITEMS[i]
+		if it and it.who == who then
+			local acc = rockmech.account_of(name)
+			local lv = rockmech.research_level(acc, it.key)
+			local cost = cost_of(it, lv + 1)
+			if job_of(acc) then
+				core.chat_send_player(name, "[研究所] 已經有研發中的項目，一次只能研發一項")
+			elseif lv >= it.max then
+				core.chat_send_player(name, "[研究所] 已達最高等級")
+			elseif not rockmech.has_account(name) then
+				core.chat_send_player(name, "[研究所] 你還沒分組，沒有資金")
+			elseif rockmech.money(name) < cost then
+				core.chat_send_player(name, ("[研究所] 錢不夠：%s Lv%d 要 %s"):format(it.label, lv + 1, money_text(cost)))
+			else
+				rockmech.add_money(name, -cost)
+				set_job(acc, {key = it.key, level = lv + 1, left = secs_of(it, lv + 1)})
+				tell(acc, ("%s 開始研發 %s Lv%d（%s、%d 分鐘，組員在線上時才會進行）"):format(name, it.label, lv + 1, money_text(cost), secs_of(it, lv + 1) / 60))
+				core.log("action", ("[rockmech] research %s %s Lv%d by %s ($%d)"):format(acc, it.key, lv + 1, name, cost))
+			end
+			if who then core.show_formspec(name, FORM, form(name, who)) end
+			return true
+		end
+	end
+	return true
+end)
+
+-- 進度：每秒，有組員在線上的帳戶才扣時間
+local tick = 0
+core.register_globalstep(function(dtime)
+	tick = tick + dtime
+	if tick < 1 then return end
+	local dt = tick
+	tick = 0
+	local accs = {}
+	for _, p in ipairs(core.get_connected_players()) do
+		local acc = rockmech.account_of(p:get_player_name())
+		accs[acc] = true
+	end
+	for acc in pairs(accs) do
+		local job = job_of(acc)
+		if job then
+			job.left = job.left - dt
+			if job.left <= 0 then
+				local it = BY_KEY[job.key]
+				local before = it and it.value(acc)
+				rockmech.research_set(acc, job.key, job.level)
+				set_job(acc, nil)
+				if it then tell(acc, ("%s 升到 Lv%d（%s → %s）"):format(it.label, job.level, before, it.value(acc))) end
+				core.log("action", ("[rockmech] research %s %s reached Lv%d"):format(acc, job.key, job.level))
+				for _, m in ipairs(rockmech.account_members(acc)) do
+					core.sound_play("rockmech_coin", {to_player = m, gain = 0.6}, true)
+				end
+			else
+				set_job(acc, job)
+			end
+			-- 開著研究畫面的人跟著更新剩餘時間
+			for _, m in ipairs(rockmech.account_members(acc)) do
+				if viewing[m] then core.show_formspec(m, FORM, form(m, viewing[m])) end
+			end
+		end
+	end
+end)
+core.register_on_leaveplayer(function(player) viewing[player:get_player_name()] = nil end)
+
+for who, npc in pairs(NPCS) do
+	core.register_entity(npc.entity, {
+		initial_properties = {
+			physical = true, collisionbox = npc.sit and {-0.3, 0, -0.3, 0.3, 1.2, 0.3} or {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
+			visual = "mesh", mesh = "character.b3d", textures = {"character.png^[colorize:" .. npc.tint .. ":80"},
+			nametag = npc.title, nametag_color = npc.color, static_save = false,
+		},
+		on_activate = function(self)
+			self.object:set_armor_groups({immortal = 1})
+			self.object:set_yaw(0)
+			if npc.sit then self.object:set_animation({x = 81, y = 160}, 30)
+			else self.object:set_animation({x = 0, y = 79}, 30) end
+		end,
+		on_rightclick = function(self, clicker) if clicker and clicker:is_player() then open(clicker, who) end end,
+		on_punch = function() return true end,
+	})
+	-- 由 career.lua 的 ensure_vendors 補人（攤主位置清單裡 kind = who）
+	rockmech.career_npcs[who] = npc
+end
+
+---------------------------------------------------------------------------
+-- 研究帳篷：貨櫃辦公室西邊（營地中心 x0 往西 RX），7×7 的帳篷，白底藍條棚布
+---------------------------------------------------------------------------
+
+local RX = 13               -- 帳篷中心在營地中心往西幾公尺（貨櫃辦公室外牆在 −6，冷氣在 −7）
+core.register_node("rockmech:tent_canvas_research", {
+	description = "Tent canvas (帳篷布)", is_ground_content = false, groups = {not_in_creative_inventory = 1},
+	tiles = {"[fill:16x16:#eef2f4^[fill:16x2:0,5:#2f6fbf^[fill:16x2:0,12:#2f6fbf"},
+})
+
+-- 擺設：{dx, dz, 高度層, 節點}（dz 離帳篷中心：北 +）
+local PROPS = {
+	-- 機械技工（西半邊）：工作台、工具箱、木箱、油桶
+	{-2, 1, 1, "table"}, {-1, 1, 1, "table"}, {-2, 1, 2, "toolbox"}, {-3, -2, 1, "crate"}, {-3, -2, 2, "crate"},
+	{-3, -1, 1, "barrel"}, {-2, -2, 1, "shelf"},
+	-- 地質專家（東半邊）：書桌、椅子、文件、岩樣（木箱）、工具架當書架
+	{1, 1, 1, "table"}, {2, 1, 1, "table"}, {2, 1, 2, "papers"}, {2, 0, 1, "chair"},
+	{3, -2, 1, "shelf"}, {3, -2, 2, "shelf"}, {2, -2, 1, "crate"}, {1, 1, 2, "helmets"},
+}
+
+local function ground_y(x, z)
+	for y = 40, -30, -1 do
+		local n = core.get_node({x = x, y = y, z = z}).name
+		if n ~= "air" and n ~= "ignore" then return y end
+	end
+end
+
+local function flag_of(x0) return "research_site:" .. x0 end
+function rockmech.career_build_research(x0)
+	storage:set_string(flag_of(x0), "1")       -- 這座營地蓋過研究帳篷了（下面補蓋時看這個）
+	local TZ = rockmech.career_tent_z
+	local cx = x0 - RX
+	local y = ground_y(cx, TZ) or 0
+	for _, s in ipairs({{-3, -3}, {3, -3}, {-3, 3}, {3, 3}}) do
+		for h = 1, 3 do core.set_node({x = cx + s[1], y = y + h, z = TZ + s[2]}, {name = "rockmech:tent_pole"}) end
+	end
+	for layer = 0, 2 do
+		local r = 3 - layer
+		for x = -r, r do for z = -r, r do
+			core.set_node({x = cx + x, y = y + 4 + layer, z = TZ + z}, {name = "rockmech:tent_canvas_research"})
+		end end
+	end
+	for _, p in ipairs(PROPS) do
+		core.set_node({x = cx + p[1], y = y + p[3], z = TZ + p[2]}, {name = "rockmech:camp_" .. p[4]})
+	end
+	local key = rockmech.career_vendor_spots
+	local list = core.deserialize(storage:get_string(key)) or {}
+	list[#list + 1] = {kind = "mechanic", pos = {x = cx - 2, y = y + 0.5, z = TZ}}
+	list[#list + 1] = {kind = "geologist", pos = {x = cx + 2, y = y + 1.05, z = TZ}}
+	storage:set_string(key, core.serialize(list))
+end
+
+-- 已經蓋好的營地（研究所加進來之前的世界）補上研究帳篷：出生點營地和各組營地，各補一次
+core.after(2, function()
+	local sites = {}
+	if storage:get_string("career_site") == "2" then sites[#sites + 1] = {x0 = cfg.career_camp_dx} end
+	if rockmech.team_site_x then
+		for i = 1, cfg.career_teams do
+			local t = tostring(i)
+			if storage:get_string("team_site:" .. t) == "1" then
+				sites[#sites + 1] = {x0 = rockmech.team_site_x(t)}
+			end
+		end
+	end
+	for _, s in ipairs(sites) do
+		if storage:get_string(flag_of(s.x0)) == "" then
+			storage:set_string(flag_of(s.x0), "1")
+			local TZ = rockmech.career_tent_z
+			core.emerge_area({x = s.x0 - RX - 6, y = -30, z = TZ - 6}, {x = s.x0 - RX + 6, y = 40, z = TZ + 6}, function(_, _, rem)
+				if rem > 0 then return end
+				rockmech.career_build_research(s.x0)
+				core.log("action", ("[rockmech] research tent added at x = %d"):format(s.x0 - RX))
+			end)
+		end
+	end
+end)

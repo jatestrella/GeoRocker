@@ -17,7 +17,11 @@ local PLANT = "rockmech:plant"     -- 選礦場（plant.lua），同一種受料
 local CRUSHER_BIG = "rockmech:crusher_big"   -- 大型破碎站：同一種受料倉，處理能力 rockmech_crusher_big_rate
 local CRUSHERS = {[CRUSHER] = true, [CRUSHER_BIG] = true}
 local HOPPER_BODY = {[CRUSHER] = true, [CRUSHER_BIG] = true, [PLANT] = true}
-local function rate_of(pos) return core.get_node(pos).name == CRUSHER_BIG and cfg.crusher_big_rate or cfg.crusher_rate end
+-- 處理能力：一般／大型，乘上「破碎機改良」研究
+local function rate_of(pos)
+	return (core.get_node(pos).name == CRUSHER_BIG and cfg.crusher_big_rate or cfg.crusher_rate)
+		* rockmech.eff_crusher_mult(core.get_meta(pos):get_string("owner"))
+end
 local function title_of(pos) return core.get_node(pos).name == CRUSHER_BIG and "大型破碎站" or "破碎站" end
 local SIZE, FEEDER = 9, 3    -- 受料倉開口、底部格柵的邊長 (m)
 local DEPTH = (SIZE - FEEDER) / 2 + 1              -- 倉深 (m)：每往下一層四邊各內縮 1 m（壁坡 45°），最底層就是格柵的大小
@@ -101,6 +105,28 @@ function rockmech.owner_ok(owner, name)
 	core.chat_send_player(name, ("這是%s的設施，別組不能動"):format(rockmech.account_label(owner)))
 	return false
 end
+
+-- 研究等級（research.lua）：mod storage 的 research:<帳戶>:<項目>，查詢有快取。owner：玩家名稱或帳戶
+local research_cache = {}
+function rockmech.research_level(owner, key)
+	if not owner or owner == "" then return 0 end
+	local acc = rockmech.account_of(owner)
+	local c = research_cache[acc]
+	if not c then c = {}; research_cache[acc] = c end
+	local v = c[key]
+	if v == nil then v = storage:get_int("research:" .. acc .. ":" .. key); c[key] = v end
+	return v
+end
+function rockmech.research_set(acc, key, lv)
+	storage:set_int("research:" .. acc .. ":" .. key, lv)
+	research_cache[acc] = nil
+end
+-- 研究後的係數（每級的效果在這裡；research.lua 的項目表要跟這裡一致）
+function rockmech.eff_plant_recovery(owner) return math.min(1, cfg.plant_recovery + 0.01 * rockmech.research_level(owner, "plant_recovery")) end
+function rockmech.eff_plant_misplaced(owner) return math.max(0, cfg.plant_misplaced - 0.02 * rockmech.research_level(owner, "plant_misplaced")) end
+function rockmech.eff_crusher_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "crusher_rate") end
+function rockmech.eff_conveyor_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "conveyor_rate") end
+function rockmech.eff_ore_recovery(owner, ore) return math.min(1, ore.recovery + 0.01 * rockmech.research_level(owner, "ore_recovery")) end
 
 local money_hud = {}        -- 玩家名稱 → HUD id
 
@@ -336,7 +362,7 @@ local function report(meta, owner, dump, day)
 		local rows = {}
 		if ore then
 			rows[#rows + 1] = {("%s（品位 %.0f%%）"):format(ore.label, 100 * bq / bt), ("%.1f t"):format(bq),
-				("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), ore.recovery * 100), money_text(bg), GREEN}
+				("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), rockmech.eff_ore_recovery(owner, ore) * 100), money_text(bg), GREEN}
 		end
 		rows[#rows + 1] = {"廢石", ("%.1f t"):format(bt - bq), "", "", WHITE}
 		rows[#rows + 1] = {"處理費", ("%.1f t"):format(bt), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
@@ -366,7 +392,7 @@ local function crush(pos, dtime)
 		ore_t = ore_t + tons * grade
 		if dump then fee = fee + tons * cfg.dump_fee
 		else
-			if ore then gross = gross + tons * grade * ore.recovery * rockmech.ore_price(ore) end
+			if ore then gross = gross + tons * grade * rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * rockmech.ore_price(ore) end
 			fee = fee + tons * cfg.crusher_fee
 		end
 	end)
@@ -398,7 +424,8 @@ local function formspec(pos)
 	local queue_text = ("排隊 %.1f t，約 %d 秒處理完"):format(qt, math.ceil(qt / rate))
 	local prices = {}
 	for _, ore in pairs(cfg.ores) do
-		prices[#prices + 1] = ("%s 品位 100%% 今日每噸 $%.0f（基準 $%g），回收率 %.0f%%"):format(ore.label, rockmech.ore_price(ore), ore.price, ore.recovery * 100)
+		prices[#prices + 1] = ("%s 品位 100%% 今日每噸 $%.0f（基準 $%g），回收率 %.0f%%"):format(ore.label, rockmech.ore_price(ore), ore.price,
+			rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * 100)
 	end
 	return table.concat({
 		"formspec_version[6]size[11,7.6]",

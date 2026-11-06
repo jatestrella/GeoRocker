@@ -25,7 +25,18 @@ end
 -- 每格最多升降幾個 1/8 m
 local function rmax() return math.max(0, math.floor(8 * math.tan(math.rad(cfg.conveyor_max_angle)) + 1e-6)) end
 -- 每格最多載幾級（1 級 = 1/8 m³）
-local function cell_cap() return math.max(1, math.floor(cfg.conveyor_rate / cfg.conveyor_speed / H.tons_of(1))) end
+local function base_cap() return cfg.conveyor_rate / cfg.conveyor_speed / H.tons_of(1) end
+-- 每格的載量：運量 ÷ 帶速，乘上放這格的那一組的「輸送帶改良」研究。格子的帳戶存在 node meta 的 owner，查過就快取
+local owner_cache = {}
+local function cell_cap(h, p)
+	local mult = 1
+	if h and p and rockmech.eff_conveyor_mult then
+		local o = owner_cache[h]
+		if o == nil then o = core.get_meta(p):get_string("owner"); owner_cache[h] = o end
+		mult = rockmech.eff_conveyor_mult(o)
+	end
+	return math.max(1, math.floor(base_cap() * mult))
+end
 
 ---------------------------------------------------------------------------
 -- 方塊
@@ -125,6 +136,7 @@ for h = 0, 7 do
 				core.get_meta(pos):set_int("forceload", 1)
 			end,
 			on_destruct = function(pos)
+				owner_cache[core.hash_node_position(pos)] = nil
 				if core.get_meta(pos):get_int("forceload") == 1 then core.forceload_free_block(pos, false) end
 			end,
 			-- 拆掉：這格上的料倒在原地
@@ -178,11 +190,11 @@ local function next_of(p, n)
 	return best, d
 end
 
--- 把 a 格的料往 b 格移，最多移到 b 滿
-local function move(ha, hb, C)
+-- 把 a 格的料往 b 格移，最多移到 b 滿（b 格自己的載量：各組的研究加成不同）
+local function move(ha, hb)
 	local A = loads[ha]
 	if not A then return end
-	local room = C - total(loads[hb])
+	local room = cell_cap(hb, cells[hb]) - total(loads[hb])
 	while room > 0 and #A > 0 do
 		local q = A[1]
 		local k = math.min(q.k, room)
@@ -287,7 +299,6 @@ local function shape_of(h, n, from)
 end
 
 local function tick()
-	local C = cell_cap()
 	local nodes = {}
 	-- 1. 裝料：每格正上方那一格的碎石
 	for h, p in pairs(cells) do
@@ -296,6 +307,7 @@ local function tick()
 			cells[h] = nil          -- 已經不是輸送帶了（被別的東西蓋掉）
 		elseif n then
 			nodes[h] = n
+			local C = cell_cap(h, p)
 			local room = C - total(loads[h])
 			if room > 0 then
 				local up = {x = p.x, y = p.y + 1, z = p.z}
@@ -326,8 +338,8 @@ local function tick()
 			-- chain 最後一格：是頭就倒出去；後面接的是已經走過的格（或迴圈）就只是往它移
 			local last = chain[#chain]
 			if head_dir and not wait then discharge(cells[last], head_dir)
-			elseif h then move(last, h, C) end
-			for i = #chain - 1, 1, -1 do move(chain[i], chain[i + 1], C) end
+			elseif h then move(last, h) end
+			for i = #chain - 1, 1, -1 do move(chain[i], chain[i + 1]) end
 			for _, hc in ipairs(chain) do done[hc] = true end
 		end
 	end
@@ -375,10 +387,10 @@ core.register_on_shutdown(function() storage:set_string("belt_loads", core.seria
 
 -- 離 pivot 水平 r 以內、表面在 pivot 下方、還有空位的輸送帶格（最近的那格）：回傳 位置, 表面的 y
 function rockmech.belt_near(pivot, r)
-	local C, best, bd = cell_cap(), nil, nil
+	local best, bd = nil, nil
 	for h, p in pairs(cells) do
 		local d2 = (p.x - pivot.x) ^ 2 + (p.z - pivot.z) ^ 2
-		if d2 <= r * r and p.y < pivot.y and (not bd or d2 < bd) and total(loads[h]) < C then
+		if d2 <= r * r and p.y < pivot.y and (not bd or d2 < bd) and total(loads[h]) < cell_cap(h, p) then
 			local n, is = belt_at(p)
 			if is then best, bd = p, d2 end
 		end
@@ -389,7 +401,7 @@ end
 -- 放 k 級到這格輸送帶上，回傳實際放了幾級
 function rockmech.belt_put(p, b, k, g)
 	local h = core.hash_node_position(p)
-	local put = math.min(k, cell_cap() - total(loads[h]))
+	local put = math.min(k, cell_cap(h, p) - total(loads[h]))
 	if put > 0 then add_load(h, b, put, g) end
 	return math.max(0, put)
 end
@@ -489,6 +501,7 @@ core.register_craftitem(ITEM, {
 		end
 		if core.is_protected(p, name) then core.record_protection_violation(p, name); return itemstack end
 		core.set_node(p, {name = NAME[h][""][""], param2 = fd})
+		if rockmech.account_of then core.get_meta(p):set_string("owner", rockmech.account_of(name)) end   -- 研究加成照這一組
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack
 	end,

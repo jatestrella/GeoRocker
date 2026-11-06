@@ -118,7 +118,8 @@ end
 local function step(pos, dtime)
 	local meta = core.get_meta(pos)
 	local cap = bin_cap()
-	local R, m = cfg.plant_recovery, cfg.plant_misplaced
+	local owner = meta:get_string("owner")
+	local R, m = rockmech.eff_plant_recovery(owner), rockmech.eff_plant_misplaced(owner)    -- 研究（research.lua）
 	-- 1. 吃料、分選：兩座倉都還放得下才吃（每吃 1 級，每座倉最多多 1 級）
 	local room = math.min(cap - meta:get_float("p_lv"), cap - meta:get_float("r_lv"))
 	local eaten = 0
@@ -195,7 +196,8 @@ local function formspec(pos)
 		("label[0.5,0.6;選礦場（選煤廠）　%s]"):format(stopped and "已停止" or "運轉中"),
 		("button[6,0.2;2.6,0.8;toggle;%s]"):format(stopped and "開始運轉" or "停止"),
 		("label[0.5,1.2;處理能力：%g t/s　放料：%g t/s]"):format(cfg.plant_rate, cfg.plant_load_rate),
-		("label[0.5,1.8;分選：煤 %.0f%% 進精煤，矸石 %.0f%% 混進精煤]"):format(cfg.plant_recovery * 100, cfg.plant_misplaced * 100),
+		("label[0.5,1.8;分選：煤 %.0f%% 進精煤，矸石 %.0f%% 混進精煤]"):format(rockmech.eff_plant_recovery(meta:get_string("owner")) * 100,
+			rockmech.eff_plant_misplaced(meta:get_string("owner")) * 100),
 		("label[0.5,2.5;%s]"):format(core.formspec_escape(parts[1])),
 		("label[0.5,3.1;%s]"):format(core.formspec_escape(parts[2])),
 		("label[0.5,3.7;卡車或礦卡停在放料臂 %g m 內不動，放料臂就會轉過去裝]"):format(cfg.plant_reach),

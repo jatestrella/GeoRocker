@@ -324,6 +324,10 @@ local BOOTHS = {
 		color = "#a0e080", tint = "#407020", sit = true},
 }
 local shop_kind = {}        -- 玩家名稱 → 正在看哪一攤（nil：全部）
+-- 給 research.lua：其他 NPC（研究員）也登記到 BOOTHS，由 ensure_vendors 一起補人；帳篷的 z、攤主位置的 storage 鍵
+rockmech.career_npcs = BOOTHS
+rockmech.career_tent_z = TENT_Z
+rockmech.career_vendor_spots = VENDOR_SPOTS
 
 local function shop_form(name, kind)
 	local booth = BOOTHS[kind]
@@ -695,6 +699,7 @@ end
 local function build_camp(owner, x0)
 	x0 = x0 or 0
 	build_market(x0)
+	if rockmech.career_build_research then rockmech.career_build_research(x0) end      -- 研究帳篷（research.lua）
 	local team = owner:match("^team:(%d)$")
 	if team then build_sign(x0, team) end
 	local y = ground_y(x0 + CRUSHER_X, CAMP_Z) or 0
