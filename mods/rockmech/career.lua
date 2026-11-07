@@ -72,24 +72,38 @@ local function cube(c)
 	return ("[inventorycube{%s{%s{%s"):format(t, t, t)
 end
 
--- 手上的岩芯箱：低頭看捧在胸前的箱子，主要看到蓋子（近寬遠窄），下面露一條正面（貼著標籤）。
--- 畫得比兩手的間距寬，兩端壓在手後面（手的 HUD 在上層），看起來是兩手抓著箱子兩端
-local BOX_IMG = (function()
-	local t = {"[fill:48x24:#00000000"}
-	for y = 0, 15 do
-		local inset = math.floor((15 - y) / 4 + 0.5)        -- 遠的那邊窄一點
-		t[#t + 1] = ("[fill:%dx1:%d,%d:#4f86e0"):format(48 - 2 * inset, inset, y)
-		t[#t + 1] = ("[fill:1x1:%d,%d:#1a3a80^[fill:1x1:%d,%d:#1a3a80"):format(inset, y, 47 - inset, y)   -- 蓋子左右邊
+-- 手上的岩芯箱：不畫 HUD，掛一個真的扁平箱子（跟地上的岩芯箱一樣大小、貼圖）在胸前，
+-- forced_visible 讓自己第一人稱也看得到；別人看得到你捧著箱子
+local HELD_BOX = "rockmech:held_corebox"
+local BOX_POS = {x = 0, y = 12, z = 5.5}     -- 掛在玩家身上的位置（1/10 m）：胸前、身體前方 0.55 m
+core.register_entity(HELD_BOX, {
+	initial_properties = {visual = "cube", visual_size = {x = 0.9, y = 0.4, z = 0.6},
+		textures = {"[fill:16x16:#2a62c8"}, physical = false, pointable = false, static_save = false},
+	on_activate = function(self)
+		local top, side = rockmech.corebox_tex or "[fill:16x16:#2a62c8", rockmech.corebox_side_tex or "[fill:16x16:#2a62c8"
+		self.object:set_properties({textures = {top, side, side, side, side, side}})
+	end,
+	on_step = function(self)
+		if not self.object:get_attach() then self.object:remove() end
+	end,
+})
+local held = {}             -- 玩家名稱 → 胸前的箱子物件
+local function show_held(player, on)
+	local name = player:get_player_name()
+	local o = held[name]
+	local alive = o and o:get_pos() ~= nil
+	if on and not alive then
+		o = core.add_entity(player:get_pos(), HELD_BOX)
+		if o then o:set_attach(player, "", BOX_POS, {x = 0, y = 0, z = 0}, true) end
+		held[name] = o
+	elseif not on and alive then
+		o:remove()
+		held[name] = nil
 	end
-	t[#t + 1] = "[fill:40x1:4,0:#1a3a80"                       -- 蓋子遠端的邊
-	t[#t + 1] = "[fill:44x1:2,8:#3a6cc8"                       -- 蓋子中間的接縫
-	t[#t + 1] = "[fill:48x8:0,16:#2a62c8^[fill:48x1:0,16:#1a3a80^[fill:48x1:0,23:#12285a"   -- 正面
-	t[#t + 1] = "[fill:12x4:18,18:#e8e8e0^[fill:8x1:20,19:#606060^[fill:6x1:20,21:#606060"   -- 標籤
-	return table.concat(t, "^")
-end)()
--- 手上東西的圖、說明文字放哪：岩芯箱壓在兩手上、字在箱子上方；碎石在兩手中間
+end
+
+-- 手上碎石的圖、說明文字放哪（碎石在兩手中間）；岩芯箱沒有 HUD 圖
 local function carry_layout(c)
-	if c and c.box then return {x = 0.5, y = 0.7}, {x = -30, y = -17}, {x = 0.5, y = 0.57} end
 	return {x = 0.5, y = 0.74}, {x = 4, y = 4}, {x = 0.5, y = 0.8}
 end
 
@@ -117,8 +131,8 @@ local function show_carry(player, c)
 			number = 0xFFE080, text = text, z_index = 100})
 	end
 	local img = ""
-	if c and c.box then img = BOX_IMG
-	elseif c then img = cube(c) end
+	if c and not c.box then img = cube(c) end
+	show_held(player, c and c.box ~= nil)
 	if carry_img[name] then
 		player:hud_change(carry_img[name], "text", img)
 		player:hud_change(carry_img[name], "position", ipos)
@@ -185,7 +199,12 @@ core.register_globalstep(function(dtime)
 			local rel = (player:get_look_horizontal() - parent:get_yaw()) % (2 * math.pi) - math.pi     -- 車斗在車尾那一側
 			set_arms(player, "cart", rel * ARM_LOOK)
 		elseif parent then set_arms(player, nil)
-		else set_arms(player, carried(player) and "carry" or nil) end
+		else
+			-- 捧著岩芯箱：胸前掛著真的箱子，不畫 HUD 手臂；箱子掉了就補
+			local c = carried(player)
+			set_arms(player, c and not c.box and "carry" or nil)
+			if c and c.box then show_held(player, true) end
+		end
 	end
 end)
 
@@ -923,6 +942,8 @@ end)
 core.register_on_leaveplayer(function(player)
 	local name = player:get_player_name()
 	carry_hud[name], carry_img[name], arms[name], loaded_at[name] = nil, nil, nil, nil
+	if held[name] and held[name]:get_pos() then held[name]:remove() end
+	held[name] = nil
 end)
 
 -- 已經蓋好的營地：組號看板從礦帶裡（舊位置）搬到南邊的走廊

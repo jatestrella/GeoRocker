@@ -153,6 +153,7 @@ local function box_tex(top)
 	return ("[fill:16x16:%s^[fill:16x2:0,0:#1a3a80"):format(BLUE)
 end
 rockmech.corebox_tex = box_tex(true)
+rockmech.corebox_side_tex = box_tex(false)
 core.register_node(COREBOX, {
 	description = "岩芯箱", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 	tiles = {box_tex(true), box_tex(false), box_tex(false)},
