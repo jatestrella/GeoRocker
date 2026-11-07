@@ -76,7 +76,7 @@ end
 -- forced_visible 讓自己第一人稱也看得到；別人看得到你捧著箱子
 local HELD_BOX = "rockmech:held_corebox"
 local BOX_H = 0.4 / 3                         -- 手上的箱子只有地上的 1/3 高：太厚會擋住視線
-local BOX_POS = {x = 0, y = 10 + BOX_H * 5, z = 5.5}   -- 掛在玩家身上的位置（1/10 m）：箱底離地 1 m、身體前方 0.55 m
+local BOX_POS = {x = 0, y = 7.5 + BOX_H * 5, z = 5}    -- 掛在玩家身上的位置（1/10 m）：箱底離地 0.75 m（手垂下捧著）、身體前方 0.5 m
 core.register_entity(HELD_BOX, {
 	initial_properties = {visual = "cube", visual_size = {x = 0.9, y = BOX_H, z = 0.6},
 		textures = {"[fill:16x16:#2a62c8"}, physical = false, pointable = false, static_save = false},
@@ -387,6 +387,24 @@ core.register_on_mods_loaded(function()
 		on_place = place,
 		on_secondary_use = place_air,
 	})
+	-- 手上捧著東西（碎石、岩芯箱）時，不管手上拿著什麼（木板、方塊、別的工具），右鍵都先放下捧著的東西：
+	-- 不然拿著方塊的右鍵會變成放方塊，岩芯箱放不下來
+	local skip = {[""] = true, [PICK] = true, [SHOVEL] = true, air = true, ignore = true, unknown = true}
+	for name, def in pairs(core.registered_items) do
+		if not skip[name] then
+			local op, os = def.on_place, def.on_secondary_use
+			core.override_item(name, {
+				on_place = function(itemstack, placer, pointed)
+					if placer and placer:is_player() and carried(placer) then return place(itemstack, placer, pointed) end
+					return (op or core.item_place)(itemstack, placer, pointed)
+				end,
+				on_secondary_use = function(itemstack, user, pointed)
+					if user and user:is_player() and carried(user) then return place_air(itemstack, user) end
+					if os then return os(itemstack, user, pointed) end
+				end,
+			})
+		end
+	end
 end)
 
 ---------------------------------------------------------------------------
