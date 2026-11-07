@@ -201,6 +201,7 @@ Field notebook (@1 / @2 holes)@nRight-click a core box to log it; left-click to 
 @1 logged (some fields you cannot interpret were recorded as ?): left-click to open the field notebook=@1 記好了（有些欄位不會判讀，記成 ?）：左鍵打開野帳本看
 Field notebook@nRight-click a core box to log it; left-click to read=野帳本@n對岩芯箱右鍵判讀；左鍵翻閱
 [Field notebook] Right-click a core box to log it=[野帳本] 對著岩芯箱按右鍵判讀
+Core drilling @1 / @2 m @3=鑽岩芯 @1 / @2 m @3
 [Core drilling] Nothing was drilled (@1)=[岩芯鑽探] 沒鑽到東西（@1）
 [Core drilling] Nothing was drilled=[岩芯鑽探] 沒鑽到東西
 [Core drilling] @1 finished BH-@2, depth @3 m, @4: the blue core box is next to the collar; right-click it with a field notebook to log it=[岩芯鑽探] @1 鑽好 BH-@2，深 @3 m，@4：藍色岩芯箱在孔口旁邊，拿野帳本對它右鍵判讀

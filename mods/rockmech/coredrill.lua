@@ -846,8 +846,21 @@ core.register_craftitem(BOOK, {
 
 local drilling = {}         -- 玩家名稱 → {collar, x, y, z, rows, t, max, ok（還能繼續鑽嗎：回傳 nil 或停下的原因）}
 
+-- 鑽孔進度條（畫面中間，比照鑿岩機）：已鑽深度 / 最深，加上目前這一公尺的進度
+local function progress_hud(p, d)
+	local depth = #d.rows + math.min(1, d.t / SEC_PER_M)
+	local bars = math.floor(math.min(1, depth / d.max) * 10 + 0.5)
+	local text = S("Core drilling @1 / @2 m @3", ("%.1f"):format(depth), tostring(d.max), ("■"):rep(bars) .. ("□"):rep(10 - bars))
+	if d.hud then p:hud_change(d.hud, "text", text)
+	else
+		d.hud = p:hud_add({type = "text", position = {x = 0.5, y = 0.56}, alignment = {x = 0, y = 0},
+			text = text, number = 0xFFFFFF, z_index = 50})
+	end
+end
 local function finish(name, d, why)
 	drilling[name] = nil
+	local p = core.get_player_by_name(name)
+	if p and d.hud then p:hud_remove(d.hud) end
 	if d.on_done then d.on_done() end
 	if #d.rows == 0 then
 		rockmech.notify(name, why and S("[Core drilling] Nothing was drilled (@1)", why) or S("[Core drilling] Nothing was drilled"))
@@ -935,6 +948,8 @@ core.register_globalstep(function(dtime)
 					maxpos = {x = d.x + 0.1, y = d.y + 0.6, z = d.z + 0.1}, minvel = {x = -0.6, y = 0.8, z = -0.6},
 					maxvel = {x = 0.6, y = 1.6, z = 0.6}, minacc = {x = 0, y = -5, z = 0}, maxacc = {x = 0, y = -5, z = 0},
 					minexptime = 0.4, maxexptime = 0.8, minsize = 0.6, maxsize = 1.2, texture = "[fill:4x4:#a89c90"})
+				d.hud_t = (d.hud_t or 0) + dtime
+				if d.hud_t >= 0.2 or not d.hud then d.hud_t = 0; progress_hud(p, d) end
 				while d.t >= SEC_PER_M and drilling[name] do
 					d.t = d.t - SEC_PER_M
 					local cell = {x = d.x, y = d.y - #d.rows, z = d.z}

@@ -201,6 +201,7 @@ Field notebook (@1 / @2 holes)@nRight-click a core box to log it; left-click to 
 @1 logged (some fields you cannot interpret were recorded as ?): left-click to open the field notebook=
 Field notebook@nRight-click a core box to log it; left-click to read=
 [Field notebook] Right-click a core box to log it=
+Core drilling @1 / @2 m @3=
 [Core drilling] Nothing was drilled (@1)=
 [Core drilling] Nothing was drilled=
 [Core drilling] @1 finished BH-@2, depth @3 m, @4: the blue core box is next to the collar; right-click it with a field notebook to log it=
