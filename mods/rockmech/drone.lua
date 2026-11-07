@@ -19,6 +19,9 @@ local HOME_KEY = "rockmech:drone_home"
 -- 旋翼聲：懸停、飛行各一段（同一個音檔，飛行的音高高 PITCH_MOVE 倍），兩段一起循環播放、交叉淡入淡出
 -- （正在播的聲音改不了音高）。音量跟 rockmech_vehicle_sound_gain 相乘
 local SOUND_HOVER, SOUND_MOVE, PITCH_MOVE = 0.1, 0.4, 1.12   -- 2026-11-07 降一半
+-- 駕駛的鏡頭就在無人機上（距離 0，一直是最大聲）；人其實站在起飛點，所以駕駛另外播一組不跟著無人機的聲音，
+-- 音量 × SOUND_PILOT；附在無人機上的那組只給其他人聽
+local SOUND_PILOT = 0.25
 local SOUND_OFF = 0.001     -- 淡到 0 引擎會把聲音停掉，用很小的值代替
 local FADE = 2              -- 淡入淡出速度（音量／秒）
 
@@ -169,8 +172,9 @@ local function land(name)
 		end
 		player:get_meta():set_string(HOME_KEY, "")
 	end
-	if f.snd_hover then core.sound_stop(f.snd_hover) end
-	if f.snd_move then core.sound_stop(f.snd_move) end
+	for _, k in ipairs({"snd_hover", "snd_move", "psnd_hover", "psnd_move"}) do
+		if f[k] then core.sound_stop(f[k]) end
+	end
 	if f.drone and f.drone:get_pos() then
 		for _, c in ipairs(f.drone:get_children()) do if not c:is_player() then c:remove() end end
 		f.drone:remove()
@@ -210,8 +214,10 @@ local function take_off(player)
 	-- 旋翼聲：跟著無人機走，附近的人也聽得到
 	local g = rockmech.cfg.vehicle_sound_gain or 1
 	if g > 0 then
-		f.snd_hover = core.sound_play("rockmech_drone", {object = d, loop = true, gain = SOUND_HOVER * g, max_hear_distance = 40})
-		f.snd_move = core.sound_play("rockmech_drone", {object = d, loop = true, gain = SOUND_OFF, pitch = PITCH_MOVE, max_hear_distance = 40})
+		f.snd_hover = core.sound_play("rockmech_drone", {object = d, loop = true, gain = SOUND_HOVER * g, max_hear_distance = 40, exclude_player = name})
+		f.snd_move = core.sound_play("rockmech_drone", {object = d, loop = true, gain = SOUND_OFF, pitch = PITCH_MOVE, max_hear_distance = 40, exclude_player = name})
+		f.psnd_hover = core.sound_play("rockmech_drone", {to_player = name, loop = true, gain = SOUND_HOVER * SOUND_PILOT * g})
+		f.psnd_move = core.sound_play("rockmech_drone", {to_player = name, loop = true, gain = SOUND_OFF, pitch = PITCH_MOVE})
 		f.moving = false
 	end
 	core.chat_send_player(name, ("[無人機] 起飛！WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點（上限：起飛點上方 %d m、水平 %d m 內）"):format(CEILING, cfg.drone_range))
@@ -259,6 +265,8 @@ core.register_globalstep(function(dtime)
 				local g = rockmech.cfg.vehicle_sound_gain or 1
 				core.sound_fade(f.snd_hover, FADE, moving and SOUND_OFF or SOUND_HOVER * g)
 				core.sound_fade(f.snd_move, FADE, moving and SOUND_MOVE * g or SOUND_OFF)
+				core.sound_fade(f.psnd_hover, FADE * SOUND_PILOT, moving and SOUND_OFF or SOUND_HOVER * SOUND_PILOT * g)
+				core.sound_fade(f.psnd_move, FADE * SOUND_PILOT, moving and SOUND_MOVE * SOUND_PILOT * g or SOUND_OFF)
 			end
 			-- 強制載入跟著走（換了區塊才重算）
 			local bh = core.hash_node_position({x = math.floor(pos.x / 16), y = 0, z = math.floor(pos.z / 16)})
