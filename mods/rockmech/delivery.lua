@@ -6,7 +6,8 @@
 --   設施（破碎站、大型破碎站、選礦場、輸送帶、置物箱）：買了拿到「施工單」（一張紙），拿著對地面按右鍵，照原本的放置規則在那裡施工。
 --     施工前先檢查施工範圍（機身、受料倉、塔）裡有沒有人或車：有就不施工（人會掉進挖開的倉裡）。
 --     放置預覽（preview.lua）跟著施工單走，範圍內有人或車也標紅色。
--- 障礙物偵測給預覽共用：rockmech.cells_blocked(cells, y0, y1)。
+-- 障礙物偵測給預覽共用：rockmech.cells_blocked(cells, y0, y1, except)；放東西的人自己不算，
+-- 施工完人站在受料倉範圍裡就移到倉外。
 
 local V = rockmech.vehicles
 local cfg = rockmech.cfg
@@ -38,8 +39,9 @@ local function body_cells(def, cx, cz, yaw)
 end
 rockmech.vehicle_body_cells = body_cells
 
--- 這些格子（y0..y1 之間）有沒有人或車：回傳說明（"人"／"卡車"…）或 nil
-function rockmech.cells_blocked(cells, y0, y1)
+-- 這些格子（y0..y1 之間）有沒有人或車：回傳說明（"人"／"卡車"…）或 nil。except：不算的那個玩家（放東西的人自己）
+function rockmech.cells_blocked(cells, y0, y1, except)
+	local skip = except and except.is_player and except:is_player() and except:get_player_name()
 	if #cells == 0 then return nil end
 	local set, x1, x2, z1, z2 = {}, math.huge, -math.huge, math.huge, -math.huge
 	for _, c in ipairs(cells) do
@@ -51,7 +53,7 @@ function rockmech.cells_blocked(cells, y0, y1)
 	for _, o in ipairs(core.get_objects_in_area({x = x1 - 8, y = y0 - 4, z = z1 - 8}, {x = x2 + 8, y = y1 + 4, z = z2 + 8})) do
 		local p = o:get_pos()
 		if o:is_player() then
-			if p.y >= y0 - 2 and p.y <= y1 and hit(p.x, p.z) then return "人" end
+			if o:get_player_name() ~= skip and p.y >= y0 - 2 and p.y <= y1 and hit(p.x, p.z) then return "人" end
 		else
 			local e = o:get_luaentity()
 			local def = e and e.vkind and V.TYPES[e.vkind]
@@ -215,11 +217,33 @@ for _, o in ipairs(ORDERS) do
 			if o.hopper then
 				local dx, dz = hopper_dir(placer)
 				local a = pointed.above
-				local who = rockmech.cells_blocked(rockmech.facility_cells(o.item, a, dx, dz), a.y - 1, a.y + 4)
+				local cells = rockmech.facility_cells(o.item, a, dx, dz)
+				local who = rockmech.cells_blocked(cells, a.y - 1, a.y + 4, placer)
 				if who then
-					core.chat_send_player(name, ("[施工] 施工範圍裡有%s：先移開（你自己也要站到預覽框外面）"):format(who))
+					core.chat_send_player(name, ("[施工] 施工範圍裡有%s：先移開"):format(who))
 					return itemstack
 				end
+				local tmp = ItemStack(o.item)
+				local res = orig.on_place(tmp, placer, pointed)
+				if core.get_node(a).name ~= o.item then return itemstack end      -- 沒蓋成（地不平…，原本的訊息已經講了）
+				if not core.is_creative_enabled(name) and res and res:get_count() == 0 then itemstack:take_item() end
+				-- 自己站在施工範圍裡：移到受料倉外（倉朝自己這邊挖，不移會掉進去）
+				local pp = placer:get_pos()
+				local px, pz = math.floor(pp.x + 0.5), math.floor(pp.z + 0.5)
+				for _, c in ipairs(cells) do
+					if c[1] == px and c[2] == pz then
+						local far = 2 + H.SIZE + 1
+						local q = {x = a.x + dx * far + (dx == 0 and (pp.x - a.x) or 0), y = a.y + 2, z = a.z + dz * far + (dz == 0 and (pp.z - a.z) or 0)}
+						for y = a.y + 6, a.y - 6, -1 do
+							local nd = core.registered_nodes[core.get_node({x = math.floor(q.x + 0.5), y = y, z = math.floor(q.z + 0.5)}).name]
+							if nd and nd.walkable then q.y = y + 0.5; break end
+						end
+						placer:set_pos(q)
+						core.chat_send_player(name, "[施工] 你站在受料倉的位置，先把你移到倉外")
+						break
+					end
+				end
+				return itemstack
 			end
 			local tmp = ItemStack(o.item)
 			tmp:get_meta():set_int("slope", itemstack:get_meta():get_int("slope"))

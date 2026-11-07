@@ -147,12 +147,12 @@ core.register_globalstep(function(dtime)
 				last[name] = key
 				if vdef then
 					local cells = vehicle_cells(vdef, a, yaw)
-					draw(name, cells, a.y, not (rockmech.cells_blocked and rockmech.cells_blocked(cells, a.y, a.y + 2 * vdef.half)))
+					draw(name, cells, a.y, not (rockmech.cells_blocked and rockmech.cells_blocked(cells, a.y, a.y + 2 * vdef.half, player)))
 				else
 					-- 機身、受料倉（選礦場再加兩座塔）；地不平，或範圍裡有人、有車（delivery.lua）就標紅色
 					local cells = rockmech.facility_cells(item, a, dx, dz)
 					local ok = is_plant and rockmech.plant_site_ok(a, dx, dz) or (not is_plant and H.site_ok(a, dx, dz))
-					if ok and rockmech.cells_blocked(cells, a.y - 1, a.y + 4) then ok = false end
+					if ok and rockmech.cells_blocked(cells, a.y - 1, a.y + 4, player) then ok = false end
 					draw(name, cells, a.y, ok)
 				end
 			end
