@@ -336,9 +336,11 @@ end
 ---------------------------------------------------------------------------
 
 local TOPSOIL = "rockmech:topsoil"
+local TOPSOIL_K = {[TOPSOIL] = NLEV}     -- 表土 → 厚度（八分之一公尺）；薄的表土在下面註冊
 local function loosen(p)
-	if core.get_node(p).name ~= TOPSOIL then return false end
-	core.swap_node(p, {name = SOIL})
+	local k = TOPSOIL_K[core.get_node(p).name]
+	if not k then return false end
+	core.swap_node(p, {name = rockmech.rubble_with_level(SOIL, k)})
 	core.after(0, function() rockmech.collapse.check_cell(p) end)     -- 底下空了就掉、陡了就流
 	return true
 end
@@ -366,6 +368,27 @@ core.register_node(TOPSOIL, {
 		return ok
 	end,
 })
+-- 薄的表土（1/8 … 7/8 m）：山腳那一圈逐漸變薄的坡腳用。一樣有草、不流動；被擾動變成同樣厚度的鬆土
+local TOPSOIL_THIN = {}
+for k = 1, NLEV - 1 do
+	local name = TOPSOIL .. "_" .. k
+	core.register_node(name, {
+		description = ("表土（%d/8 m）Topsoil"):format(k),
+		drawtype = "nodebox", paramtype = "light",
+		node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.5 + k / NLEV, 0.5}},
+		tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
+		is_ground_content = false, groups = {crumbly = 3, soil = 1, not_in_creative_inventory = 1},
+		sounds = default.node_sound_dirt_defaults(), drop = "",
+		on_dig = function(pos, node, digger)
+			local loose = rockmech.rubble_with_level(SOIL, k)
+			core.swap_node(pos, {name = loose})
+			local ok = core.node_dig(pos, {name = loose}, digger)
+			disturb(pos)
+			return ok
+		end,
+	})
+	TOPSOIL_THIN[k], TOPSOIL_K[name] = name, k
+end
 -- 鬆土放久了長草變回表土：滿格、沒被壓實、上面是空的而且照得到光（平均約 10 分鐘）
 core.register_abm({
 	label = "rockmech: 鬆土長草變回表土",
@@ -395,7 +418,7 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 山上的表土和樹林：每條礦帶交界的山脊，比地表高 1 m 以上、頂上是天然岩石的每一欄都鋪 SOIL_T m 的表土
+-- 山上的表土和樹林：每條礦帶交界的山脊，比地表高 1 m 以上、頂上是天然岩石的每一欄都鋪 1–3 m 的表土（有厚有薄）
 -- （陡坡也鋪：根系抓住；2 m 才蓋得住 1 m 一階的岩石台階；屋頂、帳篷等建築上面不鋪），
 -- 上面稀疏種蘋果樹；鋸木台、木工桌放在營地裡。
 -- 2026-11-07 的教訓：蓋的時候絕不動岩石（換掉岩石等於開挖），而且用 VoxelManip 寫（不觸發破壞判定）
@@ -405,7 +428,7 @@ local RIDGE_X = 30           -- 山脊中線兩側各鋪幾公尺
 local Z1, Z2 = -40, 160      -- 沿山脊鋪到哪裡（z）
 local MIN_RISE = 1           -- 比地表高這麼多才算山坡（走廊、平地不鋪）
 local TREE_GAP = 6           -- 樹距 (m)，再加隨機偏移、隨機跳過一些
-local SOIL_T = 2             -- 表土厚度 (m)
+local SOIL_MIN, SOIL_MAX = 1, 3   -- 表土厚度 (m)：平滑雜訊在這中間變化（平均 2 m，蓋得住 1 m 一階的岩石台階）
 local DIRS8 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}}
 
 -- 範圍內每一欄最高的非空氣格 h，和那一格是不是天然岩石 rock（建築、樹、土上面不鋪）
@@ -441,35 +464,87 @@ local function plant_ridge(xr)
 	local surface = cfg.surface_y or 0
 	-- 表土（VoxelManip：不觸發破壞判定）
 	local vm = core.get_voxel_manip()
-	local e1, e2 = vm:read_from_map({x = x1, y = -20, z = Z1}, {x = x2, y = 60 + SOIL_T, z = Z2})
+	local e1, e2 = vm:read_from_map({x = x1, y = -20, z = Z1}, {x = x2, y = 61 + SOIL_MAX, z = Z2})
 	local area = VoxelArea(e1, e2)
 	local data = vm:get_data()
 	local c_top = core.get_content_id(TOPSOIL)
-	local covered, n_soil = {}, 0
+	local c_thin = {}
+	for k = 1, NLEV - 1 do c_thin[k] = core.get_content_id(TOPSOIL_THIN[k]) end
+	-- 每一欄的厚度（八分之一公尺）：平滑雜訊，SOIL_MIN..SOIL_MAX m，看起來像自然堆積
+	local thick = {}
+	local noise = rockmech.stress.terrain_noise
 	for x = x1, x2 do for z = Z1, Z2 do
 		local y = h[x .. "," .. z]
 		if y and y >= surface + MIN_RISE and rock[x .. "," .. z] then
-			local t = 0
-			for dy = 1, SOIL_T do
-				local i = area:index(x, y + dy, z)
-				if data[i] ~= core.CONTENT_AIR then break end
-				data[i] = c_top; t = dy; n_soil = n_soil + 1
-			end
-			if t > 0 then covered[x .. "," .. z] = t end
+			local n = noise(x / 14, z / 14, 41)
+			thick[x .. "," .. z] = math.floor(NLEV * (SOIL_MIN + (SOIL_MAX - SOIL_MIN) * n) + 0.5)
 		end
 	end end
+	-- 樹的位置先挑：稀疏（間距 TREE_GAP、隨機偏移、四成跳過），那一欄的厚度取整格（樹不長在薄片上），至少 2 m
+	local trees = {}
+	for gx = x1, x2, TREE_GAP do for gz = Z1, Z2, TREE_GAP do
+		local x = gx + math.floor(rnd(gx, gz, 1) * 5) - 2
+		local z = gz + math.floor(rnd(gx, gz, 2) * 5) - 2
+		local t = thick[x .. "," .. z]
+		if rnd(gx, gz, 3) > 0.4 and t then
+			thick[x .. "," .. z] = math.max(2 * NLEV, t - t % NLEV)
+			trees[#trees + 1] = {x = x, z = z}
+		end
+	end end
+	local covered, n_soil = {}, 0     -- covered：鋪了幾整格
+	for key, t in pairs(thick) do
+		local x, z = key:match("^(-?%d+),(-?%d+)$")
+		x, z = tonumber(x), tonumber(z)
+		local y = h[key]
+		local full, r = math.floor(t / NLEV), t % NLEV
+		local done = 0
+		for dy = 1, full + (r > 0 and 1 or 0) do
+			local i = area:index(x, y + dy, z)
+			if data[i] ~= core.CONTENT_AIR then break end
+			data[i] = dy <= full and c_top or c_thin[r]
+			n_soil = n_soil + 1
+			if dy <= full then done = dy end
+		end
+		if done > 0 then covered[key] = done end
+	end
+	-- 坡腳：山腳平地上離有表土的地方 1、2、3 m 的那一圈，鋪 1 m、5/8 m、2/8 m 的表土（蓋住最下面那一階的岩石側面，
+	-- 逐漸變薄接到平地）。只鋪在天然岩石上
+	local APRON = {NLEV, 5, 2}
+	local dist, frontier = {}, {}
+	for key in pairs(covered) do dist[key] = 0; frontier[#frontier + 1] = key end
+	for d = 1, #APRON do
+		local nxt = {}
+		for _, key in ipairs(frontier) do
+			local cx, cz = key:match("^(-?%d+),(-?%d+)$")
+			cx, cz = tonumber(cx), tonumber(cz)
+			for _, dd in ipairs(DIRS8) do
+				local x, z = cx + dd[1], cz + dd[2]
+				local k2 = x .. "," .. z
+				if not dist[k2] and x >= x1 and x <= x2 and z >= Z1 and z <= Z2 and rock[k2] and h[k2] then
+					dist[k2] = d
+					nxt[#nxt + 1] = k2
+					local i = area:index(x, h[k2] + 1, z)
+					if data[i] == core.CONTENT_AIR then
+						local lv = APRON[d]
+						data[i] = core.get_content_id(lv == NLEV and TOPSOIL or TOPSOIL_THIN[lv])
+						n_soil = n_soil + 1
+					end
+				end
+			end
+		end
+		frontier = nxt
+	end
 	vm:set_data(data)
 	vm:write_to_map(true)
-	-- 樹：稀疏（間距 TREE_GAP、隨機偏移、四成跳過），種在表土上；周圍 8 格的地面都比樹根高 1 m 以上（窪地）不種
+	-- 樹：種在挑好的位置（整格表土上）；周圍 8 格的地面都比樹根高 1 m 以上（窪地）不種
 	local function ground(x, z)
 		local y = h[x .. "," .. z]
 		return y and (y + (covered[x .. "," .. z] or 0)) or nil
 	end
 	local n_tree = 0
-	for gx = x1, x2, TREE_GAP do for gz = Z1, Z2, TREE_GAP do
-		local x = gx + math.floor(rnd(gx, gz, 1) * 5) - 2
-		local z = gz + math.floor(rnd(gx, gz, 2) * 5) - 2
-		if rnd(gx, gz, 3) > 0.4 and covered[x .. "," .. z] == SOIL_T then
+	for _, tp in ipairs(trees) do
+		local x, z = tp.x, tp.z
+		if covered[x .. "," .. z] and covered[x .. "," .. z] * NLEV == thick[x .. "," .. z] then
 			local g = ground(x, z)
 			local buried = true
 			for _, d in ipairs(DIRS8) do
@@ -481,7 +556,7 @@ local function plant_ridge(xr)
 				n_tree = n_tree + 1
 			end
 		end
-	end end
+	end
 	-- 做完、寫進地圖之後才記下來（中途關機的話下次重做）
 	storage:set_string(key, "1")
 	planting[xr] = nil
