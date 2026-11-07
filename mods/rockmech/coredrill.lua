@@ -25,6 +25,17 @@ local box_spot             -- 下面定義（岩芯箱那段）
 local function see(name, ab) return not rockmech.can_see or rockmech.can_see(name, ab) end
 local function logs_of(acc) return core.deserialize(storage:get_string(LOG .. acc)) or {} end
 local function save_logs(acc, list) storage:set_string(LOG .. acc, core.serialize(list)) end
+local function find_bh(acc, n)
+	for _, b in ipairs(logs_of(acc)) do if b.n == n then return b end end
+end
+-- 鑽孔的名字：玩家取的名字，沒有就是 BH-n
+local function label_of(b) return b and b.name and b.name ~= "" and b.name or ("BH-" .. (b and b.n or "?")) end
+local function bh_label(acc, n)
+	local b = find_bh(acc, n)
+	return b and label_of(b) or ("BH-" .. n)
+end
+rockmech.borehole_label = bh_label
+local NAME_MAX = 20          -- 名字最多幾個字
 
 -- Priest & Hudson：節理頻率 λ（條/m）→ RQD（%）
 local function rqd_of(lambda) return 100 * math.exp(-0.1 * lambda) * (0.1 * lambda + 1) end
@@ -49,7 +60,8 @@ local function log_form(name, bh, rm, gr)
 	if rm == nil then rm = see(name, "rockmass") end
 	if gr == nil then gr = see(name, "grade") end
 	local out = {"formspec_version[6]size[15,12.4]",
-		("label[0.5,0.6;%s]"):format(core.formspec_escape(("BH-%d　孔口 (%d, %d, %d)　深 %d m%s"):format(bh.n, bh.pos.x, bh.pos.y, bh.pos.z, bh.depth,
+		("label[0.5,0.6;%s]"):format(core.formspec_escape(("%s%s　孔口 (%d, %d, %d)　深 %d m%s"):format(label_of(bh),
+			(bh.name and bh.name ~= "") and ("（BH-" .. bh.n .. "）") or "", bh.pos.x, bh.pos.y, bh.pos.z, bh.depth,
 			bh.stop and ("（" .. bh.stop .. "）") or ""))),
 		"label[0.5,1.2;深度]label[3.0,1.2;柱狀]label[4.4,1.2;岩性]label[7.4,1.2;品位]label[9.6,1.2;節理]label[11.6,1.2;RQD]"}
 	local rows = bh.rows or {}
@@ -120,9 +132,87 @@ core.register_node(CASING, {
 	drop = "",
 	on_rightclick = function(pos, node, clicker)
 		if not (clicker and clicker:is_player()) then return end
-		local meta = core.get_meta(pos)
-		core.chat_send_player(clicker:get_player_name(), ("[鑽孔] BH-%d，深 %d m：岩芯在藍色岩芯箱裡，拿野帳本對岩芯箱右鍵判讀"):format(
-			meta:get_int("n"), meta:get_int("depth")))
+		rockmech.borehole_name_form(clicker, pos)
+	end,
+})
+
+-- 鑽孔取名：對套管右鍵。自己組（和老師）可以改；名字存在鑽孔紀錄（bh:<帳戶>）裡，空白就回到 BH-n
+local NAME_FORM = "rockmech:borehole_name"
+local naming = {}            -- 玩家名稱 → 套管位置
+local function casing_info(pos, acc, n, depth)
+	core.get_meta(pos):set_string("infotext", ("%s（%s）深 %d m\n右鍵取名字"):format(bh_label(acc, n),
+		rockmech.account_label and rockmech.account_label(acc) or acc, depth))
+end
+function rockmech.borehole_name_form(player, pos)
+	local name = player:get_player_name()
+	local meta = core.get_meta(pos)
+	local acc, n, depth = meta:get_string("acc"), meta:get_int("n"), meta:get_int("depth")
+	local b = find_bh(acc, n)
+	if not b then core.chat_send_player(name, "[鑽孔] 找不到這一孔的紀錄"); return end
+	local mine = not rockmech.owner_ok or rockmech.owner_ok(acc, name)
+	naming[name] = pos
+	local out = {"formspec_version[6]size[10,5]",
+		("label[0.5,0.6;%s]"):format(core.formspec_escape(("%s（BH-%d）深 %d m　%s"):format(label_of(b), n, depth,
+			rockmech.account_label and rockmech.account_label(acc) or acc))),
+		("label[0.5,1.2;%s]"):format(core.formspec_escape("岩芯在藍色岩芯箱裡，拿野帳本對岩芯箱右鍵判讀")),
+	}
+	if mine then
+		out[#out + 1] = ("field[0.5,2.2;9,0.8;bhname;%s;%s]"):format(
+			core.formspec_escape(("鑽孔名稱（最多 %d 個字，空白 = BH-%d）"):format(NAME_MAX, n)), core.formspec_escape(b.name or ""))
+		out[#out + 1] = "field_close_on_enter[bhname;false]"
+		out[#out + 1] = "button[0.5,3.6;4,0.8;save;儲存名稱]"
+	else
+		out[#out + 1] = "label[0.5,2.4;" .. core.formspec_escape("別組的鑽孔，不能改名字") .. "]"
+	end
+	out[#out + 1] = "button_exit[5.5,3.6;4,0.8;close;關閉]"
+	core.show_formspec(name, NAME_FORM, table.concat(out))
+end
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= NAME_FORM then return end
+	local name = player:get_player_name()
+	local pos = naming[name]
+	if not pos then return true end
+	if fields.quit and not fields.save and not fields.key_enter_field then naming[name] = nil; return true end
+	if not (fields.save or fields.key_enter_field == "bhname") then return true end
+	local meta = core.get_meta(pos)
+	local acc, n = meta:get_string("acc"), meta:get_int("n")
+	if core.get_node(pos).name ~= CASING or (rockmech.owner_ok and not rockmech.owner_ok(acc, name)) then return true end
+	-- 名字：去掉換行和前後空白，最多 NAME_MAX 個字
+	local s = (fields.bhname or ""):gsub("[%c]", " "):gsub("^%s+", ""):gsub("%s+$", "")
+	local chars = {}
+	for ch in s:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+		if #chars >= NAME_MAX then break end
+		chars[#chars + 1] = ch
+	end
+	s = table.concat(chars)
+	local list = logs_of(acc)
+	local b
+	for _, x in ipairs(list) do if x.n == n then b = x end end
+	if not b then return true end
+	local old = label_of(b)
+	b.name = s ~= "" and s or nil
+	save_logs(acc, list)
+	casing_info(pos, acc, n, meta:get_int("depth"))
+	-- 附近（48 m 內）這一孔的岩芯箱跟著改名牌；遠處的在下次放下時更新
+	for _, p in ipairs(core.find_nodes_in_area(vector.subtract(pos, 48), vector.add(pos, 48), {COREBOX})) do
+		local m = core.get_meta(p)
+		if m:get_string("acc") == acc and m:get_int("n") == n then
+			m:set_string("infotext", ("岩芯箱 %s（%s，深 %d m）\n左鍵捧起來；拿野帳本右鍵判讀"):format(label_of(b),
+				rockmech.account_label and rockmech.account_label(acc) or acc, m:get_int("depth")))
+		end
+	end
+	local msg = ("[鑽孔] %s 把 %s 改名為 %s"):format(name, old, label_of(b))
+	for _, m in ipairs(rockmech.account_members and rockmech.account_members(acc) or {name}) do core.chat_send_player(m, msg) end
+	rockmech.borehole_name_form(player, pos)
+	return true
+end)
+core.register_on_leaveplayer(function(player) naming[player:get_player_name()] = nil end)
+-- 舊的套管：名牌補上「右鍵取名字」（一次）
+core.register_lbm({
+	label = "rockmech: 鑽孔套管名牌", name = "rockmech:borehole_name_tag", nodenames = {CASING}, run_at_every_load = false,
+	action = function(pos)
+		local m = core.get_meta(pos)
+		if m:get_int("n") > 0 then casing_info(pos, m:get_string("acc"), m:get_int("n"), m:get_int("depth")) end
 	end,
 })
 
@@ -173,7 +263,7 @@ function rockmech.corebox_put(pos, data)
 	meta:set_string("acc", data.acc)
 	meta:set_int("n", data.n)
 	meta:set_int("depth", data.depth)
-	meta:set_string("infotext", ("岩芯箱 BH-%d（%s，深 %d m）\n左鍵捧起來；拿野帳本右鍵判讀"):format(data.n,
+	meta:set_string("infotext", ("岩芯箱 %s（%s，深 %d m）\n左鍵捧起來；拿野帳本右鍵判讀"):format(bh_label(data.acc, data.n),
 		rockmech.account_label and rockmech.account_label(data.acc) or data.acc, data.depth))
 	return true
 end
@@ -221,17 +311,13 @@ local function book_form(name, entries)
 	for i, e in ipairs(entries) do
 		local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
 		out[#out + 1] = ("button[%g,%g;5.4,0.7;e_%d;%s]"):format(0.5 + col * 5.6, 1.2 + row * 0.8, i, core.formspec_escape(
-			("BH-%d（%s）%s%s"):format(e.n, rockmech.account_label and rockmech.account_label(e.acc) or e.acc,
+			("%s（%s）%s%s"):format(bh_label(e.acc, e.n), rockmech.account_label and rockmech.account_label(e.acc) or e.acc,
 				e.rm and "" or "岩體?", e.gr and "" or "品位?")))
 	end
 	if #entries == 0 then
 		out[#out + 1] = "label[0.5,1.6;" .. core.formspec_escape("還沒記任何孔：拿著野帳本對岩芯箱按右鍵判讀") .. "]"
 	end
 	return table.concat(out)
-end
-
-local function find_bh(acc, n)
-	for _, b in ipairs(logs_of(acc)) do if b.n == n then return b end end
 end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
@@ -275,8 +361,8 @@ local function start_logging(player, pos)
 	logging[name] = {pos = pos, acc = acc, n = n, depth = depth, t = 0, need = math.max(1, depth) * LOG_SEC_PER_M,
 		hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.7}, alignment = {x = 0, y = 0},
 			number = 0x9fe0ff, text = "", z_index = 100})}
-	core.chat_send_player(name, ("[野帳本] 開始判讀 BH-%d（深 %d m，約 %d 秒）：待在岩芯箱旁邊、手上拿著野帳本"):format(
-		n, depth, math.ceil(depth * LOG_SEC_PER_M)))
+	core.chat_send_player(name, ("[野帳本] 開始判讀 %s（深 %d m，約 %d 秒）：待在岩芯箱旁邊、手上拿著野帳本"):format(
+		bh_label(acc, n), depth, math.ceil(depth * LOG_SEC_PER_M)))
 end
 
 core.register_globalstep(function(dtime)
@@ -293,7 +379,7 @@ core.register_globalstep(function(dtime)
 			else
 				L.t = L.t + dtime
 				local m_done = math.min(L.depth, math.floor(L.t / LOG_SEC_PER_M))
-				p:hud_change(L.hud, "text", ("判讀 BH-%d　%d / %d m"):format(L.n, m_done, L.depth))
+				p:hud_change(L.hud, "text", ("判讀 %s　%d / %d m"):format(bh_label(L.acc, L.n), m_done, L.depth))
 				if L.t >= L.need then
 					local stack = p:get_wielded_item()
 					local entries = book_entries(stack)
@@ -304,7 +390,7 @@ core.register_globalstep(function(dtime)
 					stack:get_meta():set_string("logs", core.serialize(entries))
 					stack:get_meta():set_string("description", ("野帳本（%d / %d 孔）\n右鍵對岩芯箱判讀，左鍵看記過的孔"):format(#entries, BOOK_MAX))
 					p:set_wielded_item(stack)
-					stop_logging(name, ("BH-%d 記好了%s：左鍵打開野帳本看"):format(L.n,
+					stop_logging(name, ("%s 記好了%s：左鍵打開野帳本看"):format(bh_label(L.acc, L.n),
 						(e.rm and e.gr) and "" or "（有些欄位不會判讀，記成 ?）"))
 					local b = find_bh(L.acc, L.n)
 					if b then core.show_formspec(name, FORM, log_form(name, b, e.rm, e.gr)) end
@@ -367,7 +453,7 @@ local function finish(name, d, why)
 		meta:set_string("acc", acc)
 		meta:set_int("n", n)
 		meta:set_int("depth", #d.rows)
-		meta:set_string("infotext", ("BH-%d（%s）深 %d m"):format(n,
+		meta:set_string("infotext", ("BH-%d（%s）深 %d m\n右鍵取名字"):format(n,
 			rockmech.account_label and rockmech.account_label(acc) or acc, #d.rows))
 	end
 	-- 岩芯裝箱，放在孔口旁邊的地上

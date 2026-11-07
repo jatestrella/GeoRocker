@@ -116,7 +116,8 @@ local function show_carry(player, c)
 	local name = player:get_player_name()
 	local text = ""
 	if c and c.box then
-		text = ("手上：岩芯箱 BH-%d（深 %d m）　右鍵放下"):format(c.box.n, c.box.depth)
+		local label = rockmech.borehole_label and rockmech.borehole_label(c.box.acc, c.box.n) or ("BH-" .. c.box.n)
+		text = ("手上：岩芯箱 %s（深 %d m）　右鍵放下"):format(label, c.box.depth)
 	elseif c then
 		local ore = rockmech.ore_of_rubble[c.base]
 		local see = rockmech.can_see or function() return true end      -- 知識能力（knowledge.lua）
