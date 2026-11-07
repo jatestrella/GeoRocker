@@ -105,6 +105,8 @@ config.shop = {
 	{key = "gsi_card", shop = "tools", item = "rockmech:gsi_card", label = "GSI 評估圖卡（岩體）", price = 1000},
 	{key = "core_drill", shop = "tools", item = "rockmech:core_drill", label = "手持岩芯鑽機（10 m）", price = 3000},
 	{key = "compass", shop = "tools", item = "rockmech:compass", label = "地質羅盤（力學）", price = 200},
+	{key = "fieldbook", shop = "tools", item = "rockmech:fieldbook", label = "野帳本（判讀岩芯箱）", price = 10},
+	{key = "locker", shop = "tools", item = "rockmech:locker", label = "置物箱（放小東西）", price = 200},
 }
 
 -- 引擎額定功率（kW，fuel.lua 算油耗）：沒列的車不耗油（手推車靠人推）

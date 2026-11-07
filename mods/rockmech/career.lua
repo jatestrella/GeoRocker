@@ -3,6 +3,7 @@
 --   徒手只敲得動礦石，一塊 rockmech_hand_ore_time 秒；鎬子什麼岩石都能挖，也很慢；鏟子只鏟碎石，最快。
 --   敲開的岩石原地變成碎石；
 --   挖碎石就是把它拿起來，人只能拿一塊（滿格），不進物品欄，右鍵放下，或對著車斗按右鍵裝上去。
+--   岩芯箱（coredrill.lua）也一樣：左鍵捧起來、右鍵放下，一次一個；手上捧著東西時拿不了別的。
 --   世界不掉落岩石和碎石，礦都要實際搬到破碎站才換得到錢。
 --   第一次進世界在出生點旁蓋好帳篷（供應商）和一座破碎站。
 
@@ -78,7 +79,9 @@ end
 local function show_carry(player, c)
 	local name = player:get_player_name()
 	local text = ""
-	if c then
+	if c and c.box then
+		text = ("手上：岩芯箱 BH-%d（深 %d m）　右鍵放下"):format(c.box.n, c.box.depth)
+	elseif c then
 		local ore = rockmech.ore_of_rubble[c.base]
 		local see = rockmech.can_see or function() return true end      -- 知識能力（knowledge.lua）
 		text = ("手上：%s　%s%s"):format(see(name, "rockmass") and core.registered_nodes[c.base].description:gsub("\n.*", "") or "碎石",
@@ -90,7 +93,11 @@ local function show_carry(player, c)
 		carry_hud[name] = player:hud_add({type = "text", position = {x = 0.5, y = 0.8}, alignment = {x = 0, y = 0},
 			number = 0xFFE080, text = text, z_index = 100})
 	end
-	local img = c and cube(c) or ""
+	local img = ""
+	if c and c.box then
+		local t = (rockmech.corebox_tex or "[fill:16x16:#2a62c8"):gsub("%^", "&")
+		img = ("[inventorycube{%s{%s{%s"):format(t, t, t)
+	elseif c then img = cube(c) end
 	if carry_img[name] then
 		player:hud_change(carry_img[name], "text", img)
 	else
@@ -167,6 +174,10 @@ function rockmech.career_load(player, self, def)
 	local name = player:get_player_name()
 	local now = core.get_us_time() / 1e6
 	local c = carried(player)
+	if c and c.box then
+		core.chat_send_player(name, "手上捧著岩芯箱：先右鍵放下")
+		return true
+	end
 	if not c and now - (loaded_at[name] or -LOAD_HOLD) < LOAD_HOLD then return true end
 	if not c or (def.cap or 0) <= 0 then return false end
 	loaded_at[name] = now
@@ -186,6 +197,11 @@ end
 local function put_down(player, pos)
 	local c = carried(player)
 	if not c then return end
+	if c.box then
+		if rockmech.corebox_put and rockmech.corebox_put(pos, c.box) then set_carried(player, nil)
+		else core.chat_send_player(player:get_player_name(), "這裡放不下岩芯箱：對著空的地面（或另一箱的上面）按右鍵") end
+		return
+	end
 	local rest = V.deposit_column(pos.x, pos.z, pos.y, c.base, c.lv, nil, nil, c.p2)
 	c.lv = rest
 	set_carried(player, rest > 0 and c or nil)
@@ -194,11 +210,27 @@ end
 local node_dig = core.node_dig
 function core.node_dig(pos, node, digger)
 	if not digger or not digger:is_player() then return node_dig(pos, node, digger) end
+	if node.name == rockmech.COREBOX then
+		-- 岩芯箱：捧起來，一次一個
+		local name = digger:get_player_name()
+		if carried(digger) then
+			core.chat_send_player(name, "手上有東西：先右鍵放下，才捧得起岩芯箱")
+			return false
+		end
+		local data = rockmech.corebox_take(pos, digger)
+		if not data then return false end
+		set_carried(digger, {box = data})
+		return true
+	end
 	if rockmech.rubble_level[node.name] then
 		-- 挖碎石就是拿起來，人只拿得動一塊
 		local c = carried(digger)
 		local name = digger:get_player_name()
 		local base = rockmech.rubble_base[node.name]
+		if c and c.box then
+			core.chat_send_player(name, "手上捧著岩芯箱：先右鍵放下")
+			return false
+		end
 		if c and c.lv >= NLEV then
 			core.chat_send_player(name, "手上拿滿了：右鍵放下，或對著車斗按右鍵裝上去")
 			return false
@@ -255,13 +287,15 @@ local function place(itemstack, placer, pointed)
 	if def and def.on_rightclick and not placer:get_player_control().sneak then
 		return def.on_rightclick(pointed.under, un, placer, itemstack, pointed)
 	end
-	if not (carried(placer) and load_near(placer, pointed.above)) then put_down(placer, pointed.above) end
+	local c = carried(placer)
+	if not (c and not c.box and load_near(placer, pointed.above)) then put_down(placer, pointed.above) end
 	return itemstack
 end
 
 -- 對著天空按右鍵：看前方有沒有車斗
 local function place_air(itemstack, player)
-	if carried(player) then
+	local c = carried(player)
+	if c and not c.box then
 		local eye = vector.add(player:get_pos(), {x = 0, y = 1.6, z = 0})
 		load_near(player, vector.add(eye, vector.multiply(player:get_look_dir(), 3)))
 	end
@@ -377,7 +411,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				ok = false
 			else
 				inv:add_item("main", stack)
-				if order then msg = it.label .. "施工單在物品欄：拿著對地面按右鍵施工" end
+				if order then msg = it.label:gsub("（.-）$", "") .. "施工單在物品欄：拿著對地面按右鍵施工" end
 			end
 			if ok then
 				rockmech.add_money(name, -it.price)

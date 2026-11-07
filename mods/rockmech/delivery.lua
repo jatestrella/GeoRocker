@@ -3,7 +3,7 @@
 --   車輛：買了就停在自己營地東南邊的交車區（營地中心往東 YARD.x1..x2、z = YARD.z1..z2），要自己開去工地。
 --     兩排：北排車頭朝北、南排車頭朝南，車頭都貼著交車區的邊，前面是空地；左右隔 1 m。
 --     交車區沒有空位（車身蓋到的地面要平、上方淨空、沒有人或車）就不賣，先把交車區的車開走。
---   設施（破碎站、大型破碎站、選礦場、輸送帶）：買了拿到「施工單」（一張紙），拿著對地面按右鍵，照原本的放置規則在那裡施工。
+--   設施（破碎站、大型破碎站、選礦場、輸送帶、置物箱）：買了拿到「施工單」（一張紙），拿著對地面按右鍵，照原本的放置規則在那裡施工。
 --     施工前先檢查施工範圍（機身、受料倉、塔）裡有沒有人或車：有就不施工（人會掉進挖開的倉裡）。
 --     放置預覽（preview.lua）跟著施工單走，範圍內有人或車也標紅色。
 -- 障礙物偵測給預覽共用：rockmech.cells_blocked(cells, y0, y1)。
@@ -172,7 +172,9 @@ local ORDERS = {      -- 施工單 → 原本的物品、標籤顏色、名稱�
 	{order = "rockmech:order_crusher", item = "rockmech:crusher", color = "#b08a20", label = "破碎站", hopper = true},
 	{order = "rockmech:order_crusher_big", item = "rockmech:crusher_big", color = "#4a5058", label = "大型破碎站", hopper = true},
 	{order = "rockmech:order_plant", item = "rockmech:plant", color = "#3a7ab0", label = "選礦場", hopper = true, plant = true},
-	{order = "rockmech:order_belt", item = "rockmech:belt", color = "#262626", label = "輸送帶"},
+	{order = "rockmech:order_belt", item = "rockmech:belt", color = "#262626", label = "輸送帶",
+		how = "跟輸送帶一樣：點輸送帶往前接、點地面從地上開始"},
+	{order = "rockmech:order_locker", item = "rockmech:locker", color = "#6a7078", label = "置物箱", how = "放在點到的地方"},
 }
 local by_order, by_item = {}, {}
 for _, o in ipairs(ORDERS) do by_order[o.order], by_item[o.item] = o, o end
@@ -202,7 +204,7 @@ end
 
 for _, o in ipairs(ORDERS) do
 	local orig = core.registered_items[o.item]
-	local desc = o.label .. "施工單\n拿著對地面按右鍵，就在那裡施工（" .. (o.hopper and "受料倉朝自己這邊挖，先看地上的預覽框" or "跟輸送帶一樣：點輸送帶往前接、點地面從地上開始") .. "）"
+	local desc = o.label .. "施工單\n拿著對地面按右鍵，就在那裡施工（" .. (o.hopper and "受料倉朝自己這邊挖，先看地上的預覽框" or o.how) .. "）"
 	core.register_craftitem(o.order, {
 		description = desc .. (o.item == "rockmech:belt" and "\n左鍵點輸送帶收回那一格（加回施工單），點別的地方切換坡度" or ""),
 		inventory_image = PAPER .. "^[fill:12x3:2,1:" .. o.color,
