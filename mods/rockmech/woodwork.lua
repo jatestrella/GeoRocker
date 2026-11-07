@@ -174,6 +174,14 @@ local function fell(pos, digger, whole)
 		end
 	end
 	felling = false
+	local fx = function()
+		core.add_particlespawner({amount = 60, time = 0.5, minpos = vector.subtract(pos, {x = 2, y = 0, z = 2}),
+			maxpos = vector.add(pos, {x = 2, y = 6, z = 2}), minvel = {x = -1, y = -2, z = -1}, maxvel = {x = 1, y = 0, z = 1},
+			minexptime = 1, maxexptime = 2, minsize = 1, maxsize = 2, texture = "[fill:4x4:#3a7a2a"})
+		core.sound_play("default_dig_choppy", {pos = pos, gain = 1.0, max_hear_distance = 32}, true)
+	end
+	-- 不是砍的（土流失、被埋、崩塌沖倒）：樹整棵毀掉，不留原木、樹苗、蘋果。只有用斧頭砍才有原木
+	if not (digger and digger:is_player()) then fx(); return end
 	local give = {ItemStack("default:sapling " .. math.random(1, 2))}
 	if CARRY then
 		-- 經營模式：整棵樹的原木（含砍的那一格）一根接一根橫躺在地上，倒向離砍的人遠的那邊
@@ -205,10 +213,7 @@ local function fell(pos, digger, whole)
 			if not left:is_empty() then core.add_item(pos, left) end
 		end
 	end
-	core.add_particlespawner({amount = 60, time = 0.5, minpos = vector.subtract(pos, {x = 2, y = 0, z = 2}),
-		maxpos = vector.add(pos, {x = 2, y = 6, z = 2}), minvel = {x = -1, y = -2, z = -1}, maxvel = {x = 1, y = 0, z = 1},
-		minexptime = 1, maxexptime = 2, minsize = 1, maxsize = 2, texture = "[fill:4x4:#3a7a2a"})
-	core.sound_play("default_dig_choppy", {pos = pos, gain = 1.0, max_hear_distance = 32}, true)
+	fx()
 	if digger and digger:is_player() then
 		tell(digger:get_player_name(), ("樹倒了：原木 %d 根%s"):format(logs + (whole and 0 or 1), CARRY and "倒在地上（左鍵扛起來，一次一根）" or ""))
 	end
@@ -221,7 +226,7 @@ local function topple(base, why)
 	fell(base, nil, true)
 	for _, pl in ipairs(core.get_connected_players()) do
 		if vector.distance(pl:get_pos(), base) <= 32 then
-			tell(pl:get_player_name(), ("%s 的樹倒了：%s"):format(core.pos_to_string(base), why))
+			tell(pl:get_player_name(), ("%s 的樹倒了（毀掉，沒有原木）：%s"):format(core.pos_to_string(base), why))
 		end
 	end
 	core.log("action", ("[rockmech] 樹倒下 %s：%s"):format(core.pos_to_string(base), why))
@@ -450,11 +455,31 @@ end
 --   正上方的表土失去支撐 → 變鬆土掉下來
 --   旁邊四格的表土：從它的頂面到 pos 這一欄地面的落差（臨空面高度）超過 H_c → 凝聚力撐不住，變鬆土
 -- 臨空面不到 H_c 就站得住：山坡上挖一兩格只是一個小坑，坡腳切出高過 H_c 的陡壁才會一路往上滑
+-- 地上橫躺的原木：底下空了（崩塌、土流走）就毀掉消失，不會懸空，也不會變成可以撿的原木
+local function unsupported(pos)
+	local n = core.get_node({x = pos.x, y = pos.y - 1, z = pos.z}).name
+	if n == "ignore" then return false end
+	local def = core.registered_nodes[n]
+	local k = rockmech.rubble_level[n]
+	return (def and def.walkable == false) or (k and k < NLEV) or false
+end
+local function check_log(pos)
+	local node = core.get_node(pos)
+	if node.name == LOG and node.param2 >= 4 and unsupported(pos) then
+		core.remove_node(pos)
+		core.add_particlespawner({amount = 20, time = 0.3, minpos = vector.subtract(pos, 0.4), maxpos = vector.add(pos, 0.4),
+			minvel = {x = -1, y = -1, z = -1}, maxvel = {x = 1, y = 1, z = 1}, minexptime = 0.5, maxexptime = 1,
+			minsize = 1, maxsize = 2, texture = "[fill:4x4:#5a4020"})
+	end
+end
 local function disturb(pos)
 	local n = core.get_node(pos).name
 	local def = core.registered_nodes[n]
 	local k = rockmech.rubble_level[n]
-	if (def and def.walkable == false) or (k and k < NLEV) then loosen({x = pos.x, y = pos.y + 1, z = pos.z}) end
+	if (def and def.walkable == false) or (k and k < NLEV) then
+		loosen({x = pos.x, y = pos.y + 1, z = pos.z})
+		check_log({x = pos.x, y = pos.y + 1, z = pos.z})
+	end
 	local g
 	for _, d in ipairs(NB4) do
 		local p = {x = pos.x + d[1], y = pos.y, z = pos.z + d[2]}
@@ -555,6 +580,12 @@ core.register_abm({
 	interval = 10, chance = 20, catch_up = false,
 	action = check_topsoil,
 })
+core.register_abm({
+	label = "rockmech: 懸空的原木毀掉（抽查）",
+	nodenames = {LOG}, neighbors = {"air"},
+	interval = 10, chance = 5, catch_up = false,
+	action = check_log,
+})
 core.register_on_mods_loaded(function()
 	local jm = rockmech.jointmesh
 	if not jm then return end
@@ -565,6 +596,7 @@ core.register_on_mods_loaded(function()
 		local p2 = {x = math.max(a.x, b.x) + 1, y = math.max(a.y, b.y) + 4, z = math.max(a.z, b.z) + 1}
 		core.after(0.5, function()
 			for _, q in ipairs(core.find_nodes_in_area(p1, p2, {"group:rockmech_topsoil"})) do check_topsoil(q) end
+			for _, q in ipairs(core.find_nodes_in_area(p1, p2, {LOG})) do check_log(q) end
 		end)
 	end
 end)
