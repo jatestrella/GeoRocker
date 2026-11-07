@@ -56,6 +56,7 @@ local function with_sprayed(list)
 	end
 	return all
 end
+local clearing = 0          -- 爆破後清孔中：這時拿掉的孔不往裡移（孔已經被炸掉了）
 local HOLES = with_sprayed({HOLE})
 local CHARGES = with_sprayed({CHARGED, SURFACE, ANFO_HOLE, ANFO_PRIMED})
 local ALL = with_sprayed({HOLE, CHARGED, SURFACE, ANFO_HOLE, ANFO_PRIMED})   -- 爆完要清掉的孔與裝藥
@@ -169,6 +170,7 @@ local function detonate(pos)
 		R = R * f + depth
 		local center = last
 		local r = math.ceil(R) + 1
+		clearing = clearing + 1
 		for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(center, r), vector.add(center, r), ALL)) do
 			local hn = core.get_node(hp)
 			local back = core.get_node(vector.add(hp, core.wallmounted_to_dir(hn.param2))).name
@@ -176,6 +178,7 @@ local function detonate(pos)
 			local held = hn.name == SURFACE and nd and nd.walkable ~= false or rockmech.lith_of_node[back]
 			if not held then core.remove_node(hp) end
 		end
+		clearing = clearing - 1
 		return
 	end
 	local n = math.max(1, meta:get_int("n"))
@@ -200,6 +203,7 @@ local function detonate(pos)
 	rockmech.blast_charge(center, R, nil, (kind == CHARGED and n <= 1) and 0.5 or 0.8)
 	-- 爆破直接改地圖、不會觸發貼壁方塊掉落：後面的岩石沒了的鑽孔、裝藥一起消失
 	local r = math.ceil(R) + depth + 1
+	clearing = clearing + 1
 	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(center, r), vector.add(center, r), ALL)) do
 		local hn = core.get_node(hp)
 		local back = core.get_node(vector.add(hp, core.wallmounted_to_dir(hn.param2))).name
@@ -207,6 +211,7 @@ local function detonate(pos)
 		local held = hn.name == SURFACE and nd and nd.walkable ~= false or rockmech.lith_of_node[back]
 		if not held then core.remove_node(hp) end
 	end
+	clearing = clearing - 1
 end
 rockmech.detonate_charge = detonate
 
@@ -615,3 +620,51 @@ core.register_craftitem("rockmech:detonator", {
 		return itemstack
 	end,
 })
+
+-- 鑽孔的孔口那格岩石被挖掉（或掉下去）：孔還在更裡面，不該整個不見。
+-- 貼壁方塊沒了後面的岩石會被引擎拿掉；這時把孔口移到挖空的那一格、貼著再往裡一格的岩石，孔深少 1 m，
+-- 裝藥（藥卷條數、ANFO、起爆藥包）照舊，孔底的位置不變。剩不到半公尺、或再往裡不是岩石，才真的消失
+do
+	local stash = {}
+	local function continue_hole(pos, oldnode, mt)
+		if clearing > 0 then return end
+		local kind = kind_of(oldnode.name)
+		if kind == SURFACE then return end
+		local dir = core.wallmounted_to_dir(oldnode.param2)
+		local back = vector.add(pos, dir)
+		if rockmech.lith_of_node[core.get_node(back).name] then return end      -- 後面的岩石還在：是拆掉、敲掉的
+		local d = mt and mt.fields and tonumber(mt.fields.depth) or 0
+		local depth = (d > 0 and d or bcfg.hole_depth) - 1
+		if depth < 0.5 then return end
+		local nxt = vector.add(back, dir)
+		if not rockmech.lith_of_node[core.get_node(nxt).name] then return end
+		core.after(0, function()
+			if core.get_node(back).name ~= "air" or not rockmech.lith_of_node[core.get_node(nxt).name] then return end
+			core.set_node(back, {name = kind, param2 = oldnode.param2})
+			local meta = core.get_meta(back)
+			if mt and mt.fields then for k, v in pairs(mt.fields) do meta:set_string(k, v) end end
+			meta:set_float("depth", depth)
+			meta:set_int("lit", 0)
+			set_info(back)
+		end)
+	end
+	for _, name in ipairs(ALL) do
+		local def = core.registered_nodes[name]
+		if def then
+			local od, oa = def.on_destruct, def.after_destruct
+			core.override_item(name, {
+				on_destruct = function(pos)
+					stash[core.hash_node_position(pos)] = core.get_meta(pos):to_table()
+					if od then od(pos) end
+				end,
+				after_destruct = function(pos, oldnode)
+					local h = core.hash_node_position(pos)
+					local mt = stash[h]
+					stash[h] = nil
+					if oa then oa(pos, oldnode) end
+					continue_hole(pos, oldnode, mt)
+				end,
+			})
+		end
+	end
+end
