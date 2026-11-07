@@ -142,6 +142,7 @@ rockmech 模組所有可調參數，依學科分類。設定名都加上前綴 `
 | `fallbreak_break_height` | 非岩性岩塊的破碎高度 (m) | 4.0 |  |
 | `slope_enabled` | 碎石依安息角流動 | true |  |
 | `slope_angle` | 碎石安息角 (°) | 35 |  |
+| `slope_rain_drop` | 下雨（`/rain`）時鬆土安息角降低幾度；岩石碎石不受影響 | 10 |  |
 | `rubble_squeeze` | 每次載重事件擠出的碎石量 | 0.125 |  |
 | `compact_phi` | 壓實碎石的摩擦角 (°) | 75 |  |
 

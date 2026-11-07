@@ -361,6 +361,7 @@ config.shear_defaults = {
 config.slope_defaults = {
 	enabled = true,           -- 碎石超過安息角會移動（完整岩石不受安息角影響）
 	angle = 35,               -- 碎石安息角 (deg)
+	rain_drop = 10,           -- 下雨時鬆土的安息角降低幾度（weather.lua，/rain 指令）
 }
 
 -- 落石翻滾（rockfall.lua）的預設值；設定鍵為 rockmech_rockfall_<key>

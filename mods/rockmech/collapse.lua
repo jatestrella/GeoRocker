@@ -414,7 +414,8 @@ granular_settle = function(pos, chain, q_ext, side)
     end
     -- 壓實的碎石摩擦角比較高（rockmech_compact_phi）：安息角變陡，車輪也比較擠不動（懸空照樣掉）
     local tan_r, kp = SLOPE_TAN, PASSIVE_K
-    if rockmech.compacted[tn] then tan_r, kp = COMPACT_TAN, COMPACT_KP end
+    if rockmech.compacted[tn] then tan_r, kp = COMPACT_TAN, COMPACT_KP
+    elseif rockmech.rain_tan and base == rockmech.RUBBLE_SOIL then tan_r = rockmech.rain_tan end   -- 下雨：鬆土安息角暫時降低（weather.lua）
     local prev = physics_updating
     local next_pos
     local bk = rubble_k(bn)
