@@ -45,7 +45,29 @@ for _, name in ipairs({LOG, "default:leaves", "default:apple"}) do
 	end
 end
 core.override_item(LOG, {description = "原木 Log\n拿到營地的鋸木台鋸成木柱或木板"})
-core.override_item("default:sapling", {description = "樹苗 Sapling\n種在草地或土上，過一陣子長成樹"})
+-- 樹苗只能種在滿格的土上：土壤有 8 級高度，種在不滿格的土上，長出來的樹會浮在空中
+do
+	local sdef = core.registered_items["default:sapling"]
+	local orig_place = sdef and sdef.on_place
+	core.override_item("default:sapling", {
+		description = "樹苗 Sapling\n種在滿格的土上，過一陣子長成樹",
+		on_place = function(itemstack, placer, pointed)
+			if pointed.type == "node" then
+				local under = core.get_node(pointed.under).name
+				local k = rockmech.rubble_level[under]
+				if pointed.above.y ~= pointed.under.y + 1 or core.get_item_group(under, "soil") == 0
+						or (k and k < rockmech.RUBBLE_LEVELS) then
+					local def = core.registered_nodes[under]
+					if def and def.on_rightclick then return def.on_rightclick(pointed.under, core.get_node(pointed.under), placer, itemstack, pointed) end
+					tell(placer and placer:get_player_name(), "樹苗要種在滿格的土上（土的上面）")
+					return itemstack
+				end
+			end
+			if orig_place then return orig_place(itemstack, placer, pointed) end
+			return core.item_place(itemstack, placer, pointed)
+		end,
+	})
+end
 core.override_item("default:axe_steel", {description = "斧頭 Axe\n砍樹幹任何一格，整棵樹倒下變成原木"})
 -- 木板、半格改用內建的木頭貼圖，跟樓梯、門、柵欄一致
 for _, name in ipairs({PLANK, SLAB}) do core.override_item(name, {tiles = {"default_wood.png"}}) end

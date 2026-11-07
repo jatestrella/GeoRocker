@@ -382,6 +382,9 @@ granular_settle = function(pos, chain, q_ext, side)
     local T, tn = rubble_top(pos)
     if not T then return end
     local base, k = rockmech.rubble_base[tn], rubble_k(tn)
+    -- 樹根抓住土：樹幹、樹苗正下方那一格不流動（樹才不會浮在空中，woodwork.lua）
+    local above_n = core.get_node({x = T.x, y = T.y + 1, z = T.z}).name
+    if core.get_item_group(above_n, "tree") > 0 or core.get_item_group(above_n, "sapling") > 0 then return end
     local below = {x = T.x, y = T.y - 1, z = T.z}
     local bn = core.get_node(below).name
     if passable(bn) then
