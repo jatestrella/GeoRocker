@@ -229,7 +229,7 @@ describe("keyblock æ•´é«”æ»‘å‹•ï¼ˆå¤§å‹æ¥”å½¢ï¼å¹³é¢ï¼‰", function()
 		for y = -13, 0 do starts[#starts + 1] = {x = 0, y = y, z = 0} end
 		local masses = keyblock.find_masses(g, p, starts)
 		assert.are.equal(0, #masses)
-		-- ©Y¸}¤U¤èªº©¥®æ¤]·í°_ÂI¡]¥æ½u´Â¤UÅS¥X¤]¤£¦æ¡G¤U­±¬O§|©³©¥Åé¡^
+		-- å¡è…³ä¸‹æ–¹çš„å²©æ ¼ä¹Ÿç•¶èµ·é»ï¼ˆäº¤ç·šæœä¸‹éœ²å‡ºä¹Ÿä¸è¡Œï¼šä¸‹é¢æ˜¯å‘åº•å²©é«”ï¼‰
 		local g2, p2 = grid(function(x, y, z) return z >= 0 and y <= 0 or y <= -14 end)
 		assert.are.equal(0, #keyblock.find_masses(g2, p2, {{x = 0, y = -14, z = -1}}))
 	end)

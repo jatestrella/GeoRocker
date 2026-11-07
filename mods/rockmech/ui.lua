@@ -483,7 +483,7 @@ local function build(name)
 	})
 end
 
--- ´ú¸Õ¡ş°£¿ù¥Î¡G²£¥Í¬Yª±®a¬Y¤À­¶ªº formspec ¦r¦ê
+-- æ¸¬è©¦ï¼é™¤éŒ¯ç”¨ï¼šç”¢ç”ŸæŸç©å®¶æŸåˆ†é çš„ formspec å­—ä¸²
 function rockmech.info_formspec(name, tab, report)
 	state[name] = {tab = tab, report = report}
 	return build(name)
