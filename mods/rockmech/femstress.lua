@@ -16,6 +16,7 @@
 
 local cfg = rockmech.cfg
 local fcfg = cfg.fem
+local S = rockmech.S
 local fem = rockmech.fem
 core.register_async_dofile(rockmech.modpath .. "/fem.lua")
 
@@ -260,6 +261,8 @@ local function make_job(pos)
 end
 
 local function fs_text(f) return f == math.huge and "∞" or ("%.2f"):format(f) end
+-- 破壞型式代碼（"拉"／"剪"，fsmask.lua 拿來比對）→ 顯示文字
+local function mode_text(m) return m == "拉" and S("tension") or S("shear") end
 
 -- 強度：剪力 q_f(σ3)/q、張力 σt/|σ3|（應力 MPa），取較小。回傳 FS, 破壞型式
 local function strength_fs(job, meta, x, y, z, s1, s3)
@@ -397,8 +400,8 @@ local function report(pos, job, res, meta)
 	core.log("action", ("[rockmech] 應力解 %s 半徑 %d：%d 輪、殘差 %.1e、%.0f ms"):format(
 		core.pos_to_string(pos), meta.r, res.iters, res.res, res.ms))
 	if fs then
-		lines[#lines + 1] = core.colorize("#80d0ff", "[羅盤] ") ..
-			("σ1 %.2f　σ3 %.2f MPa　FS %s（%s）"):format(s1, s3, fs_text(fs), mode)
+		lines[#lines + 1] = core.colorize("#80d0ff", S("[Compass]")) .. " " ..
+			("σ1 %.2f　σ3 %.2f MPa　FS %s (%s)"):format(s1, s3, fs_text(fs), mode_text(mode))
 	end
 	local best, bp, bs1, bs3, bm
 	local cnt, fails = 0, 0
@@ -421,7 +424,7 @@ local function report(pos, job, res, meta)
 	end end end
 	-- 周圍有明顯比這一格更危險的才顯示
 	if best and (not fs or best < 0.95 * fs) then
-		lines[#lines + 1] = ("周圍最低 FS %s（%s）@ %s"):format(fs_text(best), bm, core.pos_to_string(bp))
+		lines[#lines + 1] = S("Lowest FS nearby @1 (@2) @@ @3", fs_text(best), mode_text(bm), core.pos_to_string(bp))
 	end
 	return table.concat(lines, "\n"), {fs = fs, s1 = s1, s3 = s3, mode = mode, min = best, min_pos = bp, fails = fails, count = cnt}
 end

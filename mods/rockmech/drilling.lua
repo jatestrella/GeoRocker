@@ -19,6 +19,7 @@ rockmech.spray_next = {}          -- 方塊 → 再噴一層之後的方塊（�
 
 if not rockmech.blast_charge then return end   -- 沒有 tnt mod
 
+local S = rockmech.S
 local bcfg = rockmech.cfg.blast
 local HOLE = "rockmech:drill_hole"
 local CHARGED = "rockmech:charged_hole"
@@ -89,13 +90,13 @@ local function set_info(pos)
 	local meta = core.get_meta(pos)
 	local kind = kind_of(node.name)
 	if kind == ANFO_PRIMED then
-		meta:set_string("infotext", ("ANFO 柱狀裝藥（孔深 %.0f m）＋ 起爆藥包 %d 條\n打火石點火、或用起爆器"):format(hole_len(pos), n))
+		meta:set_string("infotext", S("ANFO column charge (hole depth @1 m) + @2 primer cartridge(s)\nLight it with flint and steel, or use the blasting machine", ("%.0f"):format(hole_len(pos)), tostring(n)))
 	elseif kind == ANFO_HOLE then
-		meta:set_string("infotext", ("ANFO 柱狀裝藥（孔深 %.0f m）\n還沒有起爆藥包：放一條乳膠炸藥，否則會拒爆"):format(hole_len(pos)))
+		meta:set_string("infotext", S("ANFO column charge (hole depth @1 m)\nNo primer yet: add one emulsion cartridge, otherwise it will misfire", ("%.0f"):format(hole_len(pos))))
 	elseif kind == CHARGED then
-		meta:set_string("infotext", ("裝藥鑽孔：%d 條乳膠炸藥（最多 %d）\n打火石點火、或用起爆器"):format(n, bcfg.max_cartridges))
+		meta:set_string("infotext", S("Charged hole: @1 emulsion cartridge(s) (max @2)\nLight it with flint and steel, or use the blasting machine", tostring(n), tostring(bcfg.max_cartridges)))
 	elseif kind == SURFACE then
-		meta:set_string("infotext", ("貼面裝藥：%d 條（沒有鑽孔，威力 ×%.1f）\n打火石點火、或用起爆器"):format(n, bcfg.surface_factor))
+		meta:set_string("infotext", S("Surface charge: @1 cartridge(s) (no drill hole, power ×@2)\nLight it with flint and steel, or use the blasting machine", tostring(n), ("%.1f"):format(bcfg.surface_factor)))
 	end
 end
 
@@ -144,7 +145,7 @@ local function detonate(pos)
 		if kind == ANFO_HOLE then
 			-- 拒爆：ANFO 沒有起爆藥包炸不響，留在孔裡
 			meta:set_int("lit", 0)
-			meta:set_string("infotext", "拒爆：ANFO 沒有起爆藥包（放一條乳膠炸藥再起爆）")
+			meta:set_string("infotext", S("Misfire: the ANFO has no primer (add one emulsion cartridge and fire again)"))
 			core.log("action", "[rockmech] 拒爆（ANFO 沒有起爆藥包）" .. core.pos_to_string(pos))
 			return
 		end
@@ -237,7 +238,7 @@ end
 
 -- 鑽孔
 do
-	local def = node_base("鑽孔 Drill hole")
+	local def = node_base(S("Drill hole"))
 	def.node_box = {type = "fixed", fixed = {RING}}
 	def.selection_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.3, 0.3, -0.38, 0.3}}}
 	def.tiles = {RING_TOP, RING_SIDE, RING_SIDE, RING_SIDE, RING_SIDE, RING_SIDE}
@@ -247,7 +248,7 @@ do
 end
 -- 裝了炸藥的鑽孔：孔口露出一截藥卷與起爆線
 do
-	local def = node_base("裝藥鑽孔 Charged hole")
+	local def = node_base(S("Charged hole"))
 	def.node_box = {type = "fixed", fixed = {RING, {-0.08, -0.45, -0.08, 0.08, -0.15, 0.08}, {0.08, -0.45, -0.03, 0.4, -0.42, 0.03}}}
 	def.selection_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.3, 0.3, -0.12, 0.3}}}
 	local top = RING_TOP .. "^[fill:3x3:7,7:" .. CART .. "^[fill:6x2:9,7:" .. WIRE
@@ -263,8 +264,8 @@ end
 -- 倒了 ANFO 的鑽孔：孔裡是粉紅色顆粒（和乳膠炸藥的黃色藥卷分得出來）；有起爆藥包的多一條起爆線
 local ANFO_TOP = RING_TOP .. "^[fill:6x4:5,6:" .. PINK .. "^[fill:4x6:6,5:" .. PINK
 for _, v in ipairs({
-	{ANFO_HOLE, "ANFO 鑽孔 ANFO hole", {RING}, ANFO_TOP, RING_SIDE},
-	{ANFO_PRIMED, "ANFO 鑽孔（有起爆藥包）ANFO hole, primed", {RING, {0.08, -0.45, -0.03, 0.4, -0.42, 0.03}},
+	{ANFO_HOLE, S("ANFO hole"), {RING}, ANFO_TOP, RING_SIDE},
+	{ANFO_PRIMED, S("ANFO hole (primed)"), {RING, {0.08, -0.45, -0.03, 0.4, -0.42, 0.03}},
 		ANFO_TOP .. "^[fill:6x2:9,7:" .. WIRE, RING_SIDE .. "^[fill:6x1:9,14:" .. WIRE},
 }) do
 	local def = node_base(v[2])
@@ -285,7 +286,7 @@ do
 		for n, name in ipairs(names) do
 			local def = table.copy(core.registered_nodes[kind])
 			local top = -0.5 + 0.06 * n
-			def.description = ("噴凝土 %d 層 "):format(n) .. def.description
+			def.description = S("@1 (shotcrete, @2 layers)", def.description, tostring(n))
 			table.insert(def.node_box.fixed, 1, {-0.5, -0.5, -0.5, 0.5, top, 0.5})
 			local sel = def.selection_box.fixed[1]
 			sel[1], sel[3], sel[4], sel[6] = -0.5, -0.5, 0.5, 0.5        -- 整面噴凝土都點得到
@@ -321,7 +322,7 @@ core.register_lbm({
 
 -- 貼面裝藥：一束藥卷貼在岩面上
 do
-	local def = node_base("貼面裝藥 Surface charge")
+	local def = node_base(S("Surface charge"))
 	def.node_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.1, 0.3, -0.32, 0.1}, {0.3, -0.5, -0.03, 0.45, -0.46, 0.03}}}
 	def.selection_box = {type = "fixed", fixed = {{-0.35, -0.5, -0.15, 0.45, -0.28, 0.15}}}
 	local top = "[fill:16x16:#00000000^[fill:10x4:3,6:" .. CART .. "^[fill:10x1:3,7:#c09040^[fill:3x1:13,7:" .. WIRE
@@ -336,14 +337,14 @@ do
 end
 
 local function tell(player, msg)
-	if player and player:is_player() then core.chat_send_player(player:get_player_name(), "[爆破] " .. msg) end
+	if player and player:is_player() then core.chat_send_player(player:get_player_name(), S("[Blasting]") .. " " .. msg) end
 end
 
 -- 能不能在這個岩面鑽孔（under 是岩石、above 是空的）：回傳 nil 或不能的原因
 local function cannot_drill(under, above)
-	if not rockmech.lith_of_node[core.get_node(under).name] then return "只能在岩石上鑽孔（碎石鑽不了）" end
+	if not rockmech.lith_of_node[core.get_node(under).name] then return S("You can only drill into rock (rubble cannot be drilled)") end
 	local an = core.get_node(above).name
-	if an ~= "air" and core.get_item_group(an, "shotcrete_lining") == 0 then return "孔口前面要是空的" end   -- 噴凝土可以鑽穿（那格換成孔）
+	if an ~= "air" and core.get_item_group(an, "shotcrete_lining") == 0 then return S("The space in front of the hole collar must be empty") end   -- 噴凝土可以鑽穿（那格換成孔）
 end
 -- 鑽好一個孔
 function rockmech.make_hole(under, above)
@@ -413,19 +414,19 @@ core.register_globalstep(function(dtime)
 				st.t = st.t + dtime
 				local frac = math.min(1, st.t / bcfg.drill_time)
 				local bars = math.floor(frac * 10 + 0.5)
-				drill_hud(pl, st, ("加深 %d → %d m "):format(deep, deep + 1) .. ("■"):rep(bars) .. ("□"):rep(10 - bars))
+				drill_hud(pl, st, S("Deepening @1 → @2 m @3", tostring(deep), tostring(deep + 1), ("■"):rep(bars) .. ("□"):rep(10 - bars)))
 				if st.t >= bcfg.drill_time then
 					local meta = core.get_meta(st.under)
 					meta:set_float("depth", deep + 1)
-					meta:set_string("infotext", ("鑽孔（深 %d m）"):format(deep + 1))
+					meta:set_string("infotext", S("Drill hole (depth @1 m)", tostring(deep + 1)))
 					st.t = 0   -- 繼續按住就再加深一公尺
 				end
 			elseif is_hole(core.get_node(hit.under).name) then
 				-- 不能再加深：手持風鑽到最深了，或再往前不是岩石（鑽穿到空洞、地表、碎石）
 				local n = math.floor(hole_len(hit.under) + 0.5)
 				drill_hud(pl, st, n >= bcfg.hand_max_depth
-					and ("孔深 %d m（手持風鑽最深 %d m）"):format(n, bcfg.hand_max_depth)
-					or ("孔深 %d m（再往前不是岩石，鑽不下去）"):format(n))
+					and S("Hole depth @1 m (hand-held drill max @2 m)", tostring(n), ("%d"):format(bcfg.hand_max_depth))
+					or S("Hole depth @1 m (no rock ahead, cannot drill further)", tostring(n)))
 			elseif cannot_drill(st.under, st.above) then
 				-- 鑽不了（碎石、孔口被擋住）：什麼都不顯示
 				if st.hud then pl:hud_remove(st.hud); st.hud = nil end
@@ -433,7 +434,7 @@ core.register_globalstep(function(dtime)
 				st.t = st.t + dtime
 				local frac = math.min(1, st.t / bcfg.drill_time)
 				local bars = math.floor(frac * 10 + 0.5)
-				drill_hud(pl, st, "鑽孔 " .. ("■"):rep(bars) .. ("□"):rep(10 - bars))
+				drill_hud(pl, st, S("Drilling @1", ("■"):rep(bars) .. ("□"):rep(10 - bars)))
 				-- 粉塵
 				local dir = vector.subtract(st.under, st.above)
 				local face = vector.add(st.above, vector.multiply(dir, 0.45))
@@ -447,8 +448,8 @@ core.register_globalstep(function(dtime)
 				})
 				if st.t >= bcfg.drill_time then
 					if rockmech.make_hole(st.under, st.above) then
-						core.get_meta(st.above):set_string("infotext", ("鑽孔（深 %d m）\n繼續按住可以加深（最深 %d m）")
-							:format(bcfg.hole_depth, bcfg.hand_max_depth))
+						core.get_meta(st.above):set_string("infotext", S("Drill hole (depth @1 m)\nKeep holding to deepen it (max @2 m)",
+							("%d"):format(bcfg.hole_depth), ("%d"):format(bcfg.hand_max_depth)))
 					end
 					drill_stop(pl, name)
 				end
@@ -468,13 +469,13 @@ function rockmech.load_charge(under, above, player)
 		set_info(under)
 		return true
 	elseif kind == ANFO_PRIMED then
-		tell(player, "這個 ANFO 孔已經有起爆藥包了")
+		tell(player, S("This ANFO hole already has a primer"))
 		return false
 	elseif kind == CHARGED or kind == SURFACE then
 		local meta = core.get_meta(under)
 		local n = meta:get_int("n")
 		if n >= bcfg.max_cartridges then
-			tell(player, ("裝滿了（最多 %d 條）"):format(bcfg.max_cartridges))
+			tell(player, S("Full (max @1 cartridges)", tostring(bcfg.max_cartridges)))
 			return false
 		end
 		meta:set_int("n", n + 1)
@@ -486,7 +487,7 @@ function rockmech.load_charge(under, above, player)
 	core.set_node(above, {name = SURFACE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
 	core.get_meta(above):set_int("n", 1)
 	set_info(above)
-	tell(player, ("沒有鑽孔：貼面裝藥，威力只有 ×%.1f（先用鑿岩機鑽孔）"):format(bcfg.surface_factor))
+	tell(player, S("No drill hole: surface charge, power only ×@1 (drill a hole with the rock drill first)", ("%.1f"):format(bcfg.surface_factor)))
 	return true
 end
 
@@ -495,15 +496,15 @@ function rockmech.pour_anfo(pos, player)
 	local node = core.get_node(pos)
 	local kind = kind_of(node.name)
 	if kind == ANFO_HOLE or kind == ANFO_PRIMED then
-		tell(player, "這個孔已經裝滿 ANFO 了")
+		tell(player, S("This hole is already full of ANFO"))
 		return false
 	end
 	if kind ~= HOLE and kind ~= CHARGED then
-		tell(player, "ANFO 要倒進鑽孔（露天鑽機鑽的往下的孔）")
+		tell(player, S("ANFO goes into drill holes (downward holes drilled by the surface drill rig)"))
 		return false
 	end
 	if core.wallmounted_to_dir(node.param2).y >= 0 then
-		tell(player, "ANFO 只能倒進往下的鑽孔")
+		tell(player, S("ANFO can only be poured into downward drill holes"))
 		return false
 	end
 	local meta = core.get_meta(pos)
@@ -511,7 +512,7 @@ function rockmech.pour_anfo(pos, player)
 	become(pos, node, kind == HOLE and ANFO_HOLE or ANFO_PRIMED)
 	if kind == HOLE then meta:set_int("n", 0) end
 	set_info(pos)
-	if meta:get_int("n") < 1 then tell(player, "還沒有起爆藥包：放一條乳膠炸藥，否則會拒爆") end
+	if meta:get_int("n") < 1 then tell(player, S("No primer yet: add one emulsion cartridge, otherwise it will misfire")) end
 	return true
 end
 
@@ -528,13 +529,13 @@ function rockmech.fire_round(pos, player)
 		if vector.distance(p, pos) <= r then charges[#charges + 1] = p end
 	end
 	if #charges == 0 then
-		tell(player, ("%d m 內沒有裝藥"):format(r))
+		tell(player, S("No charges within @1 m", ("%d"):format(r)))
 		return 0
 	end
 	-- 離起爆器近的先爆（段發）
 	table.sort(charges, function(a, b) return vector.distance(a, pos) < vector.distance(b, pos) end)
 	local delay = bcfg.detonator_delay
-	tell(player, ("%d 個裝藥，%d 秒後起爆，退到安全距離！"):format(#charges, math.ceil(delay)))
+	tell(player, S("@1 charges, firing in @2 seconds, move to a safe distance!", tostring(#charges), ("%d"):format(math.ceil(delay))))
 	-- 畫面正中央的大倒數：5、4、3、2、1，起爆時消失
 	local name = player and player:is_player() and player:get_player_name()
 	local hud
@@ -562,20 +563,23 @@ function rockmech.fire_round(pos, player)
 end
 
 core.register_tool(DRILL, {
-	description = ("鑿岩機 Rock drill\n對岩面按住左鍵鑽孔（%g 秒、%d m）；對鑽孔繼續按住每 %g 秒加深 1 m（最深 %d m）")
-		:format(bcfg.drill_time, bcfg.hole_depth, bcfg.drill_time, bcfg.hand_max_depth),
+	description = S("Rock drill\nHold left-click on a rock face to drill a hole (@1 s, @2 m); keep holding on a hole to deepen it 1 m every @3 s (max @4 m)",
+		("%g"):format(bcfg.drill_time), ("%d"):format(bcfg.hole_depth), ("%g"):format(bcfg.drill_time), ("%d"):format(bcfg.hand_max_depth)),
+	short_description = S("Rock drill"),
 	inventory_image = "[fill:16x16:#00000000^[fill:9x5:2,5:#d0a020^[fill:5x1:11,7:#b0b0b0^[fill:3x5:3,10:#404040^[fill:2x1:15,7:#e0e0e0",
 	-- 有 on_use 的物品按左鍵只會「使用」、不會挖方塊（只有 groupcaps 空的話會改用手挖，創造模式的手什麼都挖得動）。
 	-- 鑽孔看的是左鍵有沒有按住（上面的 globalstep），這裡什麼都不做
 	tool_capabilities = {full_punch_interval = 1.0, max_drop_level = 0, groupcaps = {}, damage_groups = {fleshy = 1}},
 	on_use = function() return nil end,
 	on_place = function(itemstack, placer)
-		tell(placer, "鑿岩機：對岩面按住左鍵鑽孔")
+		tell(placer, S("Rock drill: hold left-click on a rock face to drill a hole"))
 		return itemstack
 	end,
 })
 core.register_craftitem(EMULSION, {
-	description = "乳膠炸藥 Emulsion explosive\n對鑽孔按右鍵裝藥（一孔最多 " .. bcfg.max_cartridges .. " 條）；沒有鑽孔只能貼面，威力很小",
+	description = S("Emulsion explosive\nRight-click a drill hole to load it (max @1 per hole); without a hole it can only be stuck on the surface, with little power",
+		tostring(bcfg.max_cartridges)),
+	short_description = S("Emulsion explosive"),
 	inventory_image = "[fill:16x16:#00000000^[fill:4x12:6,2:" .. CART .. "^[fill:4x1:6,2:#c09040^[fill:4x1:6,13:#c09040^[fill:1x3:8,0:" .. WIRE,
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
@@ -587,7 +591,8 @@ core.register_craftitem(EMULSION, {
 	end,
 })
 core.register_craftitem(ANFO, {
-	description = "ANFO（銨油炸藥，一袋）\n對往下的鑽孔按右鍵倒進去成柱狀裝藥；要有一條乳膠炸藥當起爆藥包",
+	description = S("ANFO (ammonium nitrate/fuel oil, one bag)\nRight-click a downward drill hole to pour it in as a column charge; needs one emulsion cartridge as a primer"),
+	short_description = S("ANFO"),
 	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#e8e4d8^[fill:10x2:3,3:#c8c0a8^[fill:6x3:5,8:#d03020",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
@@ -599,7 +604,9 @@ core.register_craftitem(ANFO, {
 	end,
 })
 core.register_craftitem("rockmech:detonator", {
-	description = "起爆器 Blasting machine\n按右鍵：" .. bcfg.detonator_range .. " m 內的裝藥倒數 " .. bcfg.detonator_delay .. " 秒後依序起爆",
+	description = S("Blasting machine\nRight-click: charges within @1 m count down @2 seconds, then fire in sequence",
+		tostring(bcfg.detonator_range), tostring(bcfg.detonator_delay)),
+	short_description = S("Blasting machine"),
 	inventory_image = "[fill:16x16:#00000000^[fill:10x7:3,8:#b03020^[fill:2x6:7,2:#606060^[fill:6x1:5,2:#404040^[fill:4x2:6,10:#202020",
 	stack_max = 1,
 	on_place = function(itemstack, placer)

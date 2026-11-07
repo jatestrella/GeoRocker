@@ -9,6 +9,7 @@
 
 local cfg = rockmech.cfg
 if not cfg.career then return end
+local S = rockmech.S
 
 local V = rockmech.vehicles
 local storage = rockmech.collapse.storage
@@ -119,14 +120,16 @@ local function show_carry(player, c)
 	local text = ""
 	if c and c.box then
 		local label = rockmech.borehole_label and rockmech.borehole_label(c.box.acc, c.box.n) or ("BH-" .. c.box.n)
-		text = ("手上：岩芯箱 %s（深 %d m）　右鍵放下"):format(label, c.box.depth)
+		text = S("Holding: core box @1 (depth @2 m)   right-click to put down", label, ("%d"):format(c.box.depth))
 	elseif c and c.log then
-		text = "手上：原木　右鍵放下；對著鋸木台右鍵鋸開，對著車斗右鍵裝車"
+		text = S("Holding: log   right-click to put down; right-click a saw bench to saw it, right-click a cart bed to load it")
 	elseif c then
 		local m = rockmech.mix_of[c.base]
 		local see = rockmech.can_see or function() return true end      -- 知識能力（knowledge.lua）
-		text = ("手上：%s　%s%s"):format(see(name, "rockmass") and core.registered_nodes[c.base].description:gsub("\n.*", "") or "碎石",
-			V.volume_text(c.lv, NLEV), m and see(name, m.ore and "grade" or "rockmass") and ("　" .. rockmech.mix_text(c.base, c.p2)) or "")
+		local what = see(name, "rockmass") and rockmech.desc_short(c.base) or S("rubble")
+		local mix = m and see(name, m.ore and "grade" or "rockmass") and rockmech.mix_text(c.base, c.p2)
+		text = mix and S("Holding: @1   @2   @3", what, V.volume_text(c.lv, NLEV), mix)
+			or S("Holding: @1   @2", what, V.volume_text(c.lv, NLEV))
 	end
 	local ipos, iscale, tpos = carry_layout(c)
 	if carry_hud[name] then
@@ -225,7 +228,7 @@ function rockmech.career_load(player, self, def)
 	local now = core.get_us_time() / 1e6
 	local c = carried(player)
 	if c and c.box then
-		core.chat_send_player(name, "手上捧著岩芯箱：先右鍵放下")
+		core.chat_send_player(name, S("You are holding a core box: right-click to put it down first"))
 		return true
 	end
 	if not c and now - (loaded_at[name] or -LOAD_HOLD) < LOAD_HOLD then return true end
@@ -234,7 +237,7 @@ function rockmech.career_load(player, self, def)
 	if c.log then
 		-- 一根原木佔車斗 1 m³（跟一格碎石一樣）
 		if def.cap - V.load_total(self) < NLEV then
-			core.chat_send_player(name, "車斗放不下一根原木了")
+			core.chat_send_player(name, S("There is no room for a log in the bed"))
 			return true
 		end
 		V.load_put(self, LOG, NLEV, 0)
@@ -244,7 +247,7 @@ function rockmech.career_load(player, self, def)
 	end
 	local put = math.min(c.lv, def.cap - V.load_total(self))
 	if put <= 0 then
-		core.chat_send_player(player:get_player_name(), "車斗滿了")
+		core.chat_send_player(player:get_player_name(), S("The bed is full"))
 		return true
 	end
 	V.load_put(self, c.base, put, c.p2)
@@ -260,7 +263,7 @@ local function put_down(player, pos)
 	if not c then return end
 	if c.box then
 		if rockmech.corebox_put and rockmech.corebox_put(pos, c.box) then set_carried(player, nil)
-		else core.chat_send_player(player:get_player_name(), "這裡放不下岩芯箱：對著空的地面（或另一箱的上面）按右鍵") end
+		else core.chat_send_player(player:get_player_name(), S("The core box does not fit here: right-click empty ground (or the top of another box)")) end
 		return
 	end
 	if c.log then
@@ -268,7 +271,7 @@ local function put_down(player, pos)
 		local d = core.yaw_to_dir(player:get_look_horizontal())
 		if rockmech.lay_log and rockmech.lay_log(pos.x, pos.z, pos.y, math.abs(d.x) > math.abs(d.z) and "x" or "z") then
 			set_carried(player, nil)
-		else core.chat_send_player(player:get_player_name(), "這裡放不下原木") end
+		else core.chat_send_player(player:get_player_name(), S("The log does not fit here")) end
 		return
 	end
 	local rest = V.deposit_column(pos.x, pos.z, pos.y, c.base, c.lv, nil, nil, c.p2)
@@ -283,7 +286,7 @@ function core.node_dig(pos, node, digger)
 		-- 橫躺在地上的原木：捧起來，一次一根（站著的樹幹照常砍倒，woodwork.lua）
 		local name = digger:get_player_name()
 		if carried(digger) then
-			core.chat_send_player(name, "手上有東西：先右鍵放下，才搬得動原木")
+			core.chat_send_player(name, S("Your hands are full: right-click to put it down before carrying a log"))
 			return false
 		end
 		core.remove_node(pos)
@@ -294,7 +297,7 @@ function core.node_dig(pos, node, digger)
 		-- 岩芯箱：捧起來，一次一個
 		local name = digger:get_player_name()
 		if carried(digger) then
-			core.chat_send_player(name, "手上有東西：先右鍵放下，才捧得起岩芯箱")
+			core.chat_send_player(name, S("Your hands are full: right-click to put it down before picking up a core box"))
 			return false
 		end
 		local data = rockmech.corebox_take(pos, digger)
@@ -308,15 +311,15 @@ function core.node_dig(pos, node, digger)
 		local name = digger:get_player_name()
 		local base = rockmech.rubble_base[node.name]
 		if c and (c.box or c.log) then
-			core.chat_send_player(name, c.box and "手上捧著岩芯箱：先右鍵放下" or "手上扛著原木：先右鍵放下")
+			core.chat_send_player(name, c.box and S("You are holding a core box: right-click to put it down first") or S("You are carrying a log: right-click to put it down first"))
 			return false
 		end
 		if c and c.lv >= NLEV then
-			core.chat_send_player(name, "手上拿滿了：右鍵放下，或對著車斗按右鍵裝上去")
+			core.chat_send_player(name, S("Your hands are full: right-click to put it down, or right-click a cart bed to load it"))
 			return false
 		end
 		if c and not rockmech.rubble_mixable(c.base, base) then
-			core.chat_send_player(name, "手上是別種碎石，先放下")
+			core.chat_send_player(name, S("You are holding a different kind of rubble: put it down first"))
 			return false
 		end
 		local t, b, p2 = V.take_rubble(pos, NLEV - (c and c.lv or 0))
@@ -384,7 +387,8 @@ end
 
 local function times(t) return {[1] = t * 2, [2] = t * 1.5, [3] = t} end
 core.register_tool(PICK, {
-	description = ("Pickaxe (挖礦鎬)\n挖岩石很慢，岩石會變成碎石\n挖碎石就是拿起來，一次一塊\n右鍵放下手上的碎石"),
+	description = S("Pickaxe\nDigs rock slowly; rock turns into rubble\nDigging rubble picks it up, one block at a time\nRight-click to put down the rubble you are holding"),
+	short_description = S("Pickaxe"),
 	inventory_image = "default_tool_steelpick.png",
 	tool_capabilities = {
 		full_punch_interval = 1.2, max_drop_level = 0,
@@ -399,7 +403,8 @@ core.register_tool(PICK, {
 })
 
 core.register_tool(SHOVEL, {
-	description = "Shovel (鏟子)\n很快把碎石鏟起來，一次一塊\n挖不動岩石\n右鍵放下手上的碎石",
+	description = S("Shovel\nQuickly shovels up rubble, one block at a time\nCannot dig rock\nRight-click to put down the rubble you are holding"),
+	short_description = S("Shovel"),
 	inventory_image = "default_tool_steelshovel.png",
 	tool_capabilities = {
 		full_punch_interval = 0.6, max_drop_level = 0,
@@ -449,11 +454,11 @@ end)
 
 -- kind → 攤位：名牌（職稱）、顏色、坐著還是站著
 local BOOTHS = {
-	vehicle = {entity = "rockmech:vendor_vehicle", title = "機械設備課長", sells = "車輛・破碎站・輸送帶",
+	vehicle = {entity = "rockmech:vendor_vehicle", title = S("Equipment Manager"), sells = S("Vehicles · crushers · conveyor belts"),
 		color = "#80b0ff", tint = "#2050a0", sit = true},
-	blast = {entity = "rockmech:vendor_blast", title = "爆破主任", sells = "鑽孔・炸藥・裝藥",
+	blast = {entity = "rockmech:vendor_blast", title = S("Blasting Supervisor"), sells = S("Drilling · explosives · charging"),
 		color = "#ff8060", tint = "#c03020", sit = false},
-	tools = {entity = "rockmech:vendor_tools", title = "工具室管理員", sells = "手工具・支護・儀器",
+	tools = {entity = "rockmech:vendor_tools", title = S("Tool Room Keeper"), sells = S("Hand tools · support · instruments"),
 		color = "#a0e080", tint = "#407020", sit = true},
 }
 local shop_kind = {}        -- 玩家名稱 → 正在看哪一攤（nil：全部）
@@ -464,19 +469,20 @@ rockmech.career_vendor_spots = VENDOR_SPOTS
 
 local function shop_form(name, kind)
 	local booth = BOOTHS[kind]
-	local who = booth and booth.title or "供應商"
+	local who = booth and booth.title or S("Supplier")
 	local team = rockmech.team_of(name)
-	local head = team and ("%s　第 %s 組資金 $%.0f"):format(who, team, rockmech.money(name))
-		or rockmech.has_account(name) and ("%s　資金 $%.0f"):format(who, rockmech.money(name))
-		or who .. "　你還沒分組，請老師分組後才有資金"
+	local money = ("%.0f"):format(rockmech.money(name))
+	local head = team and S("@1   Team @2 funds $@3", who, team, money)
+		or rockmech.has_account(name) and S("@1   Funds $@2", who, money)
+		or S("@1   You are not in a team yet; you will have funds once the teacher assigns you to a team", who)
 	local out = {"formspec_version[6]size[13.5,13.2]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local col, row = 0, 0
 	for i, it in ipairs(cfg.shop) do
 		if not kind or it.shop == kind then
 			local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
-			local price = it.price == 0 and "免費" or ("$%d"):format(it.price)
+			local price = it.price == 0 and S("Free") or ("$%d"):format(it.price)
 			out[#out + 1] = ("item_image[%g,%g;0.8,0.8;%s]"):format(x, y, it.item)
-			out[#out + 1] = ("label[%g,%g;%s%s]"):format(x + 1, y + 0.4, it.label, it.count and (" ×" .. it.count) or "")
+			out[#out + 1] = ("label[%g,%g;%s%s]"):format(x + 1, y + 0.4, core.formspec_escape(S(it.label)), it.count and (" ×" .. it.count) or "")
 			out[#out + 1] = ("button[%g,%g;2.2,0.8;buy_%d;%s]"):format(x + 3.9, y, i, core.formspec_escape(price))
 			row = row + 1
 			if row >= 12 then col, row = col + 1, 0 end
@@ -501,25 +507,25 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local inv = player:get_inventory()
 			local ok, msg = true, nil
 			if rockmech.money(name) < it.price then
-				core.chat_send_player(name, ("[供應商] 錢不夠：%s 要 $%d"):format(it.label, it.price))
+				core.chat_send_player(name, S("[Supplier] Not enough money: @1 costs $@2", S(it.label), ("%d"):format(it.price)))
 				ok = false
 			elseif operator and not inv:room_for_item("main", stack) then
-				core.chat_send_player(name, "[供應商] 物品欄滿了")
+				core.chat_send_player(name, S("[Supplier] Your inventory is full"))
 				ok = false
 			elseif operator then
 				-- 操作員不能比全組的怪手多（operator.lua）
 				local hired, why = rockmech.op_hire(name)
 				if hired then inv:add_item("main", stack)
-				else core.chat_send_player(name, "[供應商] " .. why); ok = false end
+				else core.chat_send_player(name, S("[Supplier] @1", why)); ok = false end
 			elseif vkind then
 				ok, msg = rockmech.deliver_vehicle(name, vkind)
-				if not ok then core.chat_send_player(name, "[供應商] " .. msg) end
+				if not ok then core.chat_send_player(name, S("[Supplier] @1", msg)) end
 			elseif not inv:room_for_item("main", stack) then
-				core.chat_send_player(name, "[供應商] 物品欄滿了")
+				core.chat_send_player(name, S("[Supplier] Your inventory is full"))
 				ok = false
 			else
 				inv:add_item("main", stack)
-				if order then msg = it.label:gsub("（.-）$", "") .. "施工單在物品欄：拿著對地面按右鍵施工" end
+				if order then msg = S("The @1 is in your inventory: hold it and right-click the ground to build", rockmech.desc_short(order)) end
 			end
 			if ok then
 				rockmech.add_money(name, -it.price)
@@ -527,20 +533,20 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				if acc ~= name then
 					-- 整組共用的錢：組員都看得到誰買了什麼
 					for _, m in ipairs(rockmech.account_members(acc)) do
-						core.chat_send_player(m, ("[%s] %s 買了 %s（$%d）"):format(rockmech.account_label(acc), name, it.label, it.price))
+						core.chat_send_player(m, S("[@1] @2 bought @3 ($@4)", rockmech.account_label(acc), name, S(it.label), ("%d"):format(it.price)))
 					end
 					core.log("action", ("[rockmech] %s (%s) bought %s for $%d"):format(name, acc, it.key, it.price))
 				else
-					core.chat_send_player(name, ("[供應商] 買了 %s"):format(it.label))
+					core.chat_send_player(name, S("[Supplier] Bought @1", S(it.label)))
 				end
 				if msg then
 					for _, m in ipairs(acc ~= name and rockmech.account_members(acc) or {name}) do
-						core.chat_send_player(m, "[供應商] " .. msg)
+						core.chat_send_player(m, S("[Supplier] @1", msg))
 					end
 				end
 				if it.final then
 					-- 終極目標：全服廣播
-					core.chat_send_all(("★★★ %s 購入「%s」！ ★★★"):format(rockmech.account_label(acc), it.label))
+					core.chat_send_all(S("★★★ @1 bought the @2! ★★★", rockmech.account_label(acc), S(it.label)))
 					core.log("action", ("[rockmech] FINAL: %s (%s) bought %s"):format(name, acc, it.key))
 					for _, p in ipairs(core.get_connected_players()) do
 						core.sound_play("rockmech_coin", {to_player = p:get_player_name(), gain = 1.0}, true)
@@ -564,7 +570,7 @@ core.register_entity(VENDOR, {
 	initial_properties = {
 		physical = true, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
 		visual = "mesh", mesh = "character.b3d", textures = {"character.png"},
-		nametag = "供應商（右鍵）", nametag_color = "#ffe080", static_save = true,
+		nametag = S("Supplier (right-click)"), nametag_color = "#ffe080", static_save = true,
 	},
 	on_activate = function(self)
 		if math.abs(self.object:get_pos().z - TENT_Z) > 3 then self.object:remove(); return end     -- 舊版位置的 NPC
@@ -597,11 +603,11 @@ end
 
 local CANVAS = {"[fill:16x16:#d8c8a0^[fill:16x2:0,6:#c04030^[fill:16x2:0,13:#c04030"}
 core.register_node("rockmech:tent_canvas", {
-	description = "Tent canvas (帳篷布)", tiles = CANVAS, is_ground_content = false,
+	description = S("Tent canvas"), tiles = CANVAS, is_ground_content = false,
 	groups = {not_in_creative_inventory = 1},
 })
 core.register_node("rockmech:tent_pole", {
-	description = "Tent pole (帳篷柱)", tiles = {"[fill:16x16:#6a4a28"}, is_ground_content = false,
+	description = S("Tent pole"), tiles = {"[fill:16x16:#6a4a28"}, is_ground_content = false,
 	drawtype = "nodebox", paramtype = "light", node_box = {type = "fixed", fixed = {-0.1, -0.5, -0.1, 0.1, 0.5, 0.1}},
 	groups = {not_in_creative_inventory = 1},
 })
@@ -614,7 +620,7 @@ local CANVASES = {
 }
 for kind, tex in pairs(CANVASES) do
 	core.register_node("rockmech:tent_canvas_" .. kind, {
-		description = "Tent canvas (帳篷布)", tiles = {tex}, is_ground_content = false,
+		description = S("Tent canvas"), tiles = {tex}, is_ground_content = false,
 		groups = {not_in_creative_inventory = 1},
 	})
 end
@@ -631,41 +637,41 @@ local function prop(name, def)
 	def.selection_box = def.node_box
 	core.register_node("rockmech:camp_" .. name, def)
 end
-prop("table", {description = "桌子", tiles = {WOOD}, node_box = {type = "fixed", fixed = {
+prop("table", {description = S("Table"), tiles = {WOOD}, node_box = {type = "fixed", fixed = {
 	{-0.5, 0.3, -0.5, 0.5, 0.45, 0.5},
 	{-0.45, -0.5, -0.45, -0.35, 0.3, -0.35}, {0.35, -0.5, -0.45, 0.45, 0.3, -0.35},
 	{-0.45, -0.5, 0.35, -0.35, 0.3, 0.45}, {0.35, -0.5, 0.35, 0.45, 0.3, 0.45}}}})
 -- 椅子：椅背在南邊（−z），坐的人臉朝北
-prop("chair", {description = "椅子", tiles = {WOOD}, node_box = {type = "fixed", fixed = {
+prop("chair", {description = S("Chair"), tiles = {WOOD}, node_box = {type = "fixed", fixed = {
 	{-0.35, -0.05, -0.35, 0.35, 0.05, 0.35},
 	{-0.35, 0.05, -0.35, 0.35, 0.8, -0.25},
 	{-0.35, -0.5, -0.35, -0.25, -0.05, -0.25}, {0.25, -0.5, -0.35, 0.35, -0.05, -0.25},
 	{-0.35, -0.5, 0.25, -0.25, -0.05, 0.35}, {0.25, -0.5, 0.25, 0.35, -0.05, 0.35}}}})
-prop("crate", {description = "木箱",
+prop("crate", {description = S("Wooden crate"),
 	tiles = {WOOD .. "^[fill:16x1:0,0:#5a3a18^[fill:16x1:0,15:#5a3a18^[fill:1x16:0,0:#5a3a18^[fill:1x16:15,0:#5a3a18"},
 	node_box = {type = "fixed", fixed = {-0.45, -0.5, -0.45, 0.45, 0.35, 0.45}}})
-prop("explosives", {description = "炸藥箱",
+prop("explosives", {description = S("Explosives box"),
 	tiles = {"[fill:16x16:#b02020^[fill:16x3:0,6:#f0d020^[fill:16x1:0,0:#601010^[fill:16x1:0,15:#601010"},
 	node_box = {type = "fixed", fixed = {-0.4, -0.5, -0.3, 0.4, 0.1, 0.3}}})
-prop("barrel", {description = "油桶", tiles = {"[fill:16x16:#2a5a9a^[fill:16x1:0,3:#18385a^[fill:16x1:0,12:#18385a"},
+prop("barrel", {description = S("Oil drum"), tiles = {"[fill:16x16:#2a5a9a^[fill:16x1:0,3:#18385a^[fill:16x1:0,12:#18385a"},
 	node_box = {type = "fixed", fixed = {{-0.35, -0.5, -0.25, 0.35, 0.45, 0.25}, {-0.25, -0.5, -0.35, 0.25, 0.45, 0.35}}}})
-prop("tires", {description = "輪胎", tiles = {DARK .. "^[fill:6x6:5,5:#555555"},
+prop("tires", {description = S("Tires"), tiles = {DARK .. "^[fill:6x6:5,5:#555555"},
 	node_box = {type = "fixed", fixed = {{-0.45, -0.5, -0.3, 0.45, 0.45, 0.3}, {-0.3, -0.5, -0.45, 0.3, 0.45, 0.45}}}})
-prop("cone", {description = "三角錐", tiles = {"[fill:16x16:#f07010^[fill:16x2:0,7:#f0f0f0"},
+prop("cone", {description = S("Traffic cone"), tiles = {"[fill:16x16:#f07010^[fill:16x2:0,7:#f0f0f0"},
 	node_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.3, 0.3, -0.4, 0.3}, {-0.15, -0.4, -0.15, 0.15, 0.0, 0.15},
 		{-0.08, 0.0, -0.08, 0.08, 0.3, 0.08}}}})
 -- 工具架：正面（+z）擺著工具
-prop("shelf", {description = "工具架",
+prop("shelf", {description = S("Tool rack"),
 	tiles = {WOOD, WOOD, WOOD, WOOD, WOOD .. "^default_tool_steelpick.png^default_tool_steelshovel.png", WOOD},
 	node_box = {type = "fixed", fixed = {{-0.5, -0.5, -0.5, 0.5, 0.5, -0.3}, {-0.5, -0.5, -0.5, -0.4, 0.5, 0.2},
 		{0.4, -0.5, -0.5, 0.5, 0.5, 0.2}, {-0.5, -0.1, -0.5, 0.5, 0.0, 0.2}, {-0.5, 0.4, -0.5, 0.5, 0.5, 0.2},
 		{-0.5, -0.5, -0.5, 0.5, -0.4, 0.2}}}})
-prop("toolbox", {description = "工具箱", tiles = {"[fill:16x16:#c03020^[fill:16x2:0,5:#202020"},
+prop("toolbox", {description = S("Toolbox"), tiles = {"[fill:16x16:#c03020^[fill:16x2:0,5:#202020"},
 	node_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.15, 0.3, -0.2, 0.15}, {-0.1, -0.2, -0.03, 0.1, -0.1, 0.03}}}})
-prop("papers", {description = "文件",
+prop("papers", {description = S("Documents"),
 	tiles = {"[fill:16x16:#f0f0e8^[fill:12x1:2,4:#8090a0^[fill:12x1:2,8:#8090a0^[fill:8x1:2,12:#8090a0"},
 	node_box = {type = "fixed", fixed = {{-0.25, -0.5, -0.2, 0.15, -0.45, 0.2}, {-0.05, -0.45, -0.15, 0.3, -0.42, 0.15}}}})
-prop("helmets", {description = "安全帽", tiles = {"[fill:16x16:#f0c020"},
+prop("helmets", {description = S("Hard hats"), tiles = {"[fill:16x16:#f0c020"},
 	node_box = {type = "fixed", fixed = {{-0.4, -0.5, -0.15, -0.05, -0.3, 0.15}, {-0.32, -0.3, -0.1, -0.13, -0.22, 0.1},
 		{0.05, -0.5, -0.15, 0.4, -0.3, 0.15}, {0.13, -0.3, -0.1, 0.32, -0.22, 0.1}}}})
 
@@ -723,23 +729,23 @@ local function plain(name, desc, tiles, extra)
 	for k, v in pairs(extra or {}) do def[k] = v end
 	core.register_node("rockmech:" .. name, def)
 end
-plain("office_wall", "貨櫃屋外牆", {WALL})
-plain("office_wall_base", "貨櫃屋外牆（底樑）", {WALL .. "^[fill:16x4:0,12:#4a4e52"})
-plain("office_post", "貨櫃屋角柱", {"[fill:16x16:#4a4e52^[fill:4x4:6,6:#2a2c2e"})
-plain("office_roof", "貨櫃屋屋頂", {"[fill:16x16:#9a9ea2^[fill:16x1:0,0:#7a7e82^[fill:16x1:0,8:#7a7e82",
+plain("office_wall", S("Container office wall"), {WALL})
+plain("office_wall_base", S("Container office wall (base beam)"), {WALL .. "^[fill:16x4:0,12:#4a4e52"})
+plain("office_post", S("Container office corner post"), {"[fill:16x16:#4a4e52^[fill:4x4:6,6:#2a2c2e"})
+plain("office_roof", S("Container office roof"), {"[fill:16x16:#9a9ea2^[fill:16x1:0,0:#7a7e82^[fill:16x1:0,8:#7a7e82",
 	"[fill:16x16:#d8d4c8", "[fill:16x16:#4a4e52", "[fill:16x16:#4a4e52", "[fill:16x16:#4a4e52", "[fill:16x16:#4a4e52"})
-plain("office_floor", "貨櫃屋地板", {"[fill:16x16:#7a6a58^[fill:16x1:0,4:#6a5a48^[fill:16x1:0,12:#6a5a48"})
-plain("camp_lamp", "天花板燈", {"[fill:16x16:#fff8d8"}, {drawtype = "nodebox", paramtype = "light",
+plain("office_floor", S("Container office floor"), {"[fill:16x16:#7a6a58^[fill:16x1:0,4:#6a5a48^[fill:16x1:0,12:#6a5a48"})
+plain("camp_lamp", S("Ceiling lamp"), {"[fill:16x16:#fff8d8"}, {drawtype = "nodebox", paramtype = "light",
 	node_box = {type = "fixed", fixed = {-0.4, 0.4, -0.15, 0.4, 0.5, 0.15}}, light_source = 13,
 	sunlight_propagates = true, walkable = false})
 -- 冷氣室外機：灰白機殼、正面圓形風扇格柵
-plain("office_ac", "冷氣室外機", {"[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc",
+plain("office_ac", S("Air conditioner outdoor unit"), {"[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc", "[fill:16x16:#d0d0cc",
 	"[fill:16x16:#d0d0cc^[fill:10x10:3,3:#505458^[fill:10x1:3,6:#808488^[fill:10x1:3,9:#808488", "[fill:16x16:#d0d0cc"},
 	{drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 	node_box = {type = "fixed", fixed = {{-0.45, -0.5, -0.25, 0.45, 0.35, 0.25}, {-0.4, -0.5, -0.3, -0.3, -0.4, 0.3}, {0.3, -0.5, -0.3, 0.4, -0.4, 0.3}}}})
 for kind, c in pairs(AWNING) do
 	-- 遮陽棚：從牆頂往外斜下來的條紋布（攤位識別色＋白）
-	plain("office_awning_" .. kind, "遮陽棚", {("[fill:16x16:#f0f0f0^[fill:4x16:0,0:%s^[fill:4x16:8,0:%s"):format(c, c)},
+	plain("office_awning_" .. kind, S("Awning"), {("[fill:16x16:#f0f0f0^[fill:4x16:0,0:%s^[fill:4x16:8,0:%s"):format(c, c)},
 		{drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 		node_box = {type = "fixed", fixed = {{-0.5, 0.35, -0.5, 0.5, 0.45, -0.1}, {-0.5, 0.15, -0.1, 0.5, 0.3, 0.3},
 			{-0.5, -0.05, 0.3, 0.5, 0.1, 0.5}}}})
@@ -845,7 +851,7 @@ local DIGITS = {
 	["6"] = {"111", "100", "111", "101", "111"}, ["7"] = {"111", "001", "001", "001", "001"},
 	["8"] = {"111", "101", "111", "101", "111"}, ["9"] = {"111", "101", "111", "001", "111"},
 }
-for _, n in ipairs({{"board", "#f0f0e8", "看板"}, {"digit", "#203a80", "看板數字"}, {"back", "#6a4a28", "看板背面"}}) do
+for _, n in ipairs({{"board", "#f0f0e8", S("Sign board")}, {"digit", "#203a80", S("Sign digit")}, {"back", "#6a4a28", S("Sign back")}}) do
 	core.register_node("rockmech:sign_" .. n[1], {
 		description = n[3], tiles = {"[fill:16x16:" .. n[2]}, is_ground_content = false,
 		groups = {not_in_creative_inventory = 1},

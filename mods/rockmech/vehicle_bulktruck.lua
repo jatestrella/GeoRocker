@@ -6,6 +6,7 @@
 --      （已經有起爆藥包的只灌 ANFO、只有 ANFO 的只補起爆藥包），從儲槽扣。灌的時候不能開車。
 --   車尾有倒車攝影機，畫面裡的孔是色點（白 = 空孔、粉紅 = ANFO）。裝藥車不能起爆。
 
+local S = rockmech.S
 local V = rockmech.vehicles
 local box_tex, seg_attach, to_local, update_hud = V.box_tex, V.seg_attach, V.to_local, V.update_hud
 local WHEEL, TREAD = V.WHEEL, V.TREAD
@@ -18,7 +19,7 @@ local BOOM_UP = 1.2         -- 灌孔時吊臂前端比根部高多少 (m)
 local ANFO, EMULSION = "rockmech:anfo", "rockmech:emulsion"
 local HOLE, CHARGED, ANFO_HOLE = "rockmech:drill_hole", "rockmech:charged_hole", "rockmech:anfo_hole"
 
-local def = {desc = "ANFO 裝藥車 Bulk explosives truck", color = "#3a8a50", cap = 0, speed = 5.0,
+local def = {desc = S("ANFO bulk truck"), color = "#3a8a50", cap = 0, speed = 5.0,
 	top_speed = 12, accel = 1.5, max_grade = math.rad(17), look_limit = math.rad(75), tire = 1.0,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 	tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
@@ -26,8 +27,8 @@ local def = {desc = "ANFO 裝藥車 Bulk explosives truck", color = "#3a8a50", c
 	-- 倒車攝影機（車尾上方往後下看）：吊臂範圍內的孔畫成色點
 	cam = {o = {x = 0, y = 1.6, z = -5.8}, target = {x = 0, y = -1.5, z = -10}, holes = BOOM_LEN + 2, flip = false,
 		hfov = math.rad(80), vfov = math.rad(48), w = 56, h = 31},
-	store = {{ANFO, 40, "ANFO（袋）"}, {EMULSION, 40, "乳膠炸藥（條）"}},
-	item_desc = "右鍵上車；空白鍵 儲槽裝 ANFO 與乳膠炸藥、E 把吊臂範圍內往下的鑽孔灌 ANFO＋起爆藥包"}
+	store = {{ANFO, 40, S("ANFO (bags)")}, {EMULSION, 40, S("Emulsion explosive (sticks)")}},
+	item_desc = S("Right-click to get in; Space loads the tank with ANFO and emulsion, E fills the downward holes within reach of the boom with ANFO + a primer")}
 do   -- 圖示：白色儲槽（綠、粉紅條紋）、槽頂的黃色吊臂、駕駛室、三軸
 	local c, r = def.color, {}
 	r[#r + 1] = {2, 12, 20, 10, "#e8e8e0"}; r[#r + 1] = {2, 12, 1, 10, "#c8c8c0"}
@@ -100,14 +101,14 @@ end
 rockmech.vehicle_bulktruck_holes = hole_list   -- 測試用
 
 function def.hud(self)
-	local s = ("\n儲槽：ANFO %d / %d 袋　乳膠炸藥 %d / %d 條"):format(
-		V.store_count(self, ANFO), def.store[1][2], V.store_count(self, EMULSION), def.store[2][2])
-	if self.pumping then s = s .. ("　灌孔中 %d / %d"):format(self.pumping.done, #self.pumping.list) end
+	local s = "\n" .. S("Tank: ANFO @1 / @2 bags  Emulsion @3 / @4 sticks",
+		("%d"):format(V.store_count(self, ANFO)), ("%d"):format(def.store[1][2]), ("%d"):format(V.store_count(self, EMULSION)), ("%d"):format(def.store[2][2]))
+	if self.pumping then s = s .. "  " .. S("Filling holes @1 / @2", ("%d"):format(self.pumping.done), ("%d"):format(#self.pumping.list)) end
 	if self.msg then s = s .. "\n" .. self.msg end
 	return s
 end
 function def.keys(self)
-	return {{"E", ("灌孔（吊臂 %d m 內）"):format(BOOM_LEN), on = self.pumping ~= nil}, {"空白鍵", "儲槽"}}
+	return {{"E", S("Fill holes (within @1 m of the boom)", ("%d"):format(BOOM_LEN)), on = self.pumping ~= nil}, {S("Space"), S("Tank")}}
 end
 function def.on_spawn(self) place_boom(self, nil) end
 
@@ -131,8 +132,8 @@ function def.step(self, ctx)
 	if not pm then return end
 	local p = pm.list[pm.done + 1]
 	if not p then
-		return finish(self, ("灌好 %d 孔"):format(pm.done)
-			.. (pm.bare > 0 and ("，%d 孔沒有起爆藥包（乳膠炸藥不夠）"):format(pm.bare) or ""))
+		return finish(self, pm.bare > 0 and S("Filled @1 holes; @2 holes have no primer (not enough emulsion)", ("%d"):format(pm.done), ("%d"):format(pm.bare))
+			or S("Filled @1 holes", ("%d"):format(pm.done)))
 	end
 	if pm.t == 0 then place_boom(self, p) end
 	pm.t = pm.t + ctx.dtime
@@ -148,7 +149,7 @@ function def.step(self, ctx)
 	local name = rockmech.hole_kind(core.get_node(p).name)
 	local need_anfo, need_primer = name == HOLE or name == CHARGED, name == HOLE or name == ANFO_HOLE
 	if need_anfo and V.store_count(self, ANFO) < 1 then
-		return finish(self, ("ANFO 用完了（灌好 %d 孔）"):format(pm.done))
+		return finish(self, S("Out of ANFO (filled @1 holes)", ("%d"):format(pm.done)))
 	end
 	if need_primer then
 		if V.store_count(self, EMULSION) >= 1 and rockmech.load_charge(p, p, nil) then
@@ -168,7 +169,7 @@ function def.action(self, ctx)
 		self.t_act = 0.5
 		local list = hole_list(self)
 		if #list == 0 then
-			self.msg = ("吊臂 %d m 內沒有要灌的往下鑽孔"):format(BOOM_LEN)
+			self.msg = S("No downward holes to fill within @1 m of the boom", ("%d"):format(BOOM_LEN))
 		else
 			self.pumping = {list = list, done = 0, t = 0, bare = 0}
 			self.msg = nil

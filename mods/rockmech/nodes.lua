@@ -6,6 +6,7 @@
 -- 見 joints.cell_mask），各面依遮罩畫節理跡線（邊緣深色線）與節理面（上色）。
 -- 遮罩 0 即原本的 node。變體不出現在創造模式物品欄。
 
+local S = rockmech.S
 local cfg = rockmech.cfg
 local joints = rockmech.joints
 local has_default = core.get_modpath("default") ~= nil
@@ -108,9 +109,9 @@ for _, key in ipairs(cfg.lithology_order) do
 		local groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1, rockmech_ore = lith.ore and 1 or nil, rockmech_ore = lith.ore and 1 or nil}
 		if mask ~= 0 then groups.not_in_creative_inventory = 1 end
 		core.register_node(name, {
-			description = lith.description .. "\n" ..
-				("γ=%.1f kN/m³  UCS=%g MPa  σt=%g MPa"):format(lith.gamma, lith.ucs, lith.tensile) ..
-				"\n放置後依所在位置顯示節理",
+			description = S("@1\nγ=@2 kN/m³  UCS=@3 MPa  σt=@4 MPa\nOnce placed, shows the joints at its location",
+				S(lith.description), ("%.1f"):format(lith.gamma), ("%g"):format(lith.ucs), ("%g"):format(lith.tensile)),
+			short_description = S(lith.description),
 			tiles = mask == 0 and {base_tile} or joint_tiles(base_tile, mask),
 			is_ground_content = true,
 			paramtype2 = lith.ore and "color" or nil, palette = lith.ore and ore_palette(lith.ore),
@@ -197,6 +198,7 @@ do
 				end
 				core.register_node(name, {
 					description = base_def.description,
+					short_description = base_def.short_description,
 					tiles = tiles,
 					is_ground_content = true,
 					paramtype2 = lith.ore and "color" or nil, palette = lith.ore and ore_palette(lith.ore),
@@ -258,7 +260,8 @@ local gravel_sounds = has_default and default.node_sound_gravel_defaults and def
 
 rockmech.RUBBLE = rockmech.modname .. ":rubble"
 core.register_node(rockmech.RUBBLE, {
-	description = "Rubble (碎石)\n破碎的岩石",
+	description = S("Rubble\nBroken rock"),
+	short_description = S("Rubble"),
 	tiles = {has_default and "default_gravel.png^[colorize:#5a5048:90" or "[fill:16x16:#6a6058"},
 	groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
 	sounds = gravel_sounds,
@@ -266,7 +269,8 @@ core.register_node(rockmech.RUBBLE, {
 
 rockmech.RUBBLE_GRANITE = rockmech.modname .. ":rubble_granite"
 core.register_node(rockmech.RUBBLE_GRANITE, {
-	description = "Granite rubble (花崗岩碎石)\n破碎的花崗岩",
+	description = S("Granite rubble\nBroken granite"),
+	short_description = S("Granite rubble"),
 	-- 與花崗岩本身相同的粉紅色調（cfg 的岩性顏色），以礫石紋理呈現
 	tiles = {has_default and ("default_gravel.png^[colorize:" .. cfg.lithologies.granite.color .. ":150")
 		or ("[fill:16x16:" .. cfg.lithologies.granite.color)},
@@ -278,7 +282,8 @@ core.register_node(rockmech.RUBBLE_GRANITE, {
 -- 營地的林地鋪這個（woodwork.lua）。以後深開挖時，上覆的土壤一樣是荷重
 rockmech.RUBBLE_SOIL = rockmech.modname .. ":rubble_soil"
 core.register_node(rockmech.RUBBLE_SOIL, {
-	description = "Loose soil (鬆土)\n跟碎石一樣會照安息角流動、有重量；滿格放久了長草變回表土（woodwork.lua）",
+	description = S("Loose soil\nLike rubble, it flows at its angle of repose and has weight; a full block left alone grows grass and turns back into topsoil"),
+	short_description = S("Loose soil"),
 	tiles = {has_default and "default_dirt.png" or "[fill:16x16:#6a5030"},     -- 遊戲內建的泥土：沒有草（表土才有草）
 	groups = {crumbly = 3, rockmech_rubble = 1, soil = 1},
 	sounds = has_default and default.node_sound_dirt_defaults and default.node_sound_dirt_defaults() or gravel_sounds,
@@ -300,7 +305,7 @@ rockmech.ore_of_rubble = {}           -- 碎石 base → 礦石
 rockmech.mix_of = {}                  -- 混合碎石 base → {a = 成分, b = 成分, ore = 礦石或 nil}；p2 = a 的比例
 local mix_pair = {}                   -- 成分 a → 成分 b → base
 local ore_root = {}                   -- 各段的滿格 node → base
-local COMP_LABEL = {[rockmech.RUBBLE] = "碎石", [rockmech.RUBBLE_GRANITE] = "花崗岩碎石", [rockmech.RUBBLE_SOIL] = "土"}
+local COMP_LABEL = {[rockmech.RUBBLE] = S("Rubble"), [rockmech.RUBBLE_GRANITE] = S("Granite rubble"), [rockmech.RUBBLE_SOIL] = S("Soil")}   -- 顯示用（已翻譯）
 local COMP_RANK = {[rockmech.RUBBLE] = 2, [rockmech.RUBBLE_GRANITE] = 2, [rockmech.RUBBLE_SOIL] = 1}   -- 礦石 3
 do
 	local order, seed = {}, 12345     -- 固定順序：比例變高時 a 的像素只增不減
@@ -319,11 +324,12 @@ do
 	end
 	local function tile(name) return core.registered_nodes[name].tiles[1] end
 	-- 一種混合：base 名稱、成分 a（貼圖 ta）、成分 b
-	local function family(base, a, ta, b, desc, ore)
+	local function family(base, a, ta, b, desc, ore, short)
 		for step = 1, rockmech.RUBBLE_STEPS do
 			local name = step == 4 and base or base .. "_g" .. step
 			core.register_node(name, {
 				description = desc,
+				short_description = short or desc,
 				tiles = {("%s^(%s^[mask:%s)"):format(tile(b), ta, masks[step])},
 				groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1, not_in_creative_inventory = step ~= 4 and 1 or nil},
 				sounds = gravel_sounds,
@@ -341,25 +347,25 @@ do
 	for key, ore in pairs(cfg.ores) do
 		ore.key = key
 		local comp = "ore:" .. key
-		COMP_LABEL[comp], COMP_RANK[comp] = ore.label, 3
+		COMP_LABEL[comp], COMP_RANK[comp] = S(ore.label), 3
 		local waste = rockmech.rubble_of_lith[ore.waste] or rockmech.RUBBLE
 		local to = "default_gravel.png^[colorize:" .. ore.pure .. ":235"
 		for _, x in ipairs({rockmech.RUBBLE, rockmech.RUBBLE_GRANITE, rockmech.RUBBLE_SOIL}) do
 			local base = rockmech.modname .. ":rubble_" .. key .. (x == waste and "" or SHORT[x])
 			if x == waste and SHORT[x] ~= "" then base = rockmech.modname .. ":rubble_" .. key end
-			family(base, comp, to, x, ("Crushed %s (%s碎石%s)"):format(key, ore.label,
-				x == waste and "" or "，混" .. COMP_LABEL[x]), ore)
+			family(base, comp, to, x, x == waste and S("@1 rubble", S(ore.label))
+				or S("@1 rubble, mixed with @2", S(ore.label), COMP_LABEL[x]), ore)
 		end
 		ore.rubble, ore.waste_rubble, ore.comp = mix_pair[comp][waste], waste, comp
 		rockmech.rubble_of_lith[ore.lith] = ore.rubble
 		rockmech.lith_of_rubble[ore.rubble] = ore.lith
 	end
 	family(rockmech.modname .. ":colluvium", rockmech.RUBBLE_SOIL, tile(rockmech.RUBBLE_SOIL), rockmech.RUBBLE,
-		"Colluvium (崩積土)\n碎石和土混在一起")
+		S("Colluvium\nRubble and soil mixed together"), nil, S("Colluvium"))
 	family(rockmech.modname .. ":colluvium_granite", rockmech.RUBBLE_SOIL, tile(rockmech.RUBBLE_SOIL), rockmech.RUBBLE_GRANITE,
-		"Granite colluvium (花崗岩崩積土)\n花崗岩碎石和土混在一起")
+		S("Granite colluvium\nGranite rubble and soil mixed together"), nil, S("Granite colluvium"))
 	family(rockmech.modname .. ":rubble_mixed", rockmech.RUBBLE_GRANITE, tile(rockmech.RUBBLE_GRANITE), rockmech.RUBBLE,
-		"Mixed rubble (混合碎石)\n花崗岩碎石和一般碎石混在一起")
+		S("Mixed rubble\nGranite rubble and ordinary rubble mixed together"), nil, S("Mixed rubble"))
 end
 -- 合併規則是純函式（mix.lua，單元測試 tests/mix_spec.lua 也用）
 local mix = dofile(rockmech.modpath .. "/mix.lua")
@@ -388,9 +394,9 @@ function rockmech.mix_text(base, p2)
 	local f = (p2 or 0) / 255
 	if m.ore then
 		local t = rockmech.ore_text(m.ore, f)
-		return m.b == m.ore.waste_rubble and t or ("%s，混%s"):format(t, COMP_LABEL[m.b])
+		return m.b == m.ore.waste_rubble and t or S("@1, mixed with @2", t, COMP_LABEL[m.b])
 	end
-	return ("%s %.0f%%、%s %.0f%%"):format(COMP_LABEL[m.a], f * 100, COMP_LABEL[m.b], (1 - f) * 100)
+	return S("@1 @2%, @3 @4%", COMP_LABEL[m.a], ("%.0f"):format(f * 100), COMP_LABEL[m.b], ("%.0f"):format((1 - f) * 100))
 end
 -- 混合碎石裡土的比例（0..1）：下雨時安息角照比例降低（collapse.lua）
 function rockmech.soil_fraction(base, p2)
@@ -411,7 +417,7 @@ end
 
 -- 礦石品位的顯示文字（grade 0..1）：HUD、車輛載量共用
 function rockmech.ore_text(ore, grade)
-	return ("%s品位 %.0f%%"):format(ore.label, grade * 100)
+	return S("@1 grade @2%", S(ore.label), ("%.0f"):format(grade * 100))
 end
 
 -- 不滿格的碎石（顆粒流用，granular.lua）：每格分 8 級，<碎石>_l1 … _l7 高度 1/8 … 7/8 m；
@@ -433,6 +439,7 @@ for _, base in ipairs(rockmech.rubble_nodes) do
 		groups.rockmech_rubble_level = k
 		core.register_node(name, {
 			description = bdef.description,
+			short_description = bdef.short_description,
 			tiles = bdef.tiles,
 			drawtype = "nodebox",
 			paramtype = "light",
@@ -463,7 +470,8 @@ for _, name in ipairs(rockmech.rubble_nodes) do
 	local groups = table.copy(def.groups)
 	groups.not_in_creative_inventory = 1
 	core.register_node(cname, {
-		description = def.description .. "（夯實）",
+		description = S("@1 (compacted)", def.description),
+		short_description = S("@1 (compacted)", def.short_description or def.description),
 		tiles = tiles,
 		drawtype = def.drawtype,
 		paramtype = def.paramtype,
@@ -504,7 +512,7 @@ for k = 1, rockmech.RUBBLE_LEVELS do
 	local name = rockmech.modname .. ":road_l" .. k
 	local rubble = core.registered_nodes[rockmech.RUBBLE]
 	core.register_node(name, {
-		description = "Compacted rubble (夯實碎石)",
+		description = S("Compacted rubble"),
 		tiles = {rubble.tiles[1] .. "^[colorize:#a89878:110"},
 		drawtype = "nodebox",
 		paramtype = "light",

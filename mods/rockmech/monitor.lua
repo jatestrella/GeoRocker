@@ -7,6 +7,7 @@
 --   MR（模數比）照 Hoek 的表：頁岩 150、砂岩 275、花崗岩 425、煤 200；D 是爆破擾動（rockmass.lua）。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 local PRISM = "rockmech:survey_prism"
 local FORM = "rockmech:survey_prism"
 local HIST_N = 60
@@ -34,10 +35,13 @@ end
 local function info(meta)
 	local h = hist_of(meta)
 	local last = h[#h]
-	if not last then return "監測稜鏡\n還沒有讀數（附近開挖、算過應力後才有）" end
+	if not last then return S("Survey prism\nNo readings yet (they appear after nearby excavation and a stress solve)") end
 	local prev = h[#h - 1]
-	return ("監測稜鏡\n位移 %.2f mm%s（%d 筆，右鍵看曲線）"):format(last.d,
-		prev and ("（上次 %+.2f mm）"):format(last.d - prev.d) or "", #h)
+	if prev then
+		return S("Survey prism\nDisplacement @1 mm (last change @2 mm) (@3 readings, right-click for the curve)",
+			("%.2f"):format(last.d), ("%+.2f"):format(last.d - prev.d), tostring(#h))
+	end
+	return S("Survey prism\nDisplacement @1 mm (@2 readings, right-click for the curve)", ("%.2f"):format(last.d), tostring(#h))
 end
 
 -- 應力解算完（femstress.lua 的 fem_run 呼叫）：範圍裡的稜鏡記一筆
@@ -86,9 +90,9 @@ local function form(pos)
 	local m = core.get_meta(pos)
 	local h = hist_of(m)
 	local out = {"formspec_version[6]size[12,8.4]",
-		("label[0.4,0.5;%s]"):format(core.formspec_escape(("監測稜鏡 %s　從安裝算起的位移"):format(core.pos_to_string(pos))))}
+		("label[0.4,0.5;%s]"):format(core.formspec_escape(S("Survey prism @1: displacement since installation", core.pos_to_string(pos))))}
 	if #h == 0 then
-		out[#out + 1] = "label[0.4,1.4;還沒有讀數：附近開挖、算過應力之後才會記錄]"
+		out[#out + 1] = "label[0.4,1.4;" .. core.formspec_escape(S("No readings yet: they are recorded after nearby excavation and a stress solve")) .. "]"
 	else
 		local maxd = 0.1
 		for _, e in ipairs(h) do maxd = math.max(maxd, e.d) end
@@ -105,18 +109,19 @@ local function form(pos)
 			out[#out + 1] = ("box[%g,%g;%g,%g;#40c0ff]"):format(X0 + (i - 1) * bw + bw * 0.15, Y0 + H - bh, bw * 0.7, bh)
 		end
 		local last = h[#h]
-		out[#out + 1] = ("label[0.4,6.7;%s]"):format(core.formspec_escape(("最新：位移 %.2f mm（東西 %+.2f、上下 %+.2f、南北 %+.2f mm），共 %d 筆")
-			:format(last.d, last.x, last.y, last.z, #h)))
-		out[#out + 1] = "label[0.4,7.2;mm（縱軸）／每次應力解一筆（橫軸）。讀數一直變大要小心；加了支撐之後應該會趨於穩定]"
+		out[#out + 1] = ("label[0.4,6.7;%s]"):format(core.formspec_escape(S("Latest: displacement @1 mm (E-W @2, up-down @3, N-S @4 mm), @5 readings",
+			("%.2f"):format(last.d), ("%+.2f"):format(last.x), ("%+.2f"):format(last.y), ("%+.2f"):format(last.z), tostring(#h))))
+		out[#out + 1] = "label[0.4,7.2;" .. core.formspec_escape(S("mm (vertical axis) / one reading per stress solve (horizontal axis). Be careful if readings keep growing; after support is installed they should level off")) .. "]"
 	end
-	out[#out + 1] = "button[0.4,7.6;3,0.6;reset;重新歸零]"
-	out[#out + 1] = "button_exit[8.6,7.6;3,0.6;close;關閉]"
+	out[#out + 1] = "button[0.4,7.6;3,0.6;reset;" .. core.formspec_escape(S("Reset to zero")) .. "]"
+	out[#out + 1] = "button_exit[8.6,7.6;3,0.6;close;" .. core.formspec_escape(S("Close")) .. "]"
 	return table.concat(out)
 end
 
 local viewing = {}
 core.register_node(PRISM, {
-	description = "監測稜鏡 Survey prism\n貼在岩面上，記錄那裡的岩石位移（附近開挖、算應力時更新）；右鍵看曲線",
+	description = S("Survey prism\nAttach to a rock face to record the rock displacement there (updated on nearby excavation and stress solves); right-click for the curve"),
+	short_description = S("Survey prism"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "wallmounted", sunlight_propagates = true,
 	node_box = {type = "wallmounted",
 		wall_top = {-0.15, 0.4, -0.15, 0.15, 0.5, 0.15},
@@ -127,7 +132,7 @@ core.register_node(PRISM, {
 	groups = {dig_immediate = 2, attached_node = 1},
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" or not rockmech.lith_of_node[core.get_node(pointed.under).name] then
-			if placer and placer:is_player() then core.chat_send_player(placer:get_player_name(), "[監測] 要貼在岩面上") end
+			if placer and placer:is_player() then core.chat_send_player(placer:get_player_name(), S("[Monitor] Must be attached to a rock face")) end
 			return itemstack
 		end
 		return core.item_place_node(itemstack, placer, pointed)

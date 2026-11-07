@@ -10,6 +10,7 @@
 -- （crusher.lua 呼叫 rockmech.fuel_take），沒被破碎站結到的由 wages.lua 換日後另外發單子。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 local V = rockmech.vehicles
 local storage = core.get_mod_storage()
 local FUEL = "fuel:"
@@ -59,7 +60,7 @@ end
 -- 駕駛 HUD 的一段字
 function rockmech.fuel_hud(self)
 	if not kw_of(self.vkind) then return "" end
-	return ("　油耗 %d L/h（今天 %d L）"):format(self.fuel_lh or 0, math.floor(self.fuel_l or 0))
+	return "  " .. S("Fuel @1 L/h (today @2 L)", ("%d"):format(self.fuel_lh or 0), ("%d"):format(math.floor(self.fuel_l or 0)))
 end
 
 local function bucket_key(acc, day) return FUEL .. acc .. ":" .. day end
@@ -75,7 +76,7 @@ end
 
 -- 燃料費那一行：{項目, 數量, 單價, 金額}
 function rockmech.fuel_row(amt, l)
-	return {"燃料費（柴油）", ("%.0f L"):format(l), ("$%g／L"):format(cfg.diesel_price), -amt}
+	return {S("Fuel (diesel)"), ("%.0f L"):format(l), S("$@1/L", ("%g"):format(cfg.diesel_price)), -amt}
 end
 
 -- 還沒結的燃料費：{帳戶 → {交易日, ...}}（wages.lua 發單子用）

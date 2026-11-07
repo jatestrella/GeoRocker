@@ -7,10 +7,12 @@
 --     坡角 90 = 直立的正面；小於 90 時正面依坡角往後傾。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 
+-- name 只給 log；label 給玩家看
 local DIRS = {
-	{name = "北 (+z)", d = {0, 1}}, {name = "東 (+x)", d = {1, 0}},
-	{name = "南 (−z)", d = {0, -1}}, {name = "西 (−x)", d = {-1, 0}},
+	{name = "北 (+z)", label = S("north (+z)"), d = {0, 1}}, {name = "東 (+x)", label = S("east (+x)"), d = {1, 0}},
+	{name = "南 (−z)", label = S("south (−z)"), d = {0, -1}}, {name = "西 (−x)", label = S("west (−x)"), d = {-1, 0}},
 }
 
 -- 正面（朝向 −d）上會順向滑動的節理（Markland：傾向與正面外法向夾角 ≤ λ，且傾角 < 坡角、> φ）
@@ -23,19 +25,19 @@ local function daylighting_sets(face_dx, face_dz, angle)
 		local h = math.sqrt(n.x * n.x + n.z * n.z)
 		if h > 1e-6 and js.dip_eff < angle and js.dip_eff > phi
 				and (n.x * face_dx + n.z * face_dz) / h >= lim then
-			out[#out + 1] = ("%s（%.0f°/%.0f°）"):format(js.name, js.dip_eff, js.dipdir_eff)
+			out[#out + 1] = ("%s (%.0f°/%.0f°)"):format(js.name, js.dip_eff, js.dipdir_eff)
 		end
 	end
 	return out
 end
 
 core.register_chatcommand("rockmech_slope", {
-	params = "[高度=24] [寬度=31] [深度=40] [坡角=90]",
-	description = "在面前堆出一座岩山（正面朝向你），可以直接往前挖隧道",
+	params = S("[height=24] [width=31] [depth=40] [slope angle=90]"),
+	description = S("Build a rock hill in front of you (its face toward you) that you can tunnel straight into"),
 	privs = {rockmech = true},
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local args = {}
 		for tok in (param or ""):gmatch("%S+") do args[#args + 1] = tonumber(tok) end
 		local H = math.max(4, math.min(64, math.floor(args[1] or 24)))
@@ -100,9 +102,9 @@ core.register_chatcommand("rockmech_slope", {
 		local warn = daylighting_sets(-dx, -dz, ang)
 		core.log("action", ("[rockmech] %s 建岩山：往 %s 挖進山、高 %d、寬 %d、深 %d、坡角 %g°，填入 %d 格"):format(
 			name, dir.name, H, Wd, D, ang, n))
-		return true, ("已在前方建好岩山：高 %d m、寬 %d m、深 %d m、正面坡角 %g°，往 %s 挖就是進山。%s"):format(
-			H, Wd, D, ang, dir.name,
-			#warn > 0 and ("注意：正面有順向的節理 " .. table.concat(warn, "、") .. "，正面可能會滑。")
-				or "正面沒有順向的節理。")
+		return true, S("Rock hill built in front of you: height @1 m, width @2 m, depth @3 m, face angle @4°; dig toward @5 to go into the hill. @6",
+			tostring(H), tostring(Wd), tostring(D), ("%g"):format(ang), dir.label,
+			#warn > 0 and S("Warning: the face has daylighting joints @1, so the face may slide.", table.concat(warn, ", "))
+				or S("The face has no daylighting joints."))
 	end,
 })

@@ -12,7 +12,8 @@ MOD = os.path.join(HERE, "..", "mods", "rockmech")
 LOC = os.path.join(MOD, "locale")
 DOMAIN = "rockmech"
 
-CALL = re.compile(r'(?<![\w.])S\(\s*"((?:[^"\\\n]|\\.)*)"')
+# S("…") 是翻譯；TR("…") 只是標記（config.lua 這種沒有翻譯函式的檔案），顯示的地方再 S(變數)
+CALL = re.compile(r'(?<![\w.])(?:S|TR)\(\s*"((?:[^"\\\n]|\\.)*)"')
 LUA_ESC = {"n": "\n", "t": "\t", '"': '"', "'": "'", "\\": "\\"}
 
 def unlua(s):
@@ -82,7 +83,13 @@ def main():
 	order = scan()
 	if not check:
 		write_tr(os.path.join(LOC, "template.txt"), order, {}, with_trans=False)
-	missing_any = False
+	# Luanti 的規定：原文裡 @1、@2… 要依序各出現一次（翻譯裡可以換順序、重複）；原文不能以 # 開頭（翻譯檔會當成註解）
+	bad = False
+	for f, s in order:
+		nums = [int(x) for x in re.findall(r"@([1-9])", s.replace("@@", ""))]
+		if nums != list(range(1, len(nums) + 1)) or s.startswith("#"):
+			print("原文不合規定（%s）：%s" % (f, s.replace("\n", "\\n")[:90])); bad = True
+	missing_any = bad
 	for path in sorted(glob.glob(os.path.join(LOC, DOMAIN + ".*.tr"))):
 		tr = parse_tr(path)
 		missing = [s for _, s in order if not tr.get(s)]

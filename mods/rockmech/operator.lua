@@ -10,6 +10,8 @@
 --     拿著「怪手操作員」對長椅按右鍵：交給他休息。
 --   計薪（wages.lua 的 hire:<怪手>）：在車上、站在旁邊等都計薪；休息、手上的卡不計薪。
 
+local S = rockmech.S
+local E = core.formspec_escape
 local V = rockmech.vehicles
 local cfg = rockmech.cfg
 local storage = rockmech.collapse.storage
@@ -23,7 +25,7 @@ local BENCH_SPOTS = "opbench_spots"            -- {{acc, seats = {pos...}}...}
 local SEATS = 4
 local FOLLOW_GAP, WALK, TELEPORT = 1.5, 4, 30  -- 站在怪手邊緣外幾公尺、走路速度 (m/s)、離太遠就直接過去 (m)
 
-local function tell(name, msg) if name then core.chat_send_player(name, "[操作員] " .. msg) end end
+local function tell(name, msg) if name then core.chat_send_player(name, S("[Operator] @1", msg)) end end
 local function geti(k) return storage:get_int(k) end
 local function addi(k, d) storage:set_int(k, math.max(0, storage:get_int(k) + d)) end
 function rockmech.op_rest_count(acc) return geti(REST .. acc) end
@@ -41,7 +43,7 @@ function rockmech.op_hire(name)
 	local acc = rockmech.account_of(name)
 	local hired, cap = geti(HIRED .. acc), excavators(acc)
 	if hired >= cap then
-		return false, ("操作員已經跟怪手一樣多了（%d 台怪手、%d 個操作員）：先買怪手，或到營地長椅解雇休息中的操作員"):format(cap, hired)
+		return false, S("You already have as many operators as excavators (@1 excavators, @2 operators): buy another excavator first, or dismiss a resting operator at the camp bench", tostring(cap), tostring(hired))
 	end
 	addi(HIRED .. acc, 1)
 	return true
@@ -51,8 +53,9 @@ local function card(acc)
 	if acc then
 		local m = s:get_meta()
 		m:set_string("acc", acc)
-		m:set_string("description", ("怪手操作員（%s）\n拿著對沒人的怪手按右鍵：派他上車作業\n對營地長椅按右鍵：交給他休息"):format(
+		m:set_string("description", S("Excavator operator (@1)\nHold and right-click an empty excavator: send him to work it\nRight-click the camp bench: let him rest",
 			rockmech.account_label and rockmech.account_label(acc) or acc))
+		m:set_string("short_description", S("Excavator operator (@1)", rockmech.account_label and rockmech.account_label(acc) or acc))
 	end
 	return s
 end
@@ -68,7 +71,7 @@ function rockmech.op_card_ok(stack, player, ex)
 		if not ok then tell(name, msg); return false end
 		return true
 	end
-	if acc ~= ex.owner then tell(name, "這是別組的操作員，不能派到這台怪手"); return false end
+	if acc ~= ex.owner then tell(name, S("This operator belongs to another team and cannot be sent to this excavator")); return false end
 	return true
 end
 
@@ -98,12 +101,12 @@ end
 
 -- 上車作業（站在旁邊的那個）
 local function step_up(ex, name)
-	if ex.driver then tell(name, "怪手上有人在開，先下車"); return false end
+	if ex.driver then tell(name, S("Someone is driving the excavator; get them out first")); return false end
 	local op = ex.op
 	op.on, op.standby, op.msg, op.t = true, false, nil, 0
 	remove_npc(ex.uid)
 	op_show(ex)
-	tell(name, "上車作業")
+	tell(name, S("Getting in to work"))
 	return true
 end
 
@@ -118,22 +121,22 @@ function rockmech.op_send_rest(ex, player)
 	op_show(ex)
 	if cfg.career and ex.owner and ex.owner ~= "" then
 		addi(REST .. ex.owner, 1)
-		tell(name, "回營地休息了（停止計薪）：到營地貨櫃辦公室南邊的長椅找他上工")
+		tell(name, S("Gone back to camp to rest (wages stopped): find him at the bench south of the camp container office to put him back to work"))
 	elseif player and player:is_player() and not core.is_creative_enabled(name) then
 		local left = player:get_inventory():add_item("main", card(nil))
 		if not left:is_empty() then core.add_item(player:get_pos(), left) end
-		tell(name, "下班了，操作員回到你的物品欄")
+		tell(name, S("Shift over: the operator is back in your inventory"))
 	end
 end
 
 local function npc_form(ex)
 	return table.concat({
 		"formspec_version[6]size[11,3.4]",
-		("label[0.5,0.6;%s 操作員：在旁邊等]"):format(core.formspec_escape(V.TYPES[ex.vkind].short or "怪手")),
-		"label[0.5,1.2;等候中照樣計薪]",
-		"button[0.5,2;3.2,0.8;up;上車作業]",
-		"button[3.9,2;3.2,0.8;rest;回基地休息]",
-		"button_exit[7.3,2;3.2,0.8;close;關閉]",
+		("label[0.5,0.6;%s]"):format(E(S("@1 operator: waiting nearby", V.TYPES[ex.vkind].short or S("Excavator")))),
+		("label[0.5,1.2;%s]"):format(E(S("Wages are still paid while waiting"))),
+		("button[0.5,2;3.2,0.8;up;%s]"):format(E(S("Get in and work"))),
+		("button[3.9,2;3.2,0.8;rest;%s]"):format(E(S("Rest at base"))),
+		("button_exit[7.3,2;3.2,0.8;close;%s]"):format(E(S("Close"))),
 	})
 end
 local npc_editing = {}
@@ -193,7 +196,7 @@ core.register_entity(NPC, {
 	initial_properties = {
 		physical = true, collide_with_objects = false, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
 		visual = "mesh", mesh = "character.b3d", textures = {rockmech.npc_skin("operator")},
-		nametag = "怪手操作員（右鍵）", nametag_color = "#ffe080", static_save = false, stepheight = 0.6,
+		nametag = S("Excavator operator (right-click)"), nametag_color = "#ffe080", static_save = false, stepheight = 0.6,
 	},
 	on_activate = function(self)
 		self.object:set_armor_groups({immortal = 1})
@@ -260,7 +263,7 @@ core.register_entity(NPC, {
 
 local WOOD = "default_wood.png"
 core.register_node(BENCH, {
-	description = "長椅（操作員休息）",
+	description = S("Bench (operator rest)"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	is_ground_content = false, groups = {not_in_creative_inventory = 1},
 	tiles = {WOOD},
@@ -290,17 +293,17 @@ local function rest_form(name, acc)
 	local mine = rockmech.account_of(name) == acc
 	local out = {
 		"formspec_version[6]size[11,4.4]",
-		("label[0.5,0.6;%s 的休息室]"):format(core.formspec_escape(rockmech.account_label and rockmech.account_label(acc) or acc)),
-		("label[0.5,1.2;休息中 %d 人（全組雇用 %d 人、怪手 %d 台；休息不計薪）]"):format(n, hired, cap),
+		("label[0.5,0.6;%s]"):format(E(S("@1 rest room", rockmech.account_label and rockmech.account_label(acc) or acc))),
+		("label[0.5,1.2;%s]"):format(E(S("Resting: @1 (team has hired @2, excavators: @3; no wages while resting)", tostring(n), tostring(hired), tostring(cap)))),
 	}
 	if mine then
-		out[#out + 1] = "button[0.5,2;3.2,0.8;work;上工（拿一張操作員）]"
-		out[#out + 1] = "button[3.9,2;3.2,0.8;fire;解雇一個]"
-		out[#out + 1] = "label[0.5,3.4;拿著「怪手操作員」對長椅按右鍵：交給他休息]"
+		out[#out + 1] = ("button[0.5,2;3.2,0.8;work;%s]"):format(E(S("To work (take an operator)")))
+		out[#out + 1] = ("button[3.9,2;3.2,0.8;fire;%s]"):format(E(S("Dismiss one")))
+		out[#out + 1] = ("label[0.5,3.4;%s]"):format(E(S("Hold an \"Excavator operator\" and right-click the bench: let him rest")))
 	else
-		out[#out + 1] = "label[0.5,2.3;這是別組的營地]"
+		out[#out + 1] = ("label[0.5,2.3;%s]"):format(E(S("This is another team's camp")))
 	end
-	out[#out + 1] = "button_exit[7.3,2;3.2,0.8;close;關閉]"
+	out[#out + 1] = ("button_exit[7.3,2;3.2,0.8;close;%s]"):format(E(S("Close")))
 	return table.concat(out)
 end
 
@@ -311,7 +314,7 @@ function rockmech.op_bench_click(pos, player)
 	local stack = player:get_wielded_item()
 	if stack:get_name() == OP_ITEM and rockmech.account_of(name) == s.acc then
 		local acc = stack:get_meta():get_string("acc")
-		if acc ~= "" and acc ~= s.acc then tell(name, "這是別組的操作員"); return end
+		if acc ~= "" and acc ~= s.acc then tell(name, S("This operator belongs to another team")); return end
 		if acc == "" and cfg.career then
 			-- 舊版沒記帳戶的卡：照雇用規則算進這組
 			local ok, msg = rockmech.op_hire(name)
@@ -320,7 +323,7 @@ function rockmech.op_bench_click(pos, player)
 		stack:take_item()
 		player:set_wielded_item(stack)
 		addi(REST .. s.acc, 1)
-		tell(name, ("交給他休息了（休息中 %d 人）"):format(geti(REST .. s.acc)))
+		tell(name, S("He is resting now (@1 resting)", tostring(geti(REST .. s.acc))))
 		return
 	end
 	rest_view[name] = s.acc
@@ -333,21 +336,21 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local acc = rest_view[name]
 	if not acc or rockmech.account_of(name) ~= acc then rest_view[name] = nil; return true end
 	if fields.work then
-		if geti(REST .. acc) <= 0 then tell(name, "沒有人在休息")
+		if geti(REST .. acc) <= 0 then tell(name, S("Nobody is resting"))
 		else
 			local left = player:get_inventory():add_item("main", card(acc))
 			if left:is_empty() then
 				addi(REST .. acc, -1)
-				tell(name, "操作員跟你走了：拿著對沒人的怪手按右鍵派他上車")
-			else tell(name, "物品欄滿了") end
+				tell(name, S("The operator is coming with you: hold him and right-click an empty excavator to send him in"))
+			else tell(name, S("Your inventory is full")) end
 		end
 	elseif fields.fire then
-		if geti(REST .. acc) <= 0 then tell(name, "沒有人在休息（只能解雇休息中的）")
+		if geti(REST .. acc) <= 0 then tell(name, S("Nobody is resting (only resting operators can be dismissed)"))
 		else
 			addi(REST .. acc, -1)
 			addi(HIRED .. acc, -1)
 			core.log("action", ("[rockmech] %s 解雇一個休息中的操作員（%s）"):format(name, acc))
-			tell(name, "解雇了一個操作員，名額空出來")
+			tell(name, S("Dismissed one operator; the slot is free again"))
 		end
 	end
 	if fields.quit or fields.close then rest_view[name] = nil
@@ -357,12 +360,13 @@ end)
 
 -- 卡片不能丟在地上（人不會被丟在路邊）
 core.register_craftitem(OP_ITEM, {
-	description = "怪手操作員 Excavator operator\n拿著對沒人的怪手按右鍵：派他上車作業\n對營地長椅按右鍵：交給他休息",
+	description = S("Excavator operator\nHold and right-click an empty excavator: send him to work it\nRight-click the camp bench: let him rest"),
+	short_description = S("Excavator operator"),
 	inventory_image = "[fill:16x16:#00000000^[fill:6x6:5,1:#e0b080^[fill:8x7:4,7:#e8a818^[fill:8x2:4,7:#303030^[fill:2x2:7,3:#303030",
 	stack_max = 1,
 	on_drop = function(itemstack, dropper)
 		if cfg.career then
-			tell(dropper and dropper:get_player_name(), "操作員不能丟在地上：帶回營地長椅交給他休息")
+			tell(dropper and dropper:get_player_name(), S("You cannot drop an operator on the ground: take him back to the camp bench to rest"))
 			return itemstack
 		end
 		return core.item_drop(itemstack, dropper, dropper:get_pos())
@@ -417,8 +421,8 @@ core.register_globalstep(function(dtime)
 		local total = geti(REST .. s.acc)
 		local first = list[1]
 		if first and first:get_pos() then
-			first:set_properties({nametag = total > SEATS and ("操作員休息中 %d 人（長椅坐不下的在辦公室裡）"):format(total)
-				or ("操作員休息中 %d 人（右鍵）"):format(total)})
+			first:set_properties({nametag = total > SEATS and S("Operators resting: @1 (those who don't fit on the bench are in the office)", tostring(total))
+				or S("Operators resting: @1 (right-click)", tostring(total))})
 		end
 	end
 end)

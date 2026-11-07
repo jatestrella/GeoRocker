@@ -5,6 +5,7 @@
 -- 結算：破碎站的日結表多一行「人事費」（crusher.lua 呼叫 rockmech.wage_take）；那天破碎站沒處理到東西、沒出日結表，
 -- 換日後 BILL_GRACE 秒由這裡另外發一張人事費的單子。
 
+local S = rockmech.S
 local cfg = rockmech.cfg
 local storage = core.get_mod_storage()
 local HIRE, WAGE = "hire:", "wage:"
@@ -41,7 +42,8 @@ end
 
 -- 人事費那一行：{項目, 數量, 單價, 金額}
 function rockmech.wage_row(amt, sec)
-	return {"人事費（怪手操作員）", ("%.1f 人·日"):format(sec / cfg.price_period), ("$%g／日"):format(wage_rate()), -amt}
+	return {S("Staff cost (excavator operator)"), S("@1 person-days", ("%.1f"):format(sec / cfg.price_period)),
+		S("$@1/day", ("%g"):format(wage_rate())), -amt}
 end
 
 local acc_t = 0
@@ -103,9 +105,9 @@ core.register_globalstep(function(dtime)
 			end
 			if #rows > 0 then
 				for _, m in ipairs(rockmech.account_members(acc)) do
-					core.chat_send_player(m, ("[營運費] 第 %d 個交易日 −$%.0f"):format(d + 1, total))
+					core.chat_send_player(m, S("[Operating costs] Trading day @1 −$@2", tostring(d + 1), ("%.0f"):format(total)))
 					if rockmech.show_bill then
-						rockmech.show_bill(m, ("營運費日結　第 %d 個交易日"):format(d + 1), rows)
+						rockmech.show_bill(m, S("Operating cost statement – trading day @1", tostring(d + 1)), rows)
 					end
 				end
 			end

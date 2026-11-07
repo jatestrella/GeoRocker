@@ -9,6 +9,7 @@
 --   這些都是建材，在岩石力學裡算空格（group rockmech_timber，見 collapse.lua、timber.lua），不能當剛性的墊支撐；
 --   空手就挖得起來（樹幹要斧頭）。
 
+local S = rockmech.S
 local storage = rockmech.collapse.storage
 local cfg = rockmech.cfg
 if not core.get_modpath("default") then return end
@@ -20,7 +21,7 @@ local SAW, BENCH = "rockmech:sawbench", "rockmech:workbench"
 local SAW_FORM, BENCH_FORM = "rockmech:sawbench", "rockmech:workbench"
 local USE_R = 4             -- 離台子幾公尺內才能用
 
-local function tell(name, msg) if name then core.chat_send_player(name, "[木工] " .. msg) end end
+local function tell(name, msg) if name then core.chat_send_player(name, S("[Woodwork] @1", msg)) end end
 
 ---------------------------------------------------------------------------
 -- 遊戲內建的木製品：加進木材（岩石力學裡算空格），空手挖得起來；原木的說明改成中文
@@ -50,12 +51,13 @@ end
 local CARRY = cfg.career and rockmech.carry_get ~= nil
 local function lying(node) return node.name == LOG and node.param2 >= 4 end
 core.override_item(LOG, {
-	description = "原木 Log\n扛到鋸木台鋸成木柱或木板",
+	description = S("Log\nCarry it to a saw bench to saw it into posts or planks"),
+	short_description = S("Timber log"),
 	-- 經營模式：砍下來的原木不進背包（倒在地上，fell）；左鍵橫躺的原木就扛起來（不用斧頭）
 	drop = CARRY and "" or nil,
 	on_punch = CARRY and function(pos, node, puncher)
 		if not (lying(node) and puncher and puncher:is_player()) then return end
-		if rockmech.carry_get(puncher) then tell(puncher:get_player_name(), "手上有東西：先右鍵放下，才搬得動原木"); return end
+		if rockmech.carry_get(puncher) then tell(puncher:get_player_name(), S("Your hands are full: right-click to put it down before carrying a log")); return end
 		core.remove_node(pos)
 		rockmech.carry_set(puncher, {log = true})
 	end or nil,
@@ -89,7 +91,8 @@ do
 	local sdef = core.registered_items["default:sapling"]
 	local orig_place = sdef and sdef.on_place
 	core.override_item("default:sapling", {
-		description = "樹苗 Sapling\n種在滿格的土上，過一陣子長成樹",
+		description = S("Sapling\nPlant it on a full block of soil; it grows into a tree after a while"),
+		short_description = S("Sapling"),
 		on_place = function(itemstack, placer, pointed)
 			if pointed.type == "node" then
 				local under = core.get_node(pointed.under).name
@@ -98,7 +101,7 @@ do
 						or (k and k < rockmech.RUBBLE_LEVELS) then
 					local def = core.registered_nodes[under]
 					if def and def.on_rightclick then return def.on_rightclick(pointed.under, core.get_node(pointed.under), placer, itemstack, pointed) end
-					tell(placer and placer:get_player_name(), "樹苗要種在滿格的土上（土的上面）")
+					tell(placer and placer:get_player_name(), S("Saplings must be planted on a full block of soil (on top of the soil)"))
 					return itemstack
 				end
 			end
@@ -107,13 +110,14 @@ do
 		end,
 	})
 end
-core.override_item("default:axe_steel", {description = "斧頭 Axe\n砍樹幹任何一格，整棵樹倒下變成原木"})
+core.override_item("default:axe_steel", {description = S("Axe\nChop any block of a trunk and the whole tree falls into logs"), short_description = S("Axe")})
 -- 木板、半格改用內建的木頭貼圖，跟樓梯、門、柵欄一致
 for _, name in ipairs({PLANK, SLAB}) do core.override_item(name, {tiles = {"default_wood.png"}}) end
 
 -- 木牆板：1/8 格厚的直立板（貼在格子的後面，面向放的人）
 core.register_node(WALL, {
-	description = "木牆板 Wooden wall panel（建材，不算支撐）\n直立的薄板，做牆壁用",
+	description = S("Wooden wall panel (building material, not a support)\nA thin upright board for building walls"),
+	short_description = S("Wooden wall panel"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	node_box = {type = "fixed", fixed = {-0.5, -0.5, 0.375, 0.5, 0.5, 0.5}},
 	tiles = {"default_wood.png"},
@@ -220,18 +224,21 @@ local function fell(pos, digger, whole)
 	end
 	fx()
 	if digger and digger:is_player() then
-		tell(digger:get_player_name(), ("樹倒了：原木 %d 根%s"):format(logs + (whole and 0 or 1), CARRY and "倒在地上（左鍵扛起來，一次一根）" or ""))
+		local nlog = tostring(logs + (whole and 0 or 1))
+		tell(digger:get_player_name(), CARRY and S("The tree fell: @1 logs lie on the ground (left-click to carry them, one at a time)", nlog)
+			or S("The tree fell: @1 logs", nlog))
 	end
 end
 core.register_on_dignode(function(pos, oldnode, digger)
 	if oldnode.name == LOG and oldnode.param2 < 4 and digger and digger:is_player() then fell(pos, digger) end
 end)
 
-local function topple(base, why)
+-- why：log 用的原因，why_s：給玩家看的（翻譯過）
+local function topple(base, why, why_s)
 	fell(base, nil, true)
 	for _, pl in ipairs(core.get_connected_players()) do
 		if vector.distance(pl:get_pos(), base) <= 32 then
-			tell(pl:get_player_name(), ("%s 的樹倒了（毀掉，沒有原木）：%s"):format(core.pos_to_string(base), why))
+			tell(pl:get_player_name(), S("The tree at @1 fell (destroyed, no logs): @2", core.pos_to_string(base), why_s))
 		end
 	end
 	core.log("action", ("[rockmech] 樹倒下 %s：%s"):format(core.pos_to_string(base), why))
@@ -257,14 +264,14 @@ core.register_abm({
 		local bdef = core.registered_nodes[bn]
 		if (bk and bk < NLEV) or (bdef and bdef.walkable == false) then
 			if sap then core.remove_node(pos); core.add_item(pos, "default:sapling")
-			else topple(pos, "樹根底下的土流失了") end
+			else topple(pos, "樹根底下的土流失了", S("the soil under its roots washed away")) end
 			return
 		end
 		if sap then return end
 		for dx = -1, 1 do for dz = -1, 1 do
 			if (dx ~= 0 or dz ~= 0) and soil_above(pos.x + dx, pos.z + dz, pos) <= 1 then return end
 		end end
-		topple(pos, "被土埋超過 1 m")
+		topple(pos, "被土埋超過 1 m", S("buried by more than 1 m of soil"))
 	end,
 })
 
@@ -273,19 +280,19 @@ core.register_abm({
 ---------------------------------------------------------------------------
 
 local SAW_RECIPES = {
-	{give = POST, n = 2, label = "木柱"},
-	{give = PLANK, n = 4, label = "木板"},
-	{give = SLAB, n = 8, label = "木板半格"},
+	{give = POST, n = 2, label = S("Timber post")},
+	{give = PLANK, n = 4, label = S("Timber plank")},
+	{give = SLAB, n = 8, label = S("Timber slab")},
 }
 local BENCH_RECIPES = {
-	{give = WALL, n = 4, need = 1, label = "木牆板"},
-	{give = SLAB, n = 2, need = 1, label = "木板半格"},
-	{give = "stairs:stair_wood", n = 1, need = 1, label = "樓梯"},
-	{give = "default:fence_wood", n = 2, need = 1, label = "柵欄"},
-	{give = "default:fence_rail_wood", n = 2, need = 1, label = "柵欄橫桿"},
-	{give = "default:ladder_wood", n = 3, need = 1, label = "梯子"},
-	{give = "doors:door_wood", n = 1, need = 2, label = "門"},
-	{give = "doors:trapdoor", n = 1, need = 2, label = "活板門"},
+	{give = WALL, n = 4, need = 1, label = S("Wooden wall panel")},
+	{give = SLAB, n = 2, need = 1, label = S("Timber slab")},
+	{give = "stairs:stair_wood", n = 1, need = 1, label = S("Stairs")},
+	{give = "default:fence_wood", n = 2, need = 1, label = S("Fence")},
+	{give = "default:fence_rail_wood", n = 2, need = 1, label = S("Fence rail")},
+	{give = "default:ladder_wood", n = 3, need = 1, label = S("Ladder")},
+	{give = "doors:door_wood", n = 1, need = 2, label = S("Door")},
+	{give = "doors:trapdoor", n = 1, need = 2, label = S("Trapdoor")},
 }
 
 local function count(inv, item)
@@ -301,41 +308,41 @@ local function carried_log(player)
 end
 local function saw_form(player)
 	local text
-	if CARRY then text = carried_log(player) and "手上扛著一根原木" or "手上沒有原木：去把地上的原木扛過來（左鍵）"
-	else text = ("物品欄裡的原木：%d 根（一次鋸一根）"):format(count(player:get_inventory(), LOG)) end
+	if CARRY then text = carried_log(player) and S("You are carrying a log") or S("You have no log: go and carry one over from the ground (left-click)")
+	else text = S("Logs in inventory: @1 (one sawn at a time)", tostring(count(player:get_inventory(), LOG))) end
 	local out = {"formspec_version[6]size[10,5.6]",
-		"label[0.5,0.6;鋸木台]",
+		"label[0.5,0.6;" .. core.formspec_escape(S("Saw bench")) .. "]",
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(text))}
 	for i, r in ipairs(SAW_RECIPES) do
 		out[#out + 1] = ("item_image[0.5,%g;0.8,0.8;%s]"):format(1.7 + (i - 1) * 1.0, r.give)
 		out[#out + 1] = ("button[1.5,%g;5,0.8;r_%d;%s]"):format(1.7 + (i - 1) * 1.0, i,
-			core.formspec_escape(("原木 1 根 → %s ×%d"):format(r.label, r.n)))
+			core.formspec_escape(S("1 log → @1 ×@2", r.label, tostring(r.n))))
 	end
-	out[#out + 1] = "button_exit[7,4.7;2.5,0.7;close;關閉]"
+	out[#out + 1] = "button_exit[7,4.7;2.5,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"
 	return table.concat(out)
 end
 local function bench_form(player)
 	local n = count(player:get_inventory(), PLANK)
 	local out = {"formspec_version[6]size[13,8]",
-		"label[0.5,0.6;木工桌]",
-		("label[0.5,1.2;%s]"):format(core.formspec_escape(("物品欄裡的木板：%d 塊（木板在鋸木台用原木鋸，或向工具室管理員買）"):format(n)))}
+		"label[0.5,0.6;" .. core.formspec_escape(S("Workbench")) .. "]",
+		("label[0.5,1.2;%s]"):format(core.formspec_escape(S("Planks in inventory: @1 (saw logs into planks at a saw bench, or buy them from the toolroom keeper)", tostring(n))))}
 	for i, r in ipairs(BENCH_RECIPES) do
 		local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
 		local x, y = 0.5 + col * 6.2, 1.8 + row * 1.2
 		out[#out + 1] = ("item_image[%g,%g;0.8,0.8;%s]"):format(x, y, r.give)
 		out[#out + 1] = ("button[%g,%g;5,0.8;r_%d;%s]"):format(x + 1, y, i,
-			core.formspec_escape(("木板 %d → %s ×%d"):format(r.need, r.label, r.n)))
+			core.formspec_escape(S("@1 planks → @2 ×@3", tostring(r.need), r.label, tostring(r.n))))
 	end
-	out[#out + 1] = "button_exit[10,7.1;2.5,0.7;close;關閉]"
+	out[#out + 1] = "button_exit[10,7.1;2.5,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"
 	return table.concat(out)
 end
 
 local function make(player, need_item, need_n, give, n)
 	local name = player:get_player_name()
 	local inv = player:get_inventory()
-	if count(inv, need_item) < need_n then tell(name, "材料不夠"); return end
+	if count(inv, need_item) < need_n then tell(name, S("Not enough materials")); return end
 	local stack = ItemStack(give .. " " .. n)
-	if not inv:room_for_item("main", stack) then tell(name, "物品欄滿了"); return end
+	if not inv:room_for_item("main", stack) then tell(name, S("Your inventory is full")); return end
 	inv:remove_item("main", ItemStack(need_item .. " " .. need_n))
 	inv:add_item("main", stack)
 	core.sound_play("default_dig_choppy", {pos = player:get_pos(), gain = 0.6, max_hear_distance = 16}, true)
@@ -347,7 +354,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local pos = using[name]
 	if fields.quit then using[name] = nil; return true end
 	if not pos or vector.distance(player:get_pos(), pos) > USE_R + 1 then
-		tell(name, "離台子太遠了"); core.close_formspec(name, formname); using[name] = nil; return true
+		tell(name, S("You are too far from the bench")); core.close_formspec(name, formname); using[name] = nil; return true
 	end
 	for k in pairs(fields) do
 		local i = tonumber(k:match("^r_(%d+)$"))
@@ -358,8 +365,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 					-- 用手上扛的那根原木
 					local stack = ItemStack(r.give .. " " .. r.n)
 					local inv = player:get_inventory()
-					if not carried_log(player) then tell(name, "手上沒有原木")
-					elseif not inv:room_for_item("main", stack) then tell(name, "物品欄滿了")
+					if not carried_log(player) then tell(name, S("You are not carrying a log"))
+					elseif not inv:room_for_item("main", stack) then tell(name, S("Your inventory is full"))
 					else
 						rockmech.carry_set(player, nil)
 						inv:add_item("main", stack)
@@ -379,15 +386,15 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 end)
 core.register_on_leaveplayer(function(player) using[player:get_player_name()] = nil end)
 
-local function table_node(name, desc, boxes, tiles, form, form_fn)
+local function table_node(name, desc, short, boxes, tiles, form, form_fn)
 	core.register_node(name, {
-		description = desc, drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
+		description = desc, short_description = short, drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 		node_box = {type = "fixed", fixed = boxes}, selection_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0.45, 0.5}},
 		tiles = tiles, is_ground_content = false, groups = {not_in_creative_inventory = 0, rockmech_timber = 1, choppy = 3},
 		sounds = default.node_sound_wood_defaults(),
 		on_rightclick = function(pos, node, clicker, itemstack)
 			if not (clicker and clicker:is_player()) then return itemstack end
-			if vector.distance(clicker:get_pos(), pos) > USE_R then tell(clicker:get_player_name(), "走近一點"); return itemstack end
+			if vector.distance(clicker:get_pos(), pos) > USE_R then tell(clicker:get_player_name(), S("Come closer")); return itemstack end
 			using[clicker:get_player_name()] = vector.copy(pos)
 			core.show_formspec(clicker:get_player_name(), form, form_fn(clicker))
 			return itemstack
@@ -402,7 +409,7 @@ end
 do
 	local b = LEGS(0.3)
 	b[#b + 1] = {-0.5, 0.3, -0.5, 0.5, 0.45, 0.5}
-	table_node(BENCH, "木工桌 Workbench\n右鍵：用木板做木牆板、樓梯、門、柵欄、梯子…", b,
+	table_node(BENCH, S("Workbench\nRight-click: make wall panels, stairs, doors, fences, ladders… from planks"), S("Workbench"), b,
 		{"default_wood.png"}, BENCH_FORM, bench_form)
 end
 -- 鋸木台：矮的木架，台面中間一片圓鋸片
@@ -410,7 +417,7 @@ do
 	local b = LEGS(0.15)
 	b[#b + 1] = {-0.5, 0.15, -0.3, 0.5, 0.3, 0.3}
 	b[#b + 1] = {-0.02, 0.3, -0.25, 0.02, 0.5, 0.25}          -- 鋸片
-	table_node(SAW, "鋸木台 Saw bench\n右鍵：把原木鋸成木柱、木板或木板半格", b,
+	table_node(SAW, S("Saw bench\nRight-click: saw a log into posts, planks or slabs"), S("Saw bench"), b,
 		{"default_wood.png^[fill:2x16:7,0:#b0b4b8", "default_wood.png", "default_wood.png"}, SAW_FORM, saw_form)
 end
 
@@ -596,7 +603,8 @@ local function disturb(pos)
 end
 
 core.register_node(TOPSOIL, {
-	description = "表土 Topsoil\n長著草和樹根的土：根系有凝聚力，陡坡上也站得住；被挖、底下被掏空、或旁邊挖開的陡壁太高（超過自立高度），就變成鬆土照安息角流",
+	description = S("Topsoil\nSoil with grass and roots: the roots give it cohesion, so it stands even on steep slopes. If dug, undermined, or if an excavated face next to it is too high (above its critical standing height), it turns into loose soil and flows at its angle of repose"),
+	short_description = S("Topsoil"),
 	tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
 	is_ground_content = false, groups = {crumbly = 3, soil = 1, rockmech_topsoil = 1},
 	sounds = default.node_sound_dirt_defaults(), drop = SOIL,
@@ -613,7 +621,7 @@ local TOPSOIL_THIN = {}
 for k = 1, NLEV - 1 do
 	local name = TOPSOIL .. "_" .. k
 	core.register_node(name, {
-		description = ("表土（%d/8 m）Topsoil"):format(k),
+		description = S("Topsoil (@1/8 m)", tostring(k)),
 		drawtype = "nodebox", paramtype = "light",
 		node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.5 + k / NLEV, 0.5}},
 		tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},

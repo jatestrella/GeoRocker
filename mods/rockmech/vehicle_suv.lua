@@ -4,11 +4,12 @@
 -- 太輕不會壓實碎石（rockmech_compact_mass），在鬆碎石上一樣會壓出淺車轍。
 
 local V = rockmech.vehicles
+local S = rockmech.S
 local box_tex = V.box_tex
 local WHEEL, TREAD = V.WHEEL, V.TREAD
 
 local c = "#3a5a8a"
-local def = {desc = "四輪驅動休旅車 4WD SUV", short = "休旅車", color = c, cap = 0, speed = 6,
+local def = {desc = S("4WD SUV"), short = S("SUV"), color = c, cap = 0, speed = 6,
 	top_speed = 22, accel = 3,    -- 直線加速到約 79 km/h
 	max_grade = math.rad(30),     -- 四輪驅動
 	tire = 0.75,
@@ -16,7 +17,7 @@ local def = {desc = "四輪驅動休旅車 4WD SUV", short = "休旅車", color 
 	mirror = {x = 1.1, y = 0.5, z = -0.1}, rearcam = {x = 0, y = 0.6, z = -3.6},   -- 後照鏡（A 柱旁）、倒車攝影機（車尾）
 	tilt = {front = 0.9, rear = -3.0, side_z = -1.2, side_x = 0.8},
 	tail_lat = {-0.8, 0, 0.8}, tail_dy = {0.6, 1.2},
-	item_desc = "右鍵上車（代步用，四輪驅動，爬坡可到 30°）"}
+	item_desc = S("Right-click to get in (for getting around; four-wheel drive, climbs slopes up to 30°)")}
 do   -- 圖示：車身、車窗、兩個輪子
 	local r = {}
 	r[#r + 1] = {2, 14, 27, 8, c}
@@ -45,6 +46,6 @@ do
 end
 -- 擋人：車身後段（碰撞箱後方）
 def.overhangs = {{x0 = -1.0, x1 = 1.0, z0 = -3.5, z1 = -1.0, y0 = -1.0, y1 = 0.8, body = "z1"}}
-function def.hud() return "　代步車" end
+function def.hud() return "  " .. S("Personnel carrier") end
 
 V.register("suv", def)

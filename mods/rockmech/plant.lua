@@ -9,6 +9,7 @@
 -- 選礦場本身不收錢也不付錢：精煤載去破碎站賣，矸石載去廢石場（破碎站切換成廢石場）丟。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 local V = rockmech.vehicles
 local H = rockmech.hopper_lib
 local NLEV = V.NLEV
@@ -29,7 +30,7 @@ local BOOM = "rockmech:plant_boom"
 local BOOM_REST = 3         -- 沒車時放料臂朝外伸出多長 (m)
 local STALL_T = 10          -- 連續停機多久才算停機 (s)
 local TOWER_OFF = 4         -- 塔中心離機身中心（左右）
-local SIDES = {{key = "p", s = 1, label = "精煤"}, {key = "r", s = -1, label = "矸石"}}
+local SIDES = {{key = "p", s = 1, label = S("Clean coal")}, {key = "r", s = -1, label = S("Rejects")}}
 
 -- 選礦場的主要礦種（只有一種礦：煤）
 local function main_ore()
@@ -91,8 +92,9 @@ local function info(meta)
 	local parts = {}
 	for _, sd in ipairs(SIDES) do
 		local lv, coal = meta:get_float(sd.key .. "_lv"), meta:get_float(sd.key .. "_coal")
-		parts[#parts + 1] = ("%s倉 %.0f / %.0f m³（%.0f t%s）"):format(sd.label, lv / NLEV, cfg.plant_bin, H.tons_of(lv),
-			lv >= 1 and ("，品位 %.0f%%"):format(100 * coal / lv) or "")   -- 不到 1 級的零頭放不出來，品位也沒意義
+		local a, b, t = ("%.0f"):format(lv / NLEV), ("%.0f"):format(cfg.plant_bin), ("%.0f"):format(H.tons_of(lv))
+		parts[#parts + 1] = lv >= 1 and S("@1 bin @2 / @3 m³ (@4 t, grade @5%)", sd.label, a, b, t, ("%.0f"):format(100 * coal / lv))
+			or S("@1 bin @2 / @3 m³ (@4 t)", sd.label, a, b, t)   -- 不到 1 級的零頭放不出來，品位也沒意義
 	end
 	return parts
 end
@@ -184,7 +186,8 @@ local function step(pos, dtime)
 		end
 	end
 	for _, sd in ipairs(SIDES) do show_fill(pos, meta, sd) end
-	meta:set_string("infotext", "選礦場" .. (stopped and "（已停止）" or "") .. "（右鍵查看）\n" .. table.concat(info(meta), "\n"))
+	meta:set_string("infotext", (stopped and S("Ore plant (stopped) (right-click to view)") or S("Ore plant (right-click to view)"))
+		.. "\n" .. table.concat(info(meta), "\n"))
 end
 
 local function formspec(pos)
@@ -193,15 +196,17 @@ local function formspec(pos)
 	local stopped = meta:get_int("stopped") == 1
 	return table.concat({
 		"formspec_version[6]size[9,5.4]",
-		("label[0.5,0.6;選礦場（選煤廠）　%s]"):format(stopped and "已停止" or "運轉中"),
-		("button[6,0.2;2.6,0.8;toggle;%s]"):format(stopped and "開始運轉" or "停止"),
-		("label[0.5,1.2;處理能力：%g t/s　放料：%g t/s]"):format(cfg.plant_rate, cfg.plant_load_rate),
-		("label[0.5,1.8;分選：煤 %.0f%% 進精煤，矸石 %.0f%% 混進精煤]"):format(rockmech.eff_plant_recovery(meta:get_string("owner")) * 100,
-			rockmech.eff_plant_misplaced(meta:get_string("owner")) * 100),
+		("label[0.5,0.6;%s]"):format(core.formspec_escape(stopped and S("Ore plant (coal preparation plant)   Stopped")
+			or S("Ore plant (coal preparation plant)   Running"))),
+		("button[6,0.2;2.6,0.8;toggle;%s]"):format(core.formspec_escape(stopped and S("Start") or S("Stop"))),
+		("label[0.5,1.2;%s]"):format(core.formspec_escape(S("Capacity: @1 t/s   Loading: @2 t/s", ("%g"):format(cfg.plant_rate), ("%g"):format(cfg.plant_load_rate)))),
+		("label[0.5,1.8;%s]"):format(core.formspec_escape(S("Separation: @1% of the coal goes to clean coal, @2% of the waste is misplaced into clean coal",
+			("%.0f"):format(rockmech.eff_plant_recovery(meta:get_string("owner")) * 100),
+			("%.0f"):format(rockmech.eff_plant_misplaced(meta:get_string("owner")) * 100)))),
 		("label[0.5,2.5;%s]"):format(core.formspec_escape(parts[1])),
 		("label[0.5,3.1;%s]"):format(core.formspec_escape(parts[2])),
-		("label[0.5,3.7;卡車或礦卡停在放料臂 %g m 內不動，放料臂就會轉過去裝]"):format(cfg.plant_reach),
-		"button_exit[3,4.3;3,0.8;ok;關閉]",
+		("label[0.5,3.7;%s]"):format(core.formspec_escape(S("When a truck or haul truck stands still within @1 m of a loading boom, the boom swings over and loads it", ("%g"):format(cfg.plant_reach)))),
+		"button_exit[3,4.3;3,0.8;ok;" .. core.formspec_escape(S("Close")) .. "]",
 	})
 end
 
@@ -261,7 +266,7 @@ local function build(pos, dx, dz, name)
 		cm:set_string("plant", core.pos_to_string(pos))
 		cm:set_float("ux", out.x)
 		cm:set_float("uz", out.z)
-		cm:set_string("infotext", ("%s放料臂：卡車停在 %g m 內就裝"):format(sd.label, cfg.plant_reach))
+		cm:set_string("infotext", S("@1 loading boom: loads trucks stopped within @2 m", sd.label, ("%g"):format(cfg.plant_reach)))
 	end
 	local meta = core.get_meta(pos)
 	meta:set_string("owner", rockmech.account_of(name))     -- 分組時歸整組
@@ -328,14 +333,14 @@ for _, sd in ipairs(SIDES) do
 				16 * e / FILL_STEPS, 16 - 16 * e / FILL_STEPS, MATERIAL[k])
 		local top = e == FILL_STEPS and full_tex(MATERIAL[k], PAINT[k]) or bin_tex(PAINT[k])
 		core.register_node(BIN_STAGE[k][e], {
-			description = ("Plant bin (選礦場%s塔%s)"):format(sd.label, e > 0 and ("，裝了 %d/8"):format(e) or ""),
+			description = e > 0 and S("Ore plant @1 tower, @2/8 full", sd.label, tostring(e)) or S("Ore plant @1 tower", sd.label),
 			tiles = {top, side, side, side, side, side}, groups = {not_in_creative_inventory = 1},
 			diggable = false, is_ground_content = false, drop = "",
 		})
 	end
 end
 core.register_node(CHUTE, {
-	description = "Plant chute (選礦場放料口)",
+	description = S("Ore plant chute"),
 	drawtype = "nodebox", paramtype = "light",
 	node_box = {type = "fixed", fixed = {{-0.5, 0, -0.5, 0.5, 0.5, 0.5}, {-0.3, -0.5, -0.3, 0.3, 0, 0.3}}},
 	tiles = {"[fill:16x16:#404040^[fill:16x2:0,7:#c0a020"},
@@ -343,8 +348,9 @@ core.register_node(CHUTE, {
 })
 
 core.register_node(PLANT, {
-	description = ("Ore plant (選礦場)\n對著平地按右鍵放置：朝自己的方向挖 %d×%d m 受料倉，機身左右各一座儲料塔\n"
-		.. "分選成精煤和矸石；卡車或礦卡停在放料臂範圍內裝料"):format(H.SIZE, H.SIZE),
+	description = S("Ore plant\nRight-click on flat ground to place: digs a @1×@2 m receiving hopper toward you, with a storage tower on each side of the machine\nSeparates feed into clean coal and rejects; trucks and haul trucks stopped within reach of a loading boom get loaded",
+		tostring(H.SIZE), tostring(H.SIZE)),
+	short_description = S("Ore plant"),
 	drawtype = "nodebox",
 	paramtype = "light",
 	node_box = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}},
@@ -361,8 +367,8 @@ core.register_node(PLANT, {
 		else dz = look.z > 0 and -1 or 1 end
 		local name = placer:get_player_name()
 		if not build(pos, dx, dz, name) then
-			core.chat_send_player(name, ("[選礦場] 要放在平地上：機身 3×3 m、前方 %d×%d m 受料倉、左右兩座塔（各 3×3 m、高 %d m）"
-				.. "要平坦、地下是實心、上方淨空"):format(H.SIZE, H.SIZE, TOWER_H))
+			core.chat_send_player(name, S("[Ore plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above",
+				tostring(H.SIZE), tostring(H.SIZE), tostring(TOWER_H)))
 			return itemstack
 		end
 		if not core.is_creative_enabled(name) then itemstack:take_item() end

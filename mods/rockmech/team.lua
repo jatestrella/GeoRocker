@@ -16,6 +16,7 @@
 
 local cfg = rockmech.cfg
 if not cfg.career then return end
+local S = rockmech.S
 
 local storage = rockmech.collapse.storage
 local TEAM_OF, SITE, TP = "team_of:", "team_site:", "team_tp:"
@@ -46,6 +47,7 @@ local function site_x(t)
 	return (i % 2 == 1 and -k or k) * SPACING + cfg.career_camp_dx     -- 營地在礦帶中心往東 camp_dx
 end
 rockmech.team_site_x = site_x
+local function sx(t) return ("%d"):format(site_x(t)) end      -- 營地 x 的文字（訊息用）
 
 ---------------------------------------------------------------------------
 -- 組的營地與資金
@@ -99,10 +101,10 @@ local function set_team(name, t)
 	if player then
 		rockmech.show_money(player)
 		if t then
-			core.chat_send_player(name, ("[分組] 你在第 %s 組。全組共用一筆資金，營地在 x = %d（拿著「回營地」旗子按左鍵回營地）"):format(t, site_x(t)))
+			core.chat_send_player(name, S("[Teams] You are in team @1. The whole team shares one fund; your camp is at x = @2 (hold the \"Back to camp\" flag and left-click to return to camp)", t, sx(t)))
 			send_home(name, t)
 		else
-			core.chat_send_player(name, "[分組] 你已經不在任何一組")
+			core.chat_send_player(name, S("[Teams] You are no longer in any team"))
 		end
 	elseif t then
 		storage:set_string(TP .. name, "1")
@@ -128,13 +130,13 @@ core.register_on_joinplayer(function(player)
 		if storage:get_string(TP .. name) ~= "" then
 			storage:set_string(TP .. name, "")
 			core.after(0.5, function()
-				core.chat_send_player(name, ("[分組] 歡迎！你在第 %s 組，全組共用一筆資金。資金在畫面右上角，拿著「回營地」旗子按左鍵回營地"):format(t))
+				core.chat_send_player(name, S("[Teams] Welcome! You are in team @1; the whole team shares one fund. The funds are shown at the top right of the screen; hold the \"Back to camp\" flag and left-click to return to camp", t))
 				send_home(name, t)
 			end)
 		end
 	elseif not core.is_singleplayer() and not rockmech.has_account(name) then
 		core.after(1, function()
-			core.chat_send_player(name, "[分組] 你還沒分組，還不能買設備。請找老師分組")
+			core.chat_send_player(name, S("[Teams] You are not in a team yet, so you cannot buy equipment. Please ask the teacher to assign you to a team"))
 		end)
 	end
 end)
@@ -162,7 +164,7 @@ local function load_roster()
 	local f = io.open(roster_path, "r")
 	if not f then return end
 	local auth = core.get_auth_handler()
-	local created, moved, bad = 0, 0, {}
+	local created, moved, bad, badlog = 0, 0, {}, {}       -- bad：給老師看的訊息（翻譯）、badlog：寫進 log
 	local n = 0
 	for line in f:lines() do
 		n = n + 1
@@ -174,7 +176,8 @@ local function load_roster()
 			if name == "帳號" or name:lower() == "name" or name:lower() == "account" then
 				-- 標題列（帳號,密碼,組別）
 			elseif not name:match("^[%w_%-]+$") or #name > 20 then
-				bad[#bad + 1] = ("第 %d 行：帳號「%s」只能用英文字母、數字、- 和 _，最多 20 字"):format(n, name)
+				bad[#bad + 1] = S("Line @1: account \"@2\" may only use English letters, digits, - and _, at most 20 characters", tostring(n), name)
+				badlog[#badlog + 1] = ("第 %d 行：帳號「%s」只能用英文字母、數字、- 和 _，最多 20 字"):format(n, name)
 			else
 				rockmech.real_names[name] = fields[4] ~= "" and fields[4] or nil     -- 第 4 欄：真名（名牌只給老師看）
 				if not auth.get_auth(name) then
@@ -183,7 +186,8 @@ local function load_roster()
 				end
 				if t ~= "" then
 					if not team_index(t) then
-						bad[#bad + 1] = ("第 %d 行：組別「%s」不在 1–%s 之間"):format(n, t, team_name(cfg.career_teams))
+						bad[#bad + 1] = S("Line @1: team \"@2\" is not between 1 and @3", tostring(n), t, team_name(cfg.career_teams))
+						badlog[#badlog + 1] = ("第 %d 行：組別「%s」不在 1–%s 之間"):format(n, t, team_name(cfg.career_teams))
 					elseif rockmech.team_of(name) ~= t then
 						set_team(name, t)
 						moved = moved + 1
@@ -195,7 +199,7 @@ local function load_roster()
 	f:close()
 	core.log("action", ("[rockmech] roster %s: %d accounts created, %d team changes"):format(cfg.career_roster, created, moved))
 	if rockmech.nametag_refresh_all then rockmech.nametag_refresh_all() end
-	for _, b in ipairs(bad) do core.log("warning", "[rockmech] 名單 " .. b) end
+	for _, b in ipairs(badlog) do core.log("warning", "[rockmech] 名單 " .. b) end
 	return created, moved, bad
 end
 
@@ -207,7 +211,9 @@ core.register_on_prejoinplayer(function(name)
 	if not (has_roster and cfg.career_roster_only) or core.is_singleplayer() then return end
 	if name == core.settings:get("name") then return end
 	if core.get_auth_handler().get_auth(name) then return end
-	return "這個伺服器只開放班上同學：請用老師給的帳號登入（大小寫要一樣）"
+	-- 還沒進遊戲，client 還沒有翻譯檔：中英並列，不用 S()
+	return "This server is for our class only: log in with the account your teacher gave you (case-sensitive).\n"
+		.. "這個伺服器只開放班上同學：請用老師給的帳號登入（大小寫要一樣）"
 end)
 
 ---------------------------------------------------------------------------
@@ -236,74 +242,74 @@ end
 local function is_teacher(name) return core.check_player_privs(name, {[TEACHER] = true}) end
 
 core.register_chatcommand("team", {
-	params = "| list | set <帳號> <組|none> | money <組> <金額> | reload",
-	description = "分組：看自己的組；老師可以列出各組、分組、調整資金、重讀名單",
+	params = S("| list | set <account> <team|none> | money <team> <amount> | reload"),
+	description = S("Teams: show your own team; the teacher can list the teams, assign teams, adjust funds and reload the roster"),
 	func = function(name, param)
 		local args = param:split(" ")
 		local cmd = args[1]
 		if not cmd then
 			local t = rockmech.team_of(name)
-			if not t then return true, "你還沒分組" end
-			return true, ("你在第 %s 組，資金 %s，營地 x = %d。組員：%s"):format(t, money_text(rockmech.money(name)), site_x(t),
-				table.concat(members_of(t), "、"))
+			if not t then return true, S("You are not in a team yet") end
+			return true, S("You are in team @1, funds @2, camp at x = @3. Members: @4", t, money_text(rockmech.money(name)), sx(t),
+				table.concat(members_of(t), ", "))
 		end
-		if not is_teacher(name) then return false, "這個指令要老師（" .. TEACHER .. " 權限）才能用" end
+		if not is_teacher(name) then return false, S("This command is for the teacher only (@1 privilege)", TEACHER) end
 		if cmd == "list" then
 			local lines = {}
 			for _, t in ipairs(all_teams()) do
 				local m = members_of(t)
 				local acc = "team:" .. t
-				lines[#lines + 1] = ("第 %s 組（x = %d）%s　%d 人：%s"):format(t, site_x(t),
-					rockmech.has_account(acc) and money_text(rockmech.money(acc)) or "未開",
-					#m, table.concat(m, "、"))
+				lines[#lines + 1] = S("Team @1 (x = @2) @3   @4 players: @5", t, sx(t),
+					rockmech.has_account(acc) and money_text(rockmech.money(acc)) or S("not opened"),
+					tostring(#m), table.concat(m, ", "))
 			end
 			return true, table.concat(lines, "\n")
 		elseif cmd == "set" then
 			local who, t = args[2], norm((args[3] or ""):upper())
-			if not who or t == "" then return false, "用法：/team set <帳號> <組|none>" end
-			if not core.get_auth_handler().get_auth(who) then return false, "沒有這個帳號：" .. who end
-			if t == "NONE" then set_team(who, nil); return true, who .. " 已取消分組" end
-			if not team_index(t) then return false, ("組別要在 1–%s 之間"):format(team_name(cfg.career_teams)) end
+			if not who or t == "" then return false, S("Usage: /team set <account> <team|none>") end
+			if not core.get_auth_handler().get_auth(who) then return false, S("No such account: @1", who) end
+			if t == "NONE" then set_team(who, nil); return true, S("@1 is no longer in a team", who) end
+			if not team_index(t) then return false, S("The team must be between 1 and @1", team_name(cfg.career_teams)) end
 			set_team(who, t)
-			return true, ("%s → 第 %s 組"):format(who, t)
+			return true, S("@1 → team @2", who, t)
 		elseif cmd == "money" then
 			local t, amount = norm(args[2] or ""), tonumber(args[3] or "")
-			if not team_index(t) or not amount then return false, "用法：/team money <組> <金額>（負數是扣錢）" end
+			if not team_index(t) or not amount then return false, S("Usage: /team money <team> <amount> (negative to deduct)") end
 			rockmech.add_money("team:" .. t, amount)
 			for _, m in ipairs(rockmech.account_members("team:" .. t)) do
-				core.chat_send_player(m, ("[第 %s 組] 老師調整資金 %s%s"):format(t, amount >= 0 and "+" or "", money_text(amount)))
+				core.chat_send_player(m, S("[Team @1] The teacher adjusted the funds by @2@3", t, amount >= 0 and "+" or "", money_text(amount)))
 			end
 			core.log("action", ("[rockmech] %s adjusted team %s money by %g"):format(name, t, amount))
-			return true, ("第 %s 組資金現在 %s"):format(t, money_text(rockmech.money("team:" .. t)))
+			return true, S("Team @1 funds are now @2", t, money_text(rockmech.money("team:" .. t)))
 		elseif cmd == "reload" then
 			if not has_roster then
 				local f = io.open(roster_path, "r")
-				if not f then return false, "找不到名單檔：" .. roster_path end
+				if not f then return false, S("Roster file not found: @1", roster_path) end
 				f:close()
 				has_roster = true
 			end
 			local created, moved, bad = load_roster()
-			return true, ("名單：新建 %d 個帳號、%d 人換組%s"):format(created, moved,
+			return true, S("Roster: @1 accounts created, @2 players changed teams@3", tostring(created), tostring(moved),
 				#bad > 0 and ("\n" .. table.concat(bad, "\n")) or "")
 		end
-		return false, "用法：/team [list | set <帳號> <組|none> | money <組> <金額> | reload]"
+		return false, S("Usage: /team [list | set <account> <team|none> | money <team> <amount> | reload]")
 	end,
 })
 
 core.register_chatcommand("site", {
-	params = "[組]",
-	description = "回自己組的營地（老師可以指定組別）",
+	params = S("[team]"),
+	description = S("Go back to your team's camp (the teacher can specify a team)"),
 	func = function(name, param)
 		local t = norm(trim(param))
 		if t ~= "" then
-			if not is_teacher(name) then return false, "只能回自己組的營地：/site" end
-			if not team_index(t) then return false, ("組別要在 1–%s 之間"):format(team_name(cfg.career_teams)) end
+			if not is_teacher(name) then return false, S("You can only go back to your own team's camp: /site") end
+			if not team_index(t) then return false, S("The team must be between 1 and @1", team_name(cfg.career_teams)) end
 		else
 			t = rockmech.team_of(name)
-			if not t then return false, "你還沒分組" end
+			if not t then return false, S("You are not in a team yet") end
 		end
 		send_home(name, t)
-		return true, ("前往第 %s 組營地（x = %d）"):format(t, site_x(t))
+		return true, S("Heading to the camp of team @1 (x = @2)", t, sx(t))
 	end,
 })
 
@@ -334,7 +340,7 @@ if core.get_modpath("sfinv") and sfinv then
 	local function name_lines(names, per)
 		local out = {}
 		for i = 1, #names, per do
-			out[#out + 1] = table.concat(names, "、", i, math.min(i + per - 1, #names))
+			out[#out + 1] = table.concat(names, ", ", i, math.min(i + per - 1, #names))
 		end
 		return out
 	end
@@ -342,13 +348,13 @@ if core.get_modpath("sfinv") and sfinv then
 	local function online_marked(t)
 		local out = {}
 		for _, m in ipairs(members_of(t)) do
-			out[#out + 1] = core.get_player_by_name(m) and (m .. "（在線）") or m
+			out[#out + 1] = core.get_player_by_name(m) and S("@1 (online)", m) or m
 		end
 		return out
 	end
 
 	sfinv.register_page(PAGE, {
-		title = "老師",
+		title = S("Teacher"),
 		is_in_nav = function(self, player) return is_teacher(player:get_player_name()) end,
 		get = function(self, player, context)
 			local name = player:get_player_name()
@@ -358,53 +364,53 @@ if core.get_modpath("sfinv") and sfinv then
 			local function add(f, ...) fs[#fs + 1] = f:format(...) end
 			local y = 0
 			if t then
-				add("label[0,%g;%s]", y, F(("第 %s 組　　資金 %s"):format(t, money_text(rockmech.money(name)))))
+				add("label[0,%g;%s]", y, F(S("Team @1   Funds @2", t, money_text(rockmech.money(name)))))
 				y = y + 0.5
-				add("label[0,%g;%s]", y, F("組員："))
+				add("label[0,%g;%s]", y, F(S("Members:")))
 				for _, line in ipairs(name_lines(online_marked(t), 3)) do
 					add("label[0.8,%g;%s]", y, F(line))
 					y = y + 0.4
 				end
 				y = y + 0.3
-				add("button[0,%g;4,0.8;rm_home;%s]", y, F(("回第 %s 組營地"):format(t)))
+				add("button[0,%g;4,0.8;rm_home;%s]", y, F(S("Back to team @1's camp", t)))
 			else
-				add("label[0,%g;%s]", y, F(teacher and "老師（沒有分組）" or "你還沒分組，請找老師分組"))
+				add("label[0,%g;%s]", y, F(teacher and S("Teacher (not in a team)") or S("You are not in a team yet; please ask the teacher to assign you to a team")))
 				y = y + 0.6
-				add("button[0,%g;4,0.8;rm_spawn;%s]", y, F("回出生點"))
+				add("button[0,%g;4,0.8;rm_spawn;%s]", y, F(S("Back to spawn")))
 			end
 			y = y + 1.1
-			add("label[0,%g;%s]", y, F("傳送到各組的營地："))
+			add("label[0,%g;%s]", y, F(S("Teleport to the team camps:")))
 			y = y + 0.45
 			for i = 1, cfg.career_teams do
 				local col, row = (i - 1) % 4, math.floor((i - 1) / 4)
-				add("button[%g,%g;2,0.8;rm_go_%d;%s]", col * 2, y + row * 0.85, i, F(("第 %d 組"):format(i)))
+				add("button[%g,%g;2,0.8;rm_go_%d;%s]", col * 2, y + row * 0.85, i, F(S("Team @1", tostring(i))))
 			end
 			y = y + math.ceil(cfg.career_teams / 4) * 0.85 + 0.2
 			if teacher then
-				add("label[0,%g;%s]", y, F("【老師】各組資金："))
+				add("label[0,%g;%s]", y, F(S("[Teacher] Funds of each team:")))
 				y = y + 0.45
 				local half = math.ceil(cfg.career_teams / 2)
 				for i = 1, cfg.career_teams do
 					local tn = team_name(i)
 					local acc = "team:" .. tn
 					local col, row = i <= half and 0 or 4, (i - 1) % half
-					add("label[%g,%g;%s]", col, y + row * 0.4, F(("第 %s 組 %s（%d 人）"):format(tn,
-						rockmech.has_account(acc) and money_text(rockmech.money(acc)) or "未開", #members_of(tn))))
+					add("label[%g,%g;%s]", col, y + row * 0.4, F(S("Team @1 @2 (@3 players)", tn,
+						rockmech.has_account(acc) and money_text(rockmech.money(acc)) or S("not opened"), tostring(#members_of(tn)))))
 				end
 				y = y + half * 0.4 + 0.5
 				local teams = {}
 				for i = 0, cfg.career_teams do teams[i + 1] = team_name(i) end
-				add("field[0.3,%g;1.9,0.8;rm_amt;%s;]", y + 0.3, F("金額（負數扣錢）"))
+				add("field[0.3,%g;1.9,0.8;rm_amt;%s;]", y + 0.3, F(S("Amount (negative to deduct)")))
 				add("dropdown[2.1,%g;1.3;rm_team;%s;1]", y + 0.05, table.concat(teams, ","))
-				add("button[3.5,%g;1.6,0.8;rm_pay;%s]", y, F("加/扣錢"))
-				add("button[5.3,%g;2.7,0.8;rm_reload;%s]", y, F("重讀學生名單"))
+				add("button[3.5,%g;1.6,0.8;rm_pay;%s]", y, F(S("Add/deduct")))
+				add("button[5.3,%g;2.7,0.8;rm_reload;%s]", y, F(S("Reload student roster")))
 				add("field_close_on_enter[rm_amt;false]")
 				-- 老師自己加入某組，用學生的身分試玩（資金、營地都是那一組的）
 				y = y + 1
-				add("label[0,%g;%s]", y + 0.15, F("老師試玩："))
+				add("label[0,%g;%s]", y + 0.15, F(S("Teacher test play:")))
 				add("dropdown[1.6,%g;1.3;rm_join_team;%s;%d]", y + 0.05, table.concat(teams, ","), (team_index(t or "") or 0) + 1)
-				add("button[3,%g;2.3,0.8;rm_join;%s]", y, F("我加入這組"))
-				if t then add("button[5.3,%g;2.7,0.8;rm_leave;%s]", y, F("我退出分組")) end
+				add("button[3,%g;2.3,0.8;rm_join;%s]", y, F(S("Join this team")))
+				if t then add("button[5.3,%g;2.7,0.8;rm_leave;%s]", y, F(S("Leave my team"))) end
 				y = y + 0.9
 			end
 			if y > 8.4 then return sfinv.make_formspec(player, context, table.concat(fs), false, ("size[8,%g]"):format(y + 0.6)) end
@@ -428,7 +434,7 @@ if core.get_modpath("sfinv") and sfinv then
 				if fields["rm_go_" .. i] then
 					core.close_formspec(name, "")
 					send_to(name, site_x(team_name(i)))
-					core.chat_send_player(name, ("[老師] 第 %d 組的營地"):format(i))
+					core.chat_send_player(name, S("[Teacher] Camp of team @1", tostring(i)))
 					return
 				end
 			end
@@ -449,23 +455,23 @@ if core.get_modpath("sfinv") and sfinv then
 			if fields.rm_pay then
 				local amount, tn = tonumber(fields.rm_amt or ""), norm(fields.rm_team or "")
 				if not amount or not team_index(tn) then
-					core.chat_send_player(name, "[老師] 金額要填數字")
+					core.chat_send_player(name, S("[Teacher] The amount must be a number"))
 					return
 				end
 				rockmech.add_money("team:" .. tn, amount)
 				for _, m in ipairs(rockmech.account_members("team:" .. tn)) do
-					core.chat_send_player(m, ("[第 %s 組] 老師調整資金 %s%s"):format(tn, amount >= 0 and "+" or "", money_text(amount)))
+					core.chat_send_player(m, S("[Team @1] The teacher adjusted the funds by @2@3", tn, amount >= 0 and "+" or "", money_text(amount)))
 				end
 				core.log("action", ("[rockmech] %s adjusted team %s money by %g"):format(name, tn, amount))
-				core.chat_send_player(name, ("[老師] 第 %s 組資金現在 %s"):format(tn, money_text(rockmech.money("team:" .. tn))))
+				core.chat_send_player(name, S("[Teacher] Team @1 funds are now @2", tn, money_text(rockmech.money("team:" .. tn))))
 				refresh(player)
 			elseif fields.rm_reload then
 				local created, moved, bad = load_roster()
 				if created then has_roster = true end
 				if not created then
-					core.chat_send_player(name, "[老師] 找不到名單檔：" .. roster_path)
+					core.chat_send_player(name, S("[Teacher] Roster file not found: @1", roster_path))
 				else
-					core.chat_send_player(name, ("[老師] 名單：新建 %d 個帳號、%d 人換組%s"):format(created, moved,
+					core.chat_send_player(name, S("[Teacher] Roster: @1 accounts created, @2 players changed teams@3", tostring(created), tostring(moved),
 						#bad > 0 and ("\n" .. table.concat(bad, "\n")) or ""))
 				end
 				refresh(player)
@@ -477,7 +483,7 @@ if core.get_modpath("sfinv") and sfinv then
 	core.register_on_joinplayer(function(player)
 		local name = player:get_player_name()
 		core.after(2, function()
-			core.chat_send_player(name, "[提示] 拿著「回營地」旗子按左鍵就回營地；全組的資金在畫面右上角")
+			core.chat_send_player(name, S("[Tip] Hold the \"Back to camp\" flag and left-click to return to camp; your team's funds are at the top right of the screen"))
 		end)
 	end)
 end
@@ -493,15 +499,16 @@ local function go_camp(itemstack, user)
 	local t = rockmech.team_of(name)
 	if t then
 		send_home(name, t)
-		core.chat_send_player(name, ("[回營地] 第 %s 組營地"):format(t))
+		core.chat_send_player(name, S("[Back to camp] Camp of team @1", t))
 	else
 		send_to(name, cfg.career_camp_dx)
-		core.chat_send_player(name, "[回營地] 出生點")
+		core.chat_send_player(name, S("[Back to camp] Spawn"))
 	end
 	return itemstack
 end
 core.register_craftitem(FLAG, {
-	description = "回營地\n拿在手上按左鍵或右鍵，回到自己組的營地",
+	description = S("Back to camp\nHold it and left-click or right-click to return to your team's camp"),
+	short_description = S("Back to camp"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x15:3,1:#6a4a28^[fill:9x6:5,1:#c04030^[fill:9x2:5,3:#f0e0b0",
 	stack_max = 1,
 	groups = {not_in_creative_inventory = 1},

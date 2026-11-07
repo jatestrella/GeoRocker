@@ -11,13 +11,14 @@
 
 local cfg = rockmech.cfg
 local collapse = rockmech.collapse
+local S = rockmech.S
 
 local KINDS = {
-	slip = {color = "#ff2020", label = "節理滑動"},
-	axial = {color = "#ff9900", label = "軸差破壞"},
-	overhang = {color = "#b040ff", label = "懸臂斷裂／被節理切離"},
-	keyblock = {color = "#ffe000", label = "關鍵塊體"},
-	mass = {color = "#ff6a00", label = "整體滑動（稜柱）"},
+	slip = {color = "#ff2020", label = S("Joint sliding")},
+	axial = {color = "#ff9900", label = S("Deviatoric failure")},
+	overhang = {color = "#b040ff", label = S("Overhang failure / cut off by joints")},
+	keyblock = {color = "#ffe000", label = S("Key block")},
+	mass = {color = "#ff6a00", label = S("Mass sliding (prism)")},
 }
 -- 只用於警戒裂紋（不會造成破壞）：明確節理的逐格受剪。節理面剪應力接近強度 → 開始滑移、張開
 local SHEAR_KIND = "shear"
@@ -356,9 +357,9 @@ end
 
 -- 警戒裂紋的破壞機制名稱（HUD 用）
 local WARN_LABEL = {
-	slip = "節理滑動", axial = "軸差破壞", overhang = "懸臂斷裂", keyblock = "關鍵塊體",
-	mass = "整體滑動（稜柱）", shear = "節理受剪（只警示，不會因此掉落）",
-	fem_tension = "應力解：拉力破壞", fem_shear = "應力解：剪力破壞",
+	slip = S("Joint sliding"), axial = S("Deviatoric failure"), overhang = S("Overhang failure"), keyblock = S("Key block"),
+	mass = S("Mass sliding (prism)"), shear = S("Joint in shear (warning only; nothing falls because of it)"),
+	fem_tension = S("Stress solution: tensile failure"), fem_shear = S("Stress solution: shear failure"),
 }
 
 -- 玩家看到的某格裂紋：回傳 {kind, label, fs} 或 nil
@@ -375,7 +376,7 @@ local function crack_caption(player, a)
 	a.wcap_t = now() + CAPTION_TIME
 	if a.wcap then return end
 	a.wcap = player:hud_add({type = "text", position = {x = 0.01, y = 0.95}, alignment = {x = 1, y = -1},
-		text = "*岩石碎裂聲*", number = 0xFFC080, z_index = 100})
+		text = S("*rock cracking*"), number = 0xFFC080, z_index = 100})
 	local name = player:get_player_name()
 	local function check()
 		if active[name] ~= a then return end
@@ -452,8 +453,8 @@ local function summary(cells, counts)
 		parts[#parts + 1] = core.colorize(KINDS[kind].color, ("■ %s %d"):format(KINDS[kind].label, counts[kind]))
 	end
 	local note = ""
-	if #cells > MAX_ENTITIES then note = ("；方塊只標最近的 %d 格"):format(MAX_ENTITIES) end
-	if #cells > MAX_WAYPOINTS then note = note .. ("；穿牆小方點只標最近的 %d 格"):format(MAX_WAYPOINTS) end
+	if #cells > MAX_ENTITIES then note = S("; boxes only mark the nearest @1 cells", ("%d"):format(MAX_ENTITIES)) end
+	if #cells > MAX_WAYPOINTS then note = note .. S("; see-through dots only mark the nearest @1 cells", ("%d"):format(MAX_WAYPOINTS)) end
 	return table.concat(parts, "  "), note
 end
 
@@ -497,7 +498,7 @@ end
 -- 單次顯示 FS 遮罩 seconds 秒（即時模式開啟時，期間暫停即時更新）
 local function show(name, r, seconds)
 	local player = core.get_player_by_name(name)
-	if not player then return false, "找不到玩家" end
+	if not player then return false, S("Player not found") end
 	local live = rockmech.fsmask_live(player)
 	local a = ensure(name)
 	if a.job then a.job:cancel(); a.job = nil end
@@ -513,9 +514,10 @@ local function show(name, r, seconds)
 		end)
 	end
 	local parts, note = summary(cells, counts)
-	return true, ("[rockmech FS 遮罩] 以 %s 為中心 ±%d m，FS ≤ 1 共 %d 格：%s（%.0f ms；%d 秒%s%s）"):format(
-		core.pos_to_string(center), r, #cells, parts, ms, seconds,
-		live and "後回到即時模式" or "後消失", note)
+	local sec = ("%d"):format(seconds)
+	return true, S("[rockmech FS mask] centered on @1 ±@2 m, @3 cells with FS ≤ 1: @4 (@5 ms; @6@7)",
+		core.pos_to_string(center), ("%d"):format(r), ("%d"):format(#cells), parts, ("%.0f"):format(ms),
+		live and S("back to live mode after @1 s", sec) or S("disappears after @1 s", sec), note)
 end
 
 ---------------------------------------------------------------------------
@@ -631,18 +633,17 @@ core.register_globalstep(function(dtime)
 end)
 
 core.register_chatcommand("rockmech_fsmask", {
-	params = "on | off | [半徑 1-32，預設 12] [秒數，預設 60]",
-	description = "標出周圍若被觸發就會破壞（FS ≤ 1）的岩格（紅 = 節理滑動、橙 = 軸差、紫 = 懸臂／被節理切離、黃 = 關鍵塊體）。"
-		.. "on/off：即時模式（跟著玩家與地形變化自動更新）",
+	params = S("on | off | [radius 1-32, default 12] [seconds, default 60]"),
+	description = S("Mark nearby rock cells that would fail if triggered (FS ≤ 1) (red = joint sliding, orange = deviatoric, purple = overhang / cut off by joints, yellow = key block). on/off: live mode (updates automatically as you move and the terrain changes)"),
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local args = param:split(" ")
 		if args[1] == "on" or args[1] == "off" then
 			rockmech.set_fsmask_live(player, args[1] == "on")
 			return true, args[1] == "on"
-				and ("[rockmech FS 遮罩] 即時模式開啟（±%d m，移動或地形改變時自動更新）"):format(LIVE_R)
-				or "[rockmech FS 遮罩] 已關閉"
+				and S("[rockmech FS mask] live mode on (±@1 m, updates automatically when you move or the terrain changes)", ("%d"):format(LIVE_R))
+				or S("[rockmech FS mask] off")
 		end
 		local r = math.max(1, math.min(MAX_R, math.floor(tonumber(args[1]) or DEFAULT_R)))
 		local t = math.max(1, math.min(MAX_T, math.floor(tonumber(args[2]) or DEFAULT_T)))
@@ -652,17 +653,16 @@ core.register_chatcommand("rockmech_fsmask", {
 
 core.register_chatcommand("rockmech_fswarn", {
 	params = "on | off",
-	description = "警戒裂紋：受開挖影響、FS 下降到 1 < FS < 門檻（預設 2）的岩格加上裂紋，"
-		.. "FS 越接近 1 裂得越嚴重（預設開啟）",
+	description = S("Warning cracks: rock cells whose FS drops to 1 < FS < threshold (default 2) because of excavation get cracks; the closer FS is to 1, the worse the cracks (on by default)"),
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local on
 		if param == "on" then on = true elseif param == "off" then on = false
 		else on = not rockmech.fswarn_enabled(player) end
 		rockmech.set_fswarn(player, on)
-		return true, on and ("[rockmech] 警戒裂紋開啟（1 < FS < %g，±%d m）"):format(cfg.fswarn.max, LIVE_R)
-			or "[rockmech] 警戒裂紋關閉"
+		return true, on and S("[rockmech] warning cracks on (1 < FS < @1, ±@2 m)", ("%g"):format(cfg.fswarn.max), ("%d"):format(LIVE_R))
+			or S("[rockmech] warning cracks off")
 	end,
 })
 

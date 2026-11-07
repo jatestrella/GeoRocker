@@ -8,6 +8,7 @@
 -- 木材在岩石力學的網格裡都算空格（group rockmech_timber，見 collapse.lua build_cid_maps），
 -- 不能拿來當剛性的墊支撐；頂板只透過木柱的 P 感受到支撐。
 
+local S = rockmech.S
 local scfg = rockmech.cfg.support
 local POST = "rockmech:timber_post"           -- 物品，也是柱身方塊
 local POST_TOP = "rockmech:timber_post_top"   -- 柱頂（多一塊頂部墊木）
@@ -19,7 +20,7 @@ local SLAB = "rockmech:timber_slab"
 local IS_POST = {[POST] = true, [POST_TOP] = true}
 
 local function tell(player, msg)
-	if player and player:is_player() then core.chat_send_player(player:get_player_name(), "[木材] " .. msg) end
+	if player and player:is_player() then core.chat_send_player(player:get_player_name(), S("[Timber] @1", msg)) end
 end
 local function creative(player)
 	return core.is_creative_enabled(player and player:is_player() and player:get_player_name() or "")
@@ -41,11 +42,15 @@ end
 local function capacity(L)
 	return rockmech.support.post_capacity(L, scfg.post_d, scfg.post_ucs, scfg.post_e)
 end
+local function d(x) return ("%d"):format(x) end
+local function mode_text(mode) return mode == "buckle" and S("buckling") or S("crushing") end
 local function info(L, supporting)
 	local P, mode, crush, buckle = capacity(L)
-	return ("木柱（長 %d m、直徑 %d cm）\n承載力 %d kN（%s控制：壓碎 %d kN、挫屈 %d kN）%s"):format(
-		L, math.floor(scfg.post_d * 100 + 0.5), P, mode == "buckle" and "挫屈" or "壓碎", crush, buckle,
-		supporting and "" or "\n沒有頂到岩石頂板：不算支撐")
+	local l, dia, p, m, c, b = d(L), d(math.floor(scfg.post_d * 100 + 0.5)), d(P), mode_text(mode), d(crush), d(buckle)
+	if supporting then
+		return S("Timber post (length @1 m, diameter @2 cm)\nCapacity @3 kN (governed by @4: crushing @5 kN, buckling @6 kN)", l, dia, p, m, c, b)
+	end
+	return S("Timber post (length @1 m, diameter @2 cm)\nCapacity @3 kN (governed by @4: crushing @5 kN, buckling @6 kN)\nNot reaching a rock roof: does not count as support", l, dia, p, m, c, b)
 end
 
 -- 柱頂在 (x, y, z) 的木柱長度（往下數連續的木柱格），沒有站在地板上回傳 nil（support.scan 用）
@@ -141,8 +146,9 @@ local function post_dig(pos, node, digger)
 end
 
 core.register_node(POST, {
-	description = ("木柱 Timber post（直徑 %d cm）\n對地板按右鍵：往上長到碰到頂板，最長 %d m\n頂到岩石頂板 → 支撐：承載力 P = min(壓碎, 挫屈)，分給柱頂周圍 3×3 m² 的頂板\n2 m 約 %d kN、4 m 約 %d kN、6 m 約 %d kN（柱越長越容易挫屈）\n對牆面按右鍵：橫放當樑")
-		:format(math.floor(scfg.post_d * 100 + 0.5), scfg.post_max_len, capacity(2), capacity(4), capacity(6)),
+	description = S("Timber post (diameter @1 cm)\nRight-click a floor: it extends upward until it reaches the roof, up to @2 m\nReaching a rock roof → support: capacity P = min(crushing, buckling), spread over the 3×3 m² of roof around the post top\n2 m about @3 kN, 4 m about @4 kN, 6 m about @5 kN (longer posts buckle more easily)\nRight-click a wall: placed horizontally as a beam",
+		d(math.floor(scfg.post_d * 100 + 0.5)), d(scfg.post_max_len), d(capacity(2)), d(capacity(4)), d(capacity(6))),
+	short_description = S("Timber post"),
 	drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
 	node_box = POST_BOX.node_box, connects_to = POST_BOX.connects_to,
 	selection_box = {type = "fixed", fixed = SHAFT},
@@ -189,7 +195,7 @@ core.register_node(POST, {
 				for s = 0, n - 1 do core.get_meta({x = above.x, y = above.y + s, z = above.z}):set_string("infotext", txt) end
 				if supporting then
 					local P, mode = capacity(n)
-					tell(placer, ("木柱 %d m 頂住頂板：承載力 %d kN（%s控制）"):format(n, P, mode == "buckle" and "挫屈" or "壓碎"))
+					tell(placer, S("A @1 m timber post holds up the roof: capacity @2 kN (governed by @3)", d(n), d(P), mode_text(mode)))
 				end
 				resolve({x = above.x, y = above.y + n - 1, z = above.z})
 			else
@@ -210,7 +216,7 @@ core.register_node(POST, {
 })
 
 core.register_node(POST_TOP, {
-	description = "木柱（柱頂） Timber post top",
+	description = S("Timber post (top)"),
 	drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
 	node_box = POST_TOP_BOX.node_box, connects_to = POST_TOP_BOX.connects_to,
 	selection_box = {type = "fixed", fixed = SHAFT},
@@ -225,7 +231,7 @@ for _, v in ipairs({
 	{BEAM_Z, BEAM_Z_BOX, zs(-0.5, 0.5), {BARK, BARK, BARK_H, BARK_H, PLAIN, PLAIN}, "timber_beam_z"},
 }) do
 	core.register_node(v[1], {
-		description = "木樑 Timber beam",
+		description = S("Timber beam"),
 		drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
 		node_box = v[2].node_box, connects_to = v[2].connects_to,
 		selection_box = {type = "fixed", fixed = v[3]},
@@ -235,7 +241,7 @@ for _, v in ipairs({
 end
 -- 舊版的樑（facedir 轉向的單一方塊）：換成順 x／順 z 的樑
 core.register_node(BEAM, {
-	description = "木樑（舊版）", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
+	description = S("Timber beam (old)"), drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 	node_box = {type = "fixed", fixed = SHAFT}, tiles = {ENDS, ENDS, BARK},
 	is_ground_content = false, groups = groups(G_HIDDEN, {timber_stick = 1}), sounds = sounds, drop = POST,
 })
@@ -252,7 +258,8 @@ core.register_lbm({
 -- 木板：1/8 格厚的薄板（不是整格方塊，免得看起來像礦柱；岩石力學裡本來就算空格、撐不住岩石）。
 -- 對頂面放是地板，對底面放貼在天花板下；牆壁用木牆板（woodwork.lua）
 core.register_node(PLANK, {
-	description = "木板 Timber plank（建材，不算支撐）\n薄木板：對地面放是地板，對頂面放貼在天花板下",
+	description = S("Timber plank (building material, not a support)\nThin board: placed on the ground it is a floor; placed against a ceiling it sits under the ceiling"),
+	short_description = S("Timber plank"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.375, 0.5}},
 	tiles = {WOOD},
@@ -269,7 +276,8 @@ core.register_node(PLANK, {
 })
 
 core.register_node(SLAB, {
-	description = "木板半格 Timber slab（建材，不算支撐）\n對頂面放是下半格、對底面放是上半格",
+	description = S("Timber slab (building material, not a support)\nPlaced on a top face it is a lower half block; on a bottom face, an upper half block"),
+	short_description = S("Timber slab"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 	node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0, 0.5}},
 	tiles = {WOOD},
@@ -454,7 +462,7 @@ local function break_post(top)
 	core.sound_play("default_dig_choppy", {pos = top, gain = 1.0, max_hear_distance = 32}, true)
 	for _, pl in ipairs(core.get_connected_players()) do
 		if vector.distance(pl:get_pos(), top) <= 32 then
-			core.chat_send_player(pl:get_player_name(), ("[木柱] %s 的木柱被壓斷了：上面的頂板撐不住"):format(core.pos_to_string(top)))
+			core.chat_send_player(pl:get_player_name(), S("[Timber post] The timber post at @1 was crushed: it could not hold the roof above", core.pos_to_string(top)))
 		end
 	end
 	core.log("action", ("[rockmech] 木柱壓斷 %s（長 %d m）"):format(core.pos_to_string(top), len))
@@ -491,9 +499,9 @@ function rockmech.timber_fem_check(a, n, failed, roof_fs, force)
 			break_post(t)
 		else
 			local lines = {info(L or 1, L ~= nil)}
-			if N and P then lines[#lines + 1] = ("軸力 %d kN／承載力 %d kN（%d%%）"):format(math.floor(N + 0.5), math.floor(P + 0.5), math.floor(N / P * 100 + 0.5)) end
+			if N and P then lines[#lines + 1] = S("Axial force @1 kN / capacity @2 kN (@3%)", d(math.floor(N + 0.5)), d(math.floor(P + 0.5)), d(math.floor(N / P * 100 + 0.5))) end
 			if L and low then
-				lines[#lines + 1] = ("上方頂板 FS %s"):format(low == math.huge and "∞" or ("%.2f"):format(low))
+				lines[#lines + 1] = S("Roof above: FS @1", low == math.huge and "∞" or ("%.2f"):format(low))
 			end
 			local txt = table.concat(lines, "\n")
 			for y = base.y, t.y do core.get_meta({x = t.x, y = y, z = t.z}):set_string("infotext", txt) end

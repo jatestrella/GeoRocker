@@ -9,6 +9,7 @@
 --   用施工單蓋（機械設備課長，delivery.lua），整組共用；挖掉控制箱就拆掉整座（倉裡的料沒了）。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 local V = rockmech.vehicles
 local NLEV = V.NLEV
 local storage = rockmech.collapse.storage
@@ -25,7 +26,7 @@ local STEP = 1
 local STALL_T = 10                             -- 這麼久沒進料、倉也空了：在臂下等的無人卡車半車以上就先走
 local BOOM_REST = 3
 
-local function tell(name, msg) if name then core.chat_send_player(name, "[裝車料斗] " .. msg) end end
+local function tell(name, msg) if name then core.chat_send_player(name, S("[Loadout bin]") .. " " .. msg) end end
 
 -- 料斗的格子（控制箱在 pos，放料臂朝 (dx, dz)）
 local function parts(pos, dx, dz)
@@ -88,17 +89,18 @@ end
 
 local function info(pos, meta, bin)
 	local n = total(bin)
-	local lines = {("裝車料斗（%s）"):format(rockmech.account_label and rockmech.account_label(meta:get_string("owner")) or meta:get_string("owner")),
-		("存量 %.1f / %d m³（%.0f t）"):format(n / NLEV, CAP, rockmech.hopper_lib.tons_of(n))}
+	local lines = {S("Loadout bin (@1)", rockmech.account_label and rockmech.account_label(meta:get_string("owner")) or meta:get_string("owner")),
+		S("Stock @1 / @2 m³ (@3 t)", ("%.1f"):format(n / NLEV), tostring(CAP), ("%.0f"):format(rockmech.hopper_lib.tons_of(n)))}
 	for base, v in pairs(bin) do
 		if v.lv >= 1 then
 			local ore = rockmech.ore_of_rubble[base]
 			local d = core.registered_nodes[base]
-			lines[#lines + 1] = ("・%s %.1f m³%s"):format(d and d.description:gsub("\n.*", "") or base, v.lv / NLEV,
-				rockmech.mix_of[base] and ("（%s）"):format(rockmech.mix_text(base, v.q / v.lv)) or "")
+			local nm, vol = d and rockmech.desc_short(d) or base, ("%.1f"):format(v.lv / NLEV)
+			lines[#lines + 1] = rockmech.mix_of[base] and S("• @1 @2 m³ (@3)", nm, vol, rockmech.mix_text(base, v.q / v.lv))
+				or S("• @1 @2 m³", nm, vol)
 		end
 	end
-	lines[#lines + 1] = ("卡車或礦卡停在放料臂 %g m 內不動就裝；頂上的格柵接輸送帶"):format(cfg.plant_reach)
+	lines[#lines + 1] = S("A truck or haul truck standing still within @1 m of the loading boom gets loaded; the grate on top takes conveyor feed", ("%g"):format(cfg.plant_reach))
 	meta:set_string("infotext", table.concat(lines, "\n"))
 end
 
@@ -210,7 +212,7 @@ local function build(pos, dx, dz, owner)
 	cm:set_string("loadout", core.pos_to_string(pos))
 	cm:set_float("ux", dx)
 	cm:set_float("uz", dz)
-	cm:set_string("infotext", ("裝車料斗的放料臂：卡車停在 %g m 內就裝"):format(cfg.plant_reach))
+	cm:set_string("infotext", S("Loadout bin boom: loads trucks stopped within @1 m", ("%g"):format(cfg.plant_reach)))
 	local meta = core.get_meta(pos)
 	meta:set_string("owner", owner)
 	meta:set_int("dx", dx)
@@ -243,19 +245,19 @@ end
 
 local STEEL = "[fill:16x16:#8a8e92^[fill:16x1:0,0:#5a5e62^[fill:1x16:0,0:#5a5e62^[fill:16x2:0,7:#c8a020"
 local FULL = "[fill:16x16:#4a4440^[fill:16x1:0,0:#5a5e62^[fill:1x16:0,0:#5a5e62^[fill:16x2:0,7:#c8a020"
-for _, w in ipairs({{WALL, STEEL, "裝車料斗"}, {WALL_FULL, FULL, "裝車料斗（有料）"}}) do
+for _, w in ipairs({{WALL, STEEL, S("Loadout bin")}, {WALL_FULL, FULL, S("Loadout bin (filled)")}}) do
 	core.register_node(w[1], {
 		description = w[3], tiles = {w[2]}, is_ground_content = false, diggable = false, drop = "",
 		groups = {not_in_creative_inventory = 1},
 	})
 end
 core.register_node(GRATE, {
-	description = "裝車料斗格柵",
+	description = S("Loadout bin grate"),
 	tiles = {"[fill:16x16:#181818^[fill:16x3:0,1:#8a8a8a^[fill:16x3:0,9:#8a8a8a^[fill:3x16:1,0:#8a8a8a^[fill:3x16:9,0:#8a8a8a", STEEL},
 	is_ground_content = false, diggable = false, drop = "", groups = {not_in_creative_inventory = 1},
 })
 core.register_node(CHUTE, {
-	description = "裝車料斗放料口",
+	description = S("Loadout bin chute"),
 	drawtype = "nodebox", paramtype = "light",
 	node_box = {type = "fixed", fixed = {{-0.5, 0, -0.5, 0.5, 0.5, 0.5}, {-0.3, -0.5, -0.3, 0.3, 0, 0.3}}},
 	tiles = {"[fill:16x16:#404040^[fill:16x2:0,7:#c0a020"},
@@ -264,8 +266,9 @@ core.register_node(CHUTE, {
 
 local editing = {}
 core.register_node(ITEM, {
-	description = ("裝車料斗 Loadout bin\n%d m³ 的料倉，頂上格柵接輸送帶（或卡車、怪手倒上去），放料臂裝 %g m 內停著的卡車、礦卡\n"
-		.. "無人卡車的裝載點設在放料臂附近就會在那裡等著裝\n對著平地按右鍵蓋：3×3 m、高 %d m，放料臂朝自己這邊"):format(CAP, cfg.plant_reach, BIN_H + 1),
+	description = S("Loadout bin\n@1 m³ bin; the grate on top takes conveyor feed (or trucks and excavators dumping onto it); the loading boom loads trucks and haul trucks parked within @2 m\nSet an autonomous truck's loading point near the boom and it will wait there to be loaded\nRight-click on flat ground to build: 3×3 m, @3 m tall, boom facing you",
+		tostring(CAP), ("%g"):format(cfg.plant_reach), tostring(BIN_H + 1)),
+	short_description = S("Loadout bin"),
 	tiles = {STEEL, STEEL, STEEL .. "^[fill:6x6:5,5:#303030^[fill:4x2:6,6:#40c040"},
 	inventory_image = "[fill:16x16:#00000000^[fill:10x8:3,2:#8a8e92^[fill:10x1:3,5:#c8a020^[fill:2x6:3,10:#5a5e62^[fill:2x6:11,10:#5a5e62^[fill:3x3:12,7:#404040",
 	is_ground_content = false, groups = {cracky = 2},
@@ -283,13 +286,13 @@ core.register_node(ITEM, {
 			rockmech.clear_site(sc, pos)
 		end
 		if not site_ok(pos, dx, dz) then
-			tell(name, ("要蓋在平地上：3×3 m 地面平坦、上方 %d m 淨空"):format(BIN_H + 2))
+			tell(name, S("Build it on flat ground: 3×3 m of level ground with @1 m of clearance above", tostring(BIN_H + 2)))
 			return itemstack
 		end
 		local cells = {}
 		for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do cells[#cells + 1] = {x, z} end end
 		local who = rockmech.cells_blocked and rockmech.cells_blocked(cells, pos.y - 1, pos.y + BIN_H, placer)
-		if who then tell(name, ("施工範圍裡有%s：先移開"):format(who)); return itemstack end
+		if who then tell(name, S("There is @1 in the construction area: move it first", who)); return itemstack end
 		build(pos, dx, dz, rockmech.account_of and rockmech.account_of(name) or name)
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack

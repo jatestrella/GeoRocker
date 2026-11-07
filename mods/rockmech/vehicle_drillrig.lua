@@ -6,6 +6,7 @@
 --   空白鍵：設定孔深（3～10 m）。駕駛艙上方中央有鑽孔攝影機畫面（從右前方看桅桿腳，色點 = 附近的孔）。
 -- 垂直孔裝 ANFO（drilling.lua：倒進往下的鑽孔成柱狀裝藥，要一條乳膠炸藥當起爆藥包）。
 
+local S = rockmech.S
 local V = rockmech.vehicles
 local box_tex, update_hud = V.box_tex, V.update_hud
 
@@ -15,7 +16,7 @@ local MAST_FOOT = {x = 0, y = -1.5, z = 2.3}   -- 桅桿腳（孔口）在車身
 local MAST_TOP = 6.7        -- 桅桿頂（車身座標 y）
 local HEAD_TOP, HEAD_LOW = 6.0, -0.9   -- 迴轉頭在桅桿上的上下限
 
-local def = {desc = "露天鑽機 Surface drill rig", color = "#d8b020", cap = 0, speed = 1.2,
+local def = {desc = S("Surface drill rig"), color = "#d8b020", cap = 0, speed = 1.2,
 	half = 1.5, rear = 3.0, lat = {-1, 0, 1}, eye_up = 1.75, eye_fwd = 0.9, eye_side = -0.5,
 	tail_lat = {-1.1, 0, 1.1}, tail_dy = {1.2, 2.2},
 	mirror = {x = 1.35, y = 1.4, z = 0.6},
@@ -24,7 +25,7 @@ local def = {desc = "露天鑽機 Surface drill rig", color = "#d8b020", cap = 0
 	-- 看得到孔位（畫面中央）和周圍的台階邊、已經鑽好的孔（色點）；鏡頭被岩石擋住就自動拉近
 	cam = {o = {x = 2.6, y = 1.8, z = 5.2}, target = MAST_FOOT, holes = 8,
 		hfov = math.rad(75), vfov = math.rad(46), w = 56, h = 31},
-	item_desc = "右鍵上車；E 在桅桿下方往下鑽一個垂直孔、空白鍵 設定孔深（露天台階爆破，孔裡倒 ANFO）"}
+	item_desc = S("Right-click to get in; E drills a vertical hole below the mast, Space sets the hole depth (surface bench blasting, the hole is filled with ANFO)")}
 do   -- 圖示：履帶、車身、駕駛室、車頭前的高桅桿與迴轉頭
 	local c, r = def.color, {}
 	V.icon_track(r, 2, 24, 20, 7)
@@ -86,25 +87,25 @@ local function hole_site(self, want)
 		y = y - 1
 	end
 	local above = {x = x, y = y, z = z}
-	if core.get_node(above).name ~= "air" then return nil, "孔口要是空的" end
-	if not rockmech.lith_of_node[core.get_node({x = x, y = y - 1, z = z}).name] then return nil, "桅桿下面不是岩石（碎石鑽不了）" end
+	if core.get_node(above).name ~= "air" then return nil, S("The hole collar must be clear") end
+	if not rockmech.lith_of_node[core.get_node({x = x, y = y - 1, z = z}).name] then return nil, S("There is no rock under the mast (rubble cannot be drilled)") end
 	local n = 0
 	for k = 1, want do
 		if not rockmech.lith_of_node[core.get_node({x = x, y = y - k, z = z}).name] then break end
 		n = k
 	end
-	if n < 2 then return nil, "下面的岩石不到 2 m" end
+	if n < 2 then return nil, S("Less than 2 m of rock below") end
 	return above, n
 end
 
 function def.hud(self)
-	local s = ("\n孔深設定 %d m"):format(depth_setting(self))
-	if self.boring and self.boring.up then s = s .. "　抽出鑽桿中"
-	elseif self.boring then s = s .. ("　鑽孔中 %.0f / %d m"):format(self.boring.t / SEC_PER_M, self.boring.depth) end
+	local s = "\n" .. S("Hole depth setting @1 m", ("%d"):format(depth_setting(self)))
+	if self.boring and self.boring.up then s = s .. "  " .. S("Pulling out the drill rods")
+	elseif self.boring then s = s .. "  " .. S("Drilling @1 / @2 m", ("%.0f"):format(self.boring.t / SEC_PER_M), ("%d"):format(self.boring.depth)) end
 	if self.msg then s = s .. "\n" .. self.msg end
 	return s
 end
-function def.keys(self) return {{"E", "鑽孔（桅桿下方）", on = self.boring ~= nil}, {"空白鍵", "設定孔深"}} end
+function def.keys(self) return {{"E", S("Drill (below the mast)"), on = self.boring ~= nil}, {S("Space"), S("Set hole depth")}} end
 function def.on_load(self, data) self.depth = data.depth end
 function def.on_save(self, data) data.depth = self.depth end
 function def.on_spawn(self) place_head(self, HEAD_TOP) end
@@ -162,10 +163,10 @@ function def.step(self, ctx)
 		if rockmech.make_hole(under, b.above) then
 			local meta = core.get_meta(b.above)
 			meta:set_float("depth", b.depth)
-			meta:set_string("infotext", ("垂直孔（深 %d m）\n倒 ANFO，並放一條乳膠炸藥當起爆藥包"):format(b.depth))
-			self.msg = ("鑽好一個 %d m 的孔"):format(b.depth)
+			meta:set_string("infotext", S("Vertical hole (@1 m deep)\nFill with ANFO and add one emulsion stick as a primer", ("%d"):format(b.depth)))
+			self.msg = S("Drilled a @1 m hole", ("%d"):format(b.depth))
 		else
-			self.msg = "孔位被擋住了"
+			self.msg = S("The hole position is blocked")
 		end
 		b.up, b.t = true, 0
 		update_hud(self)
@@ -174,8 +175,10 @@ end
 
 local editing = {}
 local function depth_formspec(self)
-	return ("formspec_version[6]size[6,3.2]label[0.5,0.6;孔深（台階高度＋超鑽）：%d m]"
-		.. "button[0.5,1.2;1.2,0.9;dec;−]button[1.9,1.2;1.2,0.9;inc;+]button_exit[3.5,2.2;2,0.7;ok;完成]"):format(depth_setting(self))
+	return ("formspec_version[6]size[6,3.2]label[0.5,0.6;%s]"
+		.. "button[0.5,1.2;1.2,0.9;dec;−]button[1.9,1.2;1.2,0.9;inc;+]button_exit[3.5,2.2;2,0.7;ok;%s]"):format(
+		core.formspec_escape(S("Hole depth (bench height + subdrill): @1 m", ("%d"):format(depth_setting(self)))),
+		core.formspec_escape(S("Done")))
 end
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= "rockmech:drillrig_depth" then return end
@@ -199,7 +202,7 @@ function def.action(self, ctx)
 			self.msg = n
 		else
 			self.boring = {above = above, depth = n, t = 0}
-			self.msg = n < depth_setting(self) and ("下面岩石只有 %d m，鑽到岩石底"):format(n) or nil
+			self.msg = n < depth_setting(self) and S("Only @1 m of rock below: drilling to the bottom of the rock", ("%d"):format(n)) or nil
 		end
 		update_hud(self)
 	elseif ctrl.jump and d and not self.boring then

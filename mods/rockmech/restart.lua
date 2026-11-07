@@ -4,6 +4,7 @@
 -- 前 5 分鐘、1 分鐘全服廣播；剛啟動 RECENT 秒內不觸發（不然 4:00 關機、4:01 重開會再關一次）。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 local at = cfg.daily_restart
 if not at then return end
 local hh, mm = at:match("^(%d%d?):(%d%d)$")
@@ -27,12 +28,13 @@ core.register_globalstep(function(dtime)
 	for _, w in ipairs(WARN) do
 		if left == w and not said[w] then
 			said[w] = true
-			core.chat_send_all(("[伺服器] %d 分鐘後重開維護（約 1 分鐘），請先把車停好、手上的碎石放下"):format(w))
+			core.chat_send_all(S("[Server] Restarting for maintenance in @1 min (takes about 1 minute); please park your vehicles and put down the rubble you are holding", tostring(w)))
 		end
 	end
 	if left == 0 then
 		core.log("action", "[rockmech] 每日定時重開：" .. at)
-		core.request_shutdown("每日維護重開，約 1 分鐘後就能再連線", true, 5)
+		-- 斷線訊息在 client 斷線後才顯示（翻譯檔已經卸下）：中英並列，不用 S()
+		core.request_shutdown("Daily maintenance restart: you can reconnect in about 1 minute.\n每日維護重開，約 1 分鐘後就能再連線", true, 5)
 		t = -1e9            -- 不再觸發
 	end
 end)

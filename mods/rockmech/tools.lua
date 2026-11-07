@@ -8,11 +8,12 @@
 --   物品欄「rockmech」分頁 / /rockmech_toggle   遊戲中開關（破壞準則、安息角滑動、翻滾）
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 
 -- rockmech 管理權限：遊戲中開關、轉換岩石、測試指令。
 -- Luanti 5.x 單人模式不會給 server 權限，所以另設一個單人模式自動擁有的權限。
 core.register_privilege("rockmech", {
-	description = "可使用 rockmech 的管理指令與遊戲中開關",
+	description = S("Can use rockmech admin commands and in-game toggles"),
 	give_to_singleplayer = true,
 	give_to_admin = true,
 })
@@ -20,7 +21,7 @@ local joints = rockmech.joints
 local stress = rockmech.stress
 
 local FACE_LABEL = {
-	E = "E (+x)", W = "W (-x)", Up = "上 (+y)", Dn = "下 (-y)", N = "N (+z)", S = "S (-z)",
+	E = "E (+x)", W = "W (-x)", Up = S("Up (+y)"), Dn = S("Down (-y)"), N = "N (+z)", S = "S (-z)",
 }
 
 local function fmt_pos(p)
@@ -36,22 +37,22 @@ local function compass_report(pos, nodename, pname)
 	local lith_note = ""
 	if not lith then
 		lith = rockmech.lith_at(pos.x, pos.y, pos.z)
-		lith_note = core.colorize("#aaaaaa",
-			(" [%s 非本 mod 岩性，應力以該深度分層 %s 計]"):format(nodename, lith.name))
+		lith_note = " " .. core.colorize("#aaaaaa",
+			S("[@1 is not a rockmech lithology; stress uses the layer at this depth, @2]", nodename, lith.name))
 	end
 
 	local st = rockmech.collapse.initial_stress(pos, lith)
-	lines[#lines + 1] = core.colorize("#ffd080", "[rockmech 羅盤] ") .. fmt_pos(pos) ..
-		"  " .. (rm and (lith.description .. lith_note) or "岩石（要有岩體分類能力才認得出岩性）")
+	lines[#lines + 1] = core.colorize("#ffd080", S("[rockmech compass]")) .. " " .. fmt_pos(pos) ..
+		"  " .. (rm and (S(lith.description) .. lith_note) or S("Rock (rock mass classification skill needed to identify the lithology)"))
 	if rm then
-		lines[#lines + 1] = ("  γ=%.1f kN/m³  σci=%g MPa  σt=%g MPa  mi=%g（完整岩石）"):format(
-			lith.gamma, lith.ucs, lith.tensile, lith.mi or 0)
+		lines[#lines + 1] = "  " .. S("γ=@1 kN/m³  σci=@2 MPa  σt=@3 MPa  mi=@4 (intact rock)",
+			("%.1f"):format(lith.gamma), ("%g"):format(lith.ucs), ("%g"):format(lith.tensile), ("%g"):format(lith.mi or 0))
 	end
-	lines[#lines + 1] = ("  上覆岩層 h=%d m（地表 y=%d%s）  初始 σv=Σγ·Δh=%.3f MPa"):format(
-		st.h, st.top_y, st.extrapolated and "，外插至 y0" or "", st.sv)
-	lines[#lines + 1] = ("  初始水平主應力：σH=%.3f（K_H=%.2f%s）σh=%.3f（K_h=%.2f%s）MPa，σH 方位 %g°"):format(
-		st.sH, cfg.KH, cfg.sH0 > 0 and ("+" .. cfg.sH0) or "",
-		st.shmin, cfg.Kh, cfg.sh0 > 0 and ("+" .. cfg.sh0) or "", cfg.sH_azimuth)
+	lines[#lines + 1] = "  " .. S("Overburden h=@1 m (ground surface y=@2@3)  initial σv=Σγ·Δh=@4 MPa",
+		("%d"):format(st.h), ("%d"):format(st.top_y), st.extrapolated and S(", extrapolated to y0") or "", ("%.3f"):format(st.sv))
+	lines[#lines + 1] = "  " .. S("Initial horizontal principal stresses: σH=@1 (K_H=@2@3) σh=@4 (K_h=@5@6) MPa, σH azimuth @7°",
+		("%.3f"):format(st.sH), ("%.2f"):format(cfg.KH), cfg.sH0 > 0 and ("+" .. cfg.sH0) or "",
+		("%.3f"):format(st.shmin), ("%.2f"):format(cfg.Kh), cfg.sh0 > 0 and ("+" .. cfg.sh0) or "", ("%g"):format(cfg.sH_azimuth))
 
 	-- 開挖後的局部應力與軸差破壞判定（只對本 mod 岩性）
 	if rockmech.lith_of_node[nodename] then
@@ -60,24 +61,25 @@ local function compass_report(pos, nodename, pname)
 		local fs = rockmech.failure.cell_state(grid, pos.x, pos.y, pos.z,
 			rockmech.collapse.failure_params(true))
 		if fs then
-			lines[#lines + 1] = ("  柱狀荷重 %.3f → 擴散後 %.3f MPa（×%.2f）%s"):format(
-				fs.sv0, fs.sv, fs.factor, fs.exposed and "（臨空）" or "")
-			lines[#lines + 1] = ("  σxx=%.3f（×%.2f）σyy=%.3f σzz=%.3f（×%.2f）σxz=%.3f → σ1=%.3f σ3=%.3f MPa"):format(
+			lines[#lines + 1] = "  " .. S("Column load @1 → after spreading @2 MPa (×@3) @4",
+				("%.3f"):format(fs.sv0), ("%.3f"):format(fs.sv), ("%.2f"):format(fs.factor), fs.exposed and S("(exposed)") or "")
+			lines[#lines + 1] = ("  σxx=%.3f (×%.2f) σyy=%.3f σzz=%.3f (×%.2f) σxz=%.3f → σ1=%.3f σ3=%.3f MPa"):format(
 				fs.sx, fs.fx, fs.sy, fs.sz, fs.fz, fs.sxz, fs.s1, fs.s3)
 			if (fs.p_support or 0) > 0 then
-				lines[#lines + 1] = ("  臨空面的法向壓力（支護 pᵢ、碎石側壓）%.3f MPa"):format(fs.p_support)
+				lines[#lines + 1] = "  " .. S("Normal pressure on the exposed face (support pᵢ, rubble lateral pressure) @1 MPa",
+					("%.3f"):format(fs.p_support))
 			end
 			local verdict
 			if fs.fails_axial then
-				verdict = core.colorize("#ff6060", "破壞")
+				verdict = core.colorize("#ff6060", S("failure"))
 			elseif fs.q >= fs.strength then
-				verdict = core.colorize("#ffb060", "超過強度但未臨空")
+				verdict = core.colorize("#ffb060", S("exceeds strength but not exposed"))
 			else
-				verdict = core.colorize("#80ff80", "穩定")
+				verdict = core.colorize("#80ff80", S("stable"))
 			end
 			if fs.rm then lines[#lines + 1] = "  " .. rockmech.rockmass_line(fs.rm) end
-			lines[#lines + 1] = ("  q=σ1−σ3=%.3f MPa  岩體強度 q_f(σ3)=%.3f MPa  FS=%.2f  → %s"):format(
-				fs.q, fs.strength, fs.fs_axial, verdict)
+			lines[#lines + 1] = "  " .. S("q=σ1−σ3=@1 MPa  rock mass strength q_f(σ3)=@2 MPa  FS=@3  → @4",
+				("%.3f"):format(fs.q), ("%.3f"):format(fs.strength), ("%.2f"):format(fs.fs_axial), verdict)
 			lines[#lines + 1] = "  " .. rockmech.slip_line(fs)
 			lines[#lines + 1] = "  " .. rockmech.overhang_line(not cfg.fem.drive and rockmech.collapse.overhang_state(pos) or nil)
 			if cfg.keyblock.enabled then
@@ -91,7 +93,7 @@ local function compass_report(pos, nodename, pname)
 		eff[#eff + 1] = core.colorize(js.color or "#ffffff",
 			("%s %.0f°/%.0f° S=%.2fm"):format(js.name, js.dip_eff, js.dipdir_eff, js.spacing_eff))
 	end
-	lines[#lines + 1] = "  節理組（格點對齊後）：" .. table.concat(eff, "  ")
+	lines[#lines + 1] = "  " .. S("Joint sets (snapped to the grid):") .. " " .. table.concat(eff, "  ")
 
 	for _, face in ipairs(joints.FACES) do
 		local fx, fy, fz, axis = joints.face_key(pos.x, pos.y, pos.z, face)
@@ -101,14 +103,14 @@ local function compass_report(pos, nodename, pname)
 			local js = sets[it.set]
 			if it.joint then
 				parts[#parts + 1] = core.colorize(js.color or "#ffffff",
-					("%s 節理 (k=%d, r=%.2f<P=%.2f)"):format(js.name, it.k, it.r, js.persistence))
+					S("@1 joint (k=@2, r=@3<P=@4)", js.name, ("%d"):format(it.k), ("%.2f"):format(it.r), ("%.2f"):format(js.persistence)))
 			else
 				parts[#parts + 1] = core.colorize("#888888",
-					("%s 岩橋 (k=%d, r=%.2f≥P=%.2f)"):format(js.name, it.k, it.r, js.persistence))
+					S("@1 rock bridge (k=@2, r=@3≥P=@4)", js.name, ("%d"):format(it.k), ("%.2f"):format(it.r), ("%.2f"):format(js.persistence)))
 			end
 		end
 		lines[#lines + 1] = "  " .. FACE_LABEL[face.name] .. ": " ..
-			(#parts > 0 and table.concat(parts, "; ") or "完整")
+			(#parts > 0 and table.concat(parts, "; ") or S("intact"))
 	end
 	return table.concat(lines, "\n")
 end
@@ -118,7 +120,8 @@ local compass_img = "[fill:16x16:#00000000" ..
 	"^[fill:2x5:7,3:#d02020^[fill:2x4:7,8:#303030"
 
 core.register_tool("rockmech:compass", {
-	description = "Geological compass (地質羅盤)\n右鍵岩面：應力與安全係數\n蹲下＋右鍵：完整資料（岩性、初始應力、六面節理）",
+	description = S("Geological compass\nRight-click a rock face: stress and factor of safety\nSneak + right-click: full data (lithology, initial stress, joints on all six faces)"),
+	short_description = S("Geological compass"),
 	inventory_image = compass_img,
 	stack_max = 1,
 	on_place = function(itemstack, placer, pointed_thing)
@@ -133,7 +136,7 @@ core.register_tool("rockmech:compass", {
 		elseif rockmech.lith_of_node[node.name] then
 			rockmech.fem_request(pos, name)
 		else
-			core.chat_send_player(name, core.colorize("#80d0ff", "[羅盤] ") .. "這裡不是岩石")
+			core.chat_send_player(name, core.colorize("#80d0ff", S("[Compass]")) .. " " .. S("This is not rock"))
 		end
 		return nil
 	end,
@@ -158,11 +161,11 @@ end
 local MAX_PARTICLES = 4000
 
 core.register_chatcommand("rockmech_traces", {
-	params = "[半徑 1-16，預設 8]",
-	description = "以 particle 顯示附近臨空岩面上的節理跡線（顏色 = 節理組）",
+	params = S("[radius 1-16, default 8]"),
+	description = S("Show joint traces on nearby exposed rock faces with particles (color = joint set)"),
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		build_cid_tables()
 		local sets = rockmech.get_joint_sets()
 
@@ -236,8 +239,8 @@ core.register_chatcommand("rockmech_traces", {
 			legend[#legend + 1] = core.colorize(js.color or "#ffffff",
 				("%s %.0f/%.0f S=%.1fm P=%.2f"):format(js.name, js.dip_eff, js.dipdir_eff, js.spacing_eff, js.persistence))
 		end
-		return true, ("節理跡線點 %d 個（半徑 %d，%.1f ms%s）  %s"):format(
-			count, r, ms, count >= MAX_PARTICLES and "，已達上限" or "",
+		return true, S("@1 joint trace points (radius @2, @3 ms@4)  @5",
+			("%d"):format(count), ("%d"):format(r), ("%.1f"):format(ms), count >= MAX_PARTICLES and S(", limit reached") or "",
 			table.concat(legend, "  "))
 	end,
 })
@@ -253,12 +256,12 @@ core.register_chatcommand("rockmech_traces", {
 ---------------------------------------------------------------------------
 
 core.register_chatcommand("rockmech_jointcube", {
-	params = "[邊長 3-15，預設 7]",
-	description = "在前方放一個帶節理跡線的花崗岩立方體（依目前節理組與世界種子）",
+	params = S("[edge length 3-15, default 7]"),
+	description = S("Place a granite cube with joint traces in front of you (using the current joint sets and world seed)"),
 	privs = {rockmech = true},
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local L = math.max(3, math.min(15, math.floor(tonumber(param) or 7)))
 		local p = vector.round(player:get_pos())
 		local x0, y0, z0 = p.x + 3, p.y, p.z - math.floor(L / 2)
@@ -277,34 +280,34 @@ core.register_chatcommand("rockmech_jointcube", {
 		for _, js in ipairs(sets) do
 			legend[#legend + 1] = ("%s %.1f°/%.1f° S=%.2fm P=%.2f"):format(js.name, js.dip_eff, js.dipdir_eff, js.spacing_eff, js.persistence)
 		end
-		return true, ("[rockmech] 已在 x=%d..%d、y=%d..%d、z=%d..%d 放置 %d³ 花崗岩（樣式 %s）。\n" ..
-			"  檢查：同一條跡線在相鄰方塊、相鄰面（例如頂面接側面）之間應連續。\n  節理組：%s"):format(
-			x0, x0 + L - 1, y0, y0 + L - 1, z0, z0 + L - 1, L, style, table.concat(legend, "；"))
+		return true, S("[rockmech] Placed a @1³ granite cube at x=@2..@3, y=@4..@5, z=@6..@7 (style @8).\n  Check: each trace should be continuous across adjacent blocks and adjacent faces (e.g. top face to side face).\n  Joint sets: @9",
+			tostring(L), tostring(x0), tostring(x0 + L - 1), tostring(y0), tostring(y0 + L - 1), tostring(z0), tostring(z0 + L - 1),
+			style, table.concat(legend, "; "))
 	end,
 })
 
 core.register_chatcommand("rockmech_jointtex_demo", {
-	description = "（edges 樣式用）在前方放 6 個花崗岩方塊，各只有一個面是節理面，用來檢查材質方向",
+	description = S("(For the edges style) Place 6 granite blocks in front of you, each with only one jointed face, to check texture orientation"),
 	privs = {rockmech = true},
 	func = function(name)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local p = vector.round(player:get_pos())
 		local M = joints.MASK
 		local list = {
-			{bit = M.E, label = "東(+x)"}, {bit = M.W, label = "西(−x)"},
-			{bit = M.N, label = "北(+z)"}, {bit = M.S, label = "南(−z)"},
-			{bit = M.Up, label = "上(+y)"}, {bit = M.Dn, label = "下(−y)"},
+			{bit = M.E, label = S("east (+x)")}, {bit = M.W, label = S("west (−x)")},
+			{bit = M.N, label = S("north (+z)")}, {bit = M.S, label = S("south (−z)")},
+			{bit = M.Up, label = S("top (+y)")}, {bit = M.Dn, label = S("bottom (−y)")},
 		}
-		local lines = {"[rockmech] 在 x=" .. (p.x + 3) .. "、z 由 " .. (p.z - 5) ..
-			" 往北每隔 2 格放置（y=" .. (p.y + 2) .. "）："}
+		local lines = {S("[rockmech] Placing at x=@1, every 2 blocks northward from z=@2 (y=@3):",
+			tostring(p.x + 3), tostring(p.z - 5), tostring(p.y + 2))}
 		for i, it in ipairs(list) do
 			local q = {x = p.x + 3, y = p.y + 2, z = p.z - 5 + (i - 1) * 2}
 			core.set_node(q, {name = rockmech.lith_variant.granite[it.bit]})
-			lines[#lines + 1] = ("  第 %d 個（z=%d）：只有%s面是節理 → 該面為鏽色，與它相鄰的四個面在靠%s的邊上有深色線")
-				:format(i, q.z, it.label, it.label)
+			lines[#lines + 1] = "  " .. S("No. @1 (z=@2): only the @3 face is jointed → that face is rust-colored, and its four neighboring faces have a dark line along the edge next to it",
+				tostring(i), tostring(q.z), it.label)
 		end
-		lines[#lines + 1] = "  （放置的方塊浮在空中，附近挖掘會觸發支撐判定讓它掉落）"
+		lines[#lines + 1] = "  " .. S("(The placed blocks float in the air; digging nearby triggers the support check and makes them fall)")
 		return true, table.concat(lines, "\n")
 	end,
 })
@@ -404,31 +407,31 @@ function rockmech.strip_soil_area(p1, p2)
 end
 
 core.register_chatcommand("rockmech_strip_soil", {
-	params = "[半徑，預設 20，上限 64]",
-	description = "移除附近的土壤（泥土、沙、礫石、黏土、雪），露出岩盤",
+	params = S("[radius, default 20, max 64]"),
+	description = S("Remove nearby soil (dirt, sand, gravel, clay, snow) to expose bedrock"),
 	privs = {rockmech = true},
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local R = math.max(1, math.min(64, math.floor(tonumber(param) or 20)))
 		local c = vector.round(player:get_pos())
 		local n, ms = rockmech.strip_soil_area(vector.subtract(c, R), vector.add(c, R))
-		return true, ("半徑 %d：移除土壤 %d 格（%.0f ms）"):format(R, n, ms)
+		return true, S("Radius @1: removed @2 soil blocks (@3 ms)", tostring(R), tostring(n), ("%.0f"):format(ms))
 	end,
 })
 
 core.register_chatcommand("convert_rocks", {
-	params = "[半徑，預設 20，上限 48]",
-	description = "把附近的 default:stone 依深度換成 rockmech 岩性，並把既有岩性方塊依目前的節理設定重新上節理材質",
+	params = S("[radius, default 20, max 48]"),
+	description = S("Convert nearby default:stone to rockmech lithologies by depth, and re-apply joint textures to existing lithology blocks using the current joint settings"),
 	privs = {rockmech = true},
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local R = math.max(1, math.min(48, math.floor(tonumber(param) or 20)))
 		local c = vector.round(player:get_pos())
 		local n_stone, n_rock, n_changed, ms = rockmech.convert_area(vector.subtract(c, R), vector.add(c, R))
-		return true, ("半徑 %d：stone → 岩性 %d 格；既有岩性 %d 格，其中 %d 格更新節理材質（%.0f ms）"):format(
-			R, n_stone, n_rock, n_changed, ms)
+		return true, S("Radius @1: stone → lithology @2 blocks; existing lithology @3 blocks, of which @4 got updated joint textures (@5 ms)",
+			tostring(R), tostring(n_stone), tostring(n_rock), tostring(n_changed), ("%.0f"):format(ms))
 	end,
 })
 
@@ -441,17 +444,17 @@ local player_huds = {}
 local function get_direction_text(player)
 	local angle = player:get_look_horizontal()
 	local degrees = (math.deg(angle) % 360)
-	if degrees >= 315 or degrees < 45 then return "北 (+Z)"
-	elseif degrees >= 45 and degrees < 135 then return "西 (-X)"
-	elseif degrees >= 135 and degrees < 225 then return "南 (-Z)"
-	else return "東 (+X)" end
+	if degrees >= 315 or degrees < 45 then return S("North (+Z)")
+	elseif degrees >= 45 and degrees < 135 then return S("West (-X)")
+	elseif degrees >= 135 and degrees < 225 then return S("South (-Z)")
+	else return S("East (+X)") end
 end
 
 core.register_on_joinplayer(function(player)
 	local name = player:get_player_name()
 	player_huds[name] = player:hud_add({
 		type = "text", position = {x = 0.5, y = 0.05},
-		text = "方位: 更新中...", number = 0xFFFFFF,
+		text = S("Heading: updating..."), number = 0xFFFFFF,
 	})
 end)
 
@@ -463,7 +466,7 @@ core.register_globalstep(function(dtime)
 	for _, player in ipairs(core.get_connected_players()) do
 		local name = player:get_player_name()
 		if player_huds[name] then
-			player:hud_change(player_huds[name], "text", "方位: " .. get_direction_text(player))
+			player:hud_change(player_huds[name], "text", S("Heading: @1", get_direction_text(player)))
 		end
 	end
 end)
@@ -473,11 +476,11 @@ end)
 ---------------------------------------------------------------------------
 
 core.register_chatcommand("rockmech_failure", {
-	params = "[半徑] [apply]",
-	description = "軸差破壞檢查（預設只回報，不改地圖；加 apply 才實際剝落）",
+	params = S("[radius] [apply]"),
+	description = S("Deviatoric failure check (by default only reports, does not change the map; add apply to actually spall)"),
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local r = cfg.failure.radius
 		local apply = false
 		for tok in (param or ""):gmatch("%S+") do
@@ -486,17 +489,19 @@ core.register_chatcommand("rockmech_failure", {
 		end
 		local c = vector.round(player:get_pos())
 		local failed, stats, ms = rockmech.collapse.evaluate_failure({c}, r)
-		local msg = ("臨空岩格 %d 格，破壞 %d 格，%.1f ms（半徑 %d，相似比 N %g）"):format(
-			stats.evaluated, stats.failed, ms, r, cfg.model_scale)
+		local msg = S("@1 exposed rock cells, @2 failed, @3 ms (radius @4, scale ratio N @5)",
+			tostring(stats.evaluated), tostring(stats.failed), ("%.1f"):format(ms), tostring(r), ("%g"):format(cfg.model_scale))
 		local s = stats.min_fs_state
 		if s then
 			local p = stats.min_fs_pos
-			msg = msg .. ("\n  最低 FS=%.2f @ (%d,%d,%d) %s h=%.0f m  柱荷重=%.2f ×%.2f  σ1=%.2f σ3=%.2f  q=%.2f / 強度 %.2f MPa")
-				:format(s.fs, p.x, p.y, p.z, s.lith, s.h, s.sv0, s.factor, s.s1, s.s3, s.q, s.strength)
+			local f2 = function(v) return ("%.2f"):format(v) end
+			msg = msg .. "\n  " .. S("Lowest FS=@1 @ @2 @3 h=@4 m", f2(s.fs), fmt_pos(p), tostring(s.lith), ("%.0f"):format(s.h)) ..
+				"  " .. S("column load=@1 ×@2  σ1=@3 σ3=@4  q=@5 / strength @6 MPa",
+					f2(s.sv0), f2(s.factor), f2(s.s1), f2(s.s3), f2(s.q), f2(s.strength))
 		end
 		if apply and #failed > 0 then
 			rockmech.collapse.apply_failure(failed)
-			msg = msg .. "\n  已破壞為碎石 " .. #failed .. " 格（只做一輪，不連鎖）"
+			msg = msg .. "\n  " .. S("Turned @1 cells into rubble (one round only, no cascade)", tostring(#failed))
 		end
 		return true, msg
 	end,
@@ -516,88 +521,89 @@ local TOGGLE_PRIV = "rockmech"
 local TOGGLES = {
 	{
 		id = "failure", tbl = cfg.failure,
-		label = "軸差破壞準則  Hoek-Brown 岩體強度（GSI）",
-		short = "軸差破壞準則",
+		label = S("Deviatoric failure criterion  Hoek-Brown rock mass strength (GSI)"),
+		short = S("Deviatoric failure criterion"),
 		info = function()
 			local f = cfg.failure
-			return ("相似比 N %g，檢查半徑 %d m，連鎖上限 %d 輪"):format(
-				cfg.model_scale, f.radius, f.max_cascade)
+			return S("Scale ratio N @1, check radius @2 m, cascade limit @3 rounds",
+				("%g"):format(cfg.model_scale), tostring(f.radius), tostring(f.max_cascade))
 		end,
-		off_note = "關閉：完整岩石不會破壞（懸空時只有完全孤立才掉落）",
+		off_note = S("Off: intact rock never fails (unsupported rock only falls when completely isolated)"),
 	},
 	{
 		id = "keyblock", tbl = cfg.keyblock,
-		label = "關鍵塊體（被節理圍住的岩塊依重力落下／平面滑動／楔形滑動）",
-		short = "關鍵塊體",
+		label = S("Key blocks (joint-bounded blocks fall / slide on a plane / slide as a wedge under gravity)"),
+		short = S("Key blocks"),
 		info = function()
-			return ("岩塊上限 %d 格；岩塊邊界節理 c %g MPa、φj %g°"):format(
-				cfg.keyblock.max_cells, cfg.keyblock.c, cfg.weakness.phi)
+			return S("Block limit @1 cells; block boundary joints c @2 MPa, φj @3°",
+				tostring(cfg.keyblock.max_cells), ("%g"):format(cfg.keyblock.c), ("%g"):format(cfg.weakness.phi))
 		end,
-		off_note = "關閉：被節理圍住的岩塊不會因重力滑出",
+		off_note = S("Off: joint-bounded blocks never slide out under gravity"),
 	},
 	{
 		id = "induced", tbl = cfg.induced,
-		label = "只有開挖造成的惡化才破壞（生成的地形視為已平衡）",
-		short = "只算開挖造成的破壞",
+		label = S("Only excavation-induced deterioration causes failure (generated terrain is treated as in equilibrium)"),
+		short = S("Excavation-induced failure only"),
 		info = function()
-			return "比較開挖前後：只有開挖前 FS > 1、開挖後 FS ≤ 1 才破壞（既有的不穩定要到完全懸空才掉）"
+			return S("Compares before and after excavation: fails only if FS > 1 before and FS ≤ 1 after (pre-existing instability only falls once completely unsupported)")
 		end,
-		off_note = "關閉：附近原本就 FS ≤ 1 的岩體，一被觸發就會破壞",
+		off_note = S("Off: nearby rock that already has FS ≤ 1 fails as soon as it is triggered"),
 	},
 	{
 		id = "weakness", tbl = cfg.weakness,
-		label = "節理弱面滑動  τ ≥ cj + σn·tan φj",
-		short = "節理弱面滑動",
+		label = S("Joint plane sliding  τ ≥ cj + σn·tan φj"),
+		short = S("Joint plane sliding"),
 		info = function()
 			local w = cfg.weakness
-			return ("cj %g MPa，φj %g°（三組相同）；%s"):format(w.c, w.phi,
-				w.daylight and ("需傾向臨空面（側向限制 ±%g°）"):format(w.lateral_limit) or "不檢查運動學")
+			return S("cj @1 MPa, φj @2° (same for all three sets); @3", ("%g"):format(w.c), ("%g"):format(w.phi),
+				w.daylight and S("must dip toward the free face (lateral limit ±@1°)", ("%g"):format(w.lateral_limit)) or S("no kinematic check"))
 		end,
-		off_note = "關閉：節理不影響強度（只有軸差破壞）",
+		off_note = S("Off: joints do not affect strength (deviatoric failure only)"),
 	},
 	{
 		id = "blast", tbl = cfg.blast,
-		label = "TNT 爆破破碎（依岩石強度）",
-		short = "爆破破碎",
+		label = S("TNT blast fragmentation (by rock strength)"),
+		short = S("Blast fragmentation"),
 		info = function()
-			return ("破碎半徑 = 爆炸半徑 × (%g/UCS)^" .. cfg.blast.ucs_exp .. "；內 %d%% 炸飛"):format(cfg.blast.ucs_ref, cfg.blast.inner * 100)
+			return S("Fragmentation radius = blast radius × (@1/UCS)^@2; inner @3% ejected", ("%g"):format(cfg.blast.ucs_ref),
+				tostring(cfg.blast.ucs_exp), ("%d"):format(math.floor(cfg.blast.inner * 100 + 0.5)))
 		end,
-		off_note = "關閉：岩石不受 TNT 影響（只炸掉其他方塊）",
+		off_note = S("Off: rock is unaffected by TNT (only other blocks are blown away)"),
 	},
 	{
 		id = "overhang", tbl = cfg.overhang,
-		label = "懸臂／頂板斷裂（依張力強度與厚度）",
-		short = "懸臂斷裂",
+		label = S("Cantilever / roof fracture (by tensile strength and thickness)"),
+		short = S("Cantilever fracture"),
 		info = function()
-			return ("L_max = √(σt,m·t/(3γ))，σt,m 依 GSI 與 N；%s"):format(
-				cfg.overhang.joints and "節理切過的根部斷面不傳張力" or "不考慮節理")
+			return S("L_max = √(σt,m·t/(3γ)), σt,m from GSI and N; @1",
+				cfg.overhang.joints and S("root sections cut by joints carry no tension") or S("joints not considered"))
 		end,
-		off_note = "關閉：連著岩體的懸空岩石不會因為伸太長而斷",
+		off_note = S("Off: overhanging rock attached to the rock mass never breaks from being too long"),
 	},
 	{
 		id = "fallbreak", tbl = cfg.fallbreak,
-		label = "完整岩石掉落時有機率變成碎石",
-		short = "掉落破碎",
-		info = function() return "機率 p = 1 − exp(−落下高度 / h_ref)，h_ref 依岩性" end,
-		off_note = "關閉：完整岩石掉落後仍是完整岩石",
+		label = S("Intact rock may turn into rubble when it falls"),
+		short = S("Breakage on falling"),
+		info = function() return S("Probability p = 1 − exp(−fall height / h_ref), h_ref depends on lithology") end,
+		off_note = S("Off: intact rock stays intact after falling"),
 	},
 	{
 		id = "slope", tbl = cfg.slope,
-		label = "碎石顆粒流（每格分 8 級，依安息角攤成斜坡；完整岩石不受影響）",
-		short = "碎石顆粒流",
-		info = function() return ("安息角 %g°；碎石懸空時仍會垂直落下"):format(cfg.slope.angle) end,
-		off_note = "關閉：碎石超過安息角也不移動",
+		label = S("Rubble granular flow (8 levels per cell, spreads into slopes at the angle of repose; intact rock unaffected)"),
+		short = S("Rubble granular flow"),
+		info = function() return S("Angle of repose @1°; unsupported rubble still falls vertically", ("%g"):format(cfg.slope.angle)) end,
+		off_note = S("Off: rubble does not move even beyond the angle of repose"),
 	},
 	{
 		id = "rockfall", tbl = cfg.rockfall,
-		label = "關鍵塊體滑出時以翻滾落石呈現",
-		short = "翻滾落石",
+		label = S("Show key blocks that slide out as tumbling rockfall"),
+		short = S("Tumbling rockfall"),
 		info = function()
-			return ("目前翻滾中 %d 顆，上限 %d"):format(
-				rockmech.rockfall_entity and rockmech.rockfall_entity.active_count() or 0,
-				cfg.rockfall.max_active)
+			return S("@1 currently tumbling, limit @2",
+				tostring(rockmech.rockfall_entity and rockmech.rockfall_entity.active_count() or 0),
+				tostring(cfg.rockfall.max_active))
 		end,
-		off_note = "關閉：滑出的關鍵塊體原地變成碎石，再依安息角流動",
+		off_note = S("Off: key blocks that slide out turn into rubble in place, then flow at the angle of repose"),
 	},
 }
 rockmech.toggles = TOGGLES
@@ -615,15 +621,15 @@ end
 -- 切換開關。回傳 ok, 訊息
 function rockmech.set_toggle(id, on, by_name)
 	local t = TOGGLE_BY_ID[id]
-	if not t then return false, "沒有這個開關: " .. tostring(id) end
+	if not t then return false, S("No such toggle: @1", tostring(id)) end
 	if by_name and not core.check_player_privs(by_name, {[TOGGLE_PRIV] = true}) then
-		return false, "需要 " .. TOGGLE_PRIV .. " 權限才能切換"
+		return false, S("You need the @1 privilege to change this", TOGGLE_PRIV)
 	end
 	t.tbl.enabled = on and true or false
 	storage:set_string(id .. "_enabled", tostring(t.tbl.enabled))
-	local state = t.tbl.enabled and "開啟" or "關閉"
-	core.log("action", ("[rockmech] %s 將%s%s"):format(by_name or "?", t.short, state))
-	return true, t.short .. "：" .. state
+	local state = t.tbl.enabled and "開啟" or "關閉"   -- 只給 log
+	core.log("action", ("[rockmech] %s 將%s%s"):format(by_name or "?", t.id, state))
+	return true, t.tbl.enabled and S("@1: on", t.short) or S("@1: off", t.short)
 end
 
 local ids = {}
@@ -631,19 +637,19 @@ for _, t in ipairs(TOGGLES) do ids[#ids + 1] = t.id end
 
 core.register_chatcommand("rockmech_toggle", {
 	params = "<" .. table.concat(ids, "|") .. "> [on|off]",
-	description = "遊戲中開關（不加 on/off 則切換）",
+	description = S("In-game toggle (switches if on/off is omitted)"),
 	privs = {[TOGGLE_PRIV] = true},
 	func = function(name, param)
 		local id, state = param:match("^%s*(%S+)%s*(%S*)")
 		local t = id and TOGGLE_BY_ID[id]
 		if not t then
-			return false, "用法：/rockmech_toggle <" .. table.concat(ids, "|") .. "> [on|off]"
+			return false, S("Usage: /rockmech_toggle <@1> [on|off]", table.concat(ids, "|"))
 		end
 		local on
 		if state == "on" then on = true
 		elseif state == "off" then on = false
 		elseif state == "" then on = not t.tbl.enabled
-		else return false, "狀態只能是 on 或 off" end
+		else return false, S("State must be on or off") end
 		return rockmech.set_toggle(id, on, name)
 	end,
 })
@@ -661,7 +667,7 @@ if core.get_modpath("sfinv") and sfinv then
 		get = function(self, player, context)
 			local can = core.check_player_privs(player, {[TOGGLE_PRIV] = true})
 			-- 精簡版：每個開關一行；說明與數值在完整資訊頁
-			local parts = {"label[0,0;", F("岩石力學開關（即時生效）"), "]"}
+			local parts = {"label[0,0;", F(S("Rock mechanics toggles (take effect immediately)")), "]"}
 			local y = 0.6
 			for _, t in ipairs(TOGGLES) do
 				parts[#parts + 1] = ("checkbox[0,%g;rm_%s;%s;%s]"):format(
@@ -670,19 +676,19 @@ if core.get_modpath("sfinv") and sfinv then
 			end
 			if not can then
 				parts[#parts + 1] = ("label[0,%g;%s]"):format(y,
-					F("（需要 " .. TOGGLE_PRIV .. " 權限才能修改）"))
+					F(S("(You need the @1 privilege to change these)", TOGGLE_PRIV)))
 				y = y + 0.6
 			end
 			-- 個人顯示設定（不需要權限）
 			if rockmech.fsmask_live then
 				parts[#parts + 1] = ("checkbox[0,%g;rm_fsmask;%s;%s]"):format(y,
-					F("標出周圍 FS ≤ 1 的岩格（個人顯示）"), tostring(rockmech.fsmask_live(player)))
+					F(S("Mark rock cells with FS ≤ 1 around you (personal display)")), tostring(rockmech.fsmask_live(player)))
 				y = y + 0.75
 				parts[#parts + 1] = ("checkbox[0,%g;rm_fswarn;%s;%s]"):format(y,
-					F(("警戒裂紋：受影響後 1 < FS < %g（個人顯示）"):format(cfg.fswarn.max)), tostring(rockmech.fswarn_enabled(player)))
+					F(S("Warning cracks: 1 < FS < @1 after being affected (personal display)", ("%g"):format(cfg.fswarn.max))), tostring(rockmech.fswarn_enabled(player)))
 				y = y + 0.75
 			end
-			parts[#parts + 1] = ("button[0,%g;5,0.8;rm_open;%s]"):format(y + 0.2, F("完整資訊頁（/rockmech）"))
+			parts[#parts + 1] = ("button[0,%g;5,0.8;rm_open;%s]"):format(y + 0.2, F(S("Full info page (/rockmech)")))
 			return sfinv.make_formspec(player, context, table.concat(parts), false)
 		end,
 		on_player_receive_fields = function(self, player, context, fields)
@@ -725,25 +731,25 @@ end
 do
 	local F = "^[fill:2x10:4,3:#000000^[fill:8x2:4,3:#000000^[fill:6x2:4,7:#000000"
 	local FACE_COLORS = {
-		{"上", "#ffffff"}, {"下", "#404040"}, {"東", "#e04040"},
-		{"西", "#40c040"}, {"北", "#4080ff"}, {"南", "#f0d020"},
+		{"top", "#ffffff"}, {"bottom", "#404040"}, {"east", "#e04040"},
+		{"west", "#40c040"}, {"north", "#4080ff"}, {"south", "#f0d020"},
 	}
 	local tiles = {}
 	for i, fc in ipairs(FACE_COLORS) do
 		tiles[i] = "[fill:16x16:" .. fc[2] .. F
 	end
 	core.register_node("rockmech:orient_test", {
-		description = "材質方向測試方塊（/rockmech_orient）",
+		description = S("Texture orientation test block (/rockmech_orient)"),
 		tiles = tiles,
 		groups = {cracky = 3, oddly_breakable_by_hand = 3, not_in_creative_inventory = 1},
 	})
 
 	core.register_chatcommand("rockmech_orient", {
-		description = "在前方放材質方向測試方塊（6 面各一個 F，顏色區分哪一面）",
+		description = S("Place texture orientation test blocks in front of you (an F on each of the 6 faces, colors tell the faces apart)"),
 		privs = {rockmech = true},
 		func = function(name)
 			local player = core.get_player_by_name(name)
-			if not player then return false, "找不到玩家" end
+			if not player then return false, S("Player not found") end
 			local p = vector.round(player:get_pos())
 			-- 放兩個：一個在眼睛高度（看側面與頂面），一個在頭頂上方（看底面）
 			local a = {x = p.x + 2, y = p.y + 1, z = p.z}
@@ -751,13 +757,13 @@ do
 			core.set_node(a, {name = "rockmech:orient_test"})
 			core.set_node(b, {name = "rockmech:orient_test"})
 			return true, table.concat({
-				"[rockmech] 已在東邊放兩個測試方塊（一個眼睛高度、一個在上方可看底面）。",
-				"  顏色：上=白 下=深灰 東=紅 西=綠 北=藍 南=黃",
-				"  我的假設（請告訴我哪一面不符合）：",
-				"  ・紅、綠、藍、黃（四個側面）：從外面看是正常的「F」（直立、不左右顛倒）",
-				"  ・白（頂面）：面向北方往下看時，是正常的「F」（F 的頂端朝北）",
-				"  ・深灰（底面）：站在下方、面向北方抬頭往上看時，是正常的「F」",
-				"  （右上角 HUD 有方位顯示）",
+				S("[rockmech] Placed two test blocks to the east (one at eye level, one above so you can see its bottom face)."),
+				"  " .. S("Colors: top=white bottom=dark gray east=red west=green north=blue south=yellow"),
+				"  " .. S("My assumption (tell me which face doesn't match):"),
+				"  " .. S("・Red, green, blue, yellow (the four sides): seen from outside, a normal 'F' (upright, not mirrored)"),
+				"  " .. S("・White (top face): looking down while facing north, a normal 'F' (top of the F points north)"),
+				"  " .. S("・Dark gray (bottom face): standing below, facing north and looking up, a normal 'F'"),
+				"  " .. S("(The HUD at the top right shows your heading)"),
 			}, "\n")
 		end,
 	})

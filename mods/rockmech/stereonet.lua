@@ -8,6 +8,7 @@
 -- 圖是伺服器即時畫的 PNG（512×512），只傳給看的人。量測記在羅盤上（換一把羅盤就是新的一本）。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 local joints = rockmech.joints
 local COMPASS = "rockmech:compass"
 local FORM = "rockmech:stereonet"
@@ -21,10 +22,12 @@ local function data_of(stack)
 end
 local function save(stack, d)
 	stack:get_meta():set_string("stereo", core.serialize(d))
-	stack:get_meta():set_string("description", ("地質羅盤（赤平投影：%d 筆節理%s）"):format(#d.m, d.slope and "、坡面" or ""))
+	stack:get_meta():set_string("description", d.slope
+		and S("Geological compass (stereonet: @1 joint readings, slope)", tostring(#d.m))
+		or S("Geological compass (stereonet: @1 joint readings)", tostring(#d.m)))
 end
 local function gauss() return (math.random() + math.random() + math.random() - 1.5) * 2 end
-local function tell(name, msg) core.chat_send_player(name, core.colorize("#80d0ff", "[赤平投影] ") .. msg) end
+local function tell(name, msg) core.chat_send_player(name, core.colorize("#80d0ff", S("[Stereonet]") .. " ") .. msg) end
 
 -- 量節理：切過這一格（六個面任一面）而且是節理（不是岩橋）的組
 local function measure_joints(pos)
@@ -191,27 +194,27 @@ local function show(name, d)
 	local lines = {}
 	for _, m in ipairs(means) do
 		local js = sets[m.s]
-		lines[#lines + 1] = core.colorize(js and js.color or "#ffffff", ("%s：%d 筆，平均 %02.0f°/%03.0f°"):format(js and js.name or ("組 " .. m.s), m.n, m.d, m.a))
+		lines[#lines + 1] = core.colorize(js and js.color or "#ffffff", S("@1: @2 readings, mean @3°/@4°", js and js.name or S("Set @1", tostring(m.s)), tostring(m.n), ("%02.0f"):format(m.d), ("%03.0f"):format(m.a)))
 	end
-	lines[#lines + 1] = d.slope and ("坡面：%02.0f°/%03.0f°（黑色粗線、方塊是極點）"):format(d.slope.d, d.slope.a) or "坡面：還沒量（蹲下＋左鍵量坡面）"
-	lines[#lines + 1] = core.colorize("#ff8080", ("紅圈：摩擦圓 φj = %g°"):format(cfg.weakness and cfg.weakness.phi or 30))
+	lines[#lines + 1] = d.slope and S("Slope: @1°/@2° (thick black line; the square is its pole)", ("%02.0f"):format(d.slope.d), ("%03.0f"):format(d.slope.a))
+		or S("Slope: not measured yet (sneak + left-click to measure the slope)")
+	lines[#lines + 1] = core.colorize("#ff8080", S("Red circle: friction circle φj = @1°", ("%g"):format(cfg.weakness and cfg.weakness.phi or 30)))
 	core.dynamic_add_media({filepath = path, to_player = name, ephemeral = true}, function()
 		local out = {"formspec_version[6]size[17,11]",
-			"label[0.4,0.5;赤平投影（下半球、等角投影）　傾角/傾向　上方是北]",
+			"label[0.4,0.5;" .. core.formspec_escape(S("Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up")) .. "]",
 			("image[0.4,0.9;9.8,9.8;%s]"):format(fname),
-			("textarea[10.6,0.9;6.1,7.6;;;%s]"):format(core.formspec_escape(table.concat(lines, "\n") ..
-				"\n\n左鍵岩面：量節理（每組一筆）\n蹲下＋左鍵：量坡面\n\nMarkland 平面滑動：節理的極點在摩擦圓外、" ..
-				"跟坡面極點在同一側、而且比坡面緩（大圓在坡面大圓裡面）→ 可能滑動")),
-			"button[10.6,8.8;3,0.7;clear;清除量測]",
-			"button_exit[13.8,8.8;3,0.7;close;關閉]"}
+			("textarea[10.6,0.9;6.1,7.6;;;%s]"):format(core.formspec_escape(table.concat(lines, "\n") .. "\n\n" ..
+				S("Left-click a rock face: measure joints (one reading per set)\nSneak + left-click: measure the slope\n\nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible"))),
+			"button[10.6,8.8;3,0.7;clear;" .. core.formspec_escape(S("Clear readings")) .. "]",
+			"button_exit[13.8,8.8;3,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"}
 		core.show_formspec(name, FORM, table.concat(out))
 		core.after(30, function() os.remove(path) end)
 	end)
 end
 
 core.override_item(COMPASS, {
-	description = "Geological compass (地質羅盤)\n右鍵岩面：應力與安全係數；蹲下＋右鍵：完整資料\n" ..
-		"左鍵岩面：量節理位態（赤平投影）；蹲下＋左鍵：量坡面；對空中右鍵：打開赤平投影",
+	description = S("Geological compass\nRight-click a rock face: stress and factor of safety; sneak + right-click: full data\nLeft-click a rock face: measure joint orientation (stereonet); sneak + left-click: measure the slope; right-click the air: open the stereonet"),
+	short_description = S("Geological compass"),
 	on_use = function(itemstack, user, pointed)
 		if not (user and user:is_player()) or pointed.type ~= "node" then return itemstack end
 		local name = user:get_player_name()
@@ -219,15 +222,15 @@ core.override_item(COMPASS, {
 		local d = data_of(itemstack)
 		if user:get_player_control().sneak then
 			local s = measure_slope(pos)
-			if not s then tell(name, "這裡量不到坡面"); return itemstack end
+			if not s then tell(name, S("Cannot measure a slope here")); return itemstack end
 			d.slope = s
 			save(itemstack, d)
-			tell(name, ("坡面 %02.0f°/%03.0f°（傾角/傾向）已記下"):format(s.d, s.a))
+			tell(name, S("Slope @1°/@2° (dip/dip direction) recorded", ("%02.0f"):format(s.d), ("%03.0f"):format(s.a)))
 			return itemstack
 		end
-		if not rockmech.lith_of_node[core.get_node(pos).name] then tell(name, "要量在岩面上"); return itemstack end
+		if not rockmech.lith_of_node[core.get_node(pos).name] then tell(name, S("Measure on a rock face")); return itemstack end
 		local ms = measure_joints(pos)
-		if #ms == 0 then tell(name, "這一格沒有節理切過（完整的岩橋），換一格量"); return itemstack end
+		if #ms == 0 then tell(name, S("No joint cuts through this block (intact rock bridge); try another block")); return itemstack end
 		local sets = rockmech.get_joint_sets()
 		local txt = {}
 		for _, m in ipairs(ms) do
@@ -236,7 +239,7 @@ core.override_item(COMPASS, {
 			txt[#txt + 1] = core.colorize(sets[m.s].color or "#ffffff", ("%s %02.0f°/%03.0f°"):format(sets[m.s].name, m.d, m.a))
 		end
 		save(itemstack, d)
-		tell(name, ("量到 %s（共 %d 筆；對空中右鍵看赤平投影）"):format(table.concat(txt, "、"), #d.m))
+		tell(name, S("Measured @1 (@2 readings in total; right-click the air to see the stereonet)", table.concat(txt, ", "), tostring(#d.m)))
 		return itemstack
 	end,
 	on_secondary_use = function(itemstack, user)

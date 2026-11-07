@@ -9,6 +9,7 @@
 -- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
 
 local NLEV = rockmech.RUBBLE_LEVELS
+local S = rockmech.S
 local collapse = rockmech.collapse
 
 local V = {NLEV = NLEV}
@@ -20,7 +21,7 @@ function V.may_use(self, name)
 	if not self.owner or self.owner == "" or not rockmech.account_of then return true end
 	if rockmech.account_of(name) == self.owner then return true end
 	if core.check_player_privs(name, {server = true}) then return true end
-	core.chat_send_player(name, ("這是%s的車，別組不能開"):format(rockmech.account_label(self.owner)))
+	core.chat_send_player(name, S("This vehicle belongs to @1; other teams cannot drive it", rockmech.account_label(self.owner)))
 	return false
 end
 -- 血條：受損的車頭上浮一條（永遠面向看的人），滿血時拿掉。50% 以上綠、30% 以上黃、以下紅，報廢是空的紅框
@@ -57,10 +58,10 @@ end
 function V.update_infotext(self)
 	update_bar(self)
 	local t = {}
-	if self.owner and self.owner ~= "" and rockmech.account_label then t[#t + 1] = rockmech.account_label(self.owner) .. "的車" end
+	if self.owner and self.owner ~= "" and rockmech.account_label then t[#t + 1] = S("@1's vehicle", rockmech.account_label(self.owner)) end
 	local hp = self.hp or 100
-	if hp <= 0 then t[#t + 1] = "【報廢】找機械技工修理"
-	elseif hp < 100 then t[#t + 1] = ("耐久 %d%%"):format(math.floor(hp + 0.5)) end
+	if hp <= 0 then t[#t + 1] = S("[WRECKED] Get a mechanic to repair it")
+	elseif hp < 100 then t[#t + 1] = S("Durability @1%", ("%d"):format(math.floor(hp + 0.5))) end
 	self.object:set_properties({infotext = table.concat(t, "\n")})
 end
 -- 車輛登記：mod storage 的 vreg:<車輛編號> = "車種|主人"，車子沒載入也數得到（操作員人數上限 = 全組的怪手數，operator.lua）。
@@ -127,11 +128,11 @@ function V.damage(self, kj)
 	if V.update_hud then V.update_hud(self) end
 	local def = V.TYPES[self.vkind]
 	local who = self.driver
-	local msg = self.hp <= 0 and ("%s被落石砸到報廢了（%.0f kJ），找機械技工修理"):format(def.desc, kj)
-		or ("%s被落石砸到（%.0f kJ），耐久剩 %d%%"):format(def.desc, kj, math.floor(self.hp + 0.5))
+	local msg = self.hp <= 0 and S("@1 was wrecked by falling rock (@2 kJ); get a mechanic to repair it", def.desc, ("%.0f"):format(kj))
+		or S("@1 was hit by falling rock (@2 kJ); durability @3% left", def.desc, ("%.0f"):format(kj), ("%d"):format(math.floor(self.hp + 0.5)))
 	if self.owner and rockmech.account_members then
-		for _, m in ipairs(rockmech.account_members(self.owner)) do core.chat_send_player(m, "[車輛] " .. msg) end
-	elseif who then core.chat_send_player(who, "[車輛] " .. msg) end
+		for _, m in ipairs(rockmech.account_members(self.owner)) do core.chat_send_player(m, S("[Vehicle] @1", msg)) end
+	elseif who then core.chat_send_player(who, S("[Vehicle] @1", msg)) end
 end
 -- 受損的車冒煙（沒有人開也冒）
 local function damage_smoke(self, dtime)
@@ -652,9 +653,9 @@ V.load_total = load_total
 -- 載量給人看：m³（1 級 = 1/8 m³，級是程式內部的單位）和噸（計價用的密度 rockmech_rubble_density，跟破碎站結算一致）。
 -- cap 可省略
 function V.volume_text(lv, cap)
-	local s = ("%.1f"):format(lv / NLEV)
-	if cap then s = s .. (" / %.0f"):format(cap / NLEV) end
-	return s .. (" m³（%.0f t）"):format(lv / NLEV * rockmech.cfg.rubble_density)
+	local v, t = ("%.1f"):format(lv / NLEV), ("%.0f"):format(lv / NLEV * rockmech.cfg.rubble_density)
+	if cap then return S("@1 / @2 m³ (@3 t)", v, ("%.0f"):format(cap / NLEV), t) end
+	return S("@1 m³ (@2 t)", v, t)
 end
 
 -- 名牌：離最近的玩家超過 NAMETAG_R 就先不顯示（名牌畫在所有 HUD 上面，遠處一堆車會蓋住右上角的結算表），
@@ -1113,10 +1114,11 @@ local function store_formspec(self)
 	local fs = {("formspec_version[6]size[8.2,%.1f]"):format(1.5 + #list * 1.2)}
 	for i, s in ipairs(list) do
 		local y = 0.4 + (i - 1) * 1.2
-		fs[#fs + 1] = ("item_image[0.4,%.1f;0.9,0.9;%s]label[1.5,%.2f;%s　%d / %d]button[4.5,%.1f;1.6,0.9;fill_%d;裝滿]button[6.2,%.1f;1.6,0.9;out_%d;卸下]")
-			:format(y, s[1], y + 0.45, s[3], V.store_count(self, s[1]), s[2], y, i, y, i)
+		fs[#fs + 1] = ("item_image[0.4,%.1f;0.9,0.9;%s]label[1.5,%.2f;%s  %d / %d]button[4.5,%.1f;1.6,0.9;fill_%d;%s]button[6.2,%.1f;1.6,0.9;out_%d;%s]")
+			:format(y, s[1], y + 0.45, core.formspec_escape(s[3]), V.store_count(self, s[1]), s[2], y, i,
+				core.formspec_escape(S("Fill")), y, i, core.formspec_escape(S("Unload")))
 	end
-	fs[#fs + 1] = ("button_exit[5.8,%.1f;2,0.7;ok;完成]"):format(0.5 + #list * 1.2)
+	fs[#fs + 1] = ("button_exit[5.8,%.1f;2,0.7;ok;%s]"):format(0.5 + #list * 1.2, core.formspec_escape(S("Done")))
 	return table.concat(fs)
 end
 function V.open_store(self, player)
@@ -1298,7 +1300,7 @@ function V.register(kind, def)
 			end
 			if clicker:get_wielded_item():get_name() == "rockmech:breaker_kit" then  -- 油壓破碎錘改裝套件：只有怪手裝得上
 				if def.install_breaker then def.install_breaker(self, clicker)
-				else core.chat_send_player(name, "[破碎錘] 只有怪手裝得上") end
+				else core.chat_send_player(name, S("[Breaker] Only excavators can be fitted with it")) end
 				return
 			end
 			if def.rightclick and def.rightclick(self, clicker) then return end   -- 拿著特定物品按右鍵（怪手操作員）
@@ -1333,7 +1335,7 @@ function V.register(kind, def)
 			if rockmech.cfg.career and puncher:get_meta():get_int("godmode:on") ~= 1 then return true end
 			if not V.may_use(self, puncher:get_player_name()) then return true end
 			if rockmech.cfg.career and load_total(self) > 0 then    -- 經營模式碎石不進物品欄
-				core.chat_send_player(puncher:get_player_name(), "車上還有碎石，先倒掉才能收起來")
+				core.chat_send_player(puncher:get_player_name(), S("There is still rubble on the vehicle; dump it before picking the vehicle up"))
 				return true
 			end
 			local inv = puncher:get_inventory()
@@ -1483,7 +1485,7 @@ function V.register(kind, def)
 				local g = travel_grade(pos, yaw, def, fwd)
 				if g > def.max_grade then
 					ctx.speed, ctx.fwd = 0, 0
-					steep = ("坡太陡（%d° > %d°）"):format(math.floor(math.deg(g) + 0.5), math.floor(math.deg(def.max_grade) + 0.5))
+					steep = S("Too steep (@1° > @2°)", ("%d"):format(math.floor(math.deg(g) + 0.5)), ("%d"):format(math.floor(math.deg(def.max_grade) + 0.5)))
 				elseif g > 0 then
 					ctx.speed = ctx.speed * (1 - 0.7 * g / def.max_grade)
 				end
@@ -1492,7 +1494,7 @@ function V.register(kind, def)
 				-- 往前看的距離照實際車速（不是想開的速度：在坡上被減速成慢爬時還照極速往前看，坡本身就一直被當成台階）
 				local h, hmax = step_ahead(pos, dir, def, ctx.fwd, math.sqrt(vel.x * vel.x + vel.z * vel.z)), V.max_step(def)
 				ctx.speed = V.step_speed(ctx.speed, h, hmax)
-				if h > hmax and not steep then steep = ("台階太高（%.1f m > %.1f m）"):format(h, hmax) end
+				if h > hmax and not steep then steep = S("Step too high (@1 m > @2 m)", ("%.1f"):format(h), ("%.1f"):format(hmax)) end
 			end
 			if steep ~= self.steep then self.steep = steep; update_hud(self) end
 			if ctx.speed ~= 0 and on_shotcrete(pos, def, dir) then ctx.speed = ctx.speed * rockmech.cfg.shotcrete_speed end
@@ -1554,7 +1556,9 @@ function V.register(kind, def)
 		end,
 	})
 	core.register_craftitem(ename .. "_item", {
-		description = def.desc .. "\n" .. def.item_desc .. (rockmech.cfg.career and "\n放出來就收不回背包，先選好位置再放" or ""),
+		description = def.desc .. "\n" .. def.item_desc
+			.. (rockmech.cfg.career and "\n" .. S("Once placed it cannot go back into your inventory; choose the spot first") or ""),
+		short_description = def.short or def.desc,
 		inventory_image = def.inv_image,
 		stack_max = 1,
 		on_place = function(itemstack, placer, pointed)

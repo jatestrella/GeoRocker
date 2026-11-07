@@ -10,6 +10,7 @@
 -- 記錄開挖（只算開挖造成的惡化）、緊貼岩石處的穩定判定與破壞檢查、
 -- 周圍沒被清掉的碎石重新判定掉落／顆粒流。
 
+local S = rockmech.S
 local MAX_FLOOD = 4096
 local NLEV = rockmech.RUBBLE_LEVELS
 
@@ -173,17 +174,19 @@ local function collect(player, levels)
 			local left = inv:add_item("main", ItemStack(base .. " " .. n))
 			local dropped = left:get_count()
 			if dropped > 0 then core.add_item(player:get_pos(), left) end
-			parts[#parts + 1] = ("%s ×%d%s"):format(core.registered_nodes[base].description, n,
-				dropped > 0 and ("（%d 個放不下，丟在腳邊）"):format(dropped) or "")
+			local desc = rockmech.desc_short(base)
+			parts[#parts + 1] = dropped > 0
+				and S("@1 ×@2 (@3 didn't fit, dropped at your feet)", desc, tostring(n), tostring(dropped))
+				or S("@1 ×@2", desc, tostring(n))
 		end
 	end
-	return table.concat(parts, "、")
+	return table.concat(parts, ", ")
 end
 
 -- flood = "near"：從指到的格子附近 ±2 格內的所有碎石出發
 local function use(player, pointed_thing, flood, tag)
 	if not player or not player:is_player() or pointed_thing.type ~= "node" then return end
-	tag = tag or "清碴魔杖"
+	tag = tag or S("Rubble wand")
 	local pname = player:get_player_name()
 	local under = pointed_thing.under
 	local cells, p1, p2, capped
@@ -191,13 +194,13 @@ local function use(player, pointed_thing, flood, tag)
 		local starts = core.find_nodes_in_area(vector.subtract(under, 2), vector.add(under, 2),
 			{"group:rockmech_rubble"})
 		if #starts == 0 then
-			core.chat_send_player(pname, ("[%s] 附近 2 格內沒有碎石"):format(tag))
+			core.chat_send_player(pname, S("[@1] No rubble within 2 blocks", tag))
 			return
 		end
 		cells, p1, p2, capped = flood_cells(starts)
 	elseif flood then
 		if not rockmech.is_rubble(core.get_node(under).name) then
-			core.chat_send_player(pname, "[清碴魔杖] 右鍵要指著碎石")
+			core.chat_send_player(pname, S("[Rubble wand] Right-click must point at rubble"))
 			return
 		end
 		cells, p1, p2, capped = flood_cells(under)
@@ -208,11 +211,12 @@ local function use(player, pointed_thing, flood, tag)
 	local t0 = core.get_us_time()
 	local count, levels = clear(cells, p1, p2, pname)
 	if count == 0 then return end
-	local msg = ("[%s] 清除 %d 格碎石%s"):format(tag, count,
-		capped and ("（達上限 %d 格，其餘再點一次）"):format(MAX_FLOOD) or "")
+	local msg = capped
+		and S("[@1] Cleared @2 rubble blocks (limit of @3 reached, click again for the rest)", tag, tostring(count), tostring(MAX_FLOOD))
+		or S("[@1] Cleared @2 rubble blocks", tag, tostring(count))
 	if player:get_player_control().sneak then
 		local got = collect(player, levels)
-		if got ~= "" then msg = msg .. "，收進物品欄：" .. got end
+		if got ~= "" then msg = S("@1, collected into inventory: @2", msg, got) end
 	end
 	core.chat_send_player(pname, msg)
 	core.log("action", ("[rockmech] %s 清碴 %s %s：%d 格（%.1f ms）"):format(pname,
@@ -221,8 +225,8 @@ local function use(player, pointed_thing, flood, tag)
 end
 
 core.register_tool("rockmech:rubble_wand", {
-	description = "Rubble wand (清碴魔杖)\n左鍵：清除面前 3×3×3 碎石\n右鍵：清除相連的所有碎石\n" ..
-		"按住 Shift：清掉的碎石收進物品欄",
+	description = S("Rubble wand\nLeft-click: clear 3×3×3 rubble in front of you\nRight-click: clear all connected rubble\nHold Shift: put the cleared rubble into your inventory"),
+	short_description = S("Rubble wand"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#ffffff" ..
 		"^[fill:4x4:11,1:#b070ff^[fill:2x2:12,2:#ffffff" ..
 		"^[fill:2x2:9,5:#8b5a2b^[fill:2x2:7,7:#8b5a2b^[fill:2x2:5,9:#8b5a2b" ..
@@ -242,7 +246,7 @@ core.register_tool("rockmech:rubble_wand", {
 local function blast_at(player, pointed_thing)
 	if not player or not player:is_player() or pointed_thing.type ~= "node" then return end
 	if not (tnt and tnt.boom) then
-		core.chat_send_player(player:get_player_name(), "[爆破魔杖] 沒有載入 tnt mod")
+		core.chat_send_player(player:get_player_name(), S("[Blast wand] The tnt mod is not loaded"))
 		return
 	end
 	-- 炸藥放在岩面前那一格（同把 TNT 放在岩面上點燃）；explode_center：該格算一個 TNT
@@ -254,8 +258,8 @@ local function blast_at(player, pointed_thing)
 end
 
 core.register_tool("rockmech:blast_wand", {
-	description = "Blast wand (爆破魔杖)\n左鍵：引爆 TNT（岩石依強度破碎）\n右鍵：一鍵清碴（附近與相連的碎石）\n" ..
-		"按住 Shift 右鍵：清掉的碎石收進物品欄",
+	description = S("Blast wand\nLeft-click: detonate TNT (rock breaks according to its strength)\nRight-click: one-click mucking (nearby and connected rubble)\nShift + right-click: put the cleared rubble into your inventory"),
+	short_description = S("Blast wand"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#fff3a0" ..
 		"^[fill:4x4:11,1:#ff5020^[fill:2x2:12,2:#ffe060" ..
 		"^[fill:2x2:9,5:#5a3a2a^[fill:2x2:7,7:#5a3a2a^[fill:2x2:5,9:#5a3a2a" ..
@@ -266,7 +270,7 @@ core.register_tool("rockmech:blast_wand", {
 		return nil
 	end,
 	on_place = function(itemstack, placer, pointed_thing)
-		use(placer, pointed_thing, "near", "爆破魔杖")
+		use(placer, pointed_thing, "near", S("Blast wand"))
 		return nil
 	end,
 })
@@ -274,8 +278,8 @@ core.register_tool("rockmech:blast_wand", {
 -- 挖洞魔杖：左鍵直接移除以指到的格為中心的 3×3×3（任何可挖的方塊，算玩家開挖：記錄開挖、觸發破壞與穩定判定），
 -- 右鍵一鍵清碴（同爆破魔杖）
 core.register_tool("rockmech:dig_wand", {
-	description = "Dig wand (挖洞魔杖)\n左鍵：移除以指到的格為中心的 3×3×3（岩石、碎石等）\n右鍵：一鍵清碴（附近與相連的碎石）\n" ..
-		"按住 Shift 右鍵：清掉的碎石收進物品欄",
+	description = S("Dig wand\nLeft-click: remove the 3×3×3 centered on the pointed block (rock, rubble, etc.)\nRight-click: one-click mucking (nearby and connected rubble)\nShift + right-click: put the cleared rubble into your inventory"),
+	short_description = S("Dig wand"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#e0fff0" ..
 		"^[fill:4x4:11,1:#20c070^[fill:2x2:12,2:#e0fff0" ..
 		"^[fill:2x2:9,5:#707070^[fill:2x2:7,7:#707070^[fill:2x2:5,9:#707070" ..
@@ -295,7 +299,7 @@ core.register_tool("rockmech:dig_wand", {
 		return nil
 	end,
 	on_place = function(itemstack, placer, pointed_thing)
-		use(placer, pointed_thing, "near", "挖洞魔杖")
+		use(placer, pointed_thing, "near", S("Dig wand"))
 		return nil
 	end,
 })

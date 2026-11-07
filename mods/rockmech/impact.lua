@@ -8,6 +8,7 @@
 -- 掩埋：岩石、碎石方塊設 drowning，頭被埋住就像溺水一樣耗氧，耗完扣血（Luanti 內建的呼吸機制）。
 -- 傷害要伺服器開 enable_damage 才有效。
 
+local S = rockmech.S
 local G = 9.81
 local HP_KJ, HP_MAX = 2, 20
 local MIN_SPEED = 2.0       -- m/s
@@ -65,7 +66,7 @@ function rockmech.impact_hit(pos, m, v, hits, now, dtime)
 					local dmg = math.min(HP_MAX, math.floor(kj / HP_KJ))
 					if dmg >= 1 and not target:get_armor_groups().immortal then
 						target:set_hp(target:get_hp() - dmg, {type = "set_hp", from = "mod", rockmech = "rockfall"})
-						core.chat_send_player(target:get_player_name(), ("[落石] 被砸中（%.0f kJ），扣 %d 點血"):format(kj, dmg))
+						core.chat_send_player(target:get_player_name(), S("[Rockfall] You were hit (@1 kJ) and lost @2 HP", ("%.0f"):format(kj), ("%d"):format(dmg)))
 					end
 				elseif rockmech.vehicles.damage then
 					rockmech.vehicles.damage(target:get_luaentity(), kj)

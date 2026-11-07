@@ -8,15 +8,18 @@
 -- 題庫：世界資料夾的 questions.txt（沒有就寫一份預設的），老師可以自己改，格式見檔案開頭。
 -- 能力：grade 品位判讀（品位）、rockmass 岩體分類（岩性、GSI、上覆厚度）、mechanics 岩石力學（σ、FS、節理、裂紋）
 
+local S = rockmech.S
+local TR = rockmech.config.TR
+local E = core.formspec_escape
 local cfg = rockmech.cfg
 local storage = rockmech.collapse.storage
 
 local ABILITIES = {
-	{key = "grade", label = "品位判讀", item = "rockmech:xrf"},
-	{key = "rockmass", label = "岩體分類", item = "rockmech:gsi_card"},
-	{key = "mechanics", label = "岩石力學", item = "rockmech:compass"},
+	{key = "grade", label = TR("Grade assessment"), item = "rockmech:xrf"},
+	{key = "rockmass", label = TR("Rock mass classification"), item = "rockmech:gsi_card"},
+	{key = "mechanics", label = TR("Rock mechanics"), item = "rockmech:compass"},
 	-- 剝採比（破碎站顯示）：沒有儀器，要進修（教授考試）或研究帳篷研發「採礦規劃」（全組），雇用的地質學家不算
-	{key = "planning", label = "採礦規劃", research = "mine_planning"},
+	{key = "planning", label = TR("Mine planning"), research = "mine_planning"},
 }
 local AB = {}
 for _, a in ipairs(ABILITIES) do AB[a.key] = a end
@@ -55,12 +58,14 @@ end
 
 -- 儀器（工具室管理員賣；地質羅盤在 tools.lua）
 core.register_craftitem("rockmech:xrf", {
-	description = "手持式 XRF 分析儀\n放在背包裡：看得到岩石、碎石、車斗裡的料的品位",
+	description = S("Handheld XRF analyzer\nKeep it in your inventory: shows the grade of rock, rubble and material in truck beds"),
+	short_description = S("Handheld XRF analyzer"),
 	inventory_image = "[fill:16x16:#00000000^[fill:8x12:4,3:#e8e8e0^[fill:6x4:5,4:#3a6a9a^[fill:4x3:6,11:#3a3a3a^[fill:2x2:7,0:#c03020",
 	stack_max = 1,
 })
 core.register_craftitem("rockmech:gsi_card", {
-	description = "GSI 評估圖卡（Hoek & Marinos）\n放在背包裡：看得到岩性、GSI、上覆厚度",
+	description = S("GSI chart (Hoek & Marinos)\nKeep it in your inventory: shows lithology, GSI and overburden thickness"),
+	short_description = S("GSI chart"),
 	inventory_image = "[fill:16x16:#00000000^[fill:14x12:1,2:#f4f0e0^[fill:12x2:2,4:#c08040^[fill:12x2:2,7:#80a060^[fill:12x2:2,10:#6080c0",
 	stack_max = 1,
 })
@@ -70,28 +75,28 @@ core.register_craftitem("rockmech:gsi_card", {
 ---------------------------------------------------------------------------
 
 local function tell(acc, msg)
-	for _, m in ipairs(rockmech.account_members(acc)) do core.chat_send_player(m, "[地質學家] " .. msg) end
+	for _, m in ipairs(rockmech.account_members(acc)) do core.chat_send_player(m, S("[Geologist] @1", msg)) end
 end
 
 function rockmech.knowledge_hire(name)
 	local acc = rockmech.account_of(name)
 	if hire_left(acc) > 0 then
-		core.chat_send_player(name, ("[地質學家] 已經雇用中，還剩 %s"):format(mmss(hire_left(acc))))
+		core.chat_send_player(name, S("[Geologist] Already hired, @1 left", mmss(hire_left(acc))))
 	elseif not rockmech.has_account(name) then
-		core.chat_send_player(name, "[地質學家] 你還沒分組，沒有資金")
+		core.chat_send_player(name, S("[Geologist] You are not in a team yet, so you have no funds"))
 	elseif rockmech.money(name) < HIRE_COST then
-		core.chat_send_player(name, ("[地質學家] 錢不夠：雇用要 %s"):format(money_text(HIRE_COST)))
+		core.chat_send_player(name, S("[Geologist] Not enough money: hiring costs @1", money_text(HIRE_COST)))
 	else
 		rockmech.add_money(name, -HIRE_COST)
 		storage:set_float(HIRE .. acc, HIRE_SECS)
 		storage:set_string(HIRED_BY .. acc, name)       -- 地質學家跟著這個人
-		tell(acc, ("%s 雇用了地質學家（%s、%d 分鐘，組員在線上時才倒數）：全組看得到品位、岩性、GSI、應力和安全係數"):format(
-			name, money_text(HIRE_COST), HIRE_SECS / 60))
+		tell(acc, S("@1 hired a geologist (@2, @3 min; the timer only runs while team members are online): the whole team can see grade, lithology, GSI, stress and factor of safety",
+			name, money_text(HIRE_COST), ("%d"):format(HIRE_SECS / 60)))
 	end
 end
 function rockmech.knowledge_hire_text(name)
 	local left = hire_left(rockmech.account_of(name))
-	return left > 0 and ("雇用中，還剩 %s"):format(mmss(left)) or ("%s／%d 分鐘，全組三種能力"):format(money_text(HIRE_COST), HIRE_SECS / 60)
+	return left > 0 and S("Hired, @1 left", mmss(left)) or S("@1 / @2 min, all three abilities for the whole team", money_text(HIRE_COST), ("%d"):format(HIRE_SECS / 60))
 end
 
 -- 跟著雇用者跑的地質學家：雇用期間出現在雇用者身邊，遠了就走過去（更遠用跑的，超過 FOLLOW_TP 直接到身邊），
@@ -105,7 +110,7 @@ core.register_entity(FOLLOWER, {
 	initial_properties = {
 		physical = true, collide_with_objects = false, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
 		visual = "mesh", mesh = "character.b3d", textures = {rockmech.npc_skin("geologist")},
-		nametag = "地質學家", nametag_color = "#e0d0a0", stepheight = 1.1, static_save = false,
+		nametag = S("Geologist"), nametag_color = "#e0d0a0", stepheight = 1.1, static_save = false,
 	},
 	on_activate = function(self)
 		self.object:set_armor_groups({immortal = 1})
@@ -140,13 +145,13 @@ core.register_entity(FOLLOWER, {
 		self.tag_t = (self.tag_t or 1) + dtime
 		if self.tag_t >= 1 then
 			self.tag_t = 0
-			self.object:set_properties({nametag = ("地質學家　剩 %s"):format(mmss(hire_left(acc)))})
+			self.object:set_properties({nametag = S("Geologist  @1 left", mmss(hire_left(acc)))})
 		end
 	end,
 	on_punch = function() return true end,
 	on_rightclick = function(self, clicker)
 		if clicker and clicker:is_player() then
-			core.chat_send_player(clicker:get_player_name(), ("[地質學家] 雇用期還剩 %s。我在的期間，全組看得到品位、岩性、GSI、應力和安全係數。"):format(
+			core.chat_send_player(clicker:get_player_name(), S("[Geologist] @1 left on my contract. While I'm here, the whole team can see grade, lithology, GSI, stress and factor of safety.",
 				mmss(hire_left(self.acc or ""))))
 		end
 	end,
@@ -166,7 +171,7 @@ core.register_globalstep(function(dtime)
 			left = left - dt
 			if left <= 0 then
 				storage:set_float(HIRE .. acc, 0)
-				tell(acc, "雇用期滿，地質學家回去了")
+				tell(acc, S("The contract is over; the geologist has gone back"))
 				if followers[acc] and followers[acc]:get_pos() then followers[acc]:remove() end
 				followers[acc] = nil
 			else
@@ -534,7 +539,7 @@ end
 local function exam_form(name)
 	local s = sessions[name]
 	local out = {"formspec_version[6]size[17,16]",
-		("label[0.5,0.6;%s]"):format(core.formspec_escape(("進修考試：%s（%d 題，答對 %d 題及格）"):format(AB[s.ab].label, #s.qs, EXAM_PASS)))}
+		("label[0.5,0.6;%s]"):format(E(S("Training exam: @1 (@2 questions, @3 correct to pass)", S(AB[s.ab].label), tostring(#s.qs), tostring(EXAM_PASS))))}
 	local y = 1.2
 	for i, e in ipairs(s.qs) do
 		out[#out + 1] = ("textarea[0.5,%g;16,1.2;;;%s]"):format(y, core.formspec_escape(("%d. %s"):format(i, e.q.text)))
@@ -542,13 +547,13 @@ local function exam_form(name)
 			out[#out + 1] = ("field[0.5,%g;4,0.8;q%d;;]"):format(y + 1.35, i)
 			if e.q.unit then out[#out + 1] = ("label[4.7,%g;%s]"):format(y + 1.75, core.formspec_escape(e.q.unit)) end
 		else
-			local items = {"（請選擇）"}
+			local items = {E(S("(choose one)"))}
 			for _, k in ipairs(e.order) do items[#items + 1] = core.formspec_escape(e.q.opts[k]) end
 			out[#out + 1] = ("dropdown[0.5,%g;16,0.8;q%d;%s;1;true]"):format(y + 1.35, i, table.concat(items, ","))
 		end
 		y = y + 2.7
 	end
-	out[#out + 1] = ("button[6,%g;2.4,0.8;submit;交卷]button_exit[8.8,%g;2.4,0.8;cancel;放棄]"):format(y + 0.1, y + 0.1)
+	out[#out + 1] = ("button[6,%g;2.4,0.8;submit;%s]button_exit[8.8,%g;2.4,0.8;cancel;%s]"):format(y + 0.1, E(S("Hand in")), y + 0.1, E(S("Give up")))
 	return table.concat(out)
 end
 
@@ -556,17 +561,18 @@ function rockmech.knowledge_exam(player, ab)
 	local name = player:get_player_name()
 	local meta = player:get_meta()
 	if meta:get_string(KNOW .. ab) == "1" then
-		core.chat_send_player(name, ("[進修] 你已經通過「%s」了"):format(AB[ab].label))
+		core.chat_send_player(name, S("[Training] You have already passed \"@1\"", S(AB[ab].label)))
 		return
 	end
 	local wait = meta:get_int(COOL .. ab) - os.time()
 	if wait > 0 then
-		core.chat_send_player(name, ("[進修] 「%s」要再等 %s 才能重考"):format(AB[ab].label, mmss(wait)))
+		core.chat_send_player(name, S("[Training] You have to wait @1 before retaking \"@2\"", mmss(wait), S(AB[ab].label)))
 		return
 	end
 	local pool = BANK[ab]
 	if #pool < EXAM_N then
-		core.chat_send_player(name, ("[進修] 「%s」題庫只有 %d 題，至少要 %d 題（請老師補 questions.txt）"):format(AB[ab].label, #pool, EXAM_N))
+		core.chat_send_player(name, S("[Training] The \"@1\" question bank only has @2 questions; at least @3 are needed (ask the teacher to add some to questions.txt)",
+			S(AB[ab].label), tostring(#pool), tostring(EXAM_N)))
 		return
 	end
 	local idx = {}
@@ -606,7 +612,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local k = tonumber(v or "")          -- 選了第幾項（1 是「請選擇」）
 			ok = k and k >= 2 and e.order[k - 1] == e.q.ans or false
 		end
-		if ok then right = right + 1 else wrong[#wrong + 1] = ("%d. 正確答案：%s"):format(i, answer_text(e)) end
+		if ok then right = right + 1 else wrong[#wrong + 1] = S("@1. Correct answer: @2", tostring(i), answer_text(e)) end
 	end
 	local ab = s.ab
 	sessions[name] = nil
@@ -615,22 +621,23 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local msg
 	if pass then
 		meta:set_string(KNOW .. ab, "1")
-		msg = ("答對 %d／%d 題，通過！你學會了「%s」。"):format(right, #s.qs, AB[ab].label)
+		msg = S("@1/@2 correct: passed! You have learned \"@3\".", tostring(right), tostring(#s.qs), S(AB[ab].label))
 		core.log("action", ("[rockmech] exam %s passed %s (%d/%d)"):format(name, ab, right, #s.qs))
 		if rockmech.account_of then
 			for _, m in ipairs(rockmech.account_members(rockmech.account_of(name))) do
-				core.chat_send_player(m, ("[進修] %s 通過了「%s」"):format(name, AB[ab].label))
+				core.chat_send_player(m, S("[Training] @1 passed \"@2\"", name, S(AB[ab].label)))
 			end
 		end
 	else
 		meta:set_int(COOL .. ab, os.time() + EXAM_COOLDOWN)
-		msg = ("答對 %d／%d 題，沒過（要答對 %d 題）。%d 分鐘後可以重考。"):format(right, #s.qs, EXAM_PASS, EXAM_COOLDOWN / 60)
+		msg = S("@1/@2 correct: not passed (@3 needed). You can retake it in @4 minutes.", tostring(right), tostring(#s.qs), tostring(EXAM_PASS),
+			("%d"):format(EXAM_COOLDOWN / 60))
 	end
 	local out = {"formspec_version[6]size[14,8]", ("label[0.5,0.7;%s]"):format(core.formspec_escape(msg))}
 	if #wrong > 0 then
-		out[#out + 1] = ("textarea[0.5,1.4;13,5.4;;答錯的題目;%s]"):format(core.formspec_escape(table.concat(wrong, "\n")))
+		out[#out + 1] = ("textarea[0.5,1.4;13,5.4;;%s;%s]"):format(E(S("Questions you got wrong")), E(table.concat(wrong, "\n")))
 	end
-	out[#out + 1] = "button_exit[5.5,7;3,0.8;ok;好]"
+	out[#out + 1] = ("button_exit[5.5,7;3,0.8;ok;%s]"):format(E(S("OK")))
 	core.show_formspec(name, EXAM .. "_result", table.concat(out))
 	return true
 end)
@@ -639,10 +646,10 @@ core.register_on_leaveplayer(function(player) sessions[player:get_player_name()]
 -- 駐點地質師畫面裡的「雇用」「進修」區塊（research.lua 呼叫）。回傳 formspec 片段、用掉的高度
 function rockmech.knowledge_form(name, y)
 	local out = {}
-	out[#out + 1] = ("label[0.5,%g;雇用地質學家：%s]"):format(y + 0.4, core.formspec_escape(rockmech.knowledge_hire_text(name)))
-	if hire_left(rockmech.account_of(name)) <= 0 then out[#out + 1] = ("button[11.4,%g;3.4,0.8;hire;雇用]"):format(y) end
+	out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, E(S("Hire a geologist: @1", rockmech.knowledge_hire_text(name))))
+	if hire_left(rockmech.account_of(name)) <= 0 then out[#out + 1] = ("button[11.4,%g;3.4,0.8;hire;%s]"):format(y, E(S("Hire"))) end
 	y = y + 1.1
-	out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, core.formspec_escape("想自己學：去旁邊找大學教授進修"))
+	out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, E(S("Want to learn it yourself? Take the training exams with the university professor next door")))
 	return table.concat(out), 1.9
 end
 
@@ -657,18 +664,18 @@ local function ability_status(name, key)
 	local meta = player:get_meta()
 	local a = AB[key]
 	local src = {}
-	if meta:get_string(KNOW .. key) == "1" then src[#src + 1] = "進修通過（永久）" end
+	if meta:get_string(KNOW .. key) == "1" then src[#src + 1] = S("Passed the exam (permanent)") end
 	if a.item and player:get_inventory():contains_item("main", a.item) then
 		local d = core.registered_items[a.item]
-		src[#src + 1] = "背包裡的" .. ((d and d.description or a.item):gsub("\n.*", ""))
+		src[#src + 1] = S("@1 in your inventory", d and rockmech.desc_short(d) or a.item)
 	end
 	if a.research and rockmech.research_level and rockmech.research_level(name, a.research) >= 1 then
-		src[#src + 1] = "研究所研發完成（全組）"
+		src[#src + 1] = S("Researched at the research lab (whole team)")
 	end
 	local left = (not a.research) and rockmech.account_of and hire_left(rockmech.account_of(name)) or 0
-	if left > 0 then src[#src + 1] = ("雇用的地質學家（剩 %s）"):format(mmss(left)) end
+	if left > 0 then src[#src + 1] = S("Hired geologist (@1 left)", mmss(left)) end
 	if meta:get_int("godmode:on") == 1 then src[#src + 1] = "/god" end
-	return #src > 0, table.concat(src, "、")
+	return #src > 0, table.concat(src, S(", "))
 end
 local function cooldown_left(player, key) return player:get_meta():get_int(COOL .. key) - os.time() end
 
@@ -680,7 +687,7 @@ local PROF_SKIN = rockmech.npc_skin("professor")     -- 造型：npc_skins.lua
 
 -- 講堂的擺設
 core.register_node("rockmech:camp_blackboard", {
-	description = "黑板", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", is_ground_content = false,
+	description = S("Blackboard"), drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", is_ground_content = false,
 	tiles = {"default_wood.png", "default_wood.png", "default_wood.png", "default_wood.png",
 		"[fill:16x16:#2f4a3a^[fill:16x1:0,0:#6a4a28^[fill:16x1:0,15:#6a4a28^[fill:10x1:2,4:#d8d8c8^[fill:6x1:3,7:#d8d8c8"
 		.. "^[fill:1x3:10,6:#d8d8c8^[fill:4x1:9,10:#d8d8c8^[fill:8x1:2,12:#d8d8c8", "default_wood.png"},
@@ -688,7 +695,7 @@ core.register_node("rockmech:camp_blackboard", {
 	groups = {not_in_creative_inventory = 1},
 })
 core.register_node("rockmech:camp_lectern", {
-	description = "講桌", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", is_ground_content = false,
+	description = S("Lectern"), drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", is_ground_content = false,
 	tiles = {"default_wood.png"},
 	node_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.25, 0.3, 0.3, 0.25}, {-0.4, 0.3, -0.35, 0.4, 0.42, 0.3},
 		{-0.15, 0.42, -0.1, 0.15, 0.46, 0.15}}},
@@ -702,21 +709,21 @@ local PROF_Z = -26          -- 講堂中心的 z（研究帳篷在 z −19..−1
 local function prof_form(name)
 	local player = core.get_player_by_name(name)
 	local out = {("formspec_version[6]size[13,%g]"):format(3.6 + #ABILITIES * 1.1),
-		"label[0.5,0.6;大學教授：進修考試]",
-		("label[0.5,1.2;%s]"):format(core.formspec_escape(("每科從題庫抽 %d 題，答對 %d 題就永久學會；沒過要等 %d 分鐘才能重考同一科。"):format(
-			EXAM_N, EXAM_PASS, EXAM_COOLDOWN / 60)))}
+		("label[0.5,0.6;%s]"):format(E(S("University professor: training exams"))),
+		("label[0.5,1.2;%s]"):format(E(S("Each subject draws @1 questions from the bank; get @2 right to learn it for good. If you fail, wait @3 minutes before retaking the same subject.",
+			tostring(EXAM_N), tostring(EXAM_PASS), ("%d"):format(EXAM_COOLDOWN / 60))))}
 	local y = 2.0
 	for _, a in ipairs(ABILITIES) do
 		local status
-		if player and player:get_meta():get_string(KNOW .. a.key) == "1" then status = "已學會"
-		elseif player and cooldown_left(player, a.key) > 0 then status = ("%s 後可以重考"):format(mmss(cooldown_left(player, a.key)))
-		else status = ("題庫 %d 題"):format(#BANK[a.key]) end
-		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, core.formspec_escape(a.label))
+		if player and player:get_meta():get_string(KNOW .. a.key) == "1" then status = S("Already learned")
+		elseif player and cooldown_left(player, a.key) > 0 then status = S("Retake in @1", mmss(cooldown_left(player, a.key)))
+		else status = S("@1 questions in the bank", tostring(#BANK[a.key])) end
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, E(S(a.label)))
 		out[#out + 1] = ("label[3.5,%g;%s]"):format(y + 0.4, core.formspec_escape(status))
-		out[#out + 1] = ("button[9.4,%g;3,0.8;study_%s;考試]"):format(y, a.key)
+		out[#out + 1] = ("button[9.4,%g;3,0.8;study_%s;%s]"):format(y, a.key, E(S("Take exam")))
 		y = y + 1.1
 	end
-	out[#out + 1] = ("button_exit[5,%g;3,0.8;close;關閉]"):format(y + 0.4)
+	out[#out + 1] = ("button_exit[5,%g;3,0.8;close;%s]"):format(y + 0.4, E(S("Close")))
 	return table.concat(out)
 end
 core.register_on_player_receive_fields(function(player, formname, fields)
@@ -732,7 +739,7 @@ core.register_entity(PROF, {
 	initial_properties = {
 		physical = true, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
 		visual = "mesh", mesh = "character.b3d", textures = {PROF_SKIN},
-		nametag = "大學教授", nametag_color = "#c0d8ff", static_save = false,
+		nametag = S("University professor"), nametag_color = "#c0d8ff", static_save = false,
 	},
 	on_activate = function(self)
 		self.object:set_armor_groups({immortal = 1})
@@ -804,33 +811,34 @@ end
 if core.get_modpath("sfinv") and sfinv and cfg.career then
 	local F = core.formspec_escape
 	local HOW = {
-		grade = "買 XRF 分析儀、雇用地質學家，或找大學教授考試",
-		rockmass = "買 GSI 評估圖卡、雇用地質學家，或找大學教授考試",
-		mechanics = "買地質羅盤、雇用地質學家，或找大學教授考試",
+		grade = S("Buy an XRF analyzer, hire a geologist, or take the professor's exam"),
+		rockmass = S("Buy a GSI chart, hire a geologist, or take the professor's exam"),
+		mechanics = S("Buy a geological compass, hire a geologist, or take the professor's exam"),
 	}
 	sfinv.register_page("rockmech:profile", {
-		title = "個人資料",
+		title = S("Profile"),
 		get = function(self, player, context)
 			local name = player:get_player_name()
 			local team = rockmech.team_of and rockmech.team_of(name)
-			local fs = {("label[0,0;%s]"):format(F(("%s　%s"):format(name, team and ("第 " .. team .. " 組") or "沒有分組")))}
+			local fs = {("label[0,0;%s]"):format(F(("%s  %s"):format(name, team and S("Team @1", tostring(team)) or S("No team"))))}
 			if rockmech.has_account and rockmech.has_account(name) then
-				fs[#fs + 1] = ("label[0,0.5;%s]"):format(F(("資金 $%.0f"):format(rockmech.money(name))))
+				fs[#fs + 1] = ("label[0,0.5;%s]"):format(F(S("Funds: $@1", ("%.0f"):format(rockmech.money(name)))))
 			end
-			fs[#fs + 1] = ("label[0,1.2;%s]"):format(F("掌握的能力"))
+			fs[#fs + 1] = ("label[0,1.2;%s]"):format(F(S("Your abilities")))
 			local y = 1.7
 			for _, a in ipairs(ABILITIES) do
 				local has, src = ability_status(name, a.key)
-				fs[#fs + 1] = ("label[0,%g;%s]"):format(y, F((has and "● " or "○ ") .. a.label))
+				fs[#fs + 1] = ("label[0,%g;%s]"):format(y, F((has and "● " or "○ ") .. S(a.label)))
 				if has then
-					fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F("來源：" .. src))
+					fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F(S("Source: @1", src)))
 				else
 					local cd = cooldown_left(player, a.key)
-					fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F(HOW[a.key] .. (cd > 0 and ("（重考還要 " .. mmss(cd) .. "）") or "")))
+					local how = HOW[a.key] or ""
+				fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F(cd > 0 and S("@1 (retake in @2)", how, mmss(cd)) or how))
 				end
 				y = y + 0.6
 			end
-			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.3, F("品位判讀：看得到品位　岩體分類：岩性、GSI、上覆厚度　岩石力學：應力、安全係數、裂紋"))
+			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.3, F(S("Grade assessment: grades   Rock mass classification: lithology, GSI, overburden thickness   Rock mechanics: stress, factor of safety, cracks")))
 			if rockmech.nick_formspec then
 				fs[#fs + 1] = rockmech.nick_formspec(name, y + 1.2)
 				local m = rockmech.nick_message(name)

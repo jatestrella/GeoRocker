@@ -4,16 +4,17 @@
 -- 實體的車尾就是推車的前方（def.pushed：前後操作對調），車斗、倒土的邏輯和卡車共用。
 
 local V = rockmech.vehicles
+local S = rockmech.S
 local NLEV, box_tex = V.NLEV, V.box_tex
 
 local c = "#8a7050"
-local cart = {desc = "手推車 Hand cart", short = "推車", color = c, cap = rockmech.cfg.cart_blocks * NLEV, speed = 2.5,
+local cart = {desc = S("Hand cart"), short = S("Cart"), color = c, cap = rockmech.cfg.cart_blocks * NLEV, speed = 2.5,
 	tire = 0.6, no_ahs = true, pushed = true, push_z = 0.9, look_limit = math.rad(50),
 	select_box = {-1.4, -0.9, -3.2, 1.4, 1.6, 1.6}, aim_margin = 1.2,   -- 車子小，點選和怪手瞄準的範圍放大
 	half = 0.9, top = 0.6, lat = {-1, 0, 1}, eye_up = V.EYE_HEIGHT - 0.9, eye_fwd = -0.9, rear = 2.4,
 	tilt = {front = 0.4, rear = -2.0, side_z = -0.8, side_x = 0.6},
 	max_grade = math.rad(17),
-	item_desc = ("右鍵推車；空白鍵把車斗往前倒（載量 %d 塊）\n手上拿著碎石時右鍵是裝上去"):format(rockmech.cfg.cart_blocks)}
+	item_desc = S("Right-click to push; Space tips the bed forward (capacity @1 blocks)\nRight-click while holding rubble to load it", ("%d"):format(rockmech.cfg.cart_blocks))}
 do
 	local r = {}
 	r[#r + 1] = {4, 12, 22, 8, c}; r[#r + 1] = {2, 10, 26, 2, "#5a4a30"}
@@ -35,6 +36,6 @@ do
 		side_tex = ("[fill:16x16:%s^[fill:16x2:0,0:#5a4a30"):format(c),
 		overlap_lat = {-0.7, 0, 0.7}, overlap_dy = {0.6, 1.2}, aim_top = 0.4,
 	})
-	function cart.hud(self) return "\n空白鍵 把車斗往前倒" end
+	function cart.hud(self) return "\n" .. S("Space: tip the bed forward") end
 end
 V.register("cart", cart)

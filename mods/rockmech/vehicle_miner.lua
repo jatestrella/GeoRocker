@@ -12,6 +12,7 @@
 --     都沒有就存在料倉裡。無人卡車（AHS）可以綁定採礦機：自己開過來停在旁邊，裝滿就走。
 
 local V = rockmech.vehicles
+local S = rockmech.S
 local NLEV = V.NLEV
 local box_tex, face_cells, ground_y, passable = V.box_tex, V.face_cells, V.ground_y, V.passable
 local update_hud = V.update_hud
@@ -26,7 +27,7 @@ local PIVOT = {x = 0, y = 0.9, z = -4.2}            -- 卸料臂轉軸（車身�
 local REST = {x = 0, y = 2.6, z = -9.5}             -- 沒在卸料時卸料臂的端點
 local LAT = {-2, -1, 0, 1, 2}
 
-local def = {desc = "連續採礦機 Surface miner", short = "採礦機", color = "#e8e4d8", cap = CAP, speed = 1.4,
+local def = {desc = S("Surface miner"), short = S("Miner"), color = "#e8e4d8", cap = CAP, speed = 1.4,
 	half = 2.5, top = 1.5, rear = 4.5, lat = LAT, eye_up = 1.9, eye_fwd = 1.6, eye_side = -1.0,
 	mirror = {x = 1.6, y = 1.6, z = 1.0},
 	tilt = {front = 2.0, rear = -4.0, side_z = -1.0, side_x = 1.8}, max_grade = math.rad(20),
@@ -36,8 +37,7 @@ local def = {desc = "連續採礦機 Surface miner", short = "採礦機", color 
 	-- 作業攝影機（駕駛艙上方中央的小畫面，像露天鑽機）：從車頂往前下方看切削區，紅十字 = 滾筒切到的位置
 	cam = {o = {x = 0, y = 3.2, z = 0.6}, target = {x = 0, y = -2.5, z = 3.5}, mark = {x = 0, y = -2.5, z = 3.5},
 		hfov = math.rad(80), vfov = math.rad(48), w = 56, h = 31},
-	item_desc = "右鍵上車；E 滾筒開／關（開著往前開就把岩石直接切下來，不用爆破）、空白鍵 切深 下切 1 m／平切\n"
-		.. "車上料倉 60 m³，自動卸到旁邊的卡車、輸送帶或破碎站；無人卡車可以綁定它"}
+	item_desc = S("Right-click to get in; E turns the drum on/off (drive forward with it on to cut rock directly, no blasting needed); Space sets the cut depth: 1 m down / level\nOn-board bin 60 m³, unloads automatically into a nearby truck, conveyor or crusher; autonomous trucks can bind to it")}
 
 do   -- 圖示：白色長車身、四組履帶、中間的滾筒、上面的駕駛室、車尾斜上的卸料臂
 	local c, r = def.color, {}
@@ -273,14 +273,14 @@ local function discharge(self, pos, dt)
 			return math.max(0, put)
 		end)
 		if moved > 0 then V.refresh(truck); update_hud(truck) end
-		msg = "卸到" .. (V.TYPES[truck.vkind].short or "卡車")
+		msg = S("Unloading into @1", V.TYPES[truck.vkind].short or S("Truck"))
 	else
 		local pw = V.to_world(self, PIVOT)
 		local bp, by = rockmech.belt_near and rockmech.belt_near({x = pw.x, y = pw.y + 3, z = pw.z}, BOOM_LEN)
 		if bp then
 			tip = V.to_local(self, {x = bp.x, y = by + 1.5, z = bp.z})
 			moved = unload(self, n, function(base, k, g) return rockmech.belt_put(bp, base, k, g) end)
-			msg = "卸到輸送帶"
+			msg = S("Unloading onto the conveyor")
 		else
 			local hc = find_hopper(pw)
 			if hc then
@@ -288,7 +288,7 @@ local function discharge(self, pos, dt)
 				moved = unload(self, n, function(base, k, g)
 					return k - V.deposit_column(hc.x, hc.z, hc.y + 1, base, k, 8, nil, g)
 				end)
-				msg = "卸到受料倉"
+				msg = S("Unloading into the hopper")
 			end
 		end
 	end
@@ -301,18 +301,18 @@ local function discharge(self, pos, dt)
 			minvel = {x = 0, y = -4, z = 0}, maxvel = {x = 0, y = -6, z = 0}, minsize = 2, maxsize = 4,
 			minexptime = 0.4, maxexptime = 0.7, texture = "[fill:4x4:#3a3530"})
 	end
-	msg = msg or "沒有卸料目標：叫卡車來、接輸送帶或靠近破碎站"
+	msg = msg or S("Nothing to unload into: call a truck, connect a conveyor or move close to the crusher")
 	if msg ~= self.target_msg then self.target_msg = msg; update_hud(self) end
 end
 
 ---------------------------------------------------------------------------
 
 function def.hud(self)
-	return "\n卸料：" .. (self.target_msg or "料倉是空的")
+	return "\n" .. S("Unloading: @1", self.target_msg or S("bin is empty"))
 		.. (self.cut_msg and ("\n" .. self.cut_msg) or "")
 end
 function def.keys(self)
-	return {{"E", "滾筒切削", on = self.cut}, {"空白鍵", "下切 1 m（關＝平切）", on = (self.depth or 1) > 0}}
+	return {{"E", S("Drum cutting"), on = self.cut}, {S("Space"), S("Cut 1 m down (off = level)"), on = (self.depth or 1) > 0}}
 end
 function def.busy(self) return self.cut end
 function def.on_load(self, data) self.cut, self.depth = data.cut, data.depth end
@@ -359,7 +359,7 @@ function def.move(self, ctx)
 		if n > 0 then debris(self, ctx.pos, ctx.s, (self.cut_coal or 0) / n) end
 		self.cut_now, self.cut_coal = 0, 0
 	end
-	local msg = why == "full" and "料倉滿了：等卸料" or why == "block" and "前面有切不動的東西（設施、輸送帶）" or nil
+	local msg = why == "full" and S("Bin full: waiting to unload") or why == "block" and S("Something ahead can't be cut (facility, conveyor)") or nil
 	if msg ~= self.cut_msg then self.cut_msg = msg; update_hud(self) end
 	-- 滾筒轉動
 	if self.cut and self.parts and self.parts.drum then

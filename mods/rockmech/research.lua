@@ -7,6 +7,9 @@
 --   各項的效果由 crusher.lua 的 rockmech.eff_* 算：選礦場、破碎站、輸送帶照放置那一組的等級。
 --   進行中的研發存在 research_job:<研究員>:<帳戶> = {key, level, left（剩幾秒）, total}。
 
+local S = rockmech.S
+local TR = rockmech.config.TR
+local E = core.formspec_escape
 local cfg = rockmech.cfg
 if not cfg.career then return end
 local storage = rockmech.collapse.storage
@@ -16,23 +19,23 @@ local JOB = "research_job:"
 
 -- 研發項目。per：每級的效果（顯示用，實際算在 crusher.lua 的 rockmech.eff_*）
 local ITEMS = {
-	{key = "plant_recovery", who = "mechanic", label = "選礦回收率", max = 5, base = 20000, minutes = 10,
-		desc = "選礦場的煤進精煤的比例 +1%",
+	{key = "plant_recovery", who = "mechanic", label = TR("Plant recovery"), max = 5, base = 20000, minutes = 10,
+		desc = TR("Share of coal recovered into clean coal at the processing plant +1%"),
 		value = function(acc) return ("%.0f%%"):format(rockmech.eff_plant_recovery(acc) * 100) end},
-	{key = "plant_misplaced", who = "mechanic", label = "降低精煤混入", max = 4, base = 20000, minutes = 10,
-		desc = "選礦場的矸石混進精煤的比例 −2%",
+	{key = "plant_misplaced", who = "mechanic", label = TR("Cleaner clean coal"), max = 4, base = 20000, minutes = 10,
+		desc = TR("Share of waste rock misplaced into clean coal at the processing plant −2%"),
 		value = function(acc) return ("%.0f%%"):format(rockmech.eff_plant_misplaced(acc) * 100) end},
-	{key = "crusher_rate", who = "mechanic", label = "破碎機改良", max = 5, base = 30000, minutes = 15,
-		desc = "破碎站處理能力 +10%",
+	{key = "crusher_rate", who = "mechanic", label = TR("Crusher upgrade"), max = 5, base = 30000, minutes = 15,
+		desc = TR("Crushing station throughput +10%"),
 		value = function(acc) return ("×%.1f"):format(rockmech.eff_crusher_mult(acc)) end},
-	{key = "conveyor_rate", who = "mechanic", label = "輸送帶改良", max = 5, base = 15000, minutes = 10,
-		desc = "輸送帶運量 +10%（之後放的、已經放的都算）",
+	{key = "conveyor_rate", who = "mechanic", label = TR("Conveyor upgrade"), max = 5, base = 15000, minutes = 10,
+		desc = TR("Conveyor capacity +10% (applies to conveyors already placed and placed later)"),
 		value = function(acc) return ("×%.1f"):format(rockmech.eff_conveyor_mult(acc)) end},
-	{key = "mine_planning", who = "geologist", label = "採礦規劃", max = 1, base = 30000, minutes = 10,
-		desc = "全組看得到剝採比（破碎站，廢石 ÷ 礦石）",
-		value = function(acc) return rockmech.research_level(acc, "mine_planning") >= 1 and "已會" or "還不會" end},
-	{key = "ore_recovery", who = "geologist", label = "品位控制", max = 5, base = 25000, minutes = 10,
-		desc = "破碎站賣礦的回收率 +1%",
+	{key = "mine_planning", who = "geologist", label = TR("Mine planning"), max = 1, base = 30000, minutes = 10,
+		desc = TR("The whole team can see the stripping ratio (crushing station, waste ÷ ore)"),
+		value = function(acc) return rockmech.research_level(acc, "mine_planning") >= 1 and S("Learned") or S("Not yet") end},
+	{key = "ore_recovery", who = "geologist", label = TR("Grade control"), max = 5, base = 25000, minutes = 10,
+		desc = TR("Recovery of ore sold at the crushing station +1%"),
 		value = function(acc)
 			for _, ore in pairs(cfg.ores) do return ("%.0f%%"):format(rockmech.eff_ore_recovery(acc, ore) * 100) end
 			return "—"
@@ -51,8 +54,8 @@ local function money_text(v) return ("%s$%.0f"):format(v < 0 and "−" or "", ma
 ---------------------------------------------------------------------------
 
 local NPCS = {
-	mechanic = {entity = "rockmech:npc_mechanic", title = "機械技工", color = "#ffb060", tint = "#c06010", sit = false},
-	geologist = {entity = "rockmech:npc_geologist", title = "駐點地質師", color = "#e0d0a0", tint = "#806040", sit = true},
+	mechanic = {entity = "rockmech:npc_mechanic", title = TR("Mechanic"), color = "#ffb060", tint = "#c06010", sit = false},
+	geologist = {entity = "rockmech:npc_geologist", title = TR("Site geologist"), color = "#e0d0a0", tint = "#806040", sit = true},
 }
 
 -- 進行中的研發：每位研究員各自一項（同一組的機械技工、駐點地質師可以同時研發）。
@@ -114,7 +117,7 @@ end
 local function set_repair(acc, job) storage:set_string(REPAIR .. acc, job and core.serialize(job) or "") end
 local function vname(kind)
 	local d = rockmech.vehicles and rockmech.vehicles.TYPES[kind]
-	return d and d.desc:gsub(" .*", "") or kind
+	return d and (d.short or d.desc) or kind
 end
 
 -- 進度條：底色、已完成的部分、百分比與倒數
@@ -123,7 +126,7 @@ local function bar(x, y, w, job)
 	local frac = total > 0 and math.max(0, math.min(1, 1 - job.left / total)) or 1
 	return ("box[%g,%g;%g,0.35;#2a2a2a]box[%g,%g;%g,0.35;#3fbf5f]label[%g,%g;%s]"):format(
 		x, y, w, x, y, math.max(0.01, w * frac), x + w + 0.2, y + 0.18,
-		core.formspec_escape(("%d%%　剩 %s"):format(math.floor(frac * 100), mmss(job.left))))
+		E(S("@1%  @2 left", tostring(math.floor(frac * 100)), mmss(job.left))))
 end
 
 local viewing = {}          -- 玩家名稱 → 正在看哪位研究員
@@ -132,33 +135,34 @@ local function form(name, who)
 	local acc = rockmech.account_of(name)
 	local npc = NPCS[who]
 	local job = job_of(acc, who)
-	local head = rockmech.team_of(name) and ("%s　第 %s 組資金 %s"):format(npc.title, rockmech.team_of(name), money_text(rockmech.money(name)))
-		or ("%s　資金 %s"):format(npc.title, money_text(rockmech.money(name)))
+	local head = rockmech.team_of(name) and S("@1  Team @2 funds: @3", S(npc.title), tostring(rockmech.team_of(name)), money_text(rockmech.money(name)))
+		or S("@1  Funds: @2", S(npc.title), money_text(rockmech.money(name)))
 	local out = {"formspec_version[6]size[15,13]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local status
 	if job then
 		local it = BY_KEY[job.key]
-		status = ("研發中：%s Lv%d（組員在線上時才會進行）"):format(it and it.label or job.key, job.level)
+		status = S("Researching: @1 Lv@2 (progresses only while team members are online)", it and S(it.label) or job.key, tostring(job.level))
 	else
-		status = ("%s目前沒有研發中的項目。每位研究員同時研發一項，不同研究員可以同時進行。"):format(npc.title)
+		status = S("@1 has no research in progress. Each researcher works on one item at a time; different researchers can work at the same time.", S(npc.title))
 	end
 	out[#out + 1] = ("label[0.5,1.2;%s]"):format(core.formspec_escape(status))
-	out[#out + 1] = "label[0.5,2.0;項目]label[3.6,2.0;效果]label[8.6,2.0;目前 → 下一級]label[11.4,2.0;價格／時間]"
+	out[#out + 1] = ("label[0.5,2.0;%s]label[3.6,2.0;%s]label[8.6,2.0;%s]label[11.4,2.0;%s]"):format(
+		E(S("Item")), E(S("Effect")), E(S("Current → next level")), E(S("Price / time")))
 	local y = 2.6
 	for i, it in ipairs(ITEMS) do
 		if it.who == who then
 			local lv = rockmech.research_level(acc, it.key)
 			local maxed = lv >= it.max
-			out[#out + 1] = ("label[0.5,%g;%s　Lv%d/%d]"):format(y + 0.4, core.formspec_escape(it.label), lv, it.max)
-			out[#out + 1] = ("label[3.6,%g;%s]"):format(y + 0.4, core.formspec_escape(it.desc))
+			out[#out + 1] = ("label[0.5,%g;%s　Lv%d/%d]"):format(y + 0.4, E(S(it.label)), lv, it.max)
+			out[#out + 1] = ("label[3.6,%g;%s]"):format(y + 0.4, E(S(it.desc)))
 			local now = it.value(acc)
-			local nxt = maxed and "已達最高" or ("→ Lv" .. (lv + 1))
+			local nxt = maxed and S("Max level") or ("→ Lv" .. (lv + 1))
 			out[#out + 1] = ("label[8.6,%g;%s　%s]"):format(y + 0.4, core.formspec_escape(now), core.formspec_escape(nxt))
 			if maxed then
 				out[#out + 1] = ("label[11.4,%g;—]"):format(y + 0.4)
 			else
-				out[#out + 1] = ("label[11.4,%g;%s　%d 分鐘]"):format(y + 0.4, money_text(cost_of(it, lv + 1)), secs_of(it, lv + 1) / 60)
-				if not job then out[#out + 1] = ("button[13.5,%g;1.3,0.8;go_%d;研發]"):format(y, i) end
+				out[#out + 1] = ("label[11.4,%g;%s]"):format(y + 0.4, E(S("@1  @2 min", money_text(cost_of(it, lv + 1)), ("%d"):format(secs_of(it, lv + 1) / 60))))
+				if not job then out[#out + 1] = ("button[13.5,%g;1.3,0.8;go_%d;%s]"):format(y, i, E(S("Research"))) end
 			end
 			y = y + 1.0
 			if job and job.key == it.key then
@@ -170,16 +174,16 @@ local function form(name, who)
 	-- 機械技工：修車
 	if who == "mechanic" then
 		local rj = repair_job(acc)
-		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.5, core.formspec_escape("修車：全組受損的車（落石砸的），付費派技工去修，車不用開回來"))
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.5, E(S("Vehicle repair: the team's damaged vehicles (hit by rockfall). Pay to send a mechanic; no need to drive them back")))
 		y = y + 1.0
 		if rj then
-			out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.2, core.formspec_escape(("修理中：%s"):format(vname(rj.kind))))
+			out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.2, E(S("Repairing: @1", vname(rj.kind))))
 			out[#out + 1] = bar(4.0, y + 0.05, 7.0, rj)
 			y = y + 0.7
 		end
 		local list = damaged_list(acc)
 		if #list == 0 and not rj then
-			out[#out + 1] = ("label[0.5,%g;沒有受損的車]"):format(y + 0.2)
+			out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.2, E(S("No damaged vehicles")))
 			y = y + 0.6
 		end
 		for i, d in ipairs(list) do
@@ -187,10 +191,10 @@ local function form(name, who)
 			if not (rj and rj.uid == d.uid) then
 				local cost, secs = repair_quote(d)
 				local p = d.pos and ("(%d, %d, %d)"):format(d.pos.x, d.pos.y, d.pos.z) or ""
-				out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, core.formspec_escape(("%s　%s　%s"):format(vname(d.kind),
-					(d.hp or 0) <= 0 and "報廢" or ("耐久 %d%%"):format(math.floor(d.hp + 0.5)), p)))
+				out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, E(("%s  %s  %s"):format(vname(d.kind),
+					(d.hp or 0) <= 0 and S("Wrecked") or S("Condition @1%", ("%d"):format(math.floor(d.hp + 0.5))), p)))
 				out[#out + 1] = ("label[8.6,%g;%s]"):format(y + 0.4, core.formspec_escape(("%s　%s"):format(money_text(cost), mmss(secs))))
-				if not rj then out[#out + 1] = ("button[13.0,%g;1.8,0.8;fix_%s;修理]"):format(y, d.uid) end
+				if not rj then out[#out + 1] = ("button[13.0,%g;1.8,0.8;fix_%s;%s]"):format(y, d.uid, E(S("Repair"))) end
 				y = y + 0.9
 			end
 		end
@@ -201,7 +205,7 @@ local function form(name, who)
 		out[#out + 1] = fs
 		y = y + 0.4 + h
 	end
-	out[#out + 1] = ("button_exit[6,%g;3,0.8;close;關閉]"):format(math.max(y + 0.4, 8.6))
+	out[#out + 1] = ("button_exit[6,%g;3,0.8;close;%s]"):format(math.max(y + 0.4, 8.6), E(S("Close")))
 	return table.concat(out)
 end
 
@@ -212,7 +216,7 @@ local function open(player, who)
 end
 
 local function tell(acc, msg)
-	for _, m in ipairs(rockmech.account_members(acc)) do core.chat_send_player(m, "[研究所] " .. msg) end
+	for _, m in ipairs(rockmech.account_members(acc)) do core.chat_send_player(m, S("[Research lab] @1", msg)) end
 end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
@@ -240,15 +244,15 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local d
 			for _, x in ipairs(damaged_list(acc)) do if x.uid == uid then d = x end end
 			if repair_job(acc) then
-				core.chat_send_player(name, "[機械技工] 已經在修別台車了，一次修一台")
+				core.chat_send_player(name, S("[Mechanic] Already repairing another vehicle; one at a time"))
 			elseif d then
 				local cost, secs = repair_quote(d)
 				if rockmech.money(name) < cost then
-					core.chat_send_player(name, ("[機械技工] 錢不夠：修這台要 %s"):format(money_text(cost)))
+					core.chat_send_player(name, S("[Mechanic] Not enough money: repairing this one costs @1", money_text(cost)))
 				else
 					rockmech.add_money(name, -cost)
 					set_repair(acc, {uid = uid, kind = d.kind, left = secs, total = secs})
-					tell(acc, ("%s 派技工去修%s（%s、%s，組員在線上時才會進行）"):format(name, vname(d.kind), money_text(cost), mmss(secs)))
+					tell(acc, S("@1 sent a mechanic to repair the @2 (@3, @4; progresses only while team members are online)", name, vname(d.kind), money_text(cost), mmss(secs)))
 				end
 			end
 			core.show_formspec(name, FORM, form(name, who))
@@ -263,17 +267,17 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local lv = rockmech.research_level(acc, it.key)
 			local cost = cost_of(it, lv + 1)
 			if job_of(acc, who) then
-				core.chat_send_player(name, "[研究所] 已經在研發別的項目，研究員一次只能研發一項")
+				core.chat_send_player(name, S("[Research lab] Already researching another item; a researcher can only work on one item at a time"))
 			elseif lv >= it.max then
-				core.chat_send_player(name, "[研究所] 已達最高等級")
+				core.chat_send_player(name, S("[Research lab] Already at the maximum level"))
 			elseif not rockmech.has_account(name) then
-				core.chat_send_player(name, "[研究所] 你還沒分組，沒有資金")
+				core.chat_send_player(name, S("[Research lab] You are not in a team yet, so you have no funds"))
 			elseif rockmech.money(name) < cost then
-				core.chat_send_player(name, ("[研究所] 錢不夠：%s Lv%d 要 %s"):format(it.label, lv + 1, money_text(cost)))
+				core.chat_send_player(name, S("[Research lab] Not enough money: @1 Lv@2 costs @3", S(it.label), tostring(lv + 1), money_text(cost)))
 			else
 				rockmech.add_money(name, -cost)
 				set_job(acc, who, {key = it.key, level = lv + 1, left = secs_of(it, lv + 1), total = secs_of(it, lv + 1)})
-				tell(acc, ("%s 開始研發 %s Lv%d（%s、%d 分鐘，組員在線上時才會進行）"):format(name, it.label, lv + 1, money_text(cost), secs_of(it, lv + 1) / 60))
+				tell(acc, S("@1 started researching @2 Lv@3 (@4, @5 min; progresses only while team members are online)", name, S(it.label), tostring(lv + 1), money_text(cost), ("%d"):format(secs_of(it, lv + 1) / 60)))
 				core.log("action", ("[rockmech] research %s %s Lv%d by %s ($%d)"):format(acc, it.key, lv + 1, name, cost))
 			end
 			if who then core.show_formspec(name, FORM, form(name, who)) end
@@ -307,7 +311,7 @@ core.register_globalstep(function(dtime)
 					local before = it and it.value(acc)
 					rockmech.research_set(acc, job.key, job.level)
 					set_job(acc, who, nil)
-					if it then tell(acc, ("%s 升到 Lv%d（%s → %s）"):format(it.label, job.level, before, it.value(acc))) end
+					if it then tell(acc, S("@1 reached Lv@2 (@3 → @4)", S(it.label), tostring(job.level), before, it.value(acc))) end
 					core.log("action", ("[rockmech] research %s %s reached Lv%d"):format(acc, job.key, job.level))
 					for _, m in ipairs(rockmech.account_members(acc)) do
 						core.sound_play("rockmech_coin", {to_player = m, gain = 0.6}, true)
@@ -332,7 +336,7 @@ core.register_globalstep(function(dtime)
 					V.update_infotext(e)
 					if V.update_hud then V.update_hud(e) end
 				end
-				tell(acc, ("%s修好了，耐久回到 100%%"):format(vname(rj.kind)))
+				tell(acc, S("@1 repaired; condition back to 100%", vname(rj.kind)))
 			else
 				set_repair(acc, rj)
 			end
@@ -352,7 +356,7 @@ for who, npc in pairs(NPCS) do
 		initial_properties = {
 			physical = true, collisionbox = npc.sit and {-0.3, 0, -0.3, 0.3, 1.2, 0.3} or {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
 			visual = "mesh", mesh = "character.b3d", textures = {rockmech.npc_skin(who)},      -- 造型：npc_skins.lua
-			nametag = npc.title, nametag_color = npc.color, static_save = false,
+			nametag = S(npc.title), nametag_color = npc.color, static_save = false,
 		},
 		on_activate = function(self)
 			self.object:set_armor_groups({immortal = 1})
@@ -374,7 +378,7 @@ end
 
 local RES_Z = -16           -- 帳篷中心的 z（貨櫃辦公室在 z −6..6）；x 跟貨櫃辦公室一樣
 core.register_node("rockmech:tent_canvas_research", {
-	description = "Tent canvas (帳篷布)", is_ground_content = false, groups = {not_in_creative_inventory = 1},
+	description = S("Tent canvas"), is_ground_content = false, groups = {not_in_creative_inventory = 1},
 	tiles = {"[fill:16x16:#eef2f4^[fill:16x2:0,5:#2f6fbf^[fill:16x2:0,12:#2f6fbf"},
 })
 

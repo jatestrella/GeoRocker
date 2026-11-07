@@ -8,6 +8,8 @@ local cfg = rockmech.cfg
 local joints = rockmech.joints
 local stress = rockmech.stress
 local F = core.formspec_escape
+local S = rockmech.S
+local function onoff(b) return b and S("on") or S("off") end
 
 ---------------------------------------------------------------------------
 -- 應力報告（資訊頁與 HUD 共用）
@@ -61,28 +63,33 @@ end
 function rockmech.rockmass_line(rm)
 	if not rm then return "" end
 	local n = rockmech.collapse.rock.N
-	return ("GSI %d（mb %.3f  s %.2e  a %.3f）σci %.3g → 臨空單軸 %.3g、σt %.3g MPa%s"):format(
-		rm.gsi, rm.mb, rm.s, rm.a, rm.sigci, rm.ucs_m, rm.sigt, n ~= 1 and ("（已 ÷ N=%g）"):format(n) or "")
+	return S("GSI @1 (mb @2  s @3  a @4) σci @5 → unconfined rock mass @6, σt @7 MPa@8",
+		("%d"):format(rm.gsi), ("%.3f"):format(rm.mb), ("%.2e"):format(rm.s), ("%.3f"):format(rm.a),
+		("%.3g"):format(rm.sigci), ("%.3g"):format(rm.ucs_m), ("%.3g"):format(rm.sigt),
+		n ~= 1 and (" " .. S("(already ÷ N=@1)", ("%g"):format(n))) or "")
 end
 
 -- 弱面滑動的一行說明（HUD、資訊頁、羅盤共用）
 function rockmech.slip_line(s)
-	if not cfg.weakness.enabled then return "節理滑動：關閉" end
+	if not cfg.weakness.enabled then return S("Joint sliding: off") end
 	local js = s.slip_set
 	if not js then
-		return "節理滑動：" .. (s.n_joints == 0 and "完整岩塊（無節理面穿過）" or "無可滑出的節理（未傾向臨空面）")
+		return s.n_joints == 0 and S("Joint sliding: intact rock (no joint plane passes through)")
+			or S("Joint sliding: no joint can slide out (none dips toward a free face)")
 	end
 	if s.slip_set2 then
 		local l = s.slip_line
 		local trend = math.deg(math.atan2 and math.atan2(l.x, l.z) or math.atan(l.x, l.z)) % 360
 		local plunge = math.deg(math.asin(-l.y))
-		return ("楔形滑動 %s∩%s（交線 %.0f°/%.0f°）：σn %.3f / %.3f  τ∥ %.3f MPa  FS %.2f%s"):format(
-			js.name, s.slip_set2.name, trend, plunge, s.slip_sn, s.slip_sn2, s.slip_tau, s.fs_joint,
-			s.fails_slip and "  滑動" or "")
+		return S("Wedge sliding @1∩@2 (line of intersection @3°/@4°): σn @5 / @6  τ∥ @7 MPa  FS @8@9",
+			js.name, s.slip_set2.name, ("%.0f"):format(trend), ("%.0f"):format(plunge), ("%.3f"):format(s.slip_sn),
+			("%.3f"):format(s.slip_sn2), ("%.3f"):format(s.slip_tau), ("%.2f"):format(s.fs_joint),
+			s.fails_slip and ("  " .. S("sliding")) or "")
 	end
-	return ("節理滑動 %s（%.0f°/%.0f°）：σn %.3f  τ %.3f MPa  FS %.2f%s"):format(
-		js.name, js.dip_eff, js.dipdir_eff, s.slip_sn, s.slip_tau, s.fs_joint,
-		s.fails_slip and "  滑動" or "")
+	return S("Joint sliding @1 (@2°/@3°): σn @4  τ @5 MPa  FS @6@7",
+		js.name, ("%.0f"):format(js.dip_eff), ("%.0f"):format(js.dipdir_eff), ("%.3f"):format(s.slip_sn),
+		("%.3f"):format(s.slip_tau), ("%.2f"):format(s.fs_joint),
+		s.fails_slip and ("  " .. S("sliding")) or "")
 end
 
 -- 懸臂斷裂的一行說明（HUD、資訊頁、羅盤共用）。o = collapse.overhang_state 的結果
@@ -90,48 +97,56 @@ local function fs_str(f)
 	return f == math.huge and "∞" or ("%.2f"):format(f)
 end
 function rockmech.overhang_line(o)
-	if cfg.fem.drive then return "懸臂：不另外計算，由應力解逐格判定" end
-	if not cfg.overhang.enabled then return "懸臂斷裂：關閉" end
-	if not o then return "懸臂：—" end
-	if o.supported then return "懸臂：此欄下方有支撐（FS ∞）" end
-	if o.aborted then return ("懸臂：懸空群超過 %d 格，不判定"):format(cfg.overhang.max_voxels) end
-	if not o.d then return "懸臂：被節理切離、碰不到有支撐的岩柱（FS 0，會掉落）" end
+	if cfg.fem.drive then return S("Overhang: not computed separately; the stress solution checks each cell") end
+	if not cfg.overhang.enabled then return S("Overhang failure: off") end
+	if not o then return S("Overhang: —") end
+	if o.supported then return S("Overhang: supported below this column (FS ∞)") end
+	if o.aborted then return S("Overhang: overhanging group exceeds @1 cells, not evaluated", ("%d"):format(cfg.overhang.max_voxels)) end
+	if not o.d then return S("Overhang: cut off by joints, not connected to any supported rock column (FS 0, will fall)") end
 	if o.d == 0 then
-		return ("懸臂：坐在下層懸空岩體上，由下層承擔；整段最小 FS %s"):format(fs_str(o.group_fs))
+		return S("Overhang: rests on the overhanging rock below, which carries it; minimum FS of the whole span @1", fs_str(o.group_fs))
 	end
 	local c = o.crit
 	local root = ""
 	if o.rho and o.rho < 1 then
-		root = ("、根部斷面被節理切過，完好 %.0f%%"):format(o.rho * 100)
+		root = S(", root section cut by joints, @1% intact", ("%.0f"):format(o.rho * 100))
 	end
 	-- 支護：底面往上托的 pᵢ（≥ γt 整欄被托住）
 	local sup = ""
-	if o.p_sup then sup = ("；支護往上托 %.0f kPa（荷重 γh %.0f kPa）"):format(o.p_sup, o.gamma * (o.h or o.t)) end
-	if o.fs_shear then sup = ("；剪力 FS %s"):format(fs_str(o.fs_shear)) .. sup end
-	return ("懸臂 %s、t %d m、鬆弛區 k %.2f、淨高 %.1f m、荷重高 h %.1f m%s：彎矩 %.0f kN·m/m，σb=6M/t_eff² %.3f / σt %.3f MPa  FS %s；整段最小 FS %s @ (%d,%d)%s"):format(
-		("懸空 %d m² ／ 有支撐周長 %d m"):format(o.area, o.perim),
-		o.t, o.k or 0, o.ht or 0, o.h or o.t, root, o.m or 0, o.sigma_b, o.tensile, fs_str(o.fs), fs_str(o.group_fs), c.x, c.z,
-		o.edge and ("（懸空群超出 ±%d m 檢查範圍，FS 可能高估）"):format((rockmech.collapse.overhang_radius())) or "")
-		.. ((o.cut_cells or 0) > 0 and ("；相鄰有 %d 格被節理切離、會掉落"):format(o.cut_cells) or "") .. sup
+	if o.p_sup then
+		sup = S("; support pushes up @1 kPa (load γh @2 kPa)", ("%.0f"):format(o.p_sup), ("%.0f"):format(o.gamma * (o.h or o.t)))
+	end
+	if o.fs_shear then sup = S("; shear FS @1@2", fs_str(o.fs_shear), sup) end
+	local geom = S("Overhang @1, t @2 m, relaxed zone k @3, clear height @4 m, load height h @5 m@6",
+		S("overhanging @1 m² / supported perimeter @2 m", ("%d"):format(o.area), ("%d"):format(o.perim)),
+		("%d"):format(o.t), ("%.2f"):format(o.k or 0), ("%.1f"):format(o.ht or 0), ("%.1f"):format(o.h or o.t), root)
+	local cut = (o.cut_cells or 0) > 0 and S("; @1 adjacent cells are cut off by joints and will fall", ("%d"):format(o.cut_cells)) or ""
+	local result = S("bending moment @1 kN·m/m, σb=6M/t_eff² @2 / σt @3 MPa  FS @4; minimum FS of the whole span @5 @@ (@6,@7)@8@9",
+		("%.0f"):format(o.m or 0), ("%.3f"):format(o.sigma_b), ("%.3f"):format(o.tensile), fs_str(o.fs), fs_str(o.group_fs),
+		("%d"):format(c.x), ("%d"):format(c.z),
+		o.edge and (" " .. S("(the overhanging group extends beyond the ±@1 m check range; FS may be overestimated)",
+			("%d"):format((rockmech.collapse.overhang_radius())))) or "",
+		cut .. sup)
+	return S("@1: @2", geom, result)
 end
 
 -- 關鍵塊體的一行說明。kb = collapse.keyblock_state 的結果
 function rockmech.keyblock_line(kb)
-	if not cfg.keyblock.enabled then return "關鍵塊體：關閉" end
-	if kb == nil then return "關鍵塊體：—" end
-	if kb == false then return "關鍵塊體：與岩體相連（有岩橋，或超過 " .. cfg.keyblock.max_cells .. " 格）" end
+	if not cfg.keyblock.enabled then return S("Key block: off") end
+	if kb == nil then return S("Key block: —") end
+	if kb == false then return S("Key block: connected to the rock mass (rock bridge, or more than @1 cells)", tostring(cfg.keyblock.max_cells)) end
 	local mode = rockmech.collapse.keyblock_mode_name[kb.mode]
 	local sets = {}
 	for _, pl in ipairs(kb.planes or {}) do
 		local js = pl.set and rockmech.get_joint_sets()[pl.set]
-		sets[#sets + 1] = js and js.name or "接觸面"
+		sets[#sets + 1] = js and js.name or S("contact face")
 	end
 	if not mode then
-		return ("關鍵塊體 %d 格（W %.0f kN）：卡住，沒有可行的運動方向"):format(#kb.cells, kb.W)
+		return S("Key block of @1 cells (W @2 kN): locked, no kinematically feasible movement", ("%d"):format(#kb.cells), ("%.0f"):format(kb.W))
 	end
-	return ("關鍵塊體 %d 格（W %.0f kN）：%s%s FS %s%s"):format(#kb.cells, kb.W, mode,
-		#sets > 0 and ("（" .. table.concat(sets, "＋") .. "）") or "", fs_str(kb.fs),
-		kb.fs < 1 and "  會滑出" or "")
+	return S("Key block of @1 cells (W @2 kN): @3@4 FS @5@6", ("%d"):format(#kb.cells), ("%.0f"):format(kb.W), mode,
+		#sets > 0 and S("(@1)", table.concat(sets, " + ")) or "", fs_str(kb.fs),
+		kb.fs < 1 and ("  " .. S("slides out")) or "")
 end
 
 -- 周圍臨空格的最小 FS 一行說明
@@ -140,16 +155,18 @@ function rockmech.nearby_line(nb)
 	local parts = {}
 	if nb.joint then
 		local j = nb.joint
-		parts[#parts + 1] = ("節理 %s @ (%d,%d,%d) %s%s"):format(fs_str(j.fs), j.x, j.y, j.z,
+		parts[#parts + 1] = S("joint @1 @@ (@2,@3,@4) @5@6", fs_str(j.fs), ("%d"):format(j.x), ("%d"):format(j.y), ("%d"):format(j.z),
 			j.set.name .. (j.set2 and ("∩" .. j.set2.name) or ""),
-			j.fs <= 1 and " 會滑" or "")
+			j.fs <= 1 and (" " .. S("will slide")) or "")
 	elseif cfg.weakness.enabled then
-		parts[#parts + 1] = "節理：無可滑出的面"
+		parts[#parts + 1] = S("joints: no plane can slide out")
 	end
 	if nb.axial then
-		parts[#parts + 1] = ("軸差 %s @ (%d,%d,%d)"):format(fs_str(nb.axial.fs), nb.axial.x, nb.axial.y, nb.axial.z)
+		parts[#parts + 1] = S("deviatoric @1 @@ (@2,@3,@4)", fs_str(nb.axial.fs),
+			("%d"):format(nb.axial.x), ("%d"):format(nb.axial.y), ("%d"):format(nb.axial.z))
 	end
-	return ("周圍 ±%d m 臨空格（%d 格）最小 FS：%s"):format(NEARBY_R, nb.exposed, table.concat(parts, "；"))
+	return S("Minimum FS of free-face cells within ±@1 m (@2 cells): @3", ("%d"):format(NEARBY_R), ("%d"):format(nb.exposed),
+		table.concat(parts, "; "))
 end
 
 -- HUD 用的精簡數字：∞、>99、兩位小數
@@ -167,12 +184,12 @@ local function fmt_report_lines(r, pname)
 	local s = r.local_state
 	local lines = {}
 	if see(pname, "rockmass") then
-		lines[#lines + 1] = ("%s%s　上覆 %d m"):format(r.lith.description:gsub("\n.*", ""),
-			s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", i.h)
+		lines[#lines + 1] = S("@1@2　overburden @3 m", S(r.lith.description),
+			s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", ("%d"):format(i.h))
 		local D = rockmech.collapse.damage_at_xyz and r.pos and rockmech.collapse.damage_at_xyz(r.pos.x, r.pos.y, r.pos.z)
-		if D then lines[#lines + 1] = ("爆破擾動 D = %.1f（強度、變形模數打折）"):format(D) end
+		if D then lines[#lines + 1] = S("Blast damage D = @1 (strength and deformation modulus reduced)", ("%.1f"):format(D)) end
 	else
-		lines[#lines + 1] = "岩石"
+		lines[#lines + 1] = S("Rock")
 	end
 	local ore = cfg.ores[r.lith.ore]
 	if ore and r.is_rock and see(pname, "grade") then lines[#lines + 1] = rockmech.ore_text(ore, r.p2 / 255) end
@@ -181,20 +198,20 @@ local function fmt_report_lines(r, pname)
 	local fc = rockmech.fem_cell and rockmech.fem_cell(r.pos)
 	lines[#lines + 1] = ("σ1 %.2f　σ3 %.2f MPa"):format(fc and fc.s1 or s.s1, fc and fc.s3 or s.s3)
 	-- 最低的 FS
-	local best, what = fc and fc.fs or s.fs_axial, fc and "應力解" or "軸差"
+	local best, what = fc and fc.fs or s.fs_axial, fc and S("stress solution") or S("deviatoric")
 	local function take(f, name) if f and f < best then best, what = f, name end end
 	if cfg.weakness.enabled and s.slip_set then
-		take(s.fs_joint, "節理 " .. s.slip_set.name .. (s.slip_set2 and ("∩" .. s.slip_set2.name) or ""))
+		take(s.fs_joint, S("joint @1", s.slip_set.name .. (s.slip_set2 and ("∩" .. s.slip_set2.name) or "")))
 	end
 	local o = r.overhang
-	if cfg.overhang.enabled and not cfg.fem.drive and o and not o.supported then take(o.group_fs, "懸臂") end
+	if cfg.overhang.enabled and not cfg.fem.drive and o and not o.supported then take(o.group_fs, S("overhang")) end
 	local kb = r.keyblock
-	if cfg.keyblock.enabled and kb and kb.mode then take(kb.fs, "塊體") end
-	lines[#lines + 1] = best == math.huge and "FS ∞" or ("FS %s（%s）"):format(fs_short(best), what)
+	if cfg.keyblock.enabled and kb and kb.mode then take(kb.fs, S("key block")) end
+	lines[#lines + 1] = best == math.huge and "FS ∞" or S("FS @1 (@2)", fs_short(best), what)
 	-- 這格有警戒裂紋：是哪種破壞、FS 多少
 	local w = pname and rockmech.fswarn_at and rockmech.fswarn_at(pname, r.pos)
 	if w then
-		lines[#lines + 1] = core.colorize("#ffb040", ("裂紋：%s　FS %s"):format(w.label,
+		lines[#lines + 1] = core.colorize("#ffb040", S("Crack: @1　FS @2", w.label,
 			w.kind == "shear" and w.fs <= 1.011 and "≤ 1" or fs_short(w.fs)))
 	end
 	return lines
@@ -204,7 +221,7 @@ rockmech.hud_lines = fmt_report_lines   -- 測試用
 -- 指著碎石時的 HUD：種類（岩體分類），礦石碎石再加品位（品位判讀）
 local function rubble_lines(node, pname)
 	local base = rockmech.rubble_base[node.name] or node.name
-	local lines = {see(pname, "rockmass") and (core.registered_nodes[base].description:gsub("\n.*", "")) or "碎石"}
+	local lines = {see(pname, "rockmass") and rockmech.desc_short(base) or S("Rubble")}
 	-- 混合碎石：礦石的品位要有品位判讀；崩積土這類（土、碎石的比例）看岩體分類就看得出來
 	local m = rockmech.mix_of[base]
 	if m and see(pname, m.ore and "grade" or "rockmass") then lines[#lines + 1] = rockmech.mix_text(base, node.param2) end
@@ -286,15 +303,15 @@ end)
 
 core.register_chatcommand("rockmech_hud", {
 	params = "[on|off]",
-	description = "開關畫面上的現地應力 HUD（不加參數則切換）",
+	description = S("Turn the on-screen in-situ stress HUD on or off (no argument toggles it)"),
 	func = function(name, param)
 		local player = core.get_player_by_name(name)
-		if not player then return false, "找不到玩家" end
+		if not player then return false, S("Player not found") end
 		local on
 		if param == "on" then on = true elseif param == "off" then on = false
 		else on = not hud_enabled(player) end
 		rockmech.set_hud(player, on)
-		return true, "現地應力 HUD：" .. (on and "開啟" or "關閉")
+		return true, S("In-situ stress HUD: @1", onoff(on))
 	end,
 })
 
@@ -303,7 +320,7 @@ core.register_chatcommand("rockmech_hud", {
 ---------------------------------------------------------------------------
 
 local FORM = "rockmech:info"
-local TABS = {"總覽", "岩性", "節理", "應力", "開關"}
+local TABS = {F(S("Overview")), F(S("Lithology")), F(S("Joints")), F(S("Stress")), F(S("Toggles"))}
 local state = {}       -- 玩家名稱 → {tab, report}
 
 local function table_el(x, y, w, h, name, columns, rows)
@@ -324,60 +341,64 @@ end
 local function tab_overview()
 	local f, o, rf, sp, sl = cfg.failure, cfg.overhang, cfg.rockfall, cfg.stability, cfg.slope
 	local rows = kv_rows({
-		{"世界資料夾", core.get_worldpath()},
-		{"地表高程 y0", cfg.surface_y},
-		{"岩性分布", cfg.lith_mode == "zones" and ("區帶（寬 " .. cfg.zone_width .. " m）") or "依深度分層"},
-		{"只保留岩性 / 剝除土壤", ("%s / %s"):format(cfg.only_lithologies and "是" or "否", cfg.strip_soil and "是" or "否")},
+		{S("World folder"), core.get_worldpath()},
+		{S("Surface elevation y0"), cfg.surface_y},
+		{S("Lithology layout"), cfg.lith_mode == "zones" and S("zones (width @1 m)", tostring(cfg.zone_width)) or S("layered by depth")},
+		{S("Lithologies only / strip soil"), ("%s / %s"):format(cfg.only_lithologies and S("yes") or S("no"), cfg.strip_soil and S("yes") or S("no"))},
 		{"K0", cfg.k0},
 		{"σH = K_H·σv + σH0", ("K_H %.2f，σH0 %g MPa"):format(cfg.KH, cfg.sH0)},
 		{"σh = K_h·σv + σh0", ("K_h %.2f，σh0 %g MPa"):format(cfg.Kh, cfg.sh0)},
-		{"σH 方位", cfg.sH_azimuth .. "°（由北順時針）"},
-		{"節理格點密度", cfg.joint_lattice},
-		{"相似比 N", ("%g（遊戲 1 m = 實際 %g m；σci、σt、節理 c 都 ÷ N）"):format(cfg.model_scale, cfg.model_scale)},
-		{"岩體 GSI（地表→深部 @ 過渡深度）", (function()
+		{S("σH azimuth"), S("@1° (clockwise from north)", tostring(cfg.sH_azimuth))},
+		{S("Joint lattice density"), cfg.joint_lattice},
+		{S("Scale factor N"), S("@1 (1 m in game = @2 m in reality; σci, σt and joint c are all ÷ N)",
+			("%g"):format(cfg.model_scale), ("%g"):format(cfg.model_scale))},
+		{S("Rock mass GSI (surface→depth @@ transition depth)"), (function()
 			local t = {}
 			for _, key in ipairs(cfg.lithology_order) do
 				local l = cfg.lithologies[key]
-				t[#t + 1] = ("%s %s"):format(l.description:gsub(" ?%(.*", ""), rockmech.gsi_profile_str(l.gsi))
+				t[#t + 1] = ("%s %s"):format(S(l.description), rockmech.gsi_profile_str(l.gsi))
 			end
-			return table.concat(t, "，") .. ("；D %g"):format(cfg.rockmass.d)
+			return table.concat(t, ", ") .. ("; D %g"):format(cfg.rockmass.d)
 		end)()},
-		{"軸差破壞", ("%s；Hoek-Brown 岩體強度、半徑 %d、窗格 ±%d、連鎖 %d 輪%s"):format(
-			f.enabled and "開" or "關", f.radius, f.window, f.max_cascade,
-			f.strength_scale ~= 1 and ("；舊設定 strength_scale %g"):format(f.strength_scale) or "")},
-		{"懸臂斷裂", ("%s；半徑 %d%s"):format(o.enabled and "開" or "關", o.radius,
-			o.scale ~= 1 and ("；舊設定 overhang_scale %g"):format(o.scale) or "")},
-		{"穩定判定", ("%s；半徑 %d、剛體上限 %d 格"):format(sp.enabled and "開" or "關", sp.radius, sp.rigid_max)},
-		{"碎石安息角", ("%s；%g°"):format(sl.enabled and "開" or "關", sl.angle)},
-		{"落石翻滾", ("%s；其他表面 Rn %.2f Rt %.2f μr %.2f"):format(rf.enabled and "開" or "關", rf.rn, rf.rt, rf.mu_roll)},
-		{"掉落破碎", cfg.fallbreak.enabled and "開" or "關"},
-		{"節理材質", ("%s；%s"):format(cfg.jointtex.enabled and "開" or "關", cfg.jointtex.style)},
+		{S("Deviatoric failure"), S("@1; Hoek-Brown rock mass strength, radius @2, window ±@3, cascade @4 rounds@5",
+			onoff(f.enabled), ("%d"):format(f.radius), ("%d"):format(f.window), ("%d"):format(f.max_cascade),
+			f.strength_scale ~= 1 and S("; legacy setting strength_scale @1", ("%g"):format(f.strength_scale)) or "")},
+		{S("Overhang failure"), S("@1; radius @2@3", onoff(o.enabled), ("%d"):format(o.radius),
+			o.scale ~= 1 and S("; legacy setting overhang_scale @1", ("%g"):format(o.scale)) or "")},
+		{S("Stability check"), S("@1; radius @2, rigid-body limit @3 cells", onoff(sp.enabled), ("%d"):format(sp.radius), ("%d"):format(sp.rigid_max))},
+		{S("Rubble angle of repose"), ("%s; %g°"):format(onoff(sl.enabled), sl.angle)},
+		{S("Rockfall rolling"), S("@1; other surfaces Rn @2 Rt @3 μr @4", onoff(rf.enabled),
+			("%.2f"):format(rf.rn), ("%.2f"):format(rf.rt), ("%.2f"):format(rf.mu_roll))},
+		{S("Breakage on falling"), onoff(cfg.fallbreak.enabled)},
+		{S("Joint textures"), ("%s; %s"):format(onoff(cfg.jointtex.enabled), cfg.jointtex.style)},
 	})
 	return table_el(0.3, 0.9, 16.4, 9.2, "rm_t1", "text;text", rows)
 end
 
 local function tab_lith()
-	local rows = {{"岩性", "γ (kN/m³)", "σci (MPa)", "σt (MPa)", "mi", "GSI", "地表 σc,m / σt,m",
-		"深部 σc,m / σt,m", "L_max 1 / 4 m 厚（地表）", "破碎 h_ref (m)"}}
+	local rows = {{S("Lithology"), "γ (kN/m³)", "σci (MPa)", "σt (MPa)", "mi", "GSI", S("Surface σc,m / σt,m"),
+		S("Deep σc,m / σt,m"), S("L_max for 1 / 4 m thickness (surface)"), S("Breakage h_ref (m)")}}
 	local rock = rockmech.collapse.rock
 	for _, key in ipairs(cfg.lithology_order) do
 		local l = cfg.lithologies[key]
 		local top = rock.at(key, cfg.surface_y, nil)
 		local deep = rock.at(key, cfg.surface_y - 1e6, nil)
 		local function lm(t) return ("%.1f"):format(rockmech.overhang.lmax(top.sigt, l.gamma, t, cfg.overhang.scale)) end
-		rows[#rows + 1] = {l.description, l.gamma, l.ucs, l.tensile, l.mi or "-", rockmech.gsi_profile_str(l.gsi),
+		rows[#rows + 1] = {S(l.description), l.gamma, l.ucs, l.tensile, l.mi or "-", rockmech.gsi_profile_str(l.gsi),
 			("%.3g / %.3g"):format(top.ucs_m, top.sigt), ("%.3g / %.3g"):format(deep.ucs_m, deep.sigt),
 			lm(1) .. " / " .. lm(4) .. " m", l.break_height or "-"}
 	end
 	local c = "text;text,align=right;text,align=right;text,align=right;text,align=right;text,align=right;" ..
 		"text,align=right;text,align=right;text,align=right;text,align=right"
 	return table_el(0.3, 0.9, 16.4, 4, "rm_t2", c, rows) ..
-		("label[0.3,5.4;%s]"):format(F(("σci、σt 為完整岩石（實驗室）值；岩體強度依 Hoek-Brown（GSI、mi、D）並 ÷ 相似比 N=%g。"):format(cfg.model_scale))) ..
-		("label[0.3,5.9;%s]"):format(F("σc,m = σci·s^a（臨空面單軸）；σt,m = σt·s·mi/mb；L_max = √(σt,m·t / (3γ))，頂板跨度約為其 2 倍。"))
+		("label[0.3,5.4;%s]"):format(F(S("σci and σt are intact rock (laboratory) values; rock mass strength follows Hoek-Brown (GSI, mi, D) and is divided by the scale factor N=@1.",
+			("%g"):format(cfg.model_scale)))) ..
+		("label[0.3,5.9;%s]"):format(F(S("σc,m = σci·s^a (unconfined, at a free face); σt,m = σt·s·mi/mb; L_max = √(σt,m·t / (3γ)); the roof span is about twice that.")))
 end
 
 local function tab_joints()
-	local rows = {{"組", "輸入 傾角/傾向", "對齊後 傾角/傾向", "整數法向 m", "間距 輸入→有效", "延續性", "φj", "材質級數"}}
+	local rows = {{S("Joint set"), S("Input dip / dip direction"), S("Aligned dip / dip direction"), S("Integer normal m"),
+		S("Spacing input → effective"), S("Persistence"), "φj", S("Texture levels")}}
 	local sets = rockmech.get_joint_sets()
 	for _, js in ipairs(sets) do
 		rows[#rows + 1] = {js.name, ("%g° / %g°"):format(js.dip, js.dipdir),
@@ -387,60 +408,67 @@ local function tab_joints()
 			js.persistence, js.phi .. "°", rockmech.jointtex.levels(js)}
 	end
 	return table_el(0.3, 0.9, 16.4, 3.5, "rm_t3", "text;text;text;text;text;text,align=right;text,align=right;text,align=right", rows) ..
-		("label[0.3,4.9;%s]"):format(F("座標：x = 東、y = 上、z = 北；傾向由北順時針。節理法向對齊整數格點，使跡線跨方塊連續。"))
+		("label[0.3,4.9;%s]"):format(F(S("Coordinates: x = east, y = up, z = north; dip direction is clockwise from north. Joint normals are aligned to the integer lattice so traces stay continuous across blocks.")))
 end
 
 local function tab_stress(name)
 	local st = state[name]
 	local r = st and st.report
-	local out = {("button[0.3,0.7;5,0.7;rm_refresh;%s]"):format(F("以目前指向的方塊重新計算"))}
+	local out = {("button[0.3,0.7;5,0.7;rm_refresh;%s]"):format(F(S("Recalculate for the block you are pointing at")))}
 	if not r then
-		out[#out + 1] = ("label[0.3,1.9;%s]"):format(F("（沒有指向任何方塊）"))
+		out[#out + 1] = ("label[0.3,1.9;%s]"):format(F(S("(not pointing at any block)")))
 		return table.concat(out)
 	end
 	local i, s = r.init, r.local_state
 	local rows = kv_rows({
-		{"位置", core.pos_to_string(r.pos)},
-		{"方塊", r.name},
-		{"岩性", r.lith.description:gsub("\n.*", "") .. (r.is_rock and "" or "（非岩石，以該處岩性計）")},
-		{"上覆岩層厚度 h", ("%d m（地表 y=%d%s）"):format(i.h, i.top_y,
-			i.extrapolated and "，超出掃描範圍、外插至 y0" or "")},
-		{"初始 σv = Σγ·Δh", ("%.3f MPa（開挖前，空洞視為岩石）"):format(i.sv)},
-		{"初始 σH / σh", ("%.3f / %.3f MPa（σH %g°）"):format(i.sH, i.shmin, cfg.sH_azimuth)},
-		{"初始 σxx / σzz / σxz", ("%.3f / %.3f / %.3f MPa"):format(i.sxx, i.szz, i.sxz)},
+		{S("Position"), core.pos_to_string(r.pos)},
+		{S("Node"), r.name},
+		{S("Lithology"), r.is_rock and S(r.lith.description) or S("@1 (not rock; using the lithology at this location)", S(r.lith.description))},
+		{S("Overburden thickness h"), S("@1 m (surface y=@2@3)", ("%d"):format(i.h), ("%d"):format(i.top_y),
+			i.extrapolated and S(", beyond the scan range, extrapolated to y0") or "")},
+		{S("Initial σv = Σγ·Δh"), S("@1 MPa (before excavation, voids treated as rock)", ("%.3f"):format(i.sv))},
+		{S("Initial σH / σh"), ("%.3f / %.3f MPa (σH %g°)"):format(i.sH, i.shmin, cfg.sH_azimuth)},
+		{S("Initial σxx / σzz / σxz"), ("%.3f / %.3f / %.3f MPa"):format(i.sxx, i.szz, i.sxz)},
 	})
 	if s then
 		for _, kv in ipairs({
-			{"柱狀荷重 → 擴散後 σyy", ("%.3f → %.3f MPa（×%.2f）"):format(s.sv0, s.sv, s.factor)},
-			{"局部 σxx（×集中）", ("%.3f MPa（×%.2f）"):format(s.sx, s.fx)},
-			{"局部 σyy", ("%.3f MPa"):format(s.sy)},
-			{"局部 σzz（×集中）", ("%.3f MPa（×%.2f）"):format(s.sz, s.fz)},
-			{"局部 σxz", ("%.3f MPa"):format(s.sxz)},
-			{"主應力 σ1 / σ3", ("%.3f / %.3f MPa"):format(s.s1, s.s3)},
-			{"臨空面的法向壓力（支護 pᵢ、碎石側壓）", ("%.3f MPa"):format(s.p_support or 0)},
-			{"岩體強度", rockmech.rockmass_line(s.rm)},
-			{"q = σ1 − σ3 / 岩體強度 q_f(σ3)", ("%.3f / %.3f MPa"):format(s.q, s.strength)},
-			{"軸差 FS", ("%.2f"):format(s.fs_axial)},
-			{"節理弱面", rockmech.slip_line(s)},
-			{"懸臂", rockmech.overhang_line(r.overhang)},
-			{"周圍臨空格", rockmech.nearby_line(r.nearby)},
-			{"關鍵塊體", rockmech.keyblock_line(r.keyblock)},
-			{"臨空面", (s.exposed_x and "東西 " or "") .. (s.exposed_z and "南北 " or "") ..
-				(s.exposed_up and "上 " or "") .. (s.exposed_down and "下" or "")},
-			{"判定", s.fails_axial and "軸差破壞" or s.fails_slip and "沿節理滑動"
-				or (s.q >= s.strength and "超過強度但未臨空" or "穩定")},
+			{S("Column load → spread σyy"), ("%.3f → %.3f MPa (×%.2f)"):format(s.sv0, s.sv, s.factor)},
+			{S("Local σxx (×concentration)"), ("%.3f MPa (×%.2f)"):format(s.sx, s.fx)},
+			{S("Local σyy"), ("%.3f MPa"):format(s.sy)},
+			{S("Local σzz (×concentration)"), ("%.3f MPa (×%.2f)"):format(s.sz, s.fz)},
+			{S("Local σxz"), ("%.3f MPa"):format(s.sxz)},
+			{S("Principal stresses σ1 / σ3"), ("%.3f / %.3f MPa"):format(s.s1, s.s3)},
+			{S("Normal pressure on free faces (support pᵢ, rubble lateral pressure)"), ("%.3f MPa"):format(s.p_support or 0)},
+			{S("Rock mass strength"), rockmech.rockmass_line(s.rm)},
+			{S("q = σ1 − σ3 / rock mass strength q_f(σ3)"), ("%.3f / %.3f MPa"):format(s.q, s.strength)},
+			{S("Deviatoric FS"), ("%.2f"):format(s.fs_axial)},
+			{S("Joint weakness planes"), rockmech.slip_line(s)},
+			{S("Overhang"), rockmech.overhang_line(r.overhang)},
+			{S("Nearby free-face cells"), rockmech.nearby_line(r.nearby)},
+			{S("Key block"), rockmech.keyblock_line(r.keyblock)},
+			{S("Free faces"), (function()
+				local ex = {}
+				if s.exposed_x then ex[#ex + 1] = S("east-west") end
+				if s.exposed_z then ex[#ex + 1] = S("north-south") end
+				if s.exposed_up then ex[#ex + 1] = S("top") end
+				if s.exposed_down then ex[#ex + 1] = S("bottom") end
+				return table.concat(ex, " ")
+			end)()},
+			{S("Verdict"), s.fails_axial and S("deviatoric failure") or s.fails_slip and S("sliding along a joint")
+				or (s.q >= s.strength and S("exceeds strength but no free face") or S("stable"))},
 		}) do rows[#rows + 1] = {kv[1], kv[2]} end
 	end
 	-- 六個面的節理
 	local sets = rockmech.get_joint_sets()
-	local label = {E = "東面 (+x)", W = "西面 (-x)", Up = "上面 (+y)", Dn = "下面 (-y)", N = "北面 (+z)", S = "南面 (-z)"}
+	local label = {E = S("East face (+x)"), W = S("West face (-x)"), Up = S("Top face (+y)"), Dn = S("Bottom face (-y)"),
+		N = S("North face (+z)"), S = S("South face (-z)")}
 	for _, face in ipairs(joints.FACES) do
 		local fx, fy, fz, axis = joints.face_key(r.pos.x, r.pos.y, r.pos.z, face)
 		local parts = {}
 		for _, it in ipairs(joints.face_info(sets, fx, fy, fz, axis)) do
-			parts[#parts + 1] = sets[it.set].name .. (it.joint and " 節理" or " 岩橋")
+			parts[#parts + 1] = it.joint and S("@1 joint", sets[it.set].name) or S("@1 rock bridge", sets[it.set].name)
 		end
-		rows[#rows + 1] = {label[face.name], #parts > 0 and table.concat(parts, "、") or "完整"}
+		rows[#rows + 1] = {label[face.name], #parts > 0 and table.concat(parts, ", ") or S("intact")}
 	end
 	out[#out + 1] = table_el(0.3, 1.6, 16.4, 8.6, "rm_t4", "text;text", rows)
 	return table.concat(out)
@@ -455,17 +483,18 @@ local function tab_toggles(name)
 		out[#out + 1] = ("label[0.8,%g;%s]"):format(y + 0.45, F(t.off_note))
 		y = y + 0.88
 	end
-	out[#out + 1] = ("checkbox[0.3,%g;rm_hud;%s;%s]"):format(y, F("畫面上顯示現地應力（HUD）"),
+	out[#out + 1] = ("checkbox[0.3,%g;rm_hud;%s;%s]"):format(y, F(S("Show in-situ stress on screen (HUD)")),
 		tostring(player and hud_enabled(player) or false))
 	y = y + 0.6
 	out[#out + 1] = ("checkbox[0.3,%g;rm_fsmask;%s;%s]"):format(y,
-		F("標出周圍 FS ≤ 1 的岩格（紅 = 節理滑動、橙 = 軸差、紫 = 懸臂／被節理切離）"),
+		F(S("Mark nearby rock cells with FS ≤ 1 (red = joint sliding, orange = deviatoric, purple = overhang / cut off by joints)")),
 		tostring(player and rockmech.fsmask_live and rockmech.fsmask_live(player) or false))
 	y = y + 0.6
 	out[#out + 1] = ("checkbox[0.3,%g;rm_fswarn;%s;%s]"):format(y,
-		F(("警戒裂紋：受開挖影響、FS 降到 1 < FS < %g 的岩格加上裂紋（越接近 1 裂得越嚴重）"):format(cfg.fswarn.max)),
+		F(S("Warning cracks: rock cells whose FS drops to 1 < FS < @1 because of excavation get cracks (the closer to 1, the worse the cracks)",
+			("%g"):format(cfg.fswarn.max))),
 		tostring(player and rockmech.fswarn_enabled and rockmech.fswarn_enabled(player) or false))
-	out[#out + 1] = ("label[0.3,%g;%s]"):format(y + 0.6, F("修改力學開關需要 rockmech 權限；HUD、FS 遮罩、警戒裂紋每個玩家各自設定。"))
+	out[#out + 1] = ("label[0.3,%g;%s]"):format(y + 0.6, F(S("Changing the mechanics toggles needs the rockmech privilege; the HUD, FS mask and warning cracks are set per player.")))
 	return table.concat(out)
 end
 
@@ -500,7 +529,7 @@ end
 rockmech.debug_allowed = debug_allowed
 function rockmech.show_info(name)
 	if not debug_allowed(name) then
-		core.chat_send_player(name, "[rockmech] 資訊頁是除錯用的（開了 /god 才看得到）")
+		core.chat_send_player(name, S("[rockmech] The info page is for debugging (only visible with /god on)"))
 		return
 	end
 	local player = core.get_player_by_name(name)
@@ -558,7 +587,7 @@ core.register_on_leaveplayer(function(player)
 end)
 
 core.register_chatcommand("rockmech", {
-	description = "開啟 rockmech 完整資訊頁（總覽、岩性、節理、應力、開關）",
+	description = S("Open the full rockmech info page (overview, lithology, joints, stress, toggles)"),
 	func = function(name)
 		rockmech.show_info(name)
 		return true

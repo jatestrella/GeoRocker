@@ -9,6 +9,7 @@
 --   頭 頂(8,0) 底(16,0) 右(0,8) 前(8,8) 左(16,8) 後(24,8)，各 8×8
 --   身體 頂(20,16) 右(16,20) 前(20,20) 左(28,20) 後(32,20)，前後 8×12、側 4×12
 --   手臂 (40,16)..(56,32)、腿 (0,16)..(16,32)，前面各在 (44,20)、(4,20)
+local S = rockmech.S
 local SKIN = "#d8a880"
 
 local function painter()
@@ -156,11 +157,11 @@ core.register_entity(TOOL, {
 
 -- 手上的工具（只給 NPC 拿，不放進物品欄）
 core.register_craftitem("rockmech:geo_hammer", {
-	description = "地質槌", groups = {not_in_creative_inventory = 1},
+	description = S("Geological hammer"), groups = {not_in_creative_inventory = 1},
 	inventory_image = "[fill:16x16:#00000000^[fill:2x11:7,4:#2050a0^[fill:2x3:7,12:#1a3060^[fill:9x3:3,2:#b0b4b8^[fill:2x2:2,2:#8a8e92^[fill:3x1:11,3:#8a8e92",
 })
 core.register_craftitem("rockmech:npc_wrench", {
-	description = "扳手", groups = {not_in_creative_inventory = 1},
+	description = S("Wrench"), groups = {not_in_creative_inventory = 1},
 	inventory_image = "[fill:16x16:#00000000^[fill:2x10:7,5:#a0a4a8^[fill:6x3:5,2:#a0a4a8^[fill:2x2:7,2:#00000000^[fill:2x2:7,14:#c03020",
 })
 

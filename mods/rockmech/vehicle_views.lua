@@ -2,6 +2,7 @@
 -- 駕駛的 HUD：說明文字、駕駛艙框（全螢幕圖片）、後照鏡與倒車攝影機畫面。由 vehicles.lua 載入。
 
 local V = rockmech.vehicles
+local S = rockmech.S
 local TYPES, NLEV = V.TYPES, V.NLEV
 local h2v, CLEAR, PART = V.h2v, V.CLEAR, V.PART
 
@@ -17,16 +18,16 @@ local function hud_text(self)
 	local s = def.desc
 	if def.cap > 0 then
 		local t = V.load_total(self)
-		s = s .. "　載量 " .. V.volume_text(t, def.cap)
+		s = s .. "  " .. S("Load @1", V.volume_text(t, def.cap))
 		local ore, grade = V.load_ore(self)
-		if ore and (not rockmech.can_see or rockmech.can_see(self.driver, "grade")) then s = s .. "　" .. rockmech.ore_text(ore, grade) end
+		if ore and (not rockmech.can_see or rockmech.can_see(self.driver, "grade")) then s = s .. "  " .. rockmech.ore_text(ore, grade) end
 	end
 	if def.hud then s = s .. def.hud(self) end
-	if def.top_speed then s = s .. ("　%d km/h"):format(self.kmh or 0) end
+	if def.top_speed then s = s .. ("  %d km/h"):format(self.kmh or 0) end
 	if rockmech.fuel_hud then s = s .. rockmech.fuel_hud(self) end
 	local hp = self.hp or 100
-	if hp <= 0 then s = s .. "\n" .. core.colorize("#ff6040", "【報廢】不能開，找機械技工修理")
-	elseif hp < 100 then s = s .. core.colorize(hp < V.WORN and "#ff9040" or "#ffffff", ("　耐久 %d%%"):format(math.floor(hp + 0.5))) end
+	if hp <= 0 then s = s .. "\n" .. core.colorize("#ff6040", S("[WRECKED] Cannot be driven; get a mechanic to repair it"))
+	elseif hp < 100 then s = s .. core.colorize(hp < V.WORN and "#ff9040" or "#ffffff", "  " .. S("Durability @1%", ("%d"):format(math.floor(hp + 0.5)))) end
 	if self.steep then s = s .. "\n" .. self.steep end
 	return s
 end
@@ -41,8 +42,8 @@ local function keys_of(self)
 	local def = TYPES[self.vkind]
 	local out = {}
 	for _, k in ipairs(def.keys and def.keys(self) or {}) do out[#out + 1] = k end
-	if not def.pushed then out[#out + 1] = {"Z", "追蹤相機", on = self.chase ~= nil} end
-	out[#out + 1] = {"Shift", def.pushed and "放手" or "下車"}
+	if not def.pushed then out[#out + 1] = {"Z", S("Chase camera"), on = self.chase ~= nil} end
+	out[#out + 1] = {"Shift", def.pushed and S("Let go") or S("Get out")}
 	return out
 end
 local function keys_clear(self, player)

@@ -8,6 +8,7 @@
 --   飛行中斷線、伺服器重開：起飛點記在玩家 meta，下次登入就回到起飛點。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 local DRONE, PART, REMOTE = "rockmech:drone", "rockmech:drone_part", "rockmech:drone_remote"
 local CMD = "rockmech:drone_cmd"     -- 指揮無人機（無人機＋對講機，檔案最後）
 local CMD_RANGE = 128
@@ -129,7 +130,7 @@ end
 -- 起飛、降落
 ---------------------------------------------------------------------------
 
-local DIRS = {"北", "東北", "東", "東南", "南", "西南", "西", "西北"}
+local DIRS = {S("N"), S("NE"), S("E"), S("SE"), S("S"), S("SW"), S("W"), S("NW")}
 local function heading_text(yaw)
 	-- yaw 0 = 北（+z），往左轉（逆時針）為正：yaw π/2 = 西
 	local deg = (-math.deg(yaw)) % 360
@@ -184,7 +185,7 @@ end
 local function take_off(player)
 	local name = player:get_player_name()
 	if player:get_attach() then
-		core.chat_send_player(name, "[無人機] 先下車再起飛")
+		core.chat_send_player(name, S("[Drone] Get out of the vehicle before taking off"))
 		return
 	end
 	local home = player:get_pos()
@@ -220,7 +221,8 @@ local function take_off(player)
 		f.psnd_move = core.sound_play("rockmech_drone", {to_player = name, loop = true, gain = SOUND_OFF, pitch = PITCH_MOVE})
 		f.moving = false
 	end
-	core.chat_send_player(name, ("[無人機] 起飛！WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點（上限：起飛點上方 %d m、水平 %d m 內）"):format(CEILING, cfg.drone_range))
+	core.chat_send_player(name, S("[Drone] Take-off! WASD to move, E to speed up, Space to climb, Shift to descend; right-click again to return to the take-off point (limits: @1 m above the take-off point, within @2 m horizontally)",
+		("%d"):format(CEILING), ("%d"):format(cfg.drone_range)))
 end
 
 ---------------------------------------------------------------------------
@@ -278,12 +280,14 @@ core.register_globalstep(function(dtime)
 				local vel = d:get_velocity()
 				local g = ground_below(pos)
 				local hd = math.sqrt((pos.x - f.home.x) ^ 2 + (pos.z - f.home.z) ^ 2)
-				player:hud_change(f.hud, "text", ("無人機　對地 %s　比起飛點 %+.0f m（上限 +%d）　距離 %.0f / %d m　%d km/h　方位 %s　座標 (%d, %d, %d)\n%s"):format(
-					g and ("%.0f m"):format(pos.y - g) or "—", pos.y - f.home.y, CEILING, hd, cfg.drone_range,
-					math.floor(math.sqrt(vel.x ^ 2 + vel.y ^ 2 + vel.z ^ 2) * 3.6 + 0.5), heading_text(yaw),
-					math.floor(pos.x + 0.5), math.floor(pos.y + 0.5), math.floor(pos.z + 0.5),
-					(f.out and "已到最大飛行距離，不能再往外飛　再按右鍵回到起飛點" or "再按右鍵回到起飛點")
-					.. (player:get_wielded_item():get_name() == CMD and "　左鍵指揮：點怪手、卡車" or "")))
+				player:hud_change(f.hud, "text", S("Drone   Above ground @1   vs take-off point @2 m (limit +@3)   Distance @4 / @5 m   @6 km/h   Heading @7   Position @8\n@9",
+					g and ("%.0f m"):format(pos.y - g) or "—", ("%+.0f"):format(pos.y - f.home.y), ("%d"):format(CEILING),
+					("%.0f"):format(hd), ("%d"):format(cfg.drone_range),
+					("%d"):format(math.floor(math.sqrt(vel.x ^ 2 + vel.y ^ 2 + vel.z ^ 2) * 3.6 + 0.5)), heading_text(yaw),
+					("(%d, %d, %d)"):format(math.floor(pos.x + 0.5), math.floor(pos.y + 0.5), math.floor(pos.z + 0.5)),
+					(f.out and S("Maximum flight distance reached, can't fly further out   Right-click again to return to the take-off point")
+						or S("Right-click again to return to the take-off point"))
+					.. (player:get_wielded_item():get_name() == CMD and "   " .. S("Left-click to command: click an excavator or truck") or "")))
 			end
 		end
 	end
@@ -314,7 +318,8 @@ rockmech.drone_toggle = function(user) click(nil, user) end
 function rockmech.drone_flying(name) return flights[name] ~= nil end
 function rockmech.drone_remote_item(item) return item == REMOTE or item == CMD end
 core.register_craftitem(REMOTE, {
-	description = ("無人機遙控器\n右鍵起飛（第一人稱）；WASD 移動、E 加速、空白鍵上升、Shift 下降\n再按右鍵回到起飛點；高度上限：起飛點上方 %d m"):format(CEILING),
+	description = S("Drone remote\nRight-click to take off (first person); WASD to move, E to speed up, Space to climb, Shift to descend\nRight-click again to return to the take-off point; height limit: @1 m above the take-off point", ("%d"):format(CEILING)),
+	short_description = S("Drone remote"),
 	inventory_image = "[fill:16x16:#00000000^[fill:12x8:2,6:#3a3a3a^[fill:4x4:3,8:#808080^[fill:4x4:9,8:#808080"
 		.. "^[fill:1x6:3,0:#c0c0c0^[fill:1x6:12,0:#c0c0c0^[fill:2x2:7,9:#40c0ff",
 	stack_max = 1,
@@ -326,8 +331,8 @@ core.register_craftitem(REMOTE, {
 -- 點怪手選定、點地面叫它開過去、點移動中的那台叫它停；點卡車、礦卡打開它的無人駕駛設定。
 -- 從空中指得比地上的對講機遠（CMD_RANGE m）
 core.register_craftitem(CMD, {
-	description = ("指揮無人機（無人機＋對講機）\n右鍵起飛、再按右鍵回到起飛點；WASD 移動、E 加速、空白鍵上升、Shift 下降\n"
-		.. "左鍵（地上、空中都可以）：點怪手選定、點地面叫它開過去；點卡車、礦卡打開無人駕駛設定\n指揮距離 %d m"):format(CMD_RANGE),
+	description = S("Command drone (drone + radio)\nRight-click to take off, right-click again to return to the take-off point; WASD to move, E to speed up, Space to climb, Shift to descend\nLeft-click (on the ground or in the air): click an excavator to select it, click the ground to send it there; click a dump truck or haul truck to open its AHS settings\nCommand range @1 m", ("%d"):format(CMD_RANGE)),
+	short_description = S("Command drone"),
 	inventory_image = "[fill:16x16:#00000000^[fill:12x8:2,6:#3a3a3a^[fill:4x4:3,8:#808080^[fill:4x4:9,8:#70c070"
 		.. "^[fill:1x6:3,0:#c0c0c0^[fill:1x6:12,0:#c0c0c0^[fill:2x2:7,9:#ffb030",
 	stack_max = 1,

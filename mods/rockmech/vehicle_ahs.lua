@@ -23,6 +23,8 @@
 --   只在玩家附近（引擎執行的區塊內）會動，跑太遠會停住，等玩家靠近才繼續。
 
 local V = rockmech.vehicles
+local S = rockmech.S
+local FE = core.formspec_escape
 
 local REC_STEP = 3          -- 錄製路線點的間距 (m)
 local TURN_ONLY = 0.6       -- 方向差超過這個角度 (rad) 就停下來原地轉
@@ -34,7 +36,7 @@ local LATERAL = {0, 1, -1, 2, -2, 3, -3, 4, -4}   -- 傾倒位置的橫向順序
 local DUMP_SPOTS = #LATERAL
 local STANDOFF = 4          -- 待命點在傾倒位置前方（往回程）幾公尺
 local APPROACH = 16         -- 進格柵的方向：看路線上離格柵這麼遠的點，別被最後幾公尺的轉彎帶偏
-local HOPPER_WAIT = "受料倉滿了，等待中"
+local HOPPER_WAIT = S("Hopper full, waiting")
 local CHUTE_R = 20           -- 裝載點（車身中心）離選礦場放料臂轉軸多近，就算在選礦場裝（搆不到的話到了會自己開近）(m)
 local QUEUE_R, QUEUE_SIDE = 25, 10  -- 排隊的位置：離怪手多遠、離進出的路線多遠 (m)
 local RESPOT = {0, math.rad(25), -math.rad(25), math.rad(50), -math.rad(50)}   -- 重新停車輪流試的靠近角度
@@ -51,10 +53,13 @@ local AHS = {}
 V.ahs = AHS
 local module_price      -- 自動駕駛模組的價格（下面定義）
 
-local PHASE = {wait = "在裝載點等裝滿", to_dump = "前往傾倒點", to_spot = "前往傾倒位置", align = "對準傾倒位置",
-	back_in = "倒車進傾倒位置", dumping = "倒土", pull_out = "離開傾倒位置", to_route = "倒完，回到路線",
-	to_load = "回裝載點", full = "傾倒區滿了（推平後在設定畫面重設）",
-	to_exc = "前往怪手", exc_align = "掉頭對準怪手", exc_back = "倒車到怪手旁"}
+local PHASE = {wait = S("Waiting at the loading point to be filled"), to_dump = S("Heading to the dump point"),
+	to_spot = S("Heading to the dump spot"), align = S("Lining up with the dump spot"),
+	back_in = S("Backing into the dump spot"), dumping = S("Dumping"), pull_out = S("Pulling out of the dump spot"),
+	to_route = S("Dumped, returning to the route"),
+	to_load = S("Returning to the loading point"), full = S("Dump area full (doze it flat, then reset it in the settings screen)"),
+	to_exc = S("Heading to the excavator"), exc_align = S("Turning to line up with the excavator"),
+	exc_back = S("Backing up to the excavator")}
 
 local function flat_dist(a, b) return math.sqrt((a.x - b.x) ^ 2 + (a.z - b.z) ^ 2) end
 local function round(p) return {x = math.floor(p.x * 10 + 0.5) / 10, y = math.floor(p.y * 10 + 0.5) / 10, z = math.floor(p.z * 10 + 0.5) / 10} end
@@ -79,7 +84,8 @@ module_price = function()
 	return 8000
 end
 core.register_craftitem(MODULE, {
-	description = "自動駕駛模組 Autonomous haulage kit\n拿著對卡車或礦卡按右鍵安裝（一個模組裝一台），裝了才能用無人駕駛",
+	description = S("Autonomous haulage kit\nHold it and right-click a dump truck or haul truck to install it (one module per vehicle); needed for autonomous driving"),
+	short_description = S("Autonomous haulage kit"),
 	inventory_image = "[fill:16x16:#00000000^[fill:14x10:1,3:#2a3a4a^[fill:12x8:2,4:#3a5a7a^[fill:4x4:3,6:#60e0ff"
 		.. "^[fill:2x2:9,6:#f0c040^[fill:2x2:12,6:#f0c040^[fill:2x2:9,9:#80ff80^[fill:1x3:7,0:#c0c0c0",
 	stack_max = 1,
@@ -89,11 +95,11 @@ function AHS.install(self, player)
 	local name = player:get_player_name()
 	local d = V.TYPES[self.vkind]
 	if not (d and d.bed and not d.no_ahs) then
-		core.chat_send_player(name, "[無人駕駛] 自動駕駛模組只能裝在卡車、礦卡上")
+		core.chat_send_player(name, S("[AHS] The autonomous haulage kit can only be installed on dump trucks and haul trucks"))
 		return
 	end
 	if self.ahs_mod then
-		core.chat_send_player(name, "[無人駕駛] 這台車已經裝了自動駕駛模組")
+		core.chat_send_player(name, S("[AHS] This vehicle already has an autonomous haulage kit"))
 		return
 	end
 	local st = player:get_wielded_item()
@@ -104,15 +110,15 @@ function AHS.install(self, player)
 	if self.uid then mod_store():set_string(MOD_KEY .. self.uid, "1") end
 	V.refresh(self)
 	core.log("action", ("[rockmech] %s 在 %s（%s）裝上自動駕駛模組"):format(name, d.desc, tostring(self.uid)))
-	core.chat_send_player(name, ("[無人駕駛] %s 裝上自動駕駛模組：上車按 E 設定路線"):format(d.desc))
+	core.chat_send_player(name, S("[AHS] Autonomous haulage kit installed on @1: get in and press E to set a route", d.desc))
 end
 
 -- 名牌上的無人駕駛狀態
 function AHS.status(self)
 	local a = self.ahs
 	if not (a and a.on) then return nil end
-	if self.driver then return "無人駕駛：暫停（有人駕駛）" end
-	return "無人駕駛：" .. (a.wait_msg or PHASE[a.phase] or "")
+	if self.driver then return S("AHS: paused (someone is driving)") end
+	return S("AHS: @1", a.wait_msg or PHASE[a.phase] or "")
 end
 
 local function set_phase(self, phase)
@@ -321,7 +327,7 @@ local function ask_yield(self, def, ctx, b)
 	-- 單線道又沒有會車灣：兩台都過不去，告訴學生（要拓寬道路或挖一段加寬段）
 	local nowhere = not bay and flat_dist(target, bp) < 0.5
 	if nowhere then
-		local msg = "單線道沒有會車灣，無法錯車"
+		local msg = S("Single-lane road with no passing bay: the vehicles cannot pass each other")
 		if b.ahs.wait_msg ~= msg then b.ahs.wait_msg = msg; V.refresh(b) end
 		if self.ahs.wait_msg ~= msg then self.ahs.wait_msg = msg; V.refresh(self) end
 	end
@@ -380,7 +386,8 @@ local function drive_to(self, def, ctx, a, ap, target, allow_reverse)
 			local fy_ = far.ahs.yield
 			if fy_ and fy_.by == self.uid and fy_.bay and not fy_.arrived then
 				fy_.left = YIELD_HOLD
-				if a.wait_msg ~= "等對向車進會車灣" then a.wait_msg = "等對向車進會車灣"; V.refresh(self) end
+				local m = S("Waiting for the oncoming vehicle to pull into the passing bay")
+				if a.wait_msg ~= m then a.wait_msg = m; V.refresh(self) end
 				return
 			elseif facing < -0.5 and outranks(self, far) and not fy_ then
 				ask_yield(self, def, ctx, far)
@@ -395,7 +402,8 @@ local function drive_to(self, def, ctx, a, ap, target, allow_reverse)
 		if car and a.block_t > YIELD_AFTER and car.ahs and car.ahs.on and not car.driver and outranks(self, car) then
 			ask_yield(self, def, ctx, car)
 		end
-		if a.wait_msg ~= "前方有障礙，等待中" then a.wait_msg = "前方有障礙，等待中"; V.refresh(self) end
+		local m = S("Obstacle ahead, waiting")
+		if a.wait_msg ~= m then a.wait_msg = m; V.refresh(self) end
 		return
 	end
 	a.block_t = 0
@@ -409,7 +417,7 @@ local function drive_to(self, def, ctx, a, ap, target, allow_reverse)
 		a.esc_n = (a.esc_n or 0) + 1
 		a.esc_t = ESC_BACK
 	end
-	local msg = a.stuck_t > 8 and "卡住了（路上有東西或坡太陡）" or nil
+	local msg = a.stuck_t > 8 and S("Stuck (something on the road, or the slope is too steep)") or nil
 	if msg ~= a.wait_msg then a.wait_msg = msg; V.refresh(self) end
 end
 
@@ -519,7 +527,7 @@ function AHS.step(self, def, ctx)
 			if a.bound and a.phase == "wait" then set_phase(self, "to_exc")
 			elseif a.phase == "align" or a.phase == "back_in" then set_phase(self, "to_spot") end   -- 回待命點重新對準
 		else
-			say(self, a, "讓路中")
+			say(self, a, S("Giving way"))
 			local y = a.yield
 			if flat_dist(pos, y) <= 1.5 and y.next and #y.next > 0 then      -- 到了入口 → 斜切進加寬段 → 往前擺正
 				local q = table.remove(y.next, 1)
@@ -582,8 +590,8 @@ function AHS.step(self, def, ctx)
 				set_phase(self, "to_dump")
 			elseif flat_dist(V.bed_target(self, a.chute), a.chute) > cfg.plant_reach - 1 then
 				drive_to(self, def, ctx, a, ap, a.chute)
-				if not a.wait_msg then say(self, a, "靠近放料臂") end
-			elseif a.wait_msg == "靠近放料臂" then
+				if not a.wait_msg then say(self, a, S("Moving closer to the loading chute")) end
+			elseif a.wait_msg == S("Moving closer to the loading chute") then
 				say(self, a, nil)
 			end
 		else
@@ -609,7 +617,7 @@ function AHS.step(self, def, ctx)
 			drive_to(self, def, ctx, a, ap, target)
 		elseif fwd then
 			if a.hopper and hopper_busy(self, a) then
-				say(self, a, "等前車倒完")
+				say(self, a, S("Waiting for the truck ahead to finish dumping"))
 			else
 				-- 到了傾倒點：找這一趟的傾倒位置
 				if a.hopper then a.hopper = find_hopper(a) or a.hopper end
@@ -623,7 +631,7 @@ function AHS.step(self, def, ctx)
 	elseif a.phase == "to_exc" then
 		local e, u, stop, far = exc_spot(a, def)
 		if far > cfg.ahs_max_dist then
-			say(self, a, ("怪手離路線起點太遠（%d m）"):format(far))
+			say(self, a, S("The excavator is too far from the start of the route (@1 m)", ("%d"):format(far)))
 		else
 			local busy = exc_busy(self, a, e)
 			local out = busy and busy.route[1]
@@ -632,7 +640,7 @@ function AHS.step(self, def, ctx)
 				local side = (out.z - e.z) * u.x - (out.x - e.x) * u.z > 0 and -1 or 1
 				a.queue = a.queue or queue_point(a, def, e, u, side, pos, busy)
 				local q = a.queue
-				if flat_dist(pos, q) < reach then say(self, a, "等前一台裝完")
+				if flat_dist(pos, q) < reach then say(self, a, S("Waiting for the truck ahead to finish loading"))
 				else drive_to(self, def, ctx, a, ap, q) end
 			else
 				a.queue = nil
@@ -683,7 +691,7 @@ function AHS.step(self, def, ctx)
 		local diff = heading_diff(ctx.yaw, -d.x, -d.z)
 		if math.abs(diff) > 0.12 then
 			if diff > 0 then ap.left = true else ap.right = true end
-			say(self, a, not can_swing(self, def, ctx, diff) and "車尾被擋住，等待中" or nil)
+			say(self, a, not can_swing(self, def, ctx, diff) and S("Rear is blocked, waiting") or nil)
 		else
 			a.stuck_t = 0
 			set_phase(self, "back_in")
@@ -715,7 +723,7 @@ function AHS.step(self, def, ctx)
 				a.fails = (a.fails or 0) + 1
 				local nxt = a.fails < 2 and next_spot(a, def)
 				set_phase(self, "pull_out")
-				if nxt then a.next_target = nxt else a.wait_msg = "傾倒區滿了，帶著剩下的回去" end
+				if nxt then a.next_target = nxt else a.wait_msg = S("Dump area full, taking the rest back") end
 			end
 		else
 			ap.jump = true
@@ -824,7 +832,7 @@ core.register_on_leaveplayer(function(player) lines[player:get_player_name()] = 
 local ROUTES_KEY = "ahs_routes"
 local storage = rockmech.collapse.storage
 local routes = core.deserialize(storage:get_string(ROUTES_KEY)) or {}
-local NO_ROUTE = "（還沒有路線）"
+local NO_ROUTE = S("(no routes yet)")
 local function route_names()
 	local names = {}
 	for k in pairs(routes) do names[#names + 1] = k end
@@ -858,7 +866,7 @@ end
 local editing = {}
 local picked = {}           -- 玩家名稱 → 下拉選單選到的路線
 local deleting = {}         -- 玩家名稱 → 按過一次「刪除」、等確認的路線
-local function fmt(p) return p and ("(%d, %d, %d)"):format(math.floor(p.x + 0.5), math.floor(p.y + 0.5), math.floor(p.z + 0.5)) or "未設定" end
+local function fmt(p) return p and ("(%d, %d, %d)"):format(math.floor(p.x + 0.5), math.floor(p.y + 0.5), math.floor(p.z + 0.5)) or S("not set") end
 local function formspec(self, name)
 	local a = self.ahs or {}
 	local names = route_names()
@@ -867,32 +875,34 @@ local function formspec(self, name)
 		if n == (picked[name] or a.route_name) then sel = i end
 	end
 	local st = a.rec and (rockmech.grate_center(self.object:get_pos())
-			and "錄製中：在受料倉範圍內，在這裡按「設為傾倒點」會自己對準"
-			or "錄製路線中（開到傾倒點後按「設為傾倒點」）")
-		or a.on and (a.wait_msg or PHASE[a.phase] or "") or "停止"
+			and S("Recording: within the hopper range; press “Set as dump point” here and it will line up by itself")
+			or S("Recording the route (drive to the dump point, then press “Set as dump point”)"))
+		or a.on and (a.wait_msg or PHASE[a.phase] or "") or S("Not running")
 	return table.concat({
 		"formspec_version[6]size[9,11.1]",
-		"label[0.5,0.6;無人駕駛（AHS）]",
-		("label[0.5,1.2;裝載點：%s]"):format(a.bound and "跟著怪手" or a.chute and (fmt(a.load) .. "（選礦場放料臂）") or fmt(a.load)),
-		("label[0.5,1.7;傾倒點：%s%s]"):format(fmt(a.dump), a.hopper and "（破碎站受料倉）" or ""),
-		("label[0.5,2.2;%s：%d 個點　傾倒區：已用 %d / %d 個位置]"):format(a.route_name or "路線", a.route and #a.route or 0,
-			math.min(a.spot or 0, DUMP_SPOTS), DUMP_SPOTS),
-		("label[0.5,2.7;狀態：%s]"):format(st),
-		"button[0.5,3.2;8,0.8;rec;設為裝載點並開始錄製路線（目前位置）]",
-		"button[0.5,4.1;8,0.8;dump;設為傾倒點（結束錄製）]",
-		"button[0.5,5.0;3.9,0.8;start;啟動（啟動後請下車）]",
-		"button[4.6,5.0;3.9,0.8;stop;停止]",
-		"button[0.5,5.9;3.9,0.8;go;立即出發（不等裝滿）]",
-		"button[4.6,5.9;3.9,0.8;reset;重設傾倒區]",
-		"button[0.5,6.8;3.9,0.8;line;顯示／隱藏路線]",
-		"button_exit[4.6,6.8;3.9,0.8;ok;關閉]",
-		("button[0.5,7.7;8,0.8;bind;%s]"):format(a.bound and "解除綁定怪手" or "綁定最近的怪手（裝載點跟著怪手走）"),
-		"button[0.5,8.6;2.6,0.8;save;儲存路線]",
-		("dropdown[3.2,8.6;2.7,0.8;route_pick;%s;%d;false]"):format(#names > 0 and table.concat(names, ",") or NO_ROUTE, sel),
-		"button[6,8.6;2.5,0.8;use;套用路線]",
-		("button[0.5,9.5;8,0.8;delete;%s]"):format(deleting[name] and deleting[name] == (picked[name] or a.route_name)
-			and ("再按一次確認刪除" .. deleting[name]) or "刪除選到的路線（要按兩次）"),
-		"label[0.5,10.6;裝滿 → 沿路線到傾倒線，倒車進這趟的位置倒土 → 開回裝載點；前方有人或車會停]",
+		"label[0.5,0.6;" .. FE(S("Autonomous haulage (AHS)")) .. "]",
+		("label[0.5,1.2;%s]"):format(FE(S("Loading point: @1", a.bound and S("follows the excavator")
+			or a.chute and S("@1 (plant loading chute)", fmt(a.load)) or fmt(a.load)))),
+		("label[0.5,1.7;%s]"):format(FE(a.hopper and S("Dump point: @1 (crusher hopper)", fmt(a.dump)) or S("Dump point: @1", fmt(a.dump)))),
+		("label[0.5,2.2;%s]"):format(FE(S("@1: @2 points   Dump area: @3 / @4 spots used", a.route_name or S("Route"),
+			tostring(a.route and #a.route or 0), tostring(math.min(a.spot or 0, DUMP_SPOTS)), tostring(DUMP_SPOTS)))),
+		("label[0.5,2.7;%s]"):format(FE(S("Status: @1", st))),
+		"button[0.5,3.2;8,0.8;rec;" .. FE(S("Set loading point here and start recording the route")) .. "]",
+		"button[0.5,4.1;8,0.8;dump;" .. FE(S("Set as dump point (stop recording)")) .. "]",
+		"button[0.5,5.0;3.9,0.8;start;" .. FE(S("Start (get out after starting)")) .. "]",
+		"button[4.6,5.0;3.9,0.8;stop;" .. FE(S("Stop")) .. "]",
+		"button[0.5,5.9;3.9,0.8;go;" .. FE(S("Leave now (don't wait to be full)")) .. "]",
+		"button[4.6,5.9;3.9,0.8;reset;" .. FE(S("Reset dump area")) .. "]",
+		"button[0.5,6.8;3.9,0.8;line;" .. FE(S("Show/hide route")) .. "]",
+		"button_exit[4.6,6.8;3.9,0.8;ok;" .. FE(S("Close")) .. "]",
+		("button[0.5,7.7;8,0.8;bind;%s]"):format(FE(a.bound and S("Unbind excavator")
+			or S("Bind the nearest excavator (the loading point follows it)"))),
+		"button[0.5,8.6;2.6,0.8;save;" .. FE(S("Save route")) .. "]",
+		("dropdown[3.2,8.6;2.7,0.8;route_pick;%s;%d;false]"):format(#names > 0 and table.concat(names, ",") or FE(NO_ROUTE), sel),
+		"button[6,8.6;2.5,0.8;use;" .. FE(S("Apply route")) .. "]",
+		("button[0.5,9.5;8,0.8;delete;%s]"):format(FE(deleting[name] and deleting[name] == (picked[name] or a.route_name)
+			and S("Press again to confirm deleting @1", deleting[name]) or S("Delete the selected route (press twice)"))),
+		"label[0.5,10.6;" .. FE(S("Full → follow the route to the dump line, back into this trip's spot and dump → return to the loading point; stops for people or vehicles ahead")) .. "]",
 	})
 end
 function AHS.open(self, player)
@@ -900,11 +910,11 @@ function AHS.open(self, player)
 	if AHS.needs_module(self) then
 		core.show_formspec(name, "rockmech:ahs_need", table.concat({
 			"formspec_version[6]size[9,3.6]",
-			"label[0.5,0.6;無人駕駛（AHS）]",
-			("label[0.5,1.3;%s]"):format(core.formspec_escape(
-				("這台車還沒裝自動駕駛模組：向機械設備課長買（$%d）"):format(module_price()))),
-			("label[0.5,1.8;%s]"):format(core.formspec_escape("拿著模組對這台車按右鍵就裝上（一個模組裝一台）")),
-			"button_exit[3,2.5;3,0.8;ok;知道了]",
+			"label[0.5,0.6;" .. FE(S("Autonomous haulage (AHS)")) .. "]",
+			("label[0.5,1.3;%s]"):format(FE(S("This vehicle has no autonomous haulage kit yet: buy one from the equipment manager ($@1)",
+				("%d"):format(module_price())))),
+			("label[0.5,1.8;%s]"):format(FE(S("Hold the kit and right-click this vehicle to install it (one kit per vehicle)"))),
+			"button_exit[3,2.5;3,0.8;ok;" .. FE(S("Got it")) .. "]",
 		}))
 		return
 	end
@@ -925,20 +935,21 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		a.load, a.dump, a.route, a.rec, a.on, a.spot = round(pos), nil, {round(pos)}, true, false, 0
 		a.hopper, a.route_name = nil, nil
 		lines[name] = a
-		msg = "開始錄製：開到倒土的地方"
+		msg = S("Recording started: drive to where you want to dump")
 	elseif fields.dump then
-		if not a.rec then msg = "要先設裝載點並開始錄製"
+		if not a.rec then msg = S("Set the loading point and start recording first")
 		else
 			a.route[#a.route + 1] = round(pos)
 			a.dump, a.rec = round(pos), false
 			a.hopper = find_hopper(a)
 			a.chute = rockmech.plant_chute_near and rockmech.plant_chute_near(a.load, CHUTE_R) or nil
 			if a.chute then a.bound, a.spot_at = nil, nil end
-			msg = ("路線錄好了（%d 個點）%s%s"):format(#a.route, a.hopper and "：傾倒點在破碎站，會自己倒車對準受料倉" or "",
-				a.chute and "；裝載點在選礦場放料臂範圍內，停著等它裝（不跟怪手走）" or "")
+			msg = S("Route recorded (@1 points)@2@3", tostring(#a.route),
+				a.hopper and S(": the dump point is at the crusher; the truck backs up to the hopper by itself") or "",
+				a.chute and S("; the loading point is within reach of the plant loading chute, so the truck parks and waits to be loaded (does not follow the excavator)") or "")
 		end
 	elseif fields.start then
-		if not (a.route and #a.route >= 2 and a.dump) then msg = "要先錄好路線（裝載點 → 傾倒點）"
+		if not (a.route and #a.route >= 2 and a.dump) then msg = S("Record a route first (loading point → dump point)")
 		else
 			a.on = true
 			a.hopper = find_hopper(a)        -- 破碎站可能是錄完路線才蓋的，或錄的時候差一點在範圍外
@@ -953,20 +964,20 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			end
 			if bi == 1 then a.phase = a.bound and "to_exc" or "wait" else a.phase, a.idx = "to_load", bi end
 			a.wait_msg = nil
-			msg = "已啟動：請下車"
+			msg = S("Started: please get out")
 		end
 	elseif fields.line then
 		lines[name] = lines[name] ~= a and a or nil
 	elseif fields.stop then
 		a.on = false
 		self.autopilot = nil
-		msg = "已停止"
+		msg = S("Stopped.")
 	elseif fields.go then
-		if a.on and a.phase == "wait" then a.idx = a.bound and 1 or 2; a.phase = "to_dump"; msg = "出發" end
+		if a.on and a.phase == "wait" then a.idx = a.bound and 1 or 2; a.phase = "to_dump"; msg = S("Departing") end
 	elseif fields.bind then
 		if a.bound then
 			a.bound, a.spot_at = nil, nil
-			msg = "解除綁定怪手"
+			msg = S("Excavator unbound")
 		else
 			local best, bd
 			for _, o in ipairs(core.get_objects_inside_radius(pos, cfg.ahs_max_dist)) do
@@ -979,42 +990,42 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			end
 			if best then
 				a.bound = {uid = best.uid, pos = round(best.object:get_pos()), kind = best.vkind}
-				msg = ("綁定怪手（%d m 外）：裝載點跟著它走"):format(bd)
+				msg = S("Bound to the excavator (@1 m away): the loading point follows it", ("%d"):format(bd))
 			else
-				msg = ("%d m 內沒有怪手"):format(cfg.ahs_max_dist)
+				msg = S("No excavator within @1 m", ("%d"):format(cfg.ahs_max_dist))
 			end
 		end
 	elseif fields.reset then
 		a.spot = 0
-		msg = "傾倒區重設：從第一個位置開始"
+		msg = S("Dump area reset: starting from the first spot")
 	elseif fields.save then
-		if not (a.route and #a.route >= 2 and a.dump) then msg = "要先錄好路線（裝載點 → 傾倒點）"
+		if not (a.route and #a.route >= 2 and a.dump) then msg = S("Record a route first (loading point → dump point)")
 		else
 			save_route(a)
 			picked[name] = a.route_name
-			msg = "已存成" .. a.route_name .. "：別台車選它、按「套用路線」就能用"
+			msg = S("Saved as @1: other vehicles can select it and press “Apply route”", a.route_name)
 		end
 	elseif fields.use then
 		local pick = picked[name]
-		if not routes[pick or ""] then msg = "還沒有存好的路線"
+		if not routes[pick or ""] then msg = S("No saved routes yet")
 		else
 			use_route(a, pick)
 			self.autopilot = nil
 			lines[name] = a
-			msg = "已套用" .. pick .. "：按「啟動」後下車"
+			msg = S("Applied @1: press “Start”, then get out", pick)
 		end
 	elseif fields.delete then
 		local pick = picked[name] or a.route_name
-		if not routes[pick or ""] then msg = "沒有選到存著的路線"
+		if not routes[pick or ""] then msg = S("No saved route selected")
 		elseif deleting[name] ~= pick then deleting[name] = pick     -- 第一次：等確認
 		else
 			delete_route(a, pick)
 			deleting[name], picked[name] = nil, nil
-			msg = "已刪除" .. pick .. "（已經套用的車照常跑）"
+			msg = S("Deleted @1 (vehicles already using it keep running)", pick)
 		end
 	end
 	if not fields.delete then deleting[name] = nil end      -- 按了別的就取消刪除
-	if msg then core.chat_send_player(name, "[無人駕駛] " .. msg) end
+	if msg then core.chat_send_player(name, S("[AHS] @1", msg)) end
 	V.refresh(self)
 	if fields.quit or fields.ok then editing[name], picked[name], deleting[name] = nil, nil, nil
 	else core.show_formspec(name, "rockmech:ahs", formspec(self, name)) end

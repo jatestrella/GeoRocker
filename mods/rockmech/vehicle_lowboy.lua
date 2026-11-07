@@ -6,6 +6,7 @@
 -- 車身：牽引車在前（車頭 z +1.5），平板從 z −1.5 到 −9.5，平板面離車底 0.5 m。
 
 local V = rockmech.vehicles
+local S = rockmech.S
 local box_tex = V.box_tex
 local WHEEL, TREAD = V.WHEEL, V.TREAD
 
@@ -15,14 +16,14 @@ local LOADED_SPEED = 8      -- 載車時直線加速的上限 (m/s，約 29 km/h
 local DECK_Z, DECK_TOP = -5.6, -1.0     -- 平板中心（車身座標 z）、平板面（車身座標 y；車底 −1.5）
 
 local c = "#d86018"
-local def = {desc = "平板拖車 Lowboy", short = "拖車", color = c, cap = 0, speed = 4,
+local def = {desc = S("Lowboy trailer"), short = S("Trailer"), color = c, cap = 0, speed = 4,
 	top_speed = 12, accel = 1.5,   -- 直線加速到約 43 km/h（同卡車）；載車時見 def.move
 	tire = 1.0, max_grade = math.rad(15),
 	half = 1.5, top = 1.4, lat = {-1, 0, 1}, eye_up = 1.5, eye_fwd = 0.9, rear = 9.5,
 	mirror = {x = 1.35, y = 1.2, z = 0.6}, rearcam = {x = 0, y = 1.0, z = -9.7},
 	tilt = {front = 0.9, rear = -8.5, side_z = -4.0, side_x = 1.1},
 	tail_lat = {-1.3, 0, 1.3}, tail_dy = {0.6},
-	item_desc = ("右鍵上車；E 把平板旁邊的車拉上平板（自重 ≤ %d t：怪手、推土機、鑽機、卡車…，報廢的也行），再按 E 卸在車尾"):format(MAX_T)}
+	item_desc = S("Right-click to get in; E pulls a vehicle next to the deck onto it (own weight ≤ @1 t: excavators, dozers, drill rigs, trucks…, wrecked ones too); press E again to unload it at the rear", ("%d"):format(MAX_T))}
 V.MASS.lowboy = 25
 do   -- 圖示：橘色牽引車、長長的低平板、上面一台小怪手的輪廓
 	local r = {}
@@ -89,9 +90,9 @@ local function load_vehicle(self, name)
 			if d <= LOAD_R and (not bd or d < bd) then best, bd = e, d end
 		end
 	end
-	if not best then return "平板旁邊 " .. LOAD_R .. " m 內沒有可以載的車" end
+	if not best then return S("No vehicle to load within @1 m of the deck", ("%d"):format(LOAD_R)) end
 	local t = V.MASS[best.vkind] or 20
-	if t > MAX_T then return ("%s 自重 %d t，超過 %d t 載不動"):format(V.TYPES[best.vkind].desc, t, MAX_T) end
+	if t > MAX_T then return S("@1 weighs @2 t, more than the @3 t it can carry", V.TYPES[best.vkind].desc, ("%d"):format(t), ("%d"):format(MAX_T)) end
 	attach(self, best)
 	self.carry_uid = best.uid
 	return nil, V.TYPES[best.vkind].desc
@@ -117,10 +118,10 @@ function def.action(self, ctx)
 	self.t_act = 0.6
 	if self.carry_uid then
 		local what = unload_vehicle(self)
-		self.msg = what and ("卸下 " .. what) or nil
+		self.msg = what and S("Unloaded @1", what) or nil
 	else
 		local why, what = load_vehicle(self, self.driver)
-		self.msg = why or ("載上 " .. what)
+		self.msg = why or S("Loaded @1", what)
 	end
 	V.update_hud(self)
 end
@@ -147,10 +148,10 @@ end
 
 function def.hud(self)
 	local e = carried(self)
-	return "\n平板：" .. (e and V.TYPES[e.vkind].desc or (self.carry_uid and "（載的車還沒載入）" or "空的"))
+	return "\n" .. S("Deck: @1", e and V.TYPES[e.vkind].desc or (self.carry_uid and S("(carried vehicle not loaded yet)") or S("empty")))
 		.. (self.msg and ("\n" .. self.msg) or "")
 end
-function def.keys(self) return {{"E", self.carry_uid and "卸車" or "載車（平板旁的車）", on = self.carry_uid ~= nil}} end
+function def.keys(self) return {{"E", self.carry_uid and S("Unload vehicle") or S("Load vehicle (next to the deck)"), on = self.carry_uid ~= nil}} end
 function def.on_save(self, data) data.carry_uid = self.carry_uid end
 function def.on_load(self, data) self.carry_uid = data.carry_uid end
 

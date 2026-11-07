@@ -11,6 +11,7 @@
 -- 有輸送帶的區塊一直載入（每格放的時候強制載入它的區塊，拆掉時放掉）。
 
 local cfg = rockmech.cfg
+local S = rockmech.S
 local V = rockmech.vehicles
 local H = rockmech.hopper_lib
 local storage = rockmech.collapse.storage
@@ -118,7 +119,7 @@ for h = 0, 7 do
 		local top = st == "" and RUBBER or V.rubble_tex(st == "o" and ore and ore.rubble or rockmech.RUBBLE)
 		local sel = {-0.5, -0.5, -0.5, 0.5, top_of(h) + 0.12, 0.5}
 		core.register_node(name, {
-			description = "輸送帶",
+			description = S("Conveyor belt"),
 			drawtype = "nodebox",
 			paramtype = "light",
 			paramtype2 = "4dir",
@@ -418,15 +419,17 @@ local function slopes()
 	return list
 end
 local function slope_text(r)
-	if r == 0 then return "平" end
-	return ("%s坡 %.0f°"):format(r > 0 and "上" or "下", math.deg(math.atan(math.abs(r) / 8)))
+	if r == 0 then return S("flat") end
+	local a = ("%.0f"):format(math.deg(math.atan(math.abs(r) / 8)))
+	return r > 0 and S("uphill @1°", a) or S("downhill @1°", a)
 end
 local function describe(stack, r)
-	stack:get_meta():set_string("description", ("輸送帶（%s）\n右鍵放：點輸送帶從那格往前接，點地面從地上開始\n左鍵點輸送帶收回那一格，點別的地方切換坡度"):format(slope_text(r)))
+	stack:get_meta():set_string("description", S("Conveyor belt (@1)\nRight-click to place: click a belt to extend from that block, click the ground to start from the ground\nLeft-click a belt to pick up that block; left-click elsewhere to change the slope", slope_text(r)))
 end
 
 core.register_craftitem(ITEM, {
-	description = "輸送帶\n右鍵放：點輸送帶從那格往前接，點地面從地上開始\n左鍵點輸送帶收回那一格，點別的地方切換坡度",
+	description = S("Conveyor belt\nRight-click to place: click a belt to extend from that block, click the ground to start from the ground\nLeft-click a belt to pick up that block; left-click elsewhere to change the slope"),
+	short_description = S("Conveyor belt"),
 	inventory_image = "rockmech_icon_belt.png",      -- devtools/make_icons.py
 	stack_max = 99,
 	on_use = function(itemstack, user, pointed)
@@ -450,7 +453,7 @@ core.register_craftitem(ITEM, {
 		local r = list[i % #list + 1]
 		itemstack:get_meta():set_int("slope", r)
 		describe(itemstack, r)
-		core.chat_send_player(user:get_player_name(), ("[輸送帶] 坡度：%s（最大傾角 %g°）"):format(slope_text(r), cfg.conveyor_max_angle))
+		core.chat_send_player(user:get_player_name(), S("[Conveyor] Slope: @1 (maximum inclination @2°)", slope_text(r), ("%g"):format(cfg.conveyor_max_angle)))
 		return itemstack
 	end,
 	on_place = function(itemstack, placer, pointed)
@@ -461,7 +464,7 @@ core.register_craftitem(ITEM, {
 			return udef.on_rightclick(pointed.under, un, placer, itemstack, pointed) or itemstack
 		end
 		local name = placer:get_player_name()
-		local function say(s) core.chat_send_player(name, "[輸送帶] " .. s) end
+		local function say(s) core.chat_send_player(name, S("[Conveyor]") .. " " .. s) end
 		local look = placer:get_look_dir()
 		local fd = core.dir_to_fourdir({x = look.x, y = 0, z = look.z})
 		local d = core.fourdir_to_dir(fd)
@@ -482,21 +485,21 @@ core.register_craftitem(ITEM, {
 				end
 			end
 		end
-		local tx, tz, S
+		local tx, tz, sf
 		if fpos then
 			local d0 = dir_of(fnode)
-			if d0.x == -d.x and d0.z == -d.z then say("不能往回接"); return itemstack end
+			if d0.x == -d.x and d0.z == -d.z then say(S("Cannot extend backwards")); return itemstack end
 			local r = (d0.x == d.x and d0.z == d.z) and itemstack:get_meta():get_int("slope") or 0   -- 轉彎那格是平的
 			r = math.max(-rmax(), math.min(rmax(), r))
-			tx, tz, S = fpos.x + d0.x, fpos.z + d0.z, surf(fpos, fnode) + r
+			tx, tz, sf = fpos.x + d0.x, fpos.z + d0.z, surf(fpos, fnode) + r
 		else
-			tx, tz, S = pointed.above.x, pointed.above.z, pointed.above.y * 8
+			tx, tz, sf = pointed.above.x, pointed.above.z, pointed.above.y * 8
 		end
-		local p = {x = tx, y = math.floor(S / 8), z = tz}
-		local h = S - p.y * 8
+		local p = {x = tx, y = math.floor(sf / 8), z = tz}
+		local h = sf - p.y * 8
 		local nd = core.registered_nodes[core.get_node(p).name]
 		if not (nd and nd.buildable_to) then
-			say(("下一格 %s 有東西，要先挖開"):format(core.pos_to_string(p)))
+			say(S("The next block @1 is occupied; dig it out first", core.pos_to_string(p)))
 			return itemstack
 		end
 		if core.is_protected(p, name) then core.record_protection_violation(p, name); return itemstack end

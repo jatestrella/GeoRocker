@@ -3,6 +3,7 @@
 -- 鑽孔、柱狀圖、岩芯箱、鑽孔日誌都跟手持鑽機共用（coredrill.lua 的 rockmech.coredrill_start）。
 -- 鑽的時候迴轉頭沿桅桿往下走；駕駛可以下車，但車子一移動就停在那個深度。由 vehicles.lua 載入。
 
+local S = rockmech.S
 local V = rockmech.vehicles
 local box_tex, update_hud = V.box_tex, V.update_hud
 
@@ -11,7 +12,7 @@ local MAST_FOOT = {x = 0, y = -1.5, z = 2.3}
 local MAST_TOP = 6.2
 local HEAD_TOP, HEAD_LOW = 5.6, -0.9
 
-local def = {desc = "岩芯鑽探車 Core drill rig", short = "鑽探車", color = "#e8e8e0", cap = 0, speed = 1.2,
+local def = {desc = S("Core drill rig"), short = S("Core rig"), color = "#e8e8e0", cap = 0, speed = 1.2,
 	half = 1.5, rear = 3.0, lat = {-1, 0, 1}, eye_up = 1.75, eye_fwd = 0.9, eye_side = -0.5,
 	tail_lat = {-1.1, 0, 1.1}, tail_dy = {1.2, 2.2},
 	mirror = {x = 1.35, y = 1.4, z = 0.6},
@@ -19,7 +20,7 @@ local def = {desc = "岩芯鑽探車 Core drill rig", short = "鑽探車", color
 	cam = {o = {x = 2.6, y = 1.8, z = 5.2}, target = MAST_FOOT, mark = MAST_FOOT,
 		hfov = math.rad(75), vfov = math.rad(46), w = 56, h = 31},
 	exhaust = {x = 0.9, y = 1.4, z = -2.2},
-	item_desc = ("右鍵上車；E 在桅桿下方往下鑽岩芯孔（最深 %d m），得到岩芯箱與鑽孔柱狀圖"):format(MAX_DEPTH)}
+	item_desc = S("Right-click to get in; E drills a core hole downward below the mast (up to @1 m) and gives you core boxes and a borehole log", ("%d"):format(MAX_DEPTH))}
 V.MASS.corerig = 22
 do   -- 圖示：履帶、白色車身、藍色高桅桿
 	local c, r = def.color, {}
@@ -76,9 +77,9 @@ local function collar_of(self)
 		y = y - 1
 	end
 	local above = {x = x, y = y, z = z}
-	if core.get_node(above).name ~= "air" then return nil, "孔口要是空的" end
+	if core.get_node(above).name ~= "air" then return nil, S("The hole collar must be clear") end
 	local below = core.get_node({x = x, y = y - 1, z = z}).name
-	if not (rockmech.lith_of_node[below] or rockmech.is_rubble(below)) then return nil, "桅桿下面不是岩石" end
+	if not (rockmech.lith_of_node[below] or rockmech.is_rubble(below)) then return nil, S("There is no rock under the mast") end
 	return above
 end
 
@@ -86,15 +87,15 @@ function def.action(self, ctx)
 	if not ctx.ctrl.aux1 or not rockmech.coredrill_start then return end
 	self.t_act = 0.6
 	local name = self.driver
-	if self.coring then self.msg = "正在鑽"; update_hud(self); return end
+	if self.coring then self.msg = S("Already drilling"); update_hud(self); return end
 	local collar, why = collar_of(self)
 	if not collar then self.msg = why; update_hud(self); return end
 	local p0 = self.object:get_pos()
 	local obj = self.object
 	local ok = rockmech.coredrill_start(name, collar, MAX_DEPTH, function()
 		local p = obj:get_pos()
-		if not p then return "鑽探車不見了" end
-		if vector.distance(p, p0) > 0.4 then return "鑽探車移動了" end
+		if not p then return S("The core rig is gone") end
+		if vector.distance(p, p0) > 0.4 then return S("The core rig moved") end
 	end, function()
 		self.coring = nil
 		place_head(self, HEAD_TOP)
@@ -119,12 +120,12 @@ function def.hud(self)
 	local s = "\n"
 	if self.coring then
 		local d, max = rockmech.coredrill_depth(self.coring)
-		s = s .. ("鑽岩芯中 %d / %d m（車子不能動）"):format(d or 0, max or MAX_DEPTH)
+		s = s .. S("Coring @1 / @2 m (the rig cannot move)", ("%d"):format(d or 0), ("%d"):format(max or MAX_DEPTH))
 	end
 	if self.msg then s = s .. "\n" .. self.msg end
 	return s
 end
-function def.keys(self) return {{"E", ("鑽岩芯（最深 %d m）"):format(MAX_DEPTH), on = self.coring ~= nil}} end
+function def.keys(self) return {{"E", S("Core drilling (up to @1 m)", ("%d"):format(MAX_DEPTH)), on = self.coring ~= nil}} end
 function def.on_spawn(self) place_head(self, HEAD_TOP) end
 
 V.register("corerig", def)

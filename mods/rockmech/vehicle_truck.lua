@@ -5,6 +5,7 @@
 --   碰撞箱是駕駛艙那段（half），車斗那段（往後到 −rear）倒車、轉彎前自己檢查。挖土機可以倒進車斗
 
 local V = rockmech.vehicles
+local S = rockmech.S
 local TYPES, NLEV = V.TYPES, V.NLEV
 local box_tex, load_total, update_hud = V.box_tex, V.load_total, V.update_hud
 
@@ -116,13 +117,13 @@ local function hauler(def, spec)
 		local ore, grade = V.load_ore(self)
 		-- 名牌大家都看得到：經營模式不顯示品位（要有品位判讀能力，在駕駛 HUD 看）
 		local mix = ore and not rockmech.cfg.career and "\n" .. rockmech.ore_text(ore, grade) or ""
-		V.nametag(self, "載量 " .. V.volume_text(t, cap) .. mix .. (st and ("\n" .. st) or ""), t >= cap and "#ff8060" or "#ffffff")
+		V.nametag(self, S("Load @1", V.volume_text(t, cap)) .. mix .. (st and ("\n" .. st) or ""), t >= cap and "#ff8060" or "#ffffff")
 		if not self.tip then place_bed(self, 0) end
 	end
 	function def.keys(self)
-		local k = {{"空白鍵", "倒車斗", on = self.tip ~= nil}}
+		local k = {{S("Space"), S("Tip bed"), on = self.tip ~= nil}}
 		if not def.no_ahs then
-			k[2] = {"E", self.ahs and self.ahs.rec and "錄製路線中" or "無人駕駛設定", on = self.ahs and self.ahs.rec}
+			k[2] = {"E", self.ahs and self.ahs.rec and S("Recording route") or S("AHS settings"), on = self.ahs and self.ahs.rec}
 		end
 		return k
 	end
@@ -196,13 +197,13 @@ local WHEEL = "[fill:16x16:#1c1c1c^[fill:10x10:3,3:#3a3a3a^[fill:6x6:5,5:#8a8a8a
 local TREAD = "[fill:16x16:#1c1c1c^[fill:16x1:0,3:#2e2e2e^[fill:16x1:0,8:#2e2e2e^[fill:16x1:0,13:#2e2e2e"
 V.WHEEL, V.TREAD = WHEEL, TREAD
 
-local truck = {desc = "卡車 Dump truck", short = "卡車", color = "#c84020", cap = 12 * NLEV, speed = 5.0,
+local truck = {desc = S("Dump truck"), short = S("Truck"), color = "#c84020", cap = 12 * NLEV, speed = 5.0,
 	top_speed = 12, accel = 1.5,   -- 直線加速到約 43 km/h
 	tire = 1.0,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 	rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	max_grade = math.rad(17),   -- 重載砂石車約 30%
-	item_desc = "右鍵上車；空白鍵把車斗倒在車尾（載量 12 m³）"}
+	item_desc = S("Right-click to get in; Space tips the bed out at the rear (capacity @1 m³)", "12")}
 do   -- 圖示：車斗、駕駛室、三軸
 	local c, r = truck.color, {}
 	r[#r + 1] = {2, 12, 19, 10, c}; r[#r + 1] = {2, 12, 19, 2, "#8a2a10"}

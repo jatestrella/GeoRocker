@@ -9,6 +9,7 @@
 --   * 移除 2×2×2 large_rock（改由 mapgen.lua 依深度產生岩性）
 --   * 實體改名 rockmech:sliding_node（保留 physics_core:sliding_node 舊名相容）
 
+local S = rockmech.S
 local collapse = {}
 rockmech.collapse = collapse
 
@@ -1251,8 +1252,9 @@ function collapse.keyblock_state(pos)
     return rockmech.keyblock.block_at(grid, collapse.keyblock_params(), pos.x, pos.y, pos.z)
 end
 
-local MODE_NAME = {fall = "落下", plane = "平面滑動", wedge = "楔形滑動"}
-collapse.keyblock_mode_name = MODE_NAME
+local MODE_NAME = {fall = "落下", plane = "平面滑動", wedge = "楔形滑動"}   -- log 用
+-- 給玩家看的（HUD／資訊頁，ui.lua）：翻譯過的
+collapse.keyblock_mode_name = {fall = S("falling"), plane = S("planar sliding"), wedge = S("wedge sliding")}
 
 -- 單格的懸臂狀態（HUD／資訊頁／羅盤用；與懸臂斷裂同一個模型與範圍）
 function collapse.overhang_state(pos)

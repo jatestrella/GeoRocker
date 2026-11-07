@@ -12,6 +12,7 @@
 local V = rockmech.vehicles
 local cfg = rockmech.cfg
 local H = rockmech.hopper_lib
+local S = rockmech.S
 
 local YARD = {x1 = 10, x2 = 36, z1 = -24, z2 = -42}   -- 交車區（相對營地中心 x0；z 是絕對座標，營地中心在 z = 0）
 
@@ -53,13 +54,13 @@ function rockmech.cells_blocked(cells, y0, y1, except)
 	for _, o in ipairs(core.get_objects_in_area({x = x1 - 8, y = y0 - 4, z = z1 - 8}, {x = x2 + 8, y = y1 + 4, z = z2 + 8})) do
 		local p = o:get_pos()
 		if o:is_player() then
-			if o:get_player_name() ~= skip and p.y >= y0 - 2 and p.y <= y1 and hit(p.x, p.z) then return "人" end
+			if o:get_player_name() ~= skip and p.y >= y0 - 2 and p.y <= y1 and hit(p.x, p.z) then return S("a person") end
 		else
 			local e = o:get_luaentity()
 			local def = e and e.vkind and V.TYPES[e.vkind]
 			if def then
 				for _, c in ipairs(body_cells(def, p.x, p.z, o:get_yaw())) do
-					if set[c[1] .. "," .. c[2]] then return def.short or def.desc:match("^(%S+)") end
+					if set[c[1] .. "," .. c[2]] then return def.short or def.desc end      -- 翻譯過的名稱不能再 match 切字
 				end
 			end
 		end
@@ -90,10 +91,10 @@ local function find_slot(x0, kind)
 		local n = core.get_node({x = mx, y = y, z = mz}).name
 		if n ~= "ignore" and not V.passable(n) then base = y; break end
 	end
-	if not base then return nil, "交車區還沒載入" end
+	if not base then return nil, S("The delivery yard is not loaded yet") end
 	local off = ((def.half * 2) % 2 == 1) and 0 or 0.5
 	local height = def.half + (def.top or def.half)
-	local why = "交車區沒有空位"
+	local why = S("The delivery yard has no free space")
 	-- 兩排：北排車頭朝北、車頭貼著交車區北緣；南排車頭朝南、貼著南緣。每台車前面都是空地，直接開得出去；
 	-- 左右跟別的車至少隔 GAP m（從西往東找）
 	local GAP = 1
@@ -126,7 +127,7 @@ local function find_slot(x0, kind)
 						end
 						local who = rockmech.cells_blocked(wide, gy + 1, gy + 1 + height)
 						if not who then return {x = cx, y = gy + 0.5 + def.half, z = cz}, nil, r.yaw end
-						why = "交車區停滿了（有" .. who .. "擋著）"
+						why = S("The delivery yard is full (@1 is in the way)", who)
 					end
 					break
 				end
@@ -145,18 +146,19 @@ end
 -- 商店（career.lua）買車：先找交車區的位置，找得到才收錢。回傳 是否成功, 訊息
 function rockmech.deliver_vehicle(name, kind)
 	local def = V.TYPES[kind]
-	if not def then return false, "沒有這種車" end
+	if not def then return false, S("No such vehicle") end
 	local x0 = camp_x(name)
 	local pos, why, yaw = find_slot(x0, kind)
-	if not pos then return false, why .. "：先把交車區的車開走" end
+	if not pos then return false, S("@1: drive the vehicles out of the delivery yard first", why) end
 	local obj = core.add_entity(pos, "rockmech:" .. kind)
-	if not obj then return false, "交車失敗（那裡還沒載入）" end
+	if not obj then return false, S("Delivery failed (that area is not loaded yet)") end
 	obj:set_yaw(yaw)
 	local e = obj:get_luaentity()
 	if e then V.set_owner(e, rockmech.account_of(name)) end
 	core.log("action", ("[rockmech] delivered %s to %s at %s"):format(kind, name, core.pos_to_string(vector.round(pos))))
-	return true, ("%s停在營地東南邊的交車區 (%d, %d)，車頭朝%s"):format(def.short or def.desc:match("^(%S+)"),
-		math.floor(pos.x + 0.5), math.floor(pos.z + 0.5), yaw == 0 and "北" or "南")
+	local vname, px, pz = def.short or def.desc, ("%d"):format(math.floor(pos.x + 0.5)), ("%d"):format(math.floor(pos.z + 0.5))
+	if yaw == 0 then return true, S("@1 is parked in the delivery yard southeast of the camp (@2, @3), facing north", vname, px, pz) end
+	return true, S("@1 is parked in the delivery yard southeast of the camp (@2, @3), facing south", vname, px, pz)
 end
 
 -- 是不是交車的車（商店不給物品）：rockmech:<kind>_item 而且 kind 是車
@@ -172,14 +174,14 @@ end
 -- 施工單的圖示：建築物的圖示，右下角疊一張小施工單（devtools/make_icons.py）
 local BADGE = "rockmech_order_badge.png"
 local ORDERS = {      -- 施工單 → 原本的物品、標籤顏色、名稱、有沒有受料倉（要檢查施工範圍）
-	{order = "rockmech:order_crusher", item = "rockmech:crusher", color = "#b08a20", label = "破碎站", hopper = true},
-	{order = "rockmech:order_crusher_big", item = "rockmech:crusher_big", color = "#4a5058", label = "大型破碎站", hopper = true},
-	{order = "rockmech:order_plant", item = "rockmech:plant", color = "#3a7ab0", label = "選礦場", hopper = true, plant = true},
-	{order = "rockmech:order_belt", item = "rockmech:belt", color = "#262626", label = "輸送帶",
-		how = "跟輸送帶一樣：點輸送帶往前接、點地面從地上開始"},
-	{order = "rockmech:order_locker", item = "rockmech:locker", color = "#6a7078", label = "置物箱", how = "放在點到的地方"},
-	{order = "rockmech:order_loadout", item = "rockmech:loadout", color = "#8a8e92", label = "裝車料斗",
-		how = "3×3 m 平地、上方 6 m 淨空；放料臂朝自己這邊，頂上格柵接輸送帶"},
+	{order = "rockmech:order_crusher", item = "rockmech:crusher", color = "#b08a20", label = S("Crusher"), hopper = true},
+	{order = "rockmech:order_crusher_big", item = "rockmech:crusher_big", color = "#4a5058", label = S("Large crusher"), hopper = true},
+	{order = "rockmech:order_plant", item = "rockmech:plant", color = "#3a7ab0", label = S("Ore plant"), hopper = true, plant = true},
+	{order = "rockmech:order_belt", item = "rockmech:belt", color = "#262626", label = S("Conveyor belt"),
+		how = S("same as a conveyor belt: point at a belt to extend it, point at the ground to start on the ground")},
+	{order = "rockmech:order_locker", item = "rockmech:locker", color = "#6a7078", label = S("Locker"), how = S("placed where you point")},
+	{order = "rockmech:order_loadout", item = "rockmech:loadout", color = "#8a8e92", label = S("Loadout bin"),
+		how = S("3×3 m flat ground, 6 m clear above; the discharge arm faces you, the grating on top takes a conveyor belt")},
 }
 local by_order, by_item = {}, {}
 for _, o in ipairs(ORDERS) do by_order[o.order], by_item[o.item] = o, o end
@@ -209,9 +211,13 @@ end
 
 for _, o in ipairs(ORDERS) do
 	local orig = core.registered_items[o.item]
-	local desc = o.label .. "施工單\n拿著對地面按右鍵，就在那裡施工（" .. (o.hopper and "受料倉朝自己這邊挖，先看地上的預覽框" or o.how) .. "）"
+	local how = o.hopper and S("the hopper is dug on your side; check the preview frame on the ground first") or o.how
+	local desc = o.item == "rockmech:belt"
+		and S("@1 work order\nHold it and right-click the ground to build there (@2)\nLeft-click a conveyor belt to take that section back (added to the work order); click elsewhere to change the slope", o.label, how)
+		or S("@1 work order\nHold it and right-click the ground to build there (@2)", o.label, how)
 	core.register_craftitem(o.order, {
-		description = desc .. (o.item == "rockmech:belt" and "\n左鍵點輸送帶收回那一格（加回施工單），點別的地方切換坡度" or ""),
+		description = desc,
+		short_description = S("@1 work order", o.label),
 		inventory_image = (orig and orig.inventory_image ~= "" and orig.inventory_image or "rockmech_icon_crusher.png") .. "^" .. BADGE,
 		stack_max = o.item == "rockmech:belt" and 99 or 1,
 		on_place = function(itemstack, placer, pointed)
@@ -223,7 +229,7 @@ for _, o in ipairs(ORDERS) do
 				local cells = rockmech.facility_cells(o.item, a, dx, dz)
 				local who = rockmech.cells_blocked(cells, a.y - 1, a.y + 4, placer)
 				if who then
-					core.chat_send_player(name, ("[施工] 施工範圍裡有%s：先移開"):format(who))
+					core.chat_send_player(name, S("[Construction] There is @1 in the construction area: move it away first", who))
 					return itemstack
 				end
 				local tmp = ItemStack(o.item)
@@ -242,7 +248,7 @@ for _, o in ipairs(ORDERS) do
 							if nd and nd.walkable then q.y = y + 0.5; break end
 						end
 						placer:set_pos(q)
-						core.chat_send_player(name, "[施工] 你站在受料倉的位置，先把你移到倉外")
+						core.chat_send_player(name, S("[Construction] You were standing where the hopper goes, so you were moved outside it"))
 						break
 					end
 				end
@@ -275,7 +281,7 @@ for _, o in ipairs(ORDERS) do
 			local m = itemstack:get_meta()
 			m:set_int("slope", res:get_meta():get_int("slope"))
 			local d = res:get_meta():get_string("description")
-			if d ~= "" then m:set_string("description", o.label .. "施工單　" .. d) end
+			if d ~= "" then m:set_string("description", S("@1 work order   @2", o.label, d)) end
 			return itemstack
 		end or nil,
 	})

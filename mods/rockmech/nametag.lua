@@ -7,6 +7,7 @@
 --   無人機飛行時名牌一起藏（drone.lua 呼叫 rockmech.nametag_hide）。
 
 local storage = core.get_mod_storage()
+local S = rockmech.S
 local NICK = "nick:"
 local NICK_MAX = 12
 local TAG = "rockmech:nametag"
@@ -108,7 +109,7 @@ core.register_on_joinplayer(function(player)
 	end)
 	if storage:get_string(NICK .. name) == "" and not is_teacher(name) then
 		core.after(4, function()
-			core.chat_send_player(name, "[名牌] 你還沒設定暱稱，同學現在看到的是你的帳號。按 I →「個人資料」可以設定暱稱")
+			core.chat_send_player(name, S("[Name tag] You have not set a nickname, so classmates see your account name. Press I → \"Profile\" to set a nickname"))
 		end)
 	end
 end)
@@ -157,14 +158,14 @@ function rockmech.set_nick(name, nick)
 	if nick == "" or nick == name then
 		storage:set_string(NICK .. name, "")
 	else
-		if ulen(nick) > NICK_MAX then return ("暱稱最多 %d 個字"):format(NICK_MAX) end
-		if nick:find("[()（）]") then return "暱稱不能有括號" end
+		if ulen(nick) > NICK_MAX then return S("A nickname can have at most @1 characters", tostring(NICK_MAX)) end
+		if nick:find("[()（）]") then return S("A nickname cannot contain parentheses") end
 		local low = nick:lower()
 		for _, k in ipairs(storage:get_keys()) do
 			local other = k:match("^" .. NICK .. "(.+)$")
-			if other and other ~= name and storage:get_string(k):lower() == low then return "這個暱稱已經有人用了" end
+			if other and other ~= name and storage:get_string(k):lower() == low then return S("This nickname is already taken") end
 		end
-		if core.player_exists(nick) and nick ~= name then return "暱稱不能是別人的帳號" end
+		if core.player_exists(nick) and nick ~= name then return S("A nickname cannot be someone else's account name") end
 		storage:set_string(NICK .. name, nick)
 	end
 	core.log("action", ("[rockmech] %s 的暱稱改成「%s」"):format(name, nick_of(name)))
@@ -177,10 +178,10 @@ end
 function rockmech.nick_formspec(name, y)
 	local F = core.formspec_escape
 	local fs = {
-		("label[0,%g;%s]"):format(y, F("暱稱（同學在你頭上看到的名字，最多 " .. NICK_MAX .. " 字；空白 = 用帳號）")),
+		("label[0,%g;%s]"):format(y, F(S("Nickname (the name classmates see above your head, at most @1 characters; blank = use your account name)", tostring(NICK_MAX)))),
 		("field[0.3,%g;4.5,0.8;rm_nick;;%s]"):format(y + 0.8, F(storage:get_string(NICK .. name))),
 		("field_close_on_enter[rm_nick;false]"),
-		("button[4.6,%g;1.8,0.8;rm_nick_set;設定]"):format(y + 0.45),
+		("button[4.6,%g;1.8,0.8;rm_nick_set;%s]"):format(y + 0.45, F(S("Set nickname"))),
 	}
 	return table.concat(fs)
 end
@@ -192,7 +193,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= "" or not (fields.rm_nick_set or (fields.key_enter_field == "rm_nick")) then return end
 	local name = player:get_player_name()
 	local err = rockmech.set_nick(name, fields.rm_nick)
-	nick_msg[name] = err or ("已設定：同學看到「" .. nick_of(name) .. "」")
+	nick_msg[name] = err or S("Set: classmates see \"@1\"", nick_of(name))
 	if sfinv and sfinv.set_player_inventory_formspec then sfinv.set_player_inventory_formspec(player) end
 	return true
 end)

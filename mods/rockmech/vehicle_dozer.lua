@@ -9,17 +9,18 @@
 --         推出來的高度不跟著車子的高低走。多的碎石照樣推成前面那堆。
 
 local V = rockmech.vehicles
+local S = rockmech.S
 local NLEV = V.NLEV
 local box_tex, face_cells, ground_y, passable = V.box_tex, V.face_cells, V.ground_y, V.passable
 local deposit_column, update_hud = V.deposit_column, V.update_hud
 local collapse = rockmech.collapse
 
-local def = {desc = "推土機 Bulldozer", color = "#e8c828", cap = 0, speed = 2.5,
+local def = {desc = S("Bulldozer"), short = S("Dozer"), color = "#e8c828", cap = 0, speed = 2.5,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0, mirror = {x = 1.0, y = 1.4, z = -0.2},
 	tilt = {front = 1.3, rear = -2.1, side_z = -0.4, side_x = 1.1}, max_grade = math.rad(30),   -- 履帶推土機
 	exhaust = {x = 0.5, y = 1.1, z = 1.0},   -- 排氣管口（排煙，vehicles.lua 的 V.exhaust）
 	stepheight = 0.3,   -- 放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
-	item_desc = "右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走"}
+	item_desc = S("Right-click to get in; E lowers/raises the blade; with the blade down, drive forward to push rubble away")}
 do   -- 圖示：履帶、車身、駕駛室、前面的推土鏟、後面的松土器
 	local c, r = def.color, {}
 	V.icon_track(r, 3, 23, 21, 7)
@@ -101,7 +102,7 @@ local PILE_H, PILE_ROWS = 2, 3   -- 鏟刀前那堆：最高 2 格；前一排�
 local GRADES = {nil, 0, 0.05, 0.10, -0.10, -0.05}
 local N_GRADES = 6
 local function grade_text(g)
-	if not g then return "關（鏟刀貼著地面推）" end
+	if not g then return S("Off (blade follows the ground)") end
 	return ("%+d%%"):format(math.floor(g * 100 + 0.5))
 end
 local function design_at(d, x, z) return d.h + d.g * ((x - d.x) * d.dx + (z - d.z) * d.dz) end
@@ -145,7 +146,7 @@ local function grade_cut(self, pos, s, lat, y0, got, grade)
 				cut_cell(p, node, k, keep, got, grade)
 				if keep > 0 then break end
 			elseif not passable(node.name) then
-				if y + 0.5 > t + 0.5 / NLEV then return "鏟刀前、設計坡面以上是岩石" end
+				if y + 0.5 > t + 0.5 / NLEV then return S("Rock above the design grade in front of the blade") end
 				break
 			end
 		end
@@ -185,7 +186,7 @@ local function push(self, pos, s)
 		src = face_cells(pos, s, 1, 2, y0, 3, lat)
 		for _, c in ipairs(src) do
 			local n = core.get_node(c).name
-			if not rockmech.rubble_level[n] and not passable(n) then return "鏟刀前是岩石" end   -- 岩石：推不動
+			if not rockmech.rubble_level[n] and not passable(n) then return S("Rock in front of the blade") end   -- 岩石：推不動
 		end
 		for _, c in ipairs(face_cells(pos, s, 1, 1, y0, 1, lat)) do src[#src + 1] = c end
 		for _, c in ipairs(src) do
@@ -229,7 +230,7 @@ local function push(self, pos, s)
 			end
 		end
 	end
-	return blocked and ("前面的碎石已堆滿（最高 %d 格、往前 %d 排）"):format(PILE_H, PILE_ROWS) or nil
+	return blocked and S("The rubble ahead is piled full (max @1 blocks high, @2 rows ahead)", ("%d"):format(PILE_H), ("%d"):format(PILE_ROWS)) or nil
 end
 
 -- 鏟刀前那堆碎石的量（級）：鏟刀前 PILE_ROWS 排、高 3 層
@@ -265,13 +266,15 @@ local function settle_pile(self)
 end
 
 function def.hud(self)
-	return (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石")
-		.. "\n設計坡度：" .. grade_text(self.grade) .. (self.design and ("，從 (%d, %d) 高 %.1f 起算"):format(self.design.x, self.design.z, self.design.h) or "")
-		.. "（切換時從鏟刀這裡重新起算）"
-		.. "\n鏟刀前碎石 " .. V.volume_text(self.pile_lv or 0)
-		.. (self.push_msg and ("\n推不動：" .. self.push_msg .. "，倒車換個方向或先推開前面") or "")
+	local ds = self.design
+	return "  " .. (self.blade and S("[BLADE DOWN] drive forward to push rubble away") or S("[BLADE UP] not pushing rubble"))
+		.. "\n" .. (ds and S("Design grade: @1, from (@2, @3) at height @4 (resets from the blade when switched)", grade_text(self.grade),
+				("%d"):format(ds.x), ("%d"):format(ds.z), ("%.1f"):format(ds.h))
+			or S("Design grade: @1 (resets from the blade when switched)", grade_text(self.grade)))
+		.. "\n" .. S("Rubble in front of the blade: @1", V.volume_text(self.pile_lv or 0))
+		.. (self.push_msg and ("\n" .. S("Can't push: @1; back up and change direction, or clear the way first", self.push_msg)) or "")
 end
-function def.keys(self) return {{"E", "放鏟（推碎石）", on = self.blade}, {"空白鍵", "設計坡度"}} end
+function def.keys(self) return {{"E", S("Blade down (push rubble)"), on = self.blade}, {S("Space"), S("Design grade")}} end
 function def.on_load(self, data)
 	if data.blade ~= nil then self.blade = data.blade else self.blade = true end
 	self.blade_h = self.blade and 0 or BLADE_UP

@@ -13,6 +13,7 @@
 --     對孔噴凝土、或鑽穿噴凝土就是這些方塊；之後裝藥、裝岩栓都維持噴過凝土。
 --   支護後面的岩石沒了（挖掉、爆破、坍塌）就跟著消失；爆炸會直接炸掉。
 
+local S = rockmech.S
 local scfg = rockmech.cfg.support
 local HOLE = "rockmech:drill_hole"
 local LINING = "rockmech:shotcrete_lining"
@@ -63,8 +64,9 @@ local function rods_update(pos, node)
 	if meta:get_int("eff") ~= eff + 1 then
 		meta:set_int("eff", eff + 1)
 		meta:set_string("infotext", eff < n
-			and ("岩栓（長 %g m，在 %d m 處被挖斷：只剩前 %d m 錨在岩石裡、錨定力 %d kN）"):format(bolt_len(pos), eff, eff, capacity(eff))
-			or ("岩栓（長 %g m、錨定力 %d kN）"):format(bolt_len(pos), capacity(bolt_len(pos))))
+			and S("Rock bolt (length @1 m, cut at @2 m: only the first @3 m is still anchored in rock, anchorage capacity @4 kN)",
+				("%g"):format(bolt_len(pos)), ("%d"):format(eff), ("%d"):format(eff), ("%d"):format(math.floor(capacity(eff))))
+			or S("Rock bolt (length @1 m, anchorage capacity @2 kN)", ("%g"):format(bolt_len(pos)), ("%d"):format(math.floor(capacity(bolt_len(pos))))))
 	end
 	for s = 1, n do
 		local c = along(pos, node.param2, s)
@@ -105,7 +107,7 @@ local function section_owned(pos, node)
 end
 
 local function tell(player, msg)
-	if player and player:is_player() then core.chat_send_player(player:get_player_name(), "[支護] " .. msg) end
+	if player and player:is_player() then core.chat_send_player(player:get_player_name(), S("[Support]") .. " " .. msg) end
 end
 local function creative(player)
 	return core.is_creative_enabled(player and player:is_player() and player:get_player_name() or "")
@@ -149,7 +151,7 @@ for n = 1, MAX_LAYERS do
 	local T = 0.06 * n
 	local tex = "[fill:16x16:#a4a29c^[fill:2x2:3,4:#8e8c86^[fill:2x2:10,2:#b4b2ac^[fill:2x2:6,11:#8e8c86^[fill:2x2:12,9:#b4b2ac"
 	core.register_node(LININGS[n], {
-		description = ("噴凝土層 %d 層 Shotcrete lining"):format(n),
+		description = S("Shotcrete lining (@1 layers)", tostring(n)),
 		drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
 		node_box = {type = "connected", fixed = {},
 			connect_top = {-0.5, 0.5 - T, -0.5, 0.5, 0.5, 0.5},
@@ -183,10 +185,10 @@ do
 	local lining = "[fill:16x16:#a4a29c^[fill:2x2:3,4:#8e8c86^[fill:2x2:10,2:#b4b2ac^[fill:2x2:6,11:#8e8c86^[fill:2x2:12,9:#b4b2ac"
 	local sprayed_top = lining .. "^[fill:10x10:3,3:#8a8a86^[fill:4x4:6,6:#6a6a66"    -- 墊板與螺帽同岩栓
 	local sprayed_side = lining .. "^[fill:16x2:0,13:#7a7a76"
-	local list = {{BOLT, "岩栓 Rock bolt (installed)", {PLATE, NUT}, {steel, plate, plate, plate, plate, plate}, -0.34}}
+	local list = {{BOLT, S("Rock bolt (installed)"), {PLATE, NUT}, {steel, plate, plate, plate, plate, plate}, -0.34}}
 	for n = 1, MAX_LAYERS do
 		local t = -0.5 + 0.06 * n
-		list[#list + 1] = {BOLTS_SC[n], ("噴凝土岩栓 %d 層 Rock bolt with shotcrete"):format(n),
+		list[#list + 1] = {BOLTS_SC[n], S("Rock bolt with shotcrete (@1 layers)", tostring(n)),
 			{{-0.5, -0.5, -0.5, 0.5, t, 0.5}, {-0.22, t, -0.22, 0.22, t + 0.04, 0.22}, {-0.07, t + 0.04, -0.07, 0.07, t + 0.12, 0.07}},
 			{sprayed_top, lining, sprayed_side, sprayed_side, sprayed_side, sprayed_side}, t + 0.14, n}
 	end
@@ -205,7 +207,7 @@ do
 				core.swap_node(pos, {name = rockmech.hole_variant(HOLE, BOLT_LAYERS[node.name] or 0), param2 = node.param2})
 				local meta = core.get_meta(pos)
 				local len = meta:get_float("depth")
-				meta:set_string("infotext", ("鑽孔（深 %g m）"):format(len > 0 and len or rockmech.cfg.blast.hole_depth))
+				meta:set_string("infotext", S("Drill hole (depth @1 m)", ("%g"):format(len > 0 and len or rockmech.cfg.blast.hole_depth)))
 				if digger and digger:is_player() and not creative(digger) then
 					local left = digger:get_inventory():add_item("main", ItemStack(BOLT_ITEM))
 					if not left:is_empty() then core.add_item(pos, left) end
@@ -223,7 +225,7 @@ do
 	local tex = "[fill:16x16:#151515^[fill:16x2:0,0:#3a3a38^[fill:16x2:0,14:#3a3a38"
 	for _, v in ipairs({{SEC1, {DOT}}, {SEC2, {DOT, {-0.07, 0.49, -0.07, 0.07, 0.5, 0.07}}}}) do
 		core.register_node(v[1], {
-			description = "岩栓斷面 Rock bolt section",
+			description = S("Rock bolt section"),
 			drawtype = "nodebox", paramtype = "light", paramtype2 = "wallmounted", sunlight_propagates = true,
 			node_box = {type = "fixed", fixed = v[2]},
 			tiles = {tex},
@@ -235,15 +237,16 @@ end
 
 -- 岩栓：對鑽孔按右鍵裝進去
 core.register_craftitem(BOLT_ITEM, {
-	description = ("岩栓 Rock bolt\n對鑽孔按右鍵裝進去（長度 = 孔深；錨定力 = 握裹力 %d kN/m × 長度，上限 %d kN）")
-		:format(scfg.bolt_grip, scfg.bolt_yield),
+	description = S("Rock bolt\nRight-click a drill hole to install it (length = hole depth; anchorage capacity = bond strength @1 kN/m × length, max @2 kN)",
+		("%d"):format(math.floor(scfg.bolt_grip)), ("%d"):format(math.floor(scfg.bolt_yield))),
+	short_description = S("Rock bolt"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x11:7,1:#a8a8a4^[fill:8x2:4,12:#6a6a66^[fill:4x2:6,10:#8a8a86",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
 		local p = pointed.under
 		local node = core.get_node(p)
 		if rockmech.hole_kind(node.name) ~= HOLE then
-			tell(placer, "岩栓要裝進鑽孔（先用鑿岩機鑽孔，再對孔按右鍵）")
+			tell(placer, S("Rock bolts go into drill holes (drill a hole with the rock drill first, then right-click the hole)"))
 			return itemstack
 		end
 		local layers = core.get_item_group(node.name, "shotcrete")
@@ -251,7 +254,7 @@ core.register_craftitem(BOLT_ITEM, {
 		local meta = core.get_meta(p)
 		local len = meta:get_float("depth")
 		if len <= 0 then len = rockmech.cfg.blast.hole_depth end
-		meta:set_string("infotext", ("岩栓（長 %g m、錨定力 %d kN）"):format(len, capacity(len)))
+		meta:set_string("infotext", S("Rock bolt (length @1 m, anchorage capacity @2 kN)", ("%g"):format(len), ("%d"):format(math.floor(capacity(len)))))
 		if not creative(placer) then itemstack:take_item() end
 		resolve(p)
 		return itemstack
@@ -260,8 +263,9 @@ core.register_craftitem(BOLT_ITEM, {
 
 -- 噴凝土：對岩面按右鍵，噴這一面 3×3 格
 core.register_craftitem(SHOTCRETE, {
-	description = ("噴凝土 Shotcrete（一袋）\n對岩面按右鍵，噴這一面 3×3 格（支護壓力 %.2f MPa）\n重複噴可以加厚，最多 %d 層，壓力照層數累加\n對碎石按右鍵：表層 3×3 格直接壓實（不流動、沒有車轍）")
-		:format(scfg.shotcrete_p, MAX_LAYERS),
+	description = S("Shotcrete (one bag)\nRight-click a rock face to spray a 3×3 area of that face (support pressure @1 MPa)\nSpray again to thicken it, up to @2 layers; the pressure adds up per layer\nRight-click rubble: compacts the top 3×3 surface directly (no flow, no ruts)",
+		("%.2f"):format(scfg.shotcrete_p), tostring(MAX_LAYERS)),
+	short_description = S("Shotcrete"),
 	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#b8b6b0^[fill:10x2:3,3:#8e8c86^[fill:6x3:5,8:#5a6a8a",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
@@ -283,7 +287,7 @@ core.register_craftitem(SHOTCRETE, {
 					end
 				end
 			end end
-			if count == 0 then tell(placer, "這裡的碎石已經是夯實碎石了")
+			if count == 0 then tell(placer, S("The rubble here is already compacted"))
 			elseif not creative(placer) then itemstack:take_item() end
 			return itemstack
 		end
@@ -301,7 +305,7 @@ core.register_craftitem(SHOTCRETE, {
 			end
 		end
 		if not is_rock(core.get_node(rock).name) then
-			tell(placer, "噴凝土要噴在岩面上")
+			tell(placer, S("Shotcrete must be sprayed on a rock face"))
 			return itemstack
 		end
 		local count = 0
@@ -325,7 +329,7 @@ core.register_craftitem(SHOTCRETE, {
 			end
 		end end
 		if count == 0 then
-			tell(placer, ("這裡已經噴滿 %d 層了（或岩面前面不是空的）"):format(MAX_LAYERS))
+			tell(placer, S("This is already sprayed to @1 layers (or the space in front of the rock face is not empty)", tostring(MAX_LAYERS)))
 		elseif not creative(placer) then
 			itemstack:take_item()
 		end

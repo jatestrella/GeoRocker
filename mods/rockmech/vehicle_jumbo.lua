@@ -10,6 +10,7 @@
 --     空白鍵：設定每孔幾條（1～4）。
 -- 真的工地也是分開的：鑽堡只鑽孔，裝藥台車裝藥（鑽孔時旁邊已有裝藥孔不安全）。
 
+local S = rockmech.S
 local V = rockmech.vehicles
 local box_tex, seg_attach, to_local, update_hud = V.box_tex, V.seg_attach, V.to_local, V.update_hud
 
@@ -121,8 +122,8 @@ do
 	local BOOM_REST = {{x = -0.6, y = -0.1, z = 2.4}, {x = 0.6, y = -0.1, z = 2.4}} -- 收起時臂端（推進樑中心）
 	local FRONT = 2.4          -- 收起的推進樑伸出車頭 (m)
 
-	local def = {desc = "鑽堡 Drill jumbo", color = "#d86a18", cap = 0,
-		item_desc = "右鍵上車；E 依爆破孔設計圖在前方工作面鑽孔、空白鍵 編輯設計圖"}
+	local def = {desc = S("Drill jumbo"), color = "#d86a18", cap = 0,
+		item_desc = S("Right-click to get in; E drills the face ahead following the blast hole pattern, Space edits the pattern")}
 	do   -- 圖示：輪式車身、護頂、往前伸的兩支鑽臂
 		local c, r = def.color, {}
 		r[#r + 1] = {2, 16, 19, 8, c}; r[#r + 1] = {2, 8, 9, 2, c}
@@ -204,12 +205,12 @@ do
 
 	function def.hud(self)
 		local plan = pattern(self)
-		local s = ("\n爆破孔設計圖 %d × %d"):format(plan.w, plan.h)
-		if self.drill then s = s .. ("　鑽孔中 %d / %d"):format(self.drill.done, #self.drill.list) end
+		local s = "\n" .. S("Blast hole pattern @1 × @2", ("%d"):format(plan.w), ("%d"):format(plan.h))
+		if self.drill then s = s .. "  " .. S("Drilling @1 / @2", ("%d"):format(self.drill.done), ("%d"):format(#self.drill.list)) end
 		if self.msg then s = s .. "\n" .. self.msg end
 		return s
 	end
-	function def.keys(self) return {{"E", "依設計圖鑽孔", on = self.drill ~= nil}, {"空白鍵", "編輯設計圖"}} end
+	function def.keys(self) return {{"E", S("Drill to pattern"), on = self.drill ~= nil}, {S("Space"), S("Edit pattern")}} end
 	function def.on_load(self, data)
 		if data.plan and data.plan.cells and #data.plan.cells == data.plan.w * data.plan.h then self.plan = data.plan end
 	end
@@ -236,7 +237,7 @@ do
 					if rockmech.make_hole(h.under, h.above) then
 						local meta = core.get_meta(h.above)
 						meta:set_string("plan", h.plan)
-						meta:set_string("infotext", h.plan == "r" and "鑽孔（設計：空孔，不要裝藥）" or "鑽孔（設計：裝藥孔）")
+						meta:set_string("infotext", h.plan == "r" and S("Drill hole (design: relief hole, do not charge)") or S("Drill hole (design: charged hole)"))
 					end
 					dr.done = dr.done + 1
 					b.hole = nil
@@ -246,7 +247,7 @@ do
 		end
 		if dr.done >= #dr.list then
 			self.drill = nil
-			self.msg = ("鑽好 %d 個孔"):format(dr.done)
+			self.msg = S("Drilled @1 holes", ("%d"):format(dr.done))
 			rest_booms(self)
 			update_hud(self)
 		end
@@ -259,8 +260,8 @@ do
 		local cs = 0.9
 		local W = math.max(9, plan.w * cs + 1.5)
 		local fs = {("formspec_version[6]size[%.2f,%.2f]"):format(W, plan.h * cs + 4.6),
-			"label[0.5,0.5;爆破孔設計圖（面向工作面看；最下面一排是地面那層）]",
-			"label[0.5,1.0;點格子切換：● 裝藥孔　○ 空孔　· 不鑽]",
+			"label[0.5,0.5;" .. core.formspec_escape(S("Blast hole pattern (looking at the face; the bottom row is at floor level)")) .. "]",
+			"label[0.5,1.0;" .. core.formspec_escape(S("Click a cell to toggle: ● charged hole  ○ relief hole  · not drilled")) .. "]",
 			"style_type[button;font_size=*1.3]"}
 		local x0 = (W - plan.w * cs) / 2
 		for j = 0, plan.h - 1 do
@@ -271,12 +272,16 @@ do
 		end
 		local y = 1.7 + plan.h * cs
 		fs[#fs + 1] = "style_type[button;font_size=*1]"
-		fs[#fs + 1] = ("label[0.5,%.2f;寬 %d]button[1.6,%.2f;0.7,0.7;w_dec;−]button[2.35,%.2f;0.7,0.7;w_inc;+]"):format(y + 0.35, plan.w, y, y)
-		fs[#fs + 1] = ("label[3.5,%.2f;高 %d]button[4.6,%.2f;0.7,0.7;h_dec;−]button[5.35,%.2f;0.7,0.7;h_inc;+]"):format(y + 0.35, plan.h, y, y)
+		fs[#fs + 1] = ("label[0.5,%.2f;%s]button[1.6,%.2f;0.7,0.7;w_dec;−]button[2.35,%.2f;0.7,0.7;w_inc;+]"):format(y + 0.35,
+			core.formspec_escape(S("Width @1", ("%d"):format(plan.w))), y, y)
+		fs[#fs + 1] = ("label[3.5,%.2f;%s]button[4.6,%.2f;0.7,0.7;h_dec;−]button[5.35,%.2f;0.7,0.7;h_inc;+]"):format(y + 0.35,
+			core.formspec_escape(S("Height @1", ("%d"):format(plan.h))), y, y)
 		y = y + 1.0
-		fs[#fs + 1] = ("button[0.5,%.2f;2.6,0.8;p_all;全部裝藥]button[3.2,%.2f;2.6,0.8;p_cut;中心空孔掏槽]button[5.9,%.2f;2.6,0.8;p_cut4;十字空孔掏槽]"):format(y, y, y)
+		fs[#fs + 1] = ("button[0.5,%.2f;2.6,0.8;p_all;%s]button[3.2,%.2f;2.6,0.8;p_cut;%s]button[5.9,%.2f;2.6,0.8;p_cut4;%s]"):format(
+			y, core.formspec_escape(S("Charge all")), y, core.formspec_escape(S("Center relief-hole cut")), y, core.formspec_escape(S("Cross relief-hole cut")))
 		y = y + 0.95
-		fs[#fs + 1] = ("button[0.5,%.2f;2.6,0.8;p_none;清空]button_exit[%.2f,%.2f;2.6,0.8;ok;完成]"):format(y, W - 3.1, y)
+		fs[#fs + 1] = ("button[0.5,%.2f;2.6,0.8;p_none;%s]button_exit[%.2f,%.2f;2.6,0.8;ok;%s]"):format(y, core.formspec_escape(S("Clear")),
+			W - 3.1, y, core.formspec_escape(S("Done")))
 		return table.concat(fs)
 	end
 	local function show_plan(self, name)
@@ -323,7 +328,7 @@ do
 			self.t_act = 0.5
 			local list = hole_list(self, ctx.pos, ctx.s)
 			if #list == 0 then
-				self.msg = ("前方 %d 格內沒有可鑽的岩面（車頭要對著岩壁）"):format(REACH + 1)
+				self.msg = S("No rock face to drill within @1 m ahead (point the front at the rock wall)", ("%d"):format(REACH + 1))
 			else
 				self.drill = {list = list, next = 1, done = 0, booms = {{}, {}}}
 				self.msg = nil
@@ -346,8 +351,8 @@ do
 	local BASKET = {x = 1.2, y = 0.9, z = 1.0}
 	local FRONT = 1.4          -- 收起的工作籃伸出車頭 (m)
 
-	local def = {desc = "裝藥台車 Charging unit", color = "#2a7ac0", cap = 0,
-		item_desc = "右鍵上車；E 把前方工作面的鑽孔裝藥（空孔跳過）、空白鍵 設定每孔幾條"}
+	local def = {desc = S("Charging unit"), color = "#2a7ac0", cap = 0,
+		item_desc = S("Right-click to get in; E charges the holes in the face ahead (relief holes are skipped), Space sets the sticks per hole")}
 	do   -- 圖示：輪式車身、後面的炸藥罐、吊臂與工作籃
 		local c, r = def.color, {}
 		r[#r + 1] = {2, 17, 19, 7, c}; r[#r + 1] = {2, 10, 8, 7, "#e8e8e0"}; r[#r + 1] = {2, 13, 8, 1, c}
@@ -407,15 +412,15 @@ do
 	end
 
 	function def.hud(self)
-		local s = ("\n每孔 %d 條乳膠炸藥"):format(per_hole(self))
+		local s = "\n" .. S("@1 emulsion sticks per hole", ("%d"):format(per_hole(self)))
 		local d = self.driver and core.get_player_by_name(self.driver)
 		local n = stock(d)
-		s = s .. (n == math.huge and "　（創造模式不扣）" or ("　物品欄 %d 條"):format(n))
-		if self.charging then s = s .. ("　裝藥中 %d / %d"):format(self.charging.done, #self.charging.list) end
+		s = s .. "  " .. (n == math.huge and S("(not used up in creative mode)") or S("@1 sticks in inventory", ("%d"):format(n)))
+		if self.charging then s = s .. "  " .. S("Charging @1 / @2", ("%d"):format(self.charging.done), ("%d"):format(#self.charging.list)) end
 		if self.msg then s = s .. "\n" .. self.msg end
 		return s
 	end
-	function def.keys(self) return {{"E", "裝藥（前方工作面）", on = self.charging ~= nil}, {"空白鍵", "每孔條數"}} end
+	function def.keys(self) return {{"E", S("Charge (face ahead)"), on = self.charging ~= nil}, {S("Space"), S("Sticks per hole")}} end
 	function def.on_load(self, data) self.cart = data.cart end
 	function def.on_save(self, data) data.cart = self.cart end
 	function def.on_spawn(self) place_basket(self, BASKET_REST) end
@@ -442,7 +447,7 @@ do
 			local d = ctx.d
 			local n = math.min(per_hole(self), stock(d))
 			if n <= 0 then
-				self.msg = ("乳膠炸藥用完了（裝好 %d 孔）"):format(cg.done)
+				self.msg = S("Out of emulsion (charged @1 holes)", ("%d"):format(cg.done))
 				self.charging = nil
 				place_basket(self, BASKET_REST)
 				update_hud(self)
@@ -457,18 +462,18 @@ do
 			end
 			if d and loaded > 0 and stock(d) ~= math.huge then d:get_inventory():remove_item("main", ItemStack(EMULSION .. " " .. loaded)) end
 			cg.done = cg.done + 1
-			if cg.done >= #cg.list then self.msg = ("裝好 %d 孔"):format(cg.done) end
+			if cg.done >= #cg.list then self.msg = S("Charged @1 holes", ("%d"):format(cg.done)) end
 			update_hud(self)
 		end
 	end
 
 	local editing = {}
 	local function cart_formspec(self)
-		local fs = {"formspec_version[6]size[7,3.2]label[0.5,0.6;每孔裝幾條乳膠炸藥]"}
+		local fs = {"formspec_version[6]size[7,3.2]label[0.5,0.6;" .. core.formspec_escape(S("Emulsion sticks per hole")) .. "]"}
 		for k = 1, 4 do
 			fs[#fs + 1] = ("button[%.2f,1.2;1.3,0.9;n_%d;%s%d]"):format(0.5 + (k - 1) * 1.5, k, k == per_hole(self) and "▶ " or "", k)
 		end
-		fs[#fs + 1] = "button_exit[4.5,2.3;2,0.7;ok;完成]"
+		fs[#fs + 1] = "button_exit[4.5,2.3;2,0.7;ok;" .. core.formspec_escape(S("Done")) .. "]"
 		return table.concat(fs)
 	end
 	core.register_on_player_receive_fields(function(player, formname, fields)
@@ -494,7 +499,7 @@ do
 			self.t_act = 0.5
 			local list = hole_list(self, ctx.pos, ctx.s)
 			if #list == 0 then
-				self.msg = ("前方 %d 格內沒有要裝藥的鑽孔"):format(REACH + 1)
+				self.msg = S("No holes to charge within @1 m ahead", ("%d"):format(REACH + 1))
 			else
 				self.charging = {list = list, done = 0, t = 0}
 				self.msg = nil
