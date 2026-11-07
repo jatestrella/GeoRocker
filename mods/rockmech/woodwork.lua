@@ -442,8 +442,9 @@ local function loosen(p)
 end
 ---------------------------------------------------------------------------
 -- 蓋東西時的地面整理：不滿一格的土石（薄的表土、不滿格的碎石／鬆土）上面放東西會架空（看起來浮著）。分兩類：
---   建築物（破碎站、選礦場、裝車料斗、營地）：範圍內的土石直接清掉。破碎站這類：地面那一層的薄片清掉，整片都是薄片
---     就往下一格蓋（rockmech.clear_site）；營地：範圍裡平地上的表土整片清掉，蓋在岩盤上（rockmech.clear_camp_soil）
+--   建築物（破碎站、選礦場、裝車料斗）：範圍內的土石直接清掉。地面那一層的薄片清掉，整片都是薄片
+--     就往下一格蓋（rockmech.clear_site）
+--   營地：先把範圍裡的平地整成一層平整的整格表土，建築、家具蓋在土上面（rockmech.level_camp_soil）
 --   設施（置物櫃、鋸木台、木工桌、木柱、一般方塊…）：對著薄片的上面放，薄片推到旁邊一欄（推不下才移除），
 --     設施直接放進那一格（rockmech.settle_pointed；core.item_place_node 都會經過）
 ---------------------------------------------------------------------------
@@ -491,8 +492,10 @@ function rockmech.clear_site(cells, pos)
 	if all then pos.y = pos.y - 1 end
 	return pos
 end
--- 營地範圍（a..b）裡，岩盤頂在地表 sy 的欄：上面的表土、鬆土清掉
-function rockmech.clear_camp_soil(a, b, sy)
+-- 營地範圍（a..b）裡，岩盤頂在地表 sy 的欄：上面的表土、鬆土整成剛好 CAMP_SOIL 格整格的表土（地面平整在 sy + CAMP_SOIL），
+-- 營地的建築、家具蓋在土上面（career.lua 的 ground_y 會找到土的頂面）
+local CAMP_SOIL = 1
+function rockmech.level_camp_soil(a, b, sy)
 	for x = a.x, b.x do for z = a.z, b.z do
 		local top
 		for y = sy + 4, sy - 2, -1 do
@@ -503,39 +506,12 @@ function rockmech.clear_camp_soil(a, b, sy)
 			for y = sy + 1, sy + 4 do
 				local p = {x = x, y = y, z = z}
 				local n = core.get_node(p).name
-				if TOPSOIL_K[n] or rockmech.rubble_base[n] == SOIL then core.swap_node(p, {name = "air"}) end
+				if y <= sy + CAMP_SOIL then
+					if n == "air" or TOPSOIL_K[n] or rockmech.rubble_base[n] == SOIL then core.set_node(p, {name = TOPSOIL}) end
+				elseif TOPSOIL_K[n] or rockmech.rubble_base[n] == SOIL then core.swap_node(p, {name = "air"}) end
 			end
 		end
 	end end
-end
--- 營地蓋好之後：空地（岩盤頂在地表 sy、上面是空氣）鋪回天然的表土（跟 mapgen 同一個公式 stress.natural_soil）。
--- 建築、地板、破碎站、受料倉底下不是空氣，不會鋪，所以建築不會架在薄片上
-function rockmech.restore_camp_soil(a, b, sy)
-	local S_ = rockmech.stress
-	local lane = cfg.lane_terrain
-	local function rise_at(x, z) return lane and math.floor(S_.lane_terrain(cfg, x, z) + 0.5) or 0 end
-	local n = 0
-	for x = a.x, b.x do for z = a.z, b.z do
-		local top, name
-		for y = sy + 4, sy - 2, -1 do
-			local nn = core.get_node({x = x, y = y, z = z}).name
-			if nn ~= "air" then top, name = y, nn; break end
-		end
-		local lith = top == sy and rockmech.lith_of_node[name]
-		if lith and not lith.ore then
-			local t = S_.natural_soil(cfg, x, z, rise_at(x, z), rise_at, false)
-			local y = sy + 1
-			while t > 0 do
-				local k = math.min(NLEV, t)
-				local p = {x = x, y = y, z = z}
-				if core.get_node(p).name ~= "air" then break end
-				core.swap_node(p, {name = k == NLEV and TOPSOIL or (TOPSOIL .. "_" .. k)})
-				n = n + 1
-				t, y = t - k, y + 1
-			end
-		end
-	end end
-	return n
 end
 
 -- 設施：對著薄片的上面放 → 薄片推到旁邊，回傳改放進那一格的 pointed_thing（其他情況原樣回傳）

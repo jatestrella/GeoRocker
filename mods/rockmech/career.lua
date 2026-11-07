@@ -920,10 +920,10 @@ local function quietly(fn, ...)
 end
 
 local function build_camp_now(owner, x0)
-	-- 建築區不鋪土：營地範圍平地上的表土清掉，建築蓋在岩盤上（woodwork.lua）
-	if rockmech.clear_camp_soil then
+	-- 先把營地範圍的平地整成一層平整的表土，建築、家具蓋在土上面（woodwork.lua）
+	if rockmech.level_camp_soil then
 		local a, b = rockmech.career_area(x0 or 0)
-		rockmech.clear_camp_soil(a, b, math.floor(cfg.surface_y or 0))
+		rockmech.level_camp_soil(a, b, math.floor(cfg.surface_y or 0))
 	end
 	storage:set_string("sign2:" .. x0, "1")
 	x0 = x0 or 0
@@ -939,17 +939,8 @@ local function build_camp_now(owner, x0)
 		core.log("warning", ("[rockmech] 營地 x = %d 的破碎站蓋不起來：地形不平"):format(x0))
 	end
 end
--- 蓋好之後，營地裡的空地鋪回天然的表土（woodwork.lua；建築底下不鋪）。晚幾秒：有些建築是之後才補蓋的
-local function restore_soil(x0)
-	if not rockmech.restore_camp_soil then return end
-	local a, b = rockmech.career_area(x0)
-	local n = rockmech.restore_camp_soil(a, b, math.floor(cfg.surface_y or 0))
-	storage:set_string("camp_soil2:" .. x0, "1")
-	core.log("action", ("[rockmech] 營地 x = %d 空地鋪回表土 %d 格"):format(x0, n))
-end
 local function build_camp(owner, x0)
 	quietly(build_camp_now, owner, x0)
-	core.after(5, function() restore_soil(x0 or 0) end)
 end
 
 -- 營地要用到的範圍
@@ -1007,22 +998,6 @@ end
 function rockmech.career_relayout(x0) quietly(relayout_now, x0) end
 rockmech.career_area = camp_area
 
--- 已經蓋好、空地被整片清掉表土的營地（2026-11-08 以前）：補鋪一次
-core.after(8, function()
-	local sites = {}
-	if storage:get_string(SITE_KEY) == "2" then sites[#sites + 1] = cfg.career_camp_dx or 0 end
-	if rockmech.team_site_x then
-		for i = 1, cfg.career_teams or 0 do
-			if storage:get_string("team_site:" .. i) == "1" then sites[#sites + 1] = rockmech.team_site_x(tostring(i)) end
-		end
-	end
-	for _, x0 in ipairs(sites) do
-		if storage:get_string("camp_soil2:" .. x0) == "" then
-			local a, b = camp_area(x0)
-			core.emerge_area(a, b, function(_, _, rem) if rem == 0 then restore_soil(x0) end end)
-		end
-	end
-end)
 
 -- 營地中心（帳篷和破碎站之間）的落腳點；地圖還沒生成就先給地面高度附近
 function rockmech.career_spawn(x0)
