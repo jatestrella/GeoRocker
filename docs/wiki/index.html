@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoRocker 遊戲說明</title>
+<style>
+:root {
+	--bg: #f7f6f2; --panel: #ffffff; --text: #24262b; --muted: #5f646d; --line: #dedbd2;
+	--accent: #b5562a; --accent2: #2f6f8f; --code: #f0ede6; --warn: #8a5a00; --warnbg: #fff4dc;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--bg: #17181b; --panel: #1f2125; --text: #e6e6e3; --muted: #a2a6ad; --line: #34373d;
+		--accent: #e08a5c; --accent2: #6fb2d4; --code: #2a2d32; --warn: #f0c060; --warnbg: #3a3020;
+	}
+}
+:root[data-theme="dark"] {
+	--bg: #17181b; --panel: #1f2125; --text: #e6e6e3; --muted: #a2a6ad; --line: #34373d;
+	--accent: #e08a5c; --accent2: #6fb2d4; --code: #2a2d32; --warn: #f0c060; --warnbg: #3a3020;
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0; background: var(--bg); color: var(--text);
+	font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+	line-height: 1.75; font-size: 16px;
+}
+header {
+	background: var(--panel); border-bottom: 1px solid var(--line); padding: 20px 16px 16px;
+}
+header .wrap { max-width: 1180px; margin: 0 auto; }
+header h1 { margin: 0; font-size: 28px; letter-spacing: 0.02em; }
+header p { margin: 4px 0 0; color: var(--muted); }
+.layout { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 240px 1fr; gap: 28px; padding: 24px 16px 60px; }
+nav { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 32px); overflow: auto; }
+nav a { display: block; color: var(--muted); text-decoration: none; padding: 3px 10px; border-left: 2px solid transparent; font-size: 15px; }
+nav a:hover { color: var(--accent); border-left-color: var(--accent); }
+main section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 24px 20px; margin-bottom: 22px; }
+h2 { color: var(--accent); font-size: 22px; margin: 18px 0 8px; }
+h3 { font-size: 17px; margin: 18px 0 4px; color: var(--accent2); }
+p { margin: 8px 0; }
+ul, ol { padding-left: 1.4em; margin: 6px 0; }
+li { margin: 3px 0; }
+code, kbd { background: var(--code); border-radius: 4px; padding: 0 5px; font-family: Consolas, "Courier New", monospace; font-size: 0.92em; }
+kbd { border: 1px solid var(--line); }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 15px; }
+th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+.formula { background: var(--code); border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-family: "Cambria Math", "Times New Roman", serif; font-size: 17px; overflow-x: auto; }
+.note { background: var(--warnbg); color: var(--text); border-left: 4px solid var(--warn); border-radius: 6px; padding: 8px 12px; margin: 10px 0; }
+.tag { display: inline-block; font-size: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; color: var(--muted); margin-left: 6px; vertical-align: middle; }
+.theme { float: right; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 14px; }
+.table-wrap { overflow-x: auto; }
+@media (max-width: 860px) {
+	.layout { grid-template-columns: 1fr; gap: 12px; }
+	nav { position: static; max-height: none; display: flex; flex-wrap: wrap; gap: 4px; }
+	nav a { border: 1px solid var(--line); border-radius: 14px; padding: 2px 10px; font-size: 14px; }
+	main section { padding: 6px 14px 16px; }
+}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+	<button class="theme" id="theme" type="button">深色／淺色</button>
+	<h1>GeoRocker 遊戲說明</h1>
+	<p>岩石力學、隧道、大地工程的採礦模擬（Luanti）。這份說明遊戲怎麼玩，以及每個機制背後的岩力概念。</p>
+</div></header>
+
+<div class="layout">
+<nav id="toc">
+	<a href="#start">開始玩</a>
+	<a href="#hands">手上搬東西</a>
+	<a href="#rock">岩石與地質</a>
+	<a href="#stress">開挖與崩塌</a>
+	<a href="#support">支撐</a>
+	<a href="#blast">爆破</a>
+	<a href="#soil">碎石、土、降雨</a>
+	<a href="#survey">調查與監測儀器</a>
+	<a href="#knowledge">知識能力</a>
+	<a href="#machines">機具</a>
+	<a href="#money">賣礦與經營</a>
+	<a href="#wood">樹與木工</a>
+	<a href="#shop">商店價目</a>
+	<a href="#teacher">老師用指令</a>
+</nav>
+
+<main>
+
+<section id="start">
+<h2>開始玩</h2>
+<ul>
+	<li><b>分組</b>：全班分成幾組，每組有一條一模一樣的礦帶（煤層從山丘中間切過），還有自己的營地。<b>資金是全組共用的</b>，畫面右上角看得到。</li>
+	<li><b>營地</b>：帳篷裡有三位供應商：<b>機械設備課長</b>（車輛、破碎站、輸送帶）、<b>爆破主任</b>（鑽孔、炸藥）、<b>工具室管理員</b>（手工具、支撐、儀器）。旁邊有破碎站、研究帳篷、大學教授、操作員休息的長椅。</li>
+	<li><b>回營地</b>：拿著「回營地」旗子按左鍵就回到自己的營地。</li>
+	<li><b>賺錢</b>：把煤挖下來、送到破碎站倒進受料倉，過磅就入帳（見<a href="#money">賣礦與經營</a>）。</li>
+	<li>地圖上：山坡、平地都鋪著表土；山坡上有兩成左右露出岩面（可以直接看岩性和節理），煤層的露頭是裸露的。</li>
+</ul>
+</section>
+
+<section id="hands">
+<h2>手上搬東西</h2>
+<p>背包只放小東西（工具、木柱、木板、炸藥……）。<b>大東西在世界裡</b>，人一次只捧得動一份：</p>
+<ul>
+	<li><b>碎石、土</b>：用鎬或鏟子挖起來就是捧在手上（最多一格 1 m³）。</li>
+	<li><b>岩芯箱</b>：左鍵捧起來，一次一箱。</li>
+	<li><b>原木</b>：左鍵扛起地上躺著的原木，一次一根。</li>
+	<li>捧著東西時，<b>不管手上拿什麼，右鍵都是先放下</b>：對著地面就放在那裡，對著卡車車斗就裝上車，原木對著鋸木台就鋸。</li>
+</ul>
+<h3>挖</h3>
+<ul>
+	<li>徒手只敲得動礦石；<b>鎬</b>什麼岩石都能挖但很慢，挖開的岩石原地變成碎石；<b>鏟子</b>只鏟碎石和土，最快。</li>
+	<li>世界不會掉落岩石和碎石：礦都要實際搬到破碎站才換得到錢。</li>
+</ul>
+<h3>放東西</h3>
+<ul>
+	<li><b>建築物</b>（破碎站、選礦場、裝車料斗）：範圍裡不滿一格的土石會先清掉，蓋在下面的岩盤上。</li>
+	<li><b>設施</b>（置物箱、鋸木台、木柱、方塊……）：放在不滿一格的薄土上時，薄土會被推到旁邊，設施放進那一格。</li>
+</ul>
+</section>
+
+<section id="rock">
+<h2>岩石與地質</h2>
+<p>遊戲裡的岩體 = <b>完整岩石 ＋ 明確的節理</b>。不用 RMR、Q 這類岩體分類，岩體強度直接用 Hoek–Brown 準則。</p>
+<h3>岩性</h3>
+<div class="table-wrap"><table>
+	<tr><th>岩性</th><th>單軸抗壓強度 σci</th><th>張力強度</th><th>mi</th><th>單位重</th></tr>
+	<tr><td>頁岩</td><td>30 MPa</td><td>2 MPa</td><td>6</td><td>25 kN/m³</td></tr>
+	<tr><td>砂岩</td><td>60 MPa</td><td>4 MPa</td><td>17</td><td>25 kN/m³</td></tr>
+	<tr><td>花崗岩</td><td>180 MPa</td><td>10 MPa</td><td>32</td><td>25 kN/m³</td></tr>
+	<tr><td>煤</td><td>15 MPa</td><td>1 MPa</td><td>8</td><td>14 kN/m³</td></tr>
+</table></div>
+<p class="note">各世界的設定可能不同（老師可以調）；實際的數字用 GSI 圖卡、地質羅盤或<code>/rockmech</code> 資訊頁看。</p>
+<h3>Hoek–Brown 岩體強度</h3>
+<div class="formula">σ₁ = σ₃ + σci · (mb·σ₃/σci + s)<sup>a</sup></div>
+<p>mb、s、a 由 <b>GSI</b>（地質強度指標）和 <b>D</b>（擾動係數，爆破造成）算出來：</p>
+<div class="formula">mb = mi·exp((GSI − 100)/(28 − 14D))　　s = exp((GSI − 100)/(9 − 3D))</div>
+<h3>節理</h3>
+<ul>
+	<li>岩體裡有幾組節理（例如 10°/135°、60°/000°、60°/090°，傾角/傾向）。岩面上看得到節理的跡線。</li>
+	<li>節理不會降低完整岩石的強度；破壞是沿著節理滑動（剪力強度 τ = cj + σn·tan φj）。</li>
+	<li>節理切出來的岩塊，如果能從開挖面滑出來（關鍵塊體、楔形塊），就會掉下來。</li>
+</ul>
+<h3>地應力</h3>
+<ul>
+	<li>垂直應力 σv = Σγ·h（上覆岩層和表土的重量）。</li>
+	<li>水平應力 σH = K_H·σv、σh = K_h·σv，σH 有一個方位。</li>
+</ul>
+</section>
+
+<section id="stress">
+<h2>開挖與崩塌</h2>
+<ul>
+	<li>每次開挖，伺服器在背景用<b>有限元素法</b>（每格岩石一個 1 m 的六面體元素）重新算開挖附近的應力。</li>
+	<li>每個臨空面算 <b>安全係數 FS</b>（強度 ÷ 應力），FS &lt; 1 就破壞、剝落成碎石，再重新算，可能連鎖。</li>
+	<li><b>天然地形視為平衡</b>：只有開挖造成的「穩定 → 不穩定」才會破壞。砍樹、鏟土不會讓天然山坡平白垮掉。</li>
+	<li>開挖面上方懸空的岩塊、節理切出的楔形塊會掉下來；落石會翻滾，打到人或車會受傷。</li>
+	<li><b>碎石和土的重量也算</b>：疊在岩面上是頂面荷重 q = γ·h；靠在岩壁上是側向土壓 K₀·γ·z（K₀ = 1 − sin φ）。坡頂堆太多碎石會讓下面的岩面 FS 變低；坡腳堆碎石反而有扶壁效果。卡車倒料時會在倒的地方重算一次。</li>
+	<li>地表上方淺的開挖會出現拉裂環（沉陷）。</li>
+</ul>
+<p class="note">拿著<b>地質羅盤</b>右鍵岩面看應力和 FS（要有岩石力學能力）。</p>
+</section>
+
+<section id="support">
+<h2>支撐</h2>
+<ul>
+	<li><b>岩栓</b>、<b>噴凝土</b>：在應力計算裡等於在開挖面加上一個圍壓 pᵢ，提高 FS。</li>
+	<li><b>木柱</b>：在應力計算裡是有勁度的元素。先撐好再往前挖，荷重會往木柱集中；超過承載力就壓斷（名牌顯示軸力和承載力）。木柱只有 20 cm 粗，碎石不能疊在木條上。</li>
+	<li>用<b>監測稜鏡</b>看支撐有沒有效：加了支撐之後，位移應該趨於穩定。</li>
+</ul>
+</section>
+
+<section id="blast">
+<h2>爆破</h2>
+<ol>
+	<li>用<b>鑿岩機</b>在岩面鑽孔（按住左鍵）。</li>
+	<li><b>乳膠炸藥</b>裝進孔裡（一孔最多 4 條），或貼在岩面上（威力小很多）。</li>
+	<li>用<b>起爆器</b>起爆範圍內的裝藥（或打火石只點一孔）。</li>
+</ol>
+<ul>
+	<li>破碎半徑 R = R₀·n<sup>1/3</sup>（n 條炸藥），岩石越硬破碎越小。中間炸飛、外圍原地變碎石。</li>
+	<li><b>自由面</b>：孔旁邊有空的地方（抵抗線 B &lt; R），炸得比較好；先炸中間的孔（掏槽），外圈的孔就有自由面。</li>
+	<li><b>ANFO</b>：露天台階的垂直孔（鑽機鑽），倒 ANFO 成柱狀裝藥，孔裡要放一條乳膠炸藥當起爆藥包，不然會拒爆。</li>
+</ul>
+<h3>爆破擾動 D</h3>
+<p>破碎區外面 1 m 的岩石雖然還在，但被炸鬆了：Hoek–Brown 的 D 打折強度和變形模數。</p>
+<div class="table-wrap"><table>
+	<tr><th>裝藥方式</th><th>D</th><th>效果</th></tr>
+	<tr><td>每孔 1 條乳膠炸藥（控制爆破、平滑爆破）</td><td>0.5</td><td>傷害小</td></tr>
+	<tr><td>每孔 2 條以上、貼面裝藥</td><td>0.8</td><td>頁岩 GSI 50 的強度約剩一半</td></tr>
+	<tr><td>ANFO 台階生產爆破</td><td>1.0</td><td>傷害最大</td></tr>
+	<tr><td>機械開挖（鎬、破碎錘、怪手）</td><td>0</td><td>沒有擾動</td></tr>
+</table></div>
+<p>指著岩石，HUD 會顯示「爆破擾動 D = …」（要有岩體分類能力）。</p>
+</section>
+
+<section id="soil">
+<h2>碎石、土、降雨</h2>
+<h3>碎石和鬆土</h3>
+<ul>
+	<li>每格分 8 級高度（1/8 m 一級），照<b>安息角 35°</b> 往低處流。</li>
+	<li>車子一直壓會壓實：壓實的碎石不流動。</li>
+	<li><b>混合碎石</b>：一格最多記兩種成分（礦石、碎石、花崗岩碎石、土），外觀是兩種貼圖交錯。碎石＋土＝<b>崩積土</b>。再混進第三種，留最多的兩種，其餘併進比較不值錢的那種（品位只會被稀釋）。</li>
+</ul>
+<h3>表土</h3>
+<ul>
+	<li>表土有根系的<b>凝聚力 c</b>（5 kPa），陡坡上也站得住。</li>
+	<li><b>自立高度</b>：旁邊挖開的陡壁不超過 H_c 就不會垮。</li>
+</ul>
+<div class="formula">H_c = 4c / γ · tan(45° + φ/2) ≈ 1.9 m</div>
+<ul>
+	<li>表土被挖、底下被掏空、或旁邊陡壁超過 H_c，就變成鬆土照安息角流，流走又讓上面的表土臨空，可能連成整片邊坡滑動。</li>
+	<li>滿格的鬆土放久了會長回表土。</li>
+</ul>
+<h3>降雨</h3>
+<p>降雨弱化跟<b>時雨量</b>成正比（上限 100 mm/h，颱風級）：</p>
+<div class="table-wrap"><table>
+	<tr><th>時雨量</th><th>鬆土安息角</th><th>表土凝聚力</th><th>表土自立高度</th></tr>
+	<tr><td>晴天</td><td>35°</td><td>× 1.00</td><td>1.92 m</td></tr>
+	<tr><td>30 mm/h</td><td>32°</td><td>× 0.90</td><td>1.72 m</td></tr>
+	<tr><td>100 mm/h</td><td>25°</td><td>× 0.65</td><td>1.25 m</td></tr>
+</table></div>
+<p>岩石碎石透水，不受雨影響；崩積土照土的比例弱化。用<b>氣象站</b>（百葉箱）看目前的時雨量和這場雨的累積雨量。</p>
+</section>
+
+<section id="survey">
+<h2>調查與監測儀器</h2>
+<h3>地質羅盤</h3>
+<ul>
+	<li>右鍵岩面：應力與安全係數；蹲下＋右鍵：完整資料（岩性、初始應力、六面節理）。</li>
+	<li><b>赤平投影</b>：左鍵岩面量節理位態（每組一筆，有量測誤差）；蹲下＋左鍵量坡面；對空中右鍵打開赤平投影圖（下半球、等角投影）。</li>
+	<li>圖上：節理極點（依組上色）、各組平均的大圓、坡面（黑色粗線，方塊是極點）、紅色摩擦圓（φj）。</li>
+	<li><b>Markland 平面滑動</b>：節理極點在摩擦圓外、跟坡面極點同一側、而且比坡面緩 → 可能滑動。</li>
+</ul>
+<h3>強度試驗</h3>
+<ul>
+	<li><b>施密特錘</b>：左鍵敲岩面 10 次，讀回彈值 R 的中位數，換算 UCS（Katz 2000）：</li>
+</ul>
+<div class="formula">UCS ≈ 2.21 · e<sup>0.067R</sup>　(MPa)</div>
+<ul>
+	<li><b>點荷重試驗機</b>：對地上的岩芯箱右鍵，每段岩芯做 3 次，讀點荷重強度指數 Is(50)：</li>
+</ul>
+<div class="formula">UCS ≈ 22 · Is(50)</div>
+<h3>岩芯鑽探</h3>
+<ul>
+	<li>手持岩芯鑽機（10 m）或岩芯鑽探車（60 m）往下鑽，岩芯裝進岩芯箱。鑽孔可以命名。</li>
+	<li>拿<b>野帳本</b>對岩芯箱右鍵判讀，記下柱狀圖（岩性、品位、節理頻率、RQD）。</li>
+</ul>
+<h3>監測稜鏡</h3>
+<ul>
+	<li>貼在岩面上。每次附近開挖算應力時記一筆：<b>從安裝算起的位移（mm）</b>。右鍵看歷史曲線。</li>
+	<li>隧道兩壁各貼一個，看收斂。讀數一直變大要小心；加了支撐應該趨於穩定。</li>
+	<li>位移用岩體變形模數換算（Hoek &amp; Diederichs 2006）：</li>
+</ul>
+<div class="formula">E_rm = E_i · (0.02 + (1 − D/2) / (1 + e<sup>(60 + 15D − GSI)/11</sup>))，E_i = MR · UCS</div>
+<p>MR：頁岩 150、砂岩 275、花崗岩 425、煤 200。</p>
+</section>
+
+<section id="knowledge">
+<h2>知識能力</h2>
+<p>一開始看不到品位、岩性、GSI、應力、FS 這些數字，要學會才看得到：</p>
+<div class="table-wrap"><table>
+	<tr><th>能力</th><th>看得到</th><th>怎麼取得</th></tr>
+	<tr><td>品位判讀</td><td>品位</td><td>背包裡有 XRF 分析儀、雇用地質學家、教授考試</td></tr>
+	<tr><td>岩體分類</td><td>岩性、GSI、上覆厚度、爆破擾動</td><td>背包裡有 GSI 圖卡、雇用地質學家、教授考試</td></tr>
+	<tr><td>岩石力學</td><td>應力、FS、節理、裂紋</td><td>背包裡有地質羅盤、雇用地質學家、教授考試</td></tr>
+	<tr><td>採礦規劃</td><td>剝採比</td><td>教授考試，或研究帳篷研發（全組）</td></tr>
+</table></div>
+<ul>
+	<li><b>教授考試</b>：每科抽 5 題，答對 4 題就永久學會（個人）；沒過要等 3 分鐘才能重考。</li>
+	<li><b>雇用地質學家</b>：研究帳篷的駐點地質師，雇用期間全組都有前三種能力。</li>
+	<li>背包（I）的「個人資料」分頁列出自己掌握的能力和來源。</li>
+</ul>
+</section>
+
+<section id="machines">
+<h2>機具</h2>
+<ul>
+	<li><b>卡車</b>：右鍵上車開，車斗裝碎石（手捧的碎石對著車斗右鍵就裝上去），倒在車尾。</li>
+	<li><b>怪手</b>：挖碎石裝卡車。可以雇<b>操作員</b>（另付日薪）自動挖裝、用截止品位分選；操作員可以叫回營地休息。改裝<b>油壓破碎錘</b>後可以敲碎單塊岩石。</li>
+	<li><b>推土機</b>：推碎石、整地。</li>
+	<li><b>自動卡車</b>：裝自動駕駛模組，錄一條「裝載點 → 傾倒點」的路線就會自己跑；地上的格子標出破碎站受料倉的容許範圍。</li>
+	<li><b>平板拖車</b>：載運其他車輛。</li>
+	<li><b>鑽機、鑽孔台車、裝藥車</b>：鑽孔、裝藥。<b>岩芯鑽探車</b>：鑽深孔取岩芯。</li>
+	<li><b>無人機</b>：從空中看礦場。</li>
+	<li>車子發動時吃柴油，油錢從所屬帳戶扣。</li>
+</ul>
+</section>
+
+<section id="money">
+<h2>賣礦與經營</h2>
+<h3>破碎站</h3>
+<div class="formula">收入 = 噸數 × (品位 × 回收率 × 礦價 − 處理費)</div>
+<ul>
+	<li>處理費每噸 $30；廢石的品位是 0，送來只會賠處理費：這就是<b>貧化</b>和<b>截止品位</b>。</li>
+	<li>礦價每個交易日變動一次，每天結算一次。</li>
+	<li>破碎站可以切換成<b>廢石場</b>：倒進來直接棄置。</li>
+	<li><b>剝採比</b> = 全組送來的廢石噸數 ÷ 礦石噸數（要有採礦規劃能力才看得到）。</li>
+</ul>
+<h3>其他設施</h3>
+<ul>
+	<li><b>選礦場</b>：把煤選成精煤和矸石，兩座儲料塔，放料臂裝卡車或放到皮帶上。</li>
+	<li><b>輸送帶</b>：一格一格接，最大傾角 16°，碎石落在皮帶上就被帶走。</li>
+	<li><b>裝車料斗</b>：皮帶接進料斗，放料臂裝卡車；自動卡車可以在臂下等。</li>
+	<li><b>研究帳篷</b>：用全組的錢研發（選礦回收率、破碎機改良、輸送帶改良、品位控制、採礦規劃……），組員在線上時才會進行。</li>
+</ul>
+</section>
+
+<section id="wood">
+<h2>樹與木工</h2>
+<ul>
+	<li>用<b>斧頭</b>砍樹幹任何一格，整棵倒下：原木一根根橫躺在地上，樹苗和蘋果進背包。</li>
+	<li>只有砍的才有原木：被土石流沖倒、樹根的土流失、被埋超過 1 m 的樹會整棵毀掉。</li>
+	<li>原木扛到<b>鋸木台</b>鋸成木柱（2 根）、木板（4 片）或木板半格（8 片）；<b>木工桌</b>用木板做牆板、樓梯、門、柵欄、梯子。</li>
+	<li>原木可以裝卡車（1 根佔 1 m³）；倒進破碎站會被當廢石。</li>
+	<li>木頭是建材，在岩石力學裡不算支撐（木柱例外）。</li>
+</ul>
+</section>
+
+<section id="shop">
+<h2>商店價目</h2>
+<p class="note">價格是預設值，老師可以改；遊戲裡供應商的清單為準。</p>
+<div class="table-wrap"><table>
+	<tr><th>攤位</th><th>品項與價格</th></tr>
+	<tr><td>機械設備課長</td><td>手推車 $500、休旅車 $3,000、卡車 $10,000、怪手 $15,000、推土機 $35,000、平板拖車 $40,000、礦卡 $150,000、礦用怪手 $200,000、連續採礦機 $1,500,000</td></tr>
+	<tr><td></td><td>破碎站 $20,000、大型破碎站 $300,000、選礦場 $30,000、輸送帶 $1,000（10 格）、裝車料斗 $25,000</td></tr>
+	<tr><td></td><td>怪手操作員（另付日薪）、油壓破碎錘 $20,000、自動駕駛模組 $8,000、對講機（免費）</td></tr>
+	<tr><td>爆破主任</td><td>鑿岩機 $500、起爆器 $500、乳膠炸藥 $500（10 條）、ANFO $1,000（10 包）、裝藥車 $40,000、裝藥台車 $40,000、鑽機 $50,000、鑽孔台車 $60,000、岩芯鑽探車 $45,000</td></tr>
+	<tr><td>工具室管理員</td><td>挖礦鎬（免費）、鏟子 $100、斧頭 $100、岩栓 $300（10 支）、噴凝土 $800（10 份）、木柱 $200（10 根）、木板 $100（10 片）、木板半格 $100（10 片）、鋸木台 $800、木工桌 $300</td></tr>
+	<tr><td></td><td>地質羅盤 $200、GSI 圖卡 $1,000、XRF 分析儀 $5,000、手持岩芯鑽機 $3,000、野帳本 $10、施密特錘 $1,500、點荷重試驗機 $3,000、監測稜鏡 $500（5 個）、氣象站 $500、無人機 $2,000、指揮無人機 $5,000、置物箱 $200</td></tr>
+</table></div>
+</section>
+
+<section id="teacher">
+<h2>老師用指令</h2>
+<div class="table-wrap"><table>
+	<tr><th>指令</th><th>說明</th></tr>
+	<tr><td><code>/rain &lt;時雨量 mm/h&gt; [分鐘]</code></td><td>下雨，例如 <code>/rain 60 20</code>（時雨量 60 mm/h、20 分鐘）。<code>/rain off</code> 停雨，<code>/rain</code> 看狀態。</td></tr>
+	<tr><td><code>/rockmech</code></td><td>資訊頁：岩性、節理、應力、各種開關。</td></tr>
+	<tr><td><code>/god</code></td><td>除錯用：看得到所有數字、創造模式物品欄。</td></tr>
+</table></div>
+<ul>
+	<li>題庫在世界資料夾的 <code>questions.txt</code>，可以自己改（科目：品位判讀、岩體分類、岩石力學、採礦規劃）。</li>
+	<li>各種參數（岩性強度、安息角、表土凝聚力、降雨、爆破……）在世界的 <code>rockmech.conf</code>，說明見 <code>docs/PARAMETERS.md</code>。</li>
+</ul>
+</section>
+
+</main>
+</div>
+<script>
+(function () {
+	var root = document.documentElement, btn = document.getElementById("theme");
+	try { var t = localStorage.getItem("georocker-theme"); if (t) root.setAttribute("data-theme", t); } catch (e) {}
+	btn.addEventListener("click", function () {
+		var cur = root.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+		var next = cur === "dark" ? "light" : "dark";
+		root.setAttribute("data-theme", next);
+		try { localStorage.setItem("georocker-theme", next); } catch (e) {}
+	});
+})();
+</script>
+</body>
+</html>
