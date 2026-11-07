@@ -244,10 +244,6 @@ local function neighbor_surface(x, z, ty, base, lift)
         end
         return nil
     end
-    -- 可以裝土的格子（樹幹最下面那一格，woodwork.lua）：當成空的半格，土流進去變成含土樹幹
-    if rockmech.rubble_host and rockmech.rubble_host(p, n.name, base) then
-        return granular.surface(ty, 0), {pos = p, k = 0}
-    end
     if not passable(n.name) then return nil end
     for y = ty - 1, ty - 48, -1 do
         local q = {x = x, y = y, z = z}

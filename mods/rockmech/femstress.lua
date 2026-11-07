@@ -10,7 +10,8 @@
 -- drive（rockmech_fem_drive）：由應力解決定崩落。開挖後排一次求解（同時只有一個工作，附近的開挖併在一起），
 -- 解完檢查對著開挖空間的臨空面：取面上的應力（格中心看不到一格厚的梁的彎曲），與同一面相鄰的格平均以消掉角點奇異，
 -- 拉力超過 σt 或軸差超過強度 → 該格變碎石，再解下一輪（最多 failure.max_cascade 輪）。
--- 檢查的面：對著開挖空間的面，加上離開挖點 NEAR 格內的所有臨空面（懸臂的拉力在上緣，上緣常常是天然地表）；
+-- 檢查的面：對著開挖空間的面，加上離開挖點 NEAR 格內的所有臨空面（懸臂的拉力在上緣，上緣常常是天然地表）——
+-- 後者只在觸發點真的挖過岩石時（砍樹、鏟土、放東西、碎石流動不算）；
 -- 更遠的天然岩面不判定，避免別處的天然崖壁平白崩掉。
 
 local cfg = rockmech.cfg
@@ -495,11 +496,12 @@ local function park(cur)
 		if vector.distance(q.pos, cur.pos) <= fcfg.radius / 2 then
 			q.round = math.min(q.round, cur.round)
 			q.far = q.far and cur.far
+			q.excav = q.excav or cur.excav
 			save_parked()
 			return
 		end
 	end
-	parked[#parked + 1] = {pos = cur.pos, round = cur.round, far = cur.far}
+	parked[#parked + 1] = {pos = cur.pos, round = cur.round, far = cur.far, excav = cur.excav}
 	save_parked()
 end
 
@@ -550,7 +552,9 @@ pump = function()
 	busy = true
 	rockmech.fem_run(cur.pos, function(job, res, meta, ms, t_build)
 		local t0 = core.get_us_time()
-		local failed, faces, warned = find_failed(job, res, meta, not cur.far and cur.pos or nil)
+		-- 天然坡面（離觸發點 NEAR 格內、不是對著開挖空間的面）只在觸發點真的挖過岩石（或上一輪有破壞）時才判定：
+		-- 天然地形視為已經平衡，砍樹、鏟土、放東西、碎石流動不會讓附近的天然邊坡平白垮掉
+		local failed, faces, warned = find_failed(job, res, meta, (not cur.far and cur.excav) and cur.pos or nil)
 		update_cracks(meta, job.nx, warned)
 		-- 木柱（timber.lua）：木柱格的 σv × 1 m² = 軸力，超過承載力就壓斷；柱頂上方頂板破壞也一起斷。
 		-- 名牌寫軸力和上方頂板的 FS
@@ -573,7 +577,7 @@ pump = function()
 		end
 		if not cur.far then squeeze_rubble(job, res, meta) end
 		if rockmech.fswarn_refresh then rockmech.fswarn_refresh(cur.pos) end
-		rockmech.collapse.queue_block_check(cur.pos)
+		if cur.excav or #failed > 0 then rockmech.collapse.queue_block_check(cur.pos) end
 		local t_eval = (core.get_us_time() - t0) / 1000
 		if #failed > 0 then      -- 只有真的有岩石破壞才記（每次都記 debug.txt 一天幾十 MB）
 			core.log("action", ("[rockmech] 應力解驅動 %s 第 %d 輪：%d 輪迭代、解 %.0f ms、組工作 %.1f ms、判定 %.1f ms（%d 面）、總 %.0f ms → %d 格破壞")
@@ -582,7 +586,7 @@ pump = function()
 		if #failed > 0 then
 			rockmech.collapse.apply_failure(failed, cur.round)
 			if cur.round < cfg.failure.max_cascade then
-				core.after(cfg.failure.cascade_delay, rockmech.fem_queue, cur.pos, cur.round + 1, cur.far)
+				core.after(cfg.failure.cascade_delay, rockmech.fem_queue, cur.pos, cur.round + 1, cur.far, true)
 			end
 		end
 		if cur.round < cfg.failure.max_cascade then
@@ -593,16 +597,19 @@ pump = function()
 		pump()
 	end)
 end
-function rockmech.fem_queue(pos, round, far)
+-- excav：觸發點是挖過的岩石（省略時查開挖紀錄）；只有這樣才判定附近的天然坡面
+function rockmech.fem_queue(pos, round, far, excav)
 	local p = vector.round(pos)
+	if excav == nil then excav = rockmech.collapse.is_excavated(p) end
 	for _, q in ipairs(pending) do
 		if vector.distance(q.pos, p) <= fcfg.radius / 2 then
 			q.round = math.min(q.round, round)
 			q.far = q.far and far
+			q.excav = q.excav or excav
 			return
 		end
 	end
-	pending[#pending + 1] = {pos = p, round = round, far = far}
+	pending[#pending + 1] = {pos = p, round = round, far = far, excav = excav}
 	core.after(0, pump)
 end
 local PARK_CHECK = 2      -- 每幾秒看一次玩家回來了沒
@@ -617,7 +624,7 @@ core.register_globalstep(function(dtime)
 			table.remove(parked, i)
 			save_parked()
 			core.log("action", ("[rockmech] 玩家回來，應力解接著 %s 第 %d 輪"):format(core.pos_to_string(q.pos), q.round))
-			rockmech.fem_queue(q.pos, q.round, q.far)
+			rockmech.fem_queue(q.pos, q.round, q.far, q.excav)
 		end
 	end
 end)
@@ -642,7 +649,9 @@ if fcfg.drive then
 	local orig = collapse.queue_failure_check
 	collapse.queue_failure_check = function(pos, prev, r, round, far)
 		orig(pos, prev, r, round)
-		rockmech.fem_queue(pos, round or 1, far)
+		-- 被移除的是完整岩石才算開挖（碎石、土、樹、木頭不算；on_destruct 時那一格還是原本的方塊）
+		local name = prev or core.get_node(vector.round(pos)).name
+		rockmech.fem_queue(pos, round or 1, far, rockmech.lith_of_node[name] ~= nil)
 	end
 end
 
