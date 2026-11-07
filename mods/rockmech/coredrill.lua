@@ -157,9 +157,9 @@ rockmech.corebox_side_tex = box_tex(false)
 core.register_node(COREBOX, {
 	description = "岩芯箱", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 	tiles = {box_tex(true), box_tex(false), box_tex(false)},
-	node_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.1, 0.3}},
-	-- 疊起來時整格都算：上面那箱放在這一格的上一格
-	selection_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.1, 0.3}},
+	node_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.5 + 0.4 / 3, 0.3}},
+	-- 高度 0.4/3 m（實際的岩芯箱約 10 cm 高）；疊起來時一箱佔一格，上面那箱放在上一格
+	selection_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.5 + 0.4 / 3, 0.3}},
 	groups = {crumbly = 3, falling_node = 1, not_in_creative_inventory = 1},
 	is_ground_content = false, drop = "",
 })
