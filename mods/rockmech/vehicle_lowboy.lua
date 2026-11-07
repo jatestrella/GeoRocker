@@ -2,7 +2,7 @@
 -- 平板拖車（lowboy）：牽引車＋低平板，載怪手、推土機這類慢的機具，或把報廢的車拖回來。由 vehicles.lua 載入。
 --   E：平板上沒車 → 把平板旁邊 LOAD_R m 內、自己組（或沒有組）的車拉上來（自重 ≤ MAX_T t；有人在開的不行）；
 --      平板上有車 → 卸在車尾後方。
---   載車時速度 LOADED_SPEED。載的車掛在平板上（附著），拖車存檔時記著它的編號，區塊重新載入後自己再掛回去。
+--   直線加速：空車到 12 m/s（約 43 km/h，同卡車），載車時上限 LOADED_SPEED（約 29 km/h）、加速度減半。載的車掛在平板上（附著），拖車存檔時記著它的編號，區塊重新載入後自己再掛回去。
 -- 車身：牽引車在前（車頭 z +1.5），平板從 z −1.5 到 −9.5，平板面離車底 0.5 m。
 
 local V = rockmech.vehicles
@@ -11,11 +11,12 @@ local WHEEL, TREAD = V.WHEEL, V.TREAD
 
 local MAX_T = 60            -- 載得動的自重 (t)
 local LOAD_R = 8            -- 平板中心多近的車拉得上來 (m)
-local LOADED_SPEED = 2.5    -- 載車時的速度 (m/s)
+local LOADED_SPEED = 8      -- 載車時直線加速的上限 (m/s，約 29 km/h；60 t 的平板拖車在礦區道路約 30–40 km/h)
 local DECK_Z, DECK_TOP = -5.6, -1.0     -- 平板中心（車身座標 z）、平板面（車身座標 y；車底 −1.5）
 
 local c = "#d86018"
 local def = {desc = "平板拖車 Lowboy", short = "拖車", color = c, cap = 0, speed = 4,
+	top_speed = 12, accel = 1.5,   -- 直線加速到約 43 km/h（同卡車）；載車時見 def.move
 	tire = 1.0, max_grade = math.rad(15),
 	half = 1.5, top = 1.4, lat = {-1, 0, 1}, eye_up = 1.5, eye_fwd = 0.9, rear = 9.5,
 	mirror = {x = 1.35, y = 1.2, z = 0.6}, rearcam = {x = 0, y = 1.0, z = -9.7},
@@ -126,6 +127,11 @@ end
 
 function def.move(self, ctx)
 	if self.carry_uid then
+		-- 載車：直線加速的上限 LOADED_SPEED，加速度減半（vehicles.lua 這一步已經加了 accel·dt，扣回一半）
+		if self.cruise and self.cruise > def.speed and ctx.fwd > 0 then
+			self.cruise = math.max(def.speed, math.min(LOADED_SPEED, self.cruise - 0.5 * def.accel * ctx.dtime))
+			if ctx.speed > 0 then ctx.speed = math.min(ctx.speed, self.cruise) end
+		end
 		ctx.speed = math.max(-LOADED_SPEED, math.min(LOADED_SPEED, ctx.speed))
 		-- 區塊重新載入後，載的車還沒掛回來：找到就掛
 		if not carried(self) then
