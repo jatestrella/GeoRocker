@@ -391,7 +391,7 @@ end
 core.register_node(TOPSOIL, {
 	description = "表土 Topsoil\n長著草和樹根的土：根系有凝聚力，陡坡上也站得住；被挖、底下被掏空、或旁邊挖開的陡壁太高（超過自立高度），就變成鬆土照安息角流",
 	tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
-	is_ground_content = false, groups = {crumbly = 3, soil = 1},
+	is_ground_content = false, groups = {crumbly = 3, soil = 1, rockmech_topsoil = 1},
 	sounds = default.node_sound_dirt_defaults(), drop = SOIL,
 	-- 挖：先變成鬆土再挖（經營模式就是撿起一份土），旁邊的表土也被擾動
 	on_dig = function(pos, node, digger)
@@ -410,7 +410,7 @@ for k = 1, NLEV - 1 do
 		drawtype = "nodebox", paramtype = "light",
 		node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.5 + k / NLEV, 0.5}},
 		tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
-		is_ground_content = false, groups = {crumbly = 3, soil = 1, not_in_creative_inventory = 1},
+		is_ground_content = false, groups = {crumbly = 3, soil = 1, rockmech_topsoil = 1, not_in_creative_inventory = 1},
 		sounds = default.node_sound_dirt_defaults(), drop = "",
 		on_dig = function(pos, node, digger)
 			local loose = rockmech.rubble_with_level(SOIL, k)
@@ -430,6 +430,21 @@ core.register_abm({
 		local above = {x = pos.x, y = pos.y + 1, z = pos.z}
 		if core.get_node(above).name ~= "air" or (core.get_node_light(above, 0.5) or 0) < 9 then return end
 		core.swap_node(pos, {name = TOPSOIL})
+	end,
+})
+-- 懸空的表土：大規模崩塌用 VoxelManip 寫入、岩塊整塊掉落翻滾，這些路徑不會通知表土底下空了。
+-- 定期掃露在外面的表土，正下方是空的（或不滿格的碎石、鬆土）就變鬆土掉下來
+core.register_abm({
+	label = "rockmech: 懸空的表土掉下來",
+	nodenames = {"group:rockmech_topsoil"}, neighbors = {"air"},
+	interval = 2, chance = 1, catch_up = false,
+	action = function(pos)
+		local b = {x = pos.x, y = pos.y - 1, z = pos.z}
+		local n = core.get_node(b).name
+		if n == "ignore" then return end
+		local def = core.registered_nodes[n]
+		local k = rockmech.rubble_level[n]
+		if (def and def.walkable == false) or (k and k < NLEV) then loosen(pos) end
 	end,
 })
 -- 鬆土、碎石從一格流出去（流掉一部分也算）：貼著的表土被拖動、跟著鬆掉（collapse.lua granular_settle 呼叫）
