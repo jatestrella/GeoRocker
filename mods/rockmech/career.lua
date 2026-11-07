@@ -72,12 +72,13 @@ local function cube(c)
 	return ("[inventorycube{%s{%s{%s"):format(t, t, t)
 end
 
--- 手上的岩芯箱：不畫 HUD，掛一個真的扁平箱子（跟地上的岩芯箱一樣大小、貼圖）在胸前，
+-- 手上的岩芯箱：不畫 HUD，掛一個真的扁平箱子（跟地上的岩芯箱一樣長寬、貼圖，高度 1/3）在胸前，
 -- forced_visible 讓自己第一人稱也看得到；別人看得到你捧著箱子
 local HELD_BOX = "rockmech:held_corebox"
-local BOX_POS = {x = 0, y = 12, z = 5.5}     -- 掛在玩家身上的位置（1/10 m）：胸前、身體前方 0.55 m
+local BOX_H = 0.4 / 3                         -- 手上的箱子只有地上的 1/3 高：太厚會擋住視線
+local BOX_POS = {x = 0, y = 10 + BOX_H * 5, z = 5.5}   -- 掛在玩家身上的位置（1/10 m）：箱底離地 1 m、身體前方 0.55 m
 core.register_entity(HELD_BOX, {
-	initial_properties = {visual = "cube", visual_size = {x = 0.9, y = 0.4, z = 0.6},
+	initial_properties = {visual = "cube", visual_size = {x = 0.9, y = BOX_H, z = 0.6},
 		textures = {"[fill:16x16:#2a62c8"}, physical = false, pointable = false, static_save = false},
 	on_activate = function(self)
 		local top, side = rockmech.corebox_tex or "[fill:16x16:#2a62c8", rockmech.corebox_side_tex or "[fill:16x16:#2a62c8"
