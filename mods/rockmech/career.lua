@@ -903,7 +903,17 @@ function rockmech.career_move_sign(x0, team)
 	core.log("action", ("[rockmech] 營地 x = %d 的組號看板搬到 z = %d"):format(x0, SIGN_Z))
 end
 
-local function build_camp(owner, x0)
+-- 蓋營地是施工（挖受料倉、鋪地板會換掉岩石）：期間 collapse.quiet，不排穩定判定、應力解、破壞檢查
+-- （原本開新世界時 8 座營地一起蓋，每座都排應力解和軸差破壞檢查）
+local function quietly(fn, ...)
+	local col = rockmech.collapse
+	col.quiet = col.quiet + 1
+	local ok, err = pcall(fn, ...)
+	col.quiet = col.quiet - 1
+	if not ok then error(err) end
+end
+
+local function build_camp_now(owner, x0)
 	storage:set_string("sign2:" .. x0, "1")
 	x0 = x0 or 0
 	storage:set_string("camp_layout2:" .. x0, "1")       -- 新配置（建築在破碎站那一排、面向西）
@@ -918,6 +928,7 @@ local function build_camp(owner, x0)
 		core.log("warning", ("[rockmech] 營地 x = %d 的破碎站蓋不起來：地形不平"):format(x0))
 	end
 end
+local function build_camp(owner, x0) quietly(build_camp_now, owner, x0) end
 
 -- 營地要用到的範圍
 local function camp_area(x0)
@@ -936,7 +947,7 @@ end
 
 -- 舊配置（貨櫃辦公室在營地中心南邊、研究帳篷在它西邊、都面向北）搬到新配置：拆掉舊的建築（地板換回下面的岩石），
 -- 清掉舊的攤主位置，在新位置蓋貨櫃辦公室和研究帳篷。資金、研究、地圖其他地方都不動
-function rockmech.career_relayout(x0)
+local function relayout_now(x0)
 	storage:set_string("camp_layout2:" .. x0, "1")
 	local fy
 	for y = 40, -30, -1 do
@@ -971,6 +982,7 @@ function rockmech.career_relayout(x0)
 	if rockmech.career_build_research then rockmech.career_build_research(x0) end
 	core.log("action", ("[rockmech] 營地 x = %d 改成新配置（建築在破碎站那一排、面向西）"):format(x0))
 end
+function rockmech.career_relayout(x0) quietly(relayout_now, x0) end
 rockmech.career_area = camp_area
 
 -- 營地中心（帳篷和破碎站之間）的落腳點；地圖還沒生成就先給地面高度附近

@@ -432,8 +432,9 @@ core.after(2, function()
 			local a, b = rockmech.career_area(s.x0)
 			core.emerge_area(a, b, function(_, _, rem)
 				if rem > 0 then return end
-				if old then rockmech.career_relayout(s.x0)       -- 舊配置：搬到新配置（會一起蓋研究帳篷）
-				else rockmech.career_build_research(s.x0) end
+				-- 載入完再看一次：新世界的營地這時可能剛蓋好（新配置），不要再搬一次
+				if storage:get_string("camp_layout2:" .. s.x0) == "" then rockmech.career_relayout(s.x0)   -- 舊配置：搬到新配置（會一起蓋研究帳篷）
+				elseif storage:get_string(flag_of(s.x0)) == "" then rockmech.career_build_research(s.x0) end
 			end)
 		end
 	end
