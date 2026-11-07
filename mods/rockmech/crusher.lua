@@ -651,6 +651,8 @@ end
 
 -- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false
 function rockmech.crusher_build(pos, dx, dz, name, node)
+	-- 範圍內不滿一格的土石先清掉（woodwork.lua）：不然機身架在薄片上
+	if rockmech.clear_site and rockmech.facility_cells then rockmech.clear_site(rockmech.facility_cells(node or CRUSHER, pos, dx, dz), pos) end
 	if not site_ok(pos, dx, dz) then return false end
 	core.set_node(pos, {name = node or CRUSHER})
 	dig_hopper(pos, dx, dz)

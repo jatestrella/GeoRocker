@@ -246,6 +246,7 @@ function rockmech.plant_towers(pos, dx, dz)
 end
 
 local function build(pos, dx, dz, name)
+	if rockmech.clear_site and rockmech.facility_cells then rockmech.clear_site(rockmech.facility_cells(PLANT, pos, dx, dz), pos) end
 	if not (H.site_ok(pos, dx, dz) and towers_ok(pos, dx, dz)) then return false end
 	core.set_node(pos, {name = PLANT})
 	H.dig_hopper(pos, dx, dz)

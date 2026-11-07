@@ -428,6 +428,91 @@ local function loosen(p)
 	core.after(0, function() rockmech.collapse.check_cell(p) end)     -- 底下空了就掉、陡了就流
 	return true
 end
+---------------------------------------------------------------------------
+-- 蓋東西時的地面整理：不滿一格的土石（薄的表土、不滿格的碎石／鬆土）上面放東西會架空（看起來浮著）。分兩類：
+--   建築物（破碎站、選礦場、裝車料斗、營地）：範圍內的土石直接清掉。破碎站這類：地面那一層的薄片清掉，整片都是薄片
+--     就往下一格蓋（rockmech.clear_site）；營地：範圍裡平地上的表土整片清掉，蓋在岩盤上（rockmech.clear_camp_soil）
+--   設施（置物櫃、鋸木台、木工桌、木柱、一般方塊…）：對著薄片的上面放，薄片推到旁邊一欄（推不下才移除），
+--     設施直接放進那一格（rockmech.settle_pointed；core.item_place_node 都會經過）
+---------------------------------------------------------------------------
+function rockmech.is_thin_ground(name)
+	local k = rockmech.rubble_level[name] or TOPSOIL_K[name]
+	return k ~= nil and k < NLEV
+end
+local DIR4 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+-- 把 p 那片薄片拿掉：碎石、土推到旁邊一欄（落在那欄的地面上），推不下就移除
+local function push_aside(p, push)
+	local node = core.get_node(p)
+	local k = rockmech.rubble_level[node.name] or TOPSOIL_K[node.name]
+	if not k or k >= NLEV then return end
+	local base = rockmech.rubble_base[node.name] or SOIL
+	core.swap_node(p, {name = "air"})
+	if not push then return end
+	local V = rockmech.vehicles
+	if not (V and V.deposit_column) then return end
+	-- 下一個 tick 才推：先讓設施放進空出來的那一格，推出去的土才不會又流回來
+	core.after(0, function()
+	local s = math.random(4)
+	for j = 0, 3 do
+		local d = DIR4[(s + j - 1) % 4 + 1]
+		local q = {x = p.x + d[1], y = p.y, z = p.z + d[2]}
+		local qn = core.get_node(q).name
+		-- 旁邊也是薄的表土：鬆成同樣厚度的鬆土，推過去的跟它合併
+		if TOPSOIL_K[qn] and TOPSOIL_K[qn] < NLEV then rockmech.loosen_under(q, qn); qn = core.get_node(q).name end
+		local qk = rockmech.rubble_level[qn]
+		if qn == "air" or (qk and qk < NLEV) then
+			k = V.deposit_column(q.x, q.z, p.y, base, k, 2, nil, node.param2)
+			if k <= 0 then return end
+		end
+	end
+	end)
+end
+-- cells = {{x, z}, …}，pos = 要蓋的位置（地面在 pos.y − 1）。地面那一層的薄片清掉；整片都是薄片就把 pos 往下一格（直接改 pos）
+function rockmech.clear_site(cells, pos)
+	local all = #cells > 0
+	for _, c in ipairs(cells) do
+		local p = {x = c[1], y = pos.y - 1, z = c[2]}
+		if rockmech.is_thin_ground(core.get_node(p).name) then push_aside(p, false) else all = false end
+		local p2 = {x = c[1], y = pos.y, z = c[2]}
+		if rockmech.is_thin_ground(core.get_node(p2).name) then push_aside(p2, false) end
+	end
+	if all then pos.y = pos.y - 1 end
+	return pos
+end
+-- 營地範圍（a..b）裡，岩盤頂在地表 sy 的欄：上面的表土、鬆土清掉
+function rockmech.clear_camp_soil(a, b, sy)
+	for x = a.x, b.x do for z = a.z, b.z do
+		local top
+		for y = sy + 4, sy - 2, -1 do
+			local n = core.get_node({x = x, y = y, z = z}).name
+			if n ~= "air" and n ~= "ignore" and not TOPSOIL_K[n] and rockmech.rubble_base[n] ~= SOIL then top = y; break end
+		end
+		if top == sy then
+			for y = sy + 1, sy + 4 do
+				local p = {x = x, y = y, z = z}
+				local n = core.get_node(p).name
+				if TOPSOIL_K[n] or rockmech.rubble_base[n] == SOIL then core.swap_node(p, {name = "air"}) end
+			end
+		end
+	end end
+end
+-- 設施：對著薄片的上面放 → 薄片推到旁邊，回傳改放進那一格的 pointed_thing（其他情況原樣回傳）
+function rockmech.settle_pointed(pt)
+	if pt and pt.type == "node" and pt.above and pt.under and pt.above.y == pt.under.y + 1
+			and pt.above.x == pt.under.x and pt.above.z == pt.under.z
+			and rockmech.is_thin_ground(core.get_node(pt.under).name) then
+		push_aside(pt.under, true)
+		return {type = "node", under = {x = pt.under.x, y = pt.under.y - 1, z = pt.under.z}, above = vector.copy(pt.under)}
+	end
+	return pt
+end
+do
+	local orig = core.item_place_node
+	function core.item_place_node(itemstack, placer, pt, ...)
+		return orig(itemstack, placer, rockmech.settle_pointed(pt), ...)
+	end
+end
+
 -- 薄的表土上面壓了碎石、鬆土：變成同樣厚度的鬆土，讓上面的往下倒進來合併（collapse.lua granular_settle 呼叫）
 function rockmech.loosen_under(p, name)
 	local k = TOPSOIL_K[name]

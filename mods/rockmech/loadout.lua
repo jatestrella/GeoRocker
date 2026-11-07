@@ -276,6 +276,12 @@ core.register_node(ITEM, {
 		local look = placer:get_look_dir()
 		local dx, dz = 0, 0
 		if math.abs(look.x) > math.abs(look.z) then dx = look.x > 0 and -1 or 1 else dz = look.z > 0 and -1 or 1 end
+		if rockmech.clear_site then
+			pos = vector.copy(pos)
+			local sc = {}
+			for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do sc[#sc + 1] = {x, z} end end
+			rockmech.clear_site(sc, pos)
+		end
 		if not site_ok(pos, dx, dz) then
 			tell(name, ("要蓋在平地上：3×3 m 地面平坦、上方 %d m 淨空"):format(BIN_H + 2))
 			return itemstack

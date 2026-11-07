@@ -153,6 +153,7 @@ core.register_node(POST, {
 	on_dig = post_dig,
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
+		if rockmech.settle_pointed then pointed = rockmech.settle_pointed(pointed) end   -- 薄的土石推到旁邊（woodwork.lua）
 		local under, above = pointed.under, pointed.above
 		-- 對著已經放好的東西右鍵（例如木板）：照一般規則
 		local un = core.get_node(under)

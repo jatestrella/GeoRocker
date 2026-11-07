@@ -914,6 +914,11 @@ local function quietly(fn, ...)
 end
 
 local function build_camp_now(owner, x0)
+	-- 建築區不鋪土：營地範圍平地上的表土清掉，建築蓋在岩盤上（woodwork.lua）
+	if rockmech.clear_camp_soil then
+		local a, b = rockmech.career_area(x0 or 0)
+		rockmech.clear_camp_soil(a, b, math.floor(cfg.surface_y or 0))
+	end
 	storage:set_string("sign2:" .. x0, "1")
 	x0 = x0 or 0
 	storage:set_string("camp_layout2:" .. x0, "1")       -- 新配置（建築在破碎站那一排、面向西）
