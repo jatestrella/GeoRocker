@@ -508,6 +508,36 @@ function rockmech.clear_camp_soil(a, b, sy)
 		end
 	end end
 end
+-- 營地蓋好之後：空地（岩盤頂在地表 sy、上面是空氣）鋪回天然的表土（跟 mapgen 同一個公式 stress.natural_soil）。
+-- 建築、地板、破碎站、受料倉底下不是空氣，不會鋪，所以建築不會架在薄片上
+function rockmech.restore_camp_soil(a, b, sy)
+	local S_ = rockmech.stress
+	local lane = cfg.lane_terrain
+	local function rise_at(x, z) return lane and math.floor(S_.lane_terrain(cfg, x, z) + 0.5) or 0 end
+	local n = 0
+	for x = a.x, b.x do for z = a.z, b.z do
+		local top, name
+		for y = sy + 4, sy - 2, -1 do
+			local nn = core.get_node({x = x, y = y, z = z}).name
+			if nn ~= "air" then top, name = y, nn; break end
+		end
+		local lith = top == sy and rockmech.lith_of_node[name]
+		if lith and not lith.ore then
+			local t = S_.natural_soil(cfg, x, z, rise_at(x, z), rise_at, false)
+			local y = sy + 1
+			while t > 0 do
+				local k = math.min(NLEV, t)
+				local p = {x = x, y = y, z = z}
+				if core.get_node(p).name ~= "air" then break end
+				core.swap_node(p, {name = k == NLEV and TOPSOIL or (TOPSOIL .. "_" .. k)})
+				n = n + 1
+				t, y = t - k, y + 1
+			end
+		end
+	end end
+	return n
+end
+
 -- 設施：對著薄片的上面放 → 薄片推到旁邊，回傳改放進那一格的 pointed_thing（其他情況原樣回傳）
 function rockmech.settle_pointed(pt)
 	if pt and pt.type == "node" and pt.above and pt.under and pt.above.y == pt.under.y + 1
