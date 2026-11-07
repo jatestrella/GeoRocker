@@ -105,8 +105,8 @@ local function zs(a, b) return {{-0.1, -0.06, a, 0.1, 0.06, b}, {-0.06, -0.1, a,
 local SHAFT = ys(-0.5, 0.5)
 local CAP = {-0.3, 0.42, -0.12, 0.3, 0.5, 0.12}   -- 柱頂墊木
 -- 接合：柱身在格子中央，旁邊的樑從格子邊界開始，中間會空 40 cm。
--- 用 connected nodebox：碰到旁邊的木柱、樑時，從中央伸出一段同斷面的木頭接到格子邊界，兩邊剛好接上。
---   木柱：四個水平方向接樑。順 x 的樑：±z 接木柱與順 z 的樑、上下接木柱與順 z 的樑（疊成井字）；順 z 的樑同理。
+-- 用 connected nodebox（像 Minecraft 的欄杆）：水平方向旁邊是木頭或實心方塊，就從中央伸出一段同斷面的木頭接到格子邊界。
+--   木柱：前後左右四個方向都接。樑：本身順著 x（或 z）是滿的，另外兩個水平方向接。上下不伸（柱、樑上下本來就到格子邊界）。
 local function connected(fixed, sides, connects_to)
 	local nb = {type = "connected", fixed = fixed}
 	local arms = {left = xs(-0.5, 0), right = xs(0, 0.5), bottom = ys(-0.5, 0), top = ys(0, 0.5),
@@ -123,11 +123,13 @@ local function groups(base, extra)
 	for k, v in pairs(extra) do t[k] = v end
 	return t
 end
+-- 跟 Minecraft 的欄杆一樣：旁邊是木頭（木柱、樑、木板）或實心方塊（岩石、土、建築）就伸出去接上
 local HORIZ = {"left", "right", "front", "back"}
-local POST_BOX = connected(SHAFT, HORIZ, {"group:timber_beam_x", "group:timber_beam_z"})
-local POST_TOP_BOX = connected({SHAFT[1], SHAFT[2], CAP}, HORIZ, {"group:timber_beam_x", "group:timber_beam_z"})
-local BEAM_X_BOX = connected(xs(-0.5, 0.5), {"front", "back", "top", "bottom"}, {"group:timber_post", "group:timber_beam_z"})
-local BEAM_Z_BOX = connected(zs(-0.5, 0.5), {"left", "right", "top", "bottom"}, {"group:timber_post", "group:timber_beam_x"})
+local CONNECT = {"group:rockmech_timber", "group:rockmech_rock", "group:cracky", "group:crumbly", "group:choppy"}
+local POST_BOX = connected(SHAFT, HORIZ, CONNECT)
+local POST_TOP_BOX = connected({SHAFT[1], SHAFT[2], CAP}, HORIZ, CONNECT)
+local BEAM_X_BOX = connected(xs(-0.5, 0.5), {"front", "back"}, CONNECT)
+local BEAM_Z_BOX = connected(zs(-0.5, 0.5), {"left", "right"}, CONNECT)
 
 local function post_dig(pos, node, digger)
 	local base, len = post_of(pos)
