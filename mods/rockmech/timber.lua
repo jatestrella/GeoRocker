@@ -96,6 +96,9 @@ end
 -- 外觀：圓木（兩個交叉的方柱近似），樹皮側面、年輪端面
 local BARK = "[fill:16x16:#6e5032^[fill:1x16:3,0:#5a3f26^[fill:1x16:8,0:#5a3f26^[fill:1x16:12,0:#5a3f26^[fill:2x3:5,4:#80603e^[fill:2x3:10,10:#80603e"
 local ENDS = "[fill:16x16:#c9a46a^[fill:10x10:3,3:#b8925a^[fill:6x6:5,5:#c9a46a^[fill:2x2:7,7:#9a7444"
+-- 頂面、底面、樑的端面：跟樹皮同色、沒有條紋。伸出去接的那段（connected nodebox）跟本體共用貼圖，
+-- 用年輪的話接出去的那段頂面會一截淺一截深
+local PLAIN = "[fill:16x16:#6e5032^[fill:3x2:3,4:#80603e^[fill:3x2:10,10:#80603e^[fill:2x2:6,12:#5a3f26"
 local WOOD = "[fill:16x16:#b08850^[fill:16x1:0,3:#9a7444^[fill:16x1:0,7:#9a7444^[fill:16x1:0,11:#9a7444^[fill:16x1:0,15:#9a7444^[fill:1x3:5,0:#9a7444^[fill:1x4:11,4:#9a7444^[fill:1x3:3,8:#9a7444^[fill:1x4:9,12:#9a7444"
 local BARK_H = BARK .. "^[transformR90"           -- 橫放的樑：木紋順著樑
 -- 圓木斷面（兩個交叉的方柱近似直徑 20 cm），沿 x／y／z 從 a 到 b
@@ -143,7 +146,7 @@ core.register_node(POST, {
 	drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
 	node_box = POST_BOX.node_box, connects_to = POST_BOX.connects_to,
 	selection_box = {type = "fixed", fixed = SHAFT},
-	tiles = {ENDS, ENDS, BARK},
+	tiles = {PLAIN, PLAIN, BARK},
 	inventory_image = "[fill:16x16:#00000000^[fill:4x14:6,1:#6e5032^[fill:1x14:7,1:#5a3f26^[fill:4x2:6,1:#c9a46a",
 	wield_image = "[fill:16x16:#00000000^[fill:4x14:6,1:#6e5032^[fill:1x14:7,1:#5a3f26^[fill:4x2:6,1:#c9a46a",
 	is_ground_content = false, groups = groups(G, {timber_post = 1}), sounds = sounds, drop = "",
@@ -161,6 +164,8 @@ core.register_node(POST, {
 		if not ab or not ab.buildable_to then return itemstack end
 		local name = placer and placer:is_player() and placer:get_player_name() or ""
 		if core.is_protected(above, name) then core.record_protection_violation(above, name); return itemstack end
+		-- 接在有墊木的柱頂上：墊木拿掉（柱子變長了，不是頂著頂板的柱頂）
+		if above.y == under.y + 1 and un.name == POST_TOP then core.swap_node(under, {name = POST}) end
 		if above.y == under.y + 1 then
 			-- 對地板：往上找頂板
 			local n
@@ -171,8 +176,10 @@ core.register_node(POST, {
 			end
 			if n and n >= 1 then
 				local roof = core.get_node({x = above.x, y = above.y + n, z = above.z}).name
+				-- 柱頂墊木只在頂到岩石頂板時加
+				local capped = is_rock(roof)
 				for s = 0, n - 1 do
-					core.set_node({x = above.x, y = above.y + s, z = above.z}, {name = s == n - 1 and POST_TOP or POST})
+					core.set_node({x = above.x, y = above.y + s, z = above.z}, {name = (s == n - 1 and capped) and POST_TOP or POST})
 				end
 				local meta = core.get_meta(above)
 				meta:set_int("len", n)
@@ -206,15 +213,15 @@ core.register_node(POST_TOP, {
 	drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
 	node_box = POST_TOP_BOX.node_box, connects_to = POST_TOP_BOX.connects_to,
 	selection_box = {type = "fixed", fixed = SHAFT},
-	tiles = {ENDS, ENDS, BARK},
+	tiles = {PLAIN, PLAIN, BARK},
 	is_ground_content = false, groups = groups(G_HIDDEN, {timber_post = 1}), sounds = sounds, drop = "",
 	on_dig = post_dig,
 })
 
 -- 橫放的樑：順 x、順 z 各一種（connected nodebox 不跟著 facedir 轉，所以分成兩種方塊）
 for _, v in ipairs({
-	{BEAM_X, BEAM_X_BOX, xs(-0.5, 0.5), {BARK_H, BARK_H, ENDS, ENDS, BARK_H, BARK_H}, "timber_beam_x"},
-	{BEAM_Z, BEAM_Z_BOX, zs(-0.5, 0.5), {BARK, BARK, BARK_H, BARK_H, ENDS, ENDS}, "timber_beam_z"},
+	{BEAM_X, BEAM_X_BOX, xs(-0.5, 0.5), {BARK_H, BARK_H, PLAIN, PLAIN, BARK_H, BARK_H}, "timber_beam_x"},
+	{BEAM_Z, BEAM_Z_BOX, zs(-0.5, 0.5), {BARK, BARK, BARK_H, BARK_H, PLAIN, PLAIN}, "timber_beam_z"},
 }) do
 	core.register_node(v[1], {
 		description = "木樑 Timber beam",
@@ -267,7 +274,7 @@ core.register_node(SLAB, {
 
 ---------------------------------------------------------------------------
 -- 木頭要有東西撐著：相連的木材（木柱、樑、木板、半格，六個面相鄰）算一組，
--- 這組裡至少要有一塊貼著木頭以外的實心方塊（地面、岩壁、建築…）才站得住；沒有就整組掉下來變成物品
+-- 這組裡至少要有一塊的下面或側面是木頭以外的實心方塊（地面、岩壁、建築…）才站得住（頂板不算）；沒有就整組掉下來變成物品
 -- （樑、木柱各掉一支木柱，木板、半格掉原本的）。挖掉、炸掉木頭或它旁邊的東西時檢查
 ---------------------------------------------------------------------------
 
@@ -296,8 +303,8 @@ local function group_of(start, seen)
 			if is_timber(name) then
 				local k = key(n)
 				if not seen[k] then seen[k] = true; q[#q + 1] = n end
-			elseif holds(name) then
-				anchored = true
+			elseif d[2] ~= 1 and holds(name) then
+				anchored = true          -- 下面、側面的實心方塊撐得住；上面的（頂板）不算，木頭不會黏在天花板上
 			end
 		end
 	end
@@ -362,6 +369,16 @@ do
 		if not falling then core.after(0, check_around, vector.round(pos)) end
 	end
 end
+-- 舊版不管上面是什麼都加了墊木：上面不是岩石的拿掉（一次）
+core.register_lbm({
+	label = "rockmech: 沒頂到岩石的柱頂拿掉墊木（一次）",
+	name = "rockmech:timber_cap_fix",
+	nodenames = {POST_TOP},
+	run_at_every_load = false,
+	action = function(pos)
+		if not is_rock(core.get_node({x = pos.x, y = pos.y + 1, z = pos.z}).name) then core.swap_node(pos, {name = POST}) end
+	end,
+})
 -- 這條規則之前就懸空的木頭：每個區塊第一次載入時檢查一次
 core.register_lbm({
 	label = "rockmech: 懸空的木頭掉下來（一次）",
