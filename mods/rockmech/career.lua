@@ -395,7 +395,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		local it = cfg.shop[tonumber(key:match("^buy_(%d+)$"))]
 		if it and (not kind or it.shop == kind) then
 			-- 大東西不進背包（delivery.lua）：車停到營地的交車區，設施給施工單
-			local kind = rockmech.vehicle_kind_of_item and rockmech.vehicle_kind_of_item(it.item)
+			local vkind = rockmech.vehicle_kind_of_item and rockmech.vehicle_kind_of_item(it.item)
 			local order = rockmech.order_of_item and rockmech.order_of_item(it.item)
 			local stack = ItemStack((order or it.item) .. " " .. (it.count or 1))
 			local inv = player:get_inventory()
@@ -403,8 +403,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			if rockmech.money(name) < it.price then
 				core.chat_send_player(name, ("[供應商] 錢不夠：%s 要 $%d"):format(it.label, it.price))
 				ok = false
-			elseif kind then
-				ok, msg = rockmech.deliver_vehicle(name, kind)
+			elseif vkind then
+				ok, msg = rockmech.deliver_vehicle(name, vkind)
 				if not ok then core.chat_send_player(name, "[供應商] " .. msg) end
 			elseif not inv:room_for_item("main", stack) then
 				core.chat_send_player(name, "[供應商] 物品欄滿了")
