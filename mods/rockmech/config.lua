@@ -550,6 +550,8 @@ function config.load(get)
 	-- 產生地圖時，比地表（surface_y）高 1 m 以上的天然岩石鋪 1–3 m 表土、種樹，山腳鋪漸薄的坡腳（mapgen.lua）
 	local mt = parse_bool(get("rockmech_mapgen_topsoil"))
 	cfg.mapgen_topsoil = mt ~= false
+	-- 山坡露出岩面的面積比例（一片一片的露頭，stress.outcrop_factor）
+	cfg.outcrop = math.max(0, math.min(0.9, tonumber(get("rockmech_outcrop")) or 0.2))
 	local lm = get("rockmech_lith_mode")
 	cfg.lith_mode = (lm == "zones" or lm == "layers") and lm or config.defaults.lith_mode
 	cfg.zone_width = math.max(4, math.floor(tonumber(get("rockmech_zone_width")) or config.defaults.zone_width))

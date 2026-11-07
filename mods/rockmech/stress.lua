@@ -264,6 +264,26 @@ function stress.soil_rnd(x, z, seed)      -- 每個位置固定的 0..1 亂數
 	return v - math.floor(v)
 end
 local rnd = stress.soil_rnd
+-- 露頭（rockmech_outcrop，山坡面積裸露的比例）：另一組平滑雜訊（約 10–20 m 一片）低於門檻的地方不鋪土，
+-- 門檻上方一小段的土逐漸變薄。門檻是雜訊的分位數：取樣一次算出來（雜訊不是均勻分布）
+local OUT_SCALE, OUT_SEED, OUT_EDGE = 18, 59, 0.06
+local out_thr = {}
+local function outcrop_threshold(frac)
+	if frac <= 0 then return -1 end
+	if out_thr[frac] then return out_thr[frac] end
+	local v = {}
+	for i = 0, 149 do for j = 0, 149 do v[#v + 1] = fbm(i * 0.37, j * 0.41, OUT_SEED) end end
+	table.sort(v)
+	out_thr[frac] = v[math.max(1, math.min(#v, math.floor(#v * frac + 0.5)))]
+	return out_thr[frac]
+end
+-- 山坡 (x, z) 的表土要乘的比例：0 = 露頭，1 = 正常
+function stress.outcrop_factor(cfg, x, z)
+	local thr = outcrop_threshold(cfg.outcrop or 0.2)
+	local o = fbm(x / OUT_SCALE, z / OUT_SCALE, OUT_SEED)
+	if o <= thr then return 0 end
+	return math.min(1, (o - thr) / OUT_EDGE)
+end
 -- (x, z) 是不是種樹的位置：間距 tree_gap 的格點、隨機偏移 ±2、四成跳過，整棵要在 mapgen chunk 裡（離邊 2 格）。
 -- 是的話回傳這棵樹的種子
 function stress.tree_at(x, z)
@@ -285,12 +305,13 @@ function stress.natural_soil(cfg, x, z, rise, rise_at, ore_top)
 	if rise >= SOILC.min_rise then
 		local tot, hill = 0, 0
 		if cfg.lane_terrain then tot, hill = stress.lane_terrain(cfg, x, z) end
-		local tree = stress.tree_at(x, z)
+		local of = stress.outcrop_factor(cfg, x, z)          -- 露頭：不鋪或漸薄，也不種樹
+		local tree = of >= 1 and stress.tree_at(x, z)
 		if (hill or 0) > 0 and hill >= tot - 0.5 then        -- 礦區山丘（不是交界山脊）：鋪薄一點，看得到煤層
-			return tree and NL or noise_t(SOILC.hill_min, SOILC.hill_max)
+			return tree and NL or math.floor(noise_t(SOILC.hill_min, SOILC.hill_max) * of + 0.5)
 		end
 		local t = noise_t(SOILC.min, SOILC.max)
-		return tree and math.max(2 * NL, t - t % NL) or t
+		return tree and math.max(2 * NL, t - t % NL) or math.floor(t * of + 0.5)
 	end
 	local t = noise_t(SOILC.flat_min, SOILC.flat_max)
 	for d = 1, #SOILC.apron do

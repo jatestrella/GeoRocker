@@ -209,7 +209,7 @@ describe("stress 上覆荷重外插", function()
 end)
 
 describe("stress 天然表土（mapgen 和應力解共用）", function()
-	local cfg = {}      -- 沒有礦帶地形
+	local cfg = {outcrop = 0}      -- 沒有礦帶地形、沒有露頭
 	local function none() return 0 end
 	it("礦石露頭、地表以下不鋪", function()
 		assert.are.equal(0, stress.natural_soil(cfg, 10, 10, 5, none, true))
@@ -241,6 +241,28 @@ describe("stress 天然表土（mapgen 和應力解共用）", function()
 			end
 		end end
 		assert.is_true(n > 50 and n < 200)
+	end)
+	it("露頭 20%：山坡大約兩成不鋪土，一片一片（相鄰的格大多一樣）", function()
+		local c2 = {outcrop = 0.2}
+		local bare, n, same, pairs_ = 0, 0, 0, 0
+		for x = -150, 150, 3 do for z = -150, 150, 3 do
+			n = n + 1
+			local f = stress.outcrop_factor(c2, x, z)
+			if f == 0 then bare = bare + 1 end
+			if (f == 0) == (stress.outcrop_factor(c2, x + 1, z) == 0) then same = same + 1 end
+			pairs_ = pairs_ + 1
+		end end
+		assert.is_true(bare / n > 0.15 and bare / n < 0.25)
+		assert.is_true(same / pairs_ > 0.9)
+		-- 露頭的山坡不鋪土、也不種樹
+		for x = -60, 60 do for z = -60, 60 do
+			if stress.outcrop_factor(c2, x, z) == 0 then
+				assert.are.equal(0, stress.natural_soil(c2, x, z, 5, none, false))
+			end
+		end end
+	end)
+	it("露頭 0：沒有露頭", function()
+		for x = -60, 60, 5 do assert.are.equal(1, stress.outcrop_factor({outcrop = 0}, x, 7)) end
 	end)
 	it("樹那一欄的山坡表土取整格、至少 2 m", function()
 		for x = -40, 40 do for z = -40, 40 do
