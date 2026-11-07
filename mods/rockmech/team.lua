@@ -216,6 +216,23 @@ end)
 
 local function money_text(v) return ("%s$%.0f"):format(v < 0 and "−" or "", math.abs(v)) end
 
+-- 單機版（rockmech_solo）：引擎在單機時會給玩家幾乎所有權限（含 server，等於老師），這裡只留基本的
+local SOLO_PRIVS = {interact = true, shout = true}
+if cfg.solo then
+	core.register_on_mods_loaded(function()
+		if not core.is_singleplayer() then return end
+		for priv, def in pairs(core.registered_privileges) do
+			if not SOLO_PRIVS[priv] then def.give_to_singleplayer = false end
+		end
+	end)
+end
+if cfg.solo then
+	core.register_on_joinplayer(function(player)
+		local n = player:get_player_name()
+		core.log("action", ("[rockmech] solo: %s privs = %s"):format(n, core.privs_to_string(core.get_player_privs(n))))
+	end)
+end
+
 local function is_teacher(name) return core.check_player_privs(name, {[TEACHER] = true}) end
 
 core.register_chatcommand("team", {

@@ -695,6 +695,7 @@ function config.load(get)
 	cfg.shotcrete_speed = math.max(0.1, tonumber(get("rockmech_shotcrete_speed")) or 1.5)
 	-- 經營模式（career.lua）
 	cfg.career = get("rockmech_career") == "true" or get("rockmech_career") == true
+	cfg.solo = get("rockmech_solo") == "true" or get("rockmech_solo") == true    -- 單機版（standalone/）：沒有老師功能
 	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 23000)
 	-- 分組（team.lua）：組數（A, B, …）、各組營地沿 z 相隔幾公尺、名單檔（世界資料夾裡）、名單外的名稱能不能登入
 	cfg.career_teams = math.max(1, math.min(26, math.floor(tonumber(get("rockmech_career_teams")) or 8)))
