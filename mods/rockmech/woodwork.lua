@@ -1,6 +1,6 @@
 -- rockmech/woodwork.lua
 -- 木工：樹木、砍樹、鋸木台、木工桌、木製建材。
---   樹林：每條礦帶交界的山脊種滿蘋果樹（樹底下一格土壤碎石，有重量）。樹苗種在滿格的土上會自己長。
+--   表土和樹林：每條礦帶交界的山脊整片鋪表土（根系抓住，被擾動才變鬆土），上面稀疏種蘋果樹。樹苗種在滿格的土上會自己長。
 --   砍樹：斧頭（工具室管理員）砍樹幹任何一格，整棵倒下：樹幹全部變成原木給砍的人，樹葉拿掉，掉 1–2 棵樹苗和蘋果。
 --   鋸木台（營地中心東南邊的一張台子）：手上有原木，右鍵選要鋸成什麼：2 根木柱、4 塊木板、8 塊木板半格。
 --   木工桌（營地裡一張單純的木桌）：用木板做：木牆板、樓梯、門、活板門、柵欄、柵欄橫桿、梯子、木板半格。
@@ -326,12 +326,78 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 山上的土和樹林：每條礦帶交界的山脊整片鋪一層土（nodes.lua 的土壤碎石，0–1 m），上面稀疏種蘋果樹；
--- 鋸木台、木工桌放在營地裡。
--- 土的厚度照安息角算：顆粒流在相鄰兩格土面高差 ≥ 8·d·tan(安息角) + 1（八分之一公尺，d = 1 或 √2）時才流
--- （granular.choose_flow），所以每一格有土的格子，對 8 個鄰格的高差都壓在這以下：鋪好就是穩定的，不會自己流。
--- 太陡、怎麼鋪都會超過的地方就不鋪，留岩石（陡坡只有岩石、緩坡才積得住土）。
--- 2026-11-07 的教訓：蓋的時候絕不動岩石（換掉岩石等於開挖），而且用 VoxelManip 寫（不觸發破壞判定、顆粒流）
+-- 表土（有植物根系的土）：根系凝聚力讓它在陡坡上也站得住，所以不參與顆粒流（不是碎石）。
+-- 一被擾動，根系就斷，變成一般的鬆土（nodes.lua 的土壤碎石），照安息角流動：
+--   學生挖表土 → 挖起來的就是一份土（同撿碎石）
+--   貼著的格子被挖掉、炸掉、坍塌 → 貼著的表土變鬆土；底下被掏空的表土變鬆土、掉下來
+--   鬆土流走也算擾動：陡坡上一格鬆了流走，旁邊的表土跟著鬆、跟著流，連鎖成整片邊坡滑動；
+--   緩坡上鬆掉的土在安息角內不流，連鎖自己停住
+-- 不是岩體（is_ground_content = false）：應力解、崩落判定都不算它；樹苗種得活（group soil）
+---------------------------------------------------------------------------
+
+local TOPSOIL = "rockmech:topsoil"
+local function loosen(p)
+	if core.get_node(p).name ~= TOPSOIL then return false end
+	core.swap_node(p, {name = SOIL})
+	core.after(0, function() rockmech.collapse.check_cell(p) end)     -- 底下空了就掉、陡了就流
+	return true
+end
+local NB6 = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
+-- pos 被擾動（東西被拿掉）：貼著的表土變鬆土
+local function disturb(pos)
+	for _, d in ipairs(NB6) do loosen({x = pos.x + d[1], y = pos.y + d[2], z = pos.z + d[3]}) end
+end
+-- pos 變空了：正上方的表土失去支撐，變鬆土掉下來（鬆土流走也算，不然表土會懸空）
+local function undercut(pos)
+	local def = core.registered_nodes[core.get_node(pos).name]
+	if def and def.walkable == false then loosen({x = pos.x, y = pos.y + 1, z = pos.z}) end
+end
+
+core.register_node(TOPSOIL, {
+	description = "表土 Topsoil\n長著草和樹根的土：根系抓住，陡坡上也站得住；一挖、或旁邊被挖開，就變成鬆土照安息角流",
+	tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
+	is_ground_content = false, groups = {crumbly = 3, soil = 1},
+	sounds = default.node_sound_dirt_defaults(), drop = SOIL,
+	-- 挖：先變成鬆土再挖（經營模式就是撿起一份土），旁邊的表土也被擾動
+	on_dig = function(pos, node, digger)
+		core.swap_node(pos, {name = SOIL})
+		local ok = core.node_dig(pos, {name = SOIL}, digger)
+		disturb(pos)
+		return ok
+	end,
+})
+-- 鬆土放久了長草變回表土：滿格、沒被壓實、上面是空的而且照得到光（平均約 10 分鐘）
+core.register_abm({
+	label = "rockmech: 鬆土長草變回表土",
+	nodenames = {SOIL}, interval = 60, chance = 10,
+	action = function(pos)
+		local above = {x = pos.x, y = pos.y + 1, z = pos.z}
+		if core.get_node(above).name ~= "air" or (core.get_node_light(above, 0.5) or 0) < 9 then return end
+		core.swap_node(pos, {name = TOPSOIL})
+	end,
+})
+-- 鬆土、碎石從一格流出去（流掉一部分也算）：貼著的表土被拖動、跟著鬆掉（collapse.lua granular_settle 呼叫）
+rockmech.granular_moved = disturb
+-- 擾動的來源：玩家挖東西、坍塌／爆破／碎石和鬆土移動（都會排穩定判定）
+core.register_on_dignode(function(pos, oldnode)
+	disturb(pos)
+	undercut(pos)
+end)
+do
+	local col = rockmech.collapse
+	local orig = col.queue_stability_check
+	col.queue_stability_check = function(pos, prev)
+		orig(pos, prev)
+		local p = vector.round(pos)
+		disturb(p)
+		undercut(p)
+	end
+end
+
+---------------------------------------------------------------------------
+-- 山上的表土和樹林：每條礦帶交界的山脊，比地表高 1 m 以上的每一欄都鋪一層 1 m 的表土（陡坡也鋪：根系抓住），
+-- 上面稀疏種蘋果樹；鋸木台、木工桌放在營地裡。
+-- 2026-11-07 的教訓：蓋的時候絕不動岩石（換掉岩石等於開挖），而且用 VoxelManip 寫（不觸發破壞判定）
 ---------------------------------------------------------------------------
 
 local RIDGE_X = 30           -- 山脊中線兩側各鋪幾公尺
@@ -369,68 +435,40 @@ local function plant_ridge(xr)
 	local x1, x2 = xr - RIDGE_X, xr + RIDGE_X
 	local h = heightmap(x1 - 1, x2 + 1, Z1 - 1, Z2 + 1)
 	local surface = cfg.surface_y or 0
-	local tan = math.tan(math.rad(rockmech.cfg.slope.angle))
-	local LIM = {}                  -- 往 DIRS8[i] 的鄰格，土面最多可以高幾個八分之一公尺（再高一點就會流）
-	for i, d in ipairs(DIRS8) do
-		local dist = (d[1] ~= 0 and d[2] ~= 0) and math.sqrt(2) or 1
-		LIM[i] = math.ceil(8 * dist * tan + 1) - 1
-	end
-	-- 土的級數 k（0..8，鋪在地面上一格）：先全部鋪滿，再一輪一輪把比鄰格高太多的那格削薄，直到全部穩定
-	local k = {}
-	for x = x1, x2 do for z = Z1, Z2 do
-		local y = h[x .. "," .. z]
-		if y and y >= surface + MIN_RISE then k[x .. "," .. z] = NLEV end
-	end end
-	local function e(x, z)          -- 土面高度（八分之一公尺）
-		local y = h[x .. "," .. z]
-		return y and (8 * (y + 1) + (k[x .. "," .. z] or 0)) or nil
-	end
-	for _ = 1, 40 do
-		local changed = false
-		for x = x1, x2 do for z = Z1, Z2 do
-			local kk = k[x .. "," .. z]
-			if kk and kk > 0 then
-				local base = 8 * (h[x .. "," .. z] + 1)
-				for i, d in ipairs(DIRS8) do
-					local eb = e(x + d[1], z + d[2])
-					if eb and base + kk - eb > LIM[i] then kk = math.max(0, eb + LIM[i] - base) end
-				end
-				if kk ~= k[x .. "," .. z] then k[x .. "," .. z] = kk; changed = true end
-			end
-		end end
-		if not changed then break end
-	end
-	-- 寫進地圖（VoxelManip：不觸發破壞判定、顆粒流）
+	-- 表土（VoxelManip：不觸發破壞判定）
 	local vm = core.get_voxel_manip()
 	local e1, e2 = vm:read_from_map({x = x1, y = -20, z = Z1}, {x = x2, y = 61, z = Z2})
 	local area = VoxelArea(e1, e2)
 	local data = vm:get_data()
-	local cid = {}
-	for lv = 1, NLEV do cid[lv] = core.get_content_id(rockmech.rubble_with_level(SOIL, lv)) end
-	local n_soil = 0
+	local c_top = core.get_content_id(TOPSOIL)
+	local covered, n_soil = {}, 0
 	for x = x1, x2 do for z = Z1, Z2 do
-		local kk = k[x .. "," .. z]
-		if kk and kk > 0 then
-			local i = area:index(x, h[x .. "," .. z] + 1, z)
-			if data[i] == core.CONTENT_AIR then data[i] = cid[kk]; n_soil = n_soil + 1 end
+		local y = h[x .. "," .. z]
+		if y and y >= surface + MIN_RISE then
+			local i = area:index(x, y + 1, z)
+			if data[i] == core.CONTENT_AIR then data[i] = c_top; covered[x .. "," .. z] = true; n_soil = n_soil + 1 end
 		end
 	end end
 	vm:set_data(data)
 	vm:write_to_map(true)
-	-- 樹：稀疏（間距 TREE_GAP、隨機偏移、四成跳過），只種在滿格土上；周圍 8 格的土面都高出 1 m 以上的（窪地）不種
+	-- 樹：稀疏（間距 TREE_GAP、隨機偏移、四成跳過），種在表土上；周圍 8 格的地面都比樹根高 1 m 以上（窪地）不種
+	local function ground(x, z)
+		local y = h[x .. "," .. z]
+		return y and (y + (covered[x .. "," .. z] and 1 or 0)) or nil
+	end
 	local n_tree = 0
 	for gx = x1, x2, TREE_GAP do for gz = Z1, Z2, TREE_GAP do
 		local x = gx + math.floor(rnd(gx, gz, 1) * 5) - 2
 		local z = gz + math.floor(rnd(gx, gz, 2) * 5) - 2
-		if rnd(gx, gz, 3) > 0.4 and k[x .. "," .. z] == NLEV then
-			local root = 8 * (h[x .. "," .. z] + 2)     -- 樹根（樹幹最下面那格的底）
+		if rnd(gx, gz, 3) > 0.4 and covered[x .. "," .. z] then
+			local g = ground(x, z)
 			local buried = true
 			for _, d in ipairs(DIRS8) do
-				local eb = e(x + d[1], z + d[2])
-				if not eb or eb - root <= 8 then buried = false; break end
+				local gb = ground(x + d[1], z + d[2])
+				if not gb or gb - g <= 1 then buried = false; break end
 			end
 			if not buried then
-				default.grow_tree({x = x, y = h[x .. "," .. z] + 2, z = z}, true)
+				default.grow_tree({x = x, y = g + 1, z = z}, true)
 				n_tree = n_tree + 1
 			end
 		end
@@ -438,7 +476,7 @@ local function plant_ridge(xr)
 	-- 做完、寫進地圖之後才記下來（中途關機的話下次重做）
 	storage:set_string(key, "1")
 	planting[xr] = nil
-	core.log("action", ("[rockmech] 山脊 x = %d 鋪了 %d 格土、種了 %d 棵樹"):format(xr, n_soil, n_tree))
+	core.log("action", ("[rockmech] 山脊 x = %d 鋪了 %d 格表土、種了 %d 棵樹"):format(xr, n_soil, n_tree))
 end
 
 -- 鋸木台、木工桌：營地中心往東南，交車區北邊（營地中心 (x0, 0)）

@@ -278,9 +278,8 @@ core.register_node(rockmech.RUBBLE_GRANITE, {
 -- 營地的林地鋪這個（woodwork.lua）。以後深開挖時，上覆的土壤一樣是荷重
 rockmech.RUBBLE_SOIL = rockmech.modname .. ":rubble_soil"
 core.register_node(rockmech.RUBBLE_SOIL, {
-	description = "Soil (土壤)\n跟碎石一樣會照安息角流動、有重量",
-	tiles = has_default and {"default_grass.png", "default_dirt.png",
-		{name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}} or {"[fill:16x16:#6a5030"},
+	description = "Loose soil (鬆土)\n跟碎石一樣會照安息角流動、有重量；滿格放久了長草變回表土（woodwork.lua）",
+	tiles = {has_default and "default_dirt.png" or "[fill:16x16:#6a5030"},     -- 遊戲內建的泥土：沒有草（表土才有草）
 	groups = {crumbly = 3, rockmech_rubble = 1, soil = 1},
 	sounds = has_default and default.node_sound_dirt_defaults and default.node_sound_dirt_defaults() or gravel_sounds,
 	is_ground_content = false,   -- 否則相鄰區塊生成時，會被 rockmech_strip_soil 當成土壤剝掉（半格也是，見下面）

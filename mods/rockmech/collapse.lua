@@ -428,6 +428,7 @@ granular_settle = function(pos, chain, q_ext, side)
         set_rubble(T, base, k - put)
         physics_updating = prev
         next_pos = {below}
+        if rockmech.granular_moved then rockmech.granular_moved(T) end
     else
         local q = SQUEEZE_CAP > 0 and overload(T) + (q_ext or 0) or 0
         local src, gam = granular.surface(T.y, k), rockmech.cfg.failure.gamma_other
@@ -449,6 +450,8 @@ granular_settle = function(pos, chain, q_ext, side)
         add_rubble(land, base, amount, g)
         physics_updating = prev
         rubble_sound(T, amount)
+        -- 有料從 T 流出去（woodwork.lua：貼著的表土被拖動、跟著鬆掉，連鎖成整片邊坡滑動）
+        if rockmech.granular_moved then rockmech.granular_moved(T) end
         local d = granular.DIRS[i]
         debris({x = T.x + d[1] * 0.4, y = T.y, z = T.z + d[2] * 0.4}, base,
             math.max(3, amount * 2), {x = d[1] * 1.5, y = 0, z = d[2] * 1.5})
@@ -1761,7 +1764,8 @@ local function register_physics_events(name, intact)
             collapse.queue_stability_check(pos, "air")
         end,
         on_destruct = function(pos)
-            collapse.mark_excavated(pos)
+            -- 土（鬆土、表土變的）本來就不是岩石：挖土不算開挖，底下的天然岩面不會因此被當成開挖面判定
+            if rockmech.rubble_base[core.get_node(pos).name] ~= rockmech.RUBBLE_SOIL then collapse.mark_excavated(pos) end
             rockmech.shotcrete_uncover(pos)
             -- 受料倉裡的作業（破碎站、選礦場吃料、倉內碎石往格柵流，crusher.lua 設 collapse.quiet）：
             -- 倉壁有混凝土護坡，碎石怎麼動都不會露出岩面，不排穩定、破壞、應力解（原本一座破碎站一分鐘排一百多次）
