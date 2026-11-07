@@ -335,8 +335,10 @@ do
 end
 
 -- 兩份碎石能不能放在同一格：同種，或礦石碎石和它的廢石
+-- 碎石和鬆土（RUBBLE_SOIL）也可以合併：體積大的那種贏，一樣多變土（rubble_merge）
 function rockmech.rubble_mixable(a, b)
 	if a == b then return true end
+	if a and b and (a == rockmech.RUBBLE_SOIL or b == rockmech.RUBBLE_SOIL) then return true end
 	local oa, ob = rockmech.ore_of_rubble[a], rockmech.ore_of_rubble[b]
 	return oa ~= nil and oa.waste_rubble == b or ob ~= nil and ob.waste_rubble == a
 end
@@ -347,6 +349,14 @@ function rockmech.mix_grade(k1, p1, k2, p2)
 end
 -- 合併一格的碎石（base 1 的 k1 級品位 p1，加 base 2 的 k2 級品位 p2）。回傳 種類, 品位
 function rockmech.rubble_merge(b1, k1, p1, b2, k2, p2)
+	local SOIL = rockmech.RUBBLE_SOIL
+	if b1 ~= b2 and (b1 == SOIL or b2 == SOIL) then
+		-- 碎石＋土：體積大的那種，一樣多變土。變成礦石碎石時土算廢石（品位 0）稀釋；變成土就沒有品位
+		local ks, ko, other, po = b1 == SOIL and k1 or k2, b1 == SOIL and k2 or k1, b1 == SOIL and b2 or b1, b1 == SOIL and p2 or p1
+		if ks >= ko then return SOIL, 0 end
+		if rockmech.ore_of_rubble[other] then return other, rockmech.mix_grade(ko, po, ks, 0) end
+		return other, other == b1 and p1 or p2
+	end
 	local ore = rockmech.ore_of_rubble[b1] and b1 or rockmech.ore_of_rubble[b2] and b2 or b1
 	return ore, rockmech.mix_grade(k1, b1 == ore and p1 or 0, k2, b2 == ore and p2 or 0)
 end
