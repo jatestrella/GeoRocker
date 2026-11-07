@@ -11,7 +11,9 @@
 local scfg = rockmech.cfg.support
 local POST = "rockmech:timber_post"           -- 物品，也是柱身方塊
 local POST_TOP = "rockmech:timber_post_top"   -- 柱頂（多一塊頂部墊木）
-local BEAM = "rockmech:timber_beam"           -- 橫放的樑
+local BEAM = "rockmech:timber_beam"           -- 舊版的樑（facedir），載入時換成下面兩種
+local BEAM_X = "rockmech:timber_beam_x"       -- 橫放的樑，順 x
+local BEAM_Z = "rockmech:timber_beam_z"       -- 橫放的樑，順 z
 local PLANK = "rockmech:timber_plank"
 local SLAB = "rockmech:timber_slab"
 local IS_POST = {[POST] = true, [POST_TOP] = true}
@@ -95,12 +97,37 @@ end
 local BARK = "[fill:16x16:#6e5032^[fill:1x16:3,0:#5a3f26^[fill:1x16:8,0:#5a3f26^[fill:1x16:12,0:#5a3f26^[fill:2x3:5,4:#80603e^[fill:2x3:10,10:#80603e"
 local ENDS = "[fill:16x16:#c9a46a^[fill:10x10:3,3:#b8925a^[fill:6x6:5,5:#c9a46a^[fill:2x2:7,7:#9a7444"
 local WOOD = "[fill:16x16:#b08850^[fill:16x1:0,3:#9a7444^[fill:16x1:0,7:#9a7444^[fill:16x1:0,11:#9a7444^[fill:16x1:0,15:#9a7444^[fill:1x3:5,0:#9a7444^[fill:1x4:11,4:#9a7444^[fill:1x3:3,8:#9a7444^[fill:1x4:9,12:#9a7444"
-local SHAFT = {{-0.1, -0.5, -0.06, 0.1, 0.5, 0.06}, {-0.06, -0.5, -0.1, 0.06, 0.5, 0.1}}
+local BARK_H = BARK .. "^[transformR90"           -- 橫放的樑：木紋順著樑
+-- 圓木斷面（兩個交叉的方柱近似直徑 20 cm），沿 x／y／z 從 a 到 b
+local function xs(a, b) return {{a, -0.1, -0.06, b, 0.1, 0.06}, {a, -0.06, -0.1, b, 0.06, 0.1}} end
+local function ys(a, b) return {{-0.1, a, -0.06, 0.1, b, 0.06}, {-0.06, a, -0.1, 0.06, b, 0.1}} end
+local function zs(a, b) return {{-0.1, -0.06, a, 0.1, 0.06, b}, {-0.06, -0.1, a, 0.06, 0.1, b}} end
+local SHAFT = ys(-0.5, 0.5)
 local CAP = {-0.3, 0.42, -0.12, 0.3, 0.5, 0.12}   -- 柱頂墊木
+-- 接合：柱身在格子中央，旁邊的樑從格子邊界開始，中間會空 40 cm。
+-- 用 connected nodebox：碰到旁邊的木柱、樑時，從中央伸出一段同斷面的木頭接到格子邊界，兩邊剛好接上。
+--   木柱：四個水平方向接樑。順 x 的樑：±z 接木柱與順 z 的樑、上下接木柱與順 z 的樑（疊成井字）；順 z 的樑同理。
+local function connected(fixed, sides, connects_to)
+	local nb = {type = "connected", fixed = fixed}
+	local arms = {left = xs(-0.5, 0), right = xs(0, 0.5), bottom = ys(-0.5, 0), top = ys(0, 0.5),
+		front = zs(-0.5, 0), back = zs(0, 0.5)}
+	for _, s in ipairs(sides) do nb["connect_" .. s] = arms[s] end
+	return {node_box = nb, connects_to = connects_to}
+end
 local sounds = core.get_modpath("default") and default.node_sound_wood_defaults() or nil
 local G = {dig_immediate = 2, rockmech_timber = 1}
 local G_HIDDEN = table.copy(G)
 G_HIDDEN.not_in_creative_inventory = 1
+local function groups(base, extra)
+	local t = table.copy(base)
+	for k, v in pairs(extra) do t[k] = v end
+	return t
+end
+local HORIZ = {"left", "right", "front", "back"}
+local POST_BOX = connected(SHAFT, HORIZ, {"group:timber_beam_x", "group:timber_beam_z"})
+local POST_TOP_BOX = connected({SHAFT[1], SHAFT[2], CAP}, HORIZ, {"group:timber_beam_x", "group:timber_beam_z"})
+local BEAM_X_BOX = connected(xs(-0.5, 0.5), {"front", "back", "top", "bottom"}, {"group:timber_post", "group:timber_beam_z"})
+local BEAM_Z_BOX = connected(zs(-0.5, 0.5), {"left", "right", "top", "bottom"}, {"group:timber_post", "group:timber_beam_x"})
 
 local function post_dig(pos, node, digger)
 	local base, len = post_of(pos)
@@ -112,11 +139,12 @@ core.register_node(POST, {
 	description = ("木柱 Timber post（直徑 %d cm）\n對地板按右鍵：往上長到碰到頂板，最長 %d m\n頂到岩石頂板 → 支撐：承載力 P = min(壓碎, 挫屈)，分給柱頂周圍 3×3 m² 的頂板\n2 m 約 %d kN、4 m 約 %d kN、6 m 約 %d kN（柱越長越容易挫屈）\n對牆面按右鍵：橫放當樑")
 		:format(math.floor(scfg.post_d * 100 + 0.5), scfg.post_max_len, capacity(2), capacity(4), capacity(6)),
 	drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
-	node_box = {type = "fixed", fixed = SHAFT},
+	node_box = POST_BOX.node_box, connects_to = POST_BOX.connects_to,
+	selection_box = {type = "fixed", fixed = SHAFT},
 	tiles = {ENDS, ENDS, BARK},
 	inventory_image = "[fill:16x16:#00000000^[fill:4x14:6,1:#6e5032^[fill:1x14:7,1:#5a3f26^[fill:4x2:6,1:#c9a46a",
 	wield_image = "[fill:16x16:#00000000^[fill:4x14:6,1:#6e5032^[fill:1x14:7,1:#5a3f26^[fill:4x2:6,1:#c9a46a",
-	is_ground_content = false, groups = G, sounds = sounds, drop = "",
+	is_ground_content = false, groups = groups(G, {timber_post = 1}), sounds = sounds, drop = "",
 	on_dig = post_dig,
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
@@ -164,7 +192,7 @@ core.register_node(POST, {
 		else
 			-- 對牆面：橫放當樑，樑的方向垂直於牆面
 			local d = vector.subtract(above, under)
-			core.set_node(above, {name = BEAM, param2 = d.x ~= 0 and 12 or 4})
+			core.set_node(above, {name = d.x ~= 0 and BEAM_X or BEAM_Z})
 		end
 		if not creative(placer) then itemstack:take_item() end
 		return itemstack
@@ -174,19 +202,41 @@ core.register_node(POST, {
 core.register_node(POST_TOP, {
 	description = "木柱（柱頂） Timber post top",
 	drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
-	node_box = {type = "fixed", fixed = {SHAFT[1], SHAFT[2], CAP}},
+	node_box = POST_TOP_BOX.node_box, connects_to = POST_TOP_BOX.connects_to,
 	selection_box = {type = "fixed", fixed = SHAFT},
 	tiles = {ENDS, ENDS, BARK},
-	is_ground_content = false, groups = G_HIDDEN, sounds = sounds, drop = "",
+	is_ground_content = false, groups = groups(G_HIDDEN, {timber_post = 1}), sounds = sounds, drop = "",
 	on_dig = post_dig,
 })
 
+-- 橫放的樑：順 x、順 z 各一種（connected nodebox 不跟著 facedir 轉，所以分成兩種方塊）
+for _, v in ipairs({
+	{BEAM_X, BEAM_X_BOX, xs(-0.5, 0.5), {BARK_H, BARK_H, ENDS, ENDS, BARK_H, BARK_H}, "timber_beam_x"},
+	{BEAM_Z, BEAM_Z_BOX, zs(-0.5, 0.5), {BARK, BARK, BARK_H, BARK_H, ENDS, ENDS}, "timber_beam_z"},
+}) do
+	core.register_node(v[1], {
+		description = "木樑 Timber beam",
+		drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
+		node_box = v[2].node_box, connects_to = v[2].connects_to,
+		selection_box = {type = "fixed", fixed = v[3]},
+		tiles = v[4],
+		is_ground_content = false, groups = groups(G_HIDDEN, {[v[5]] = 1}), sounds = sounds, drop = POST,
+	})
+end
+-- 舊版的樑（facedir 轉向的單一方塊）：換成順 x／順 z 的樑
 core.register_node(BEAM, {
-	description = "木樑 Timber beam",
-	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
-	node_box = {type = "fixed", fixed = SHAFT},
-	tiles = {ENDS, ENDS, BARK},
+	description = "木樑（舊版）", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
+	node_box = {type = "fixed", fixed = SHAFT}, tiles = {ENDS, ENDS, BARK},
 	is_ground_content = false, groups = table.copy(G_HIDDEN), sounds = sounds, drop = POST,
+})
+core.register_lbm({
+	label = "rockmech: 舊版木樑換成順 x／順 z 的樑",
+	name = "rockmech:timber_beam_axis",
+	nodenames = {BEAM}, run_at_every_load = true,
+	action = function(pos, node)
+		local axis = math.floor(node.param2 / 4)          -- facedir 的軸：3、4 = ±x，1、2 = ±z
+		core.swap_node(pos, {name = (axis == 3 or axis == 4) and BEAM_X or BEAM_Z})
+	end,
 })
 
 core.register_node(PLANK, {
