@@ -623,15 +623,29 @@ function rockmech.fieldbook_add_plt(player, rec)
 	end
 end
 ---------------------------------------------------------------------------
--- 野帳本的樣子：一本書（咖啡色封皮、米色紙、紅色邊線），右上角兩張書籤分頁：
+-- 野帳本的樣子：一本直式的書（咖啡色硬皮、米色紙、淡藍橫線、紅色邊線、看得到一疊書頁的邊、紅色書籤繩），
+-- 分頁像便條紙貼在書的右邊外面：
 --   野外調查：施密特錘的讀數
 --   岩芯：目錄是記過的鑽孔（判讀過的、或做過點荷重的），點一孔翻到那一孔的柱狀圖；
 --         點荷重做過的那幾公尺，強度欄自動標上 Is(50) 和換算的 UCS（同一公尺做過幾次取平均）
+-- 顏色都在 BOOK_COLORS，可以用 rockmech.ui_color 在世界裡改（mod storage ui_color:<名字>）
 ---------------------------------------------------------------------------
-local INK, PAPER, COVER, MARGIN, RULE = "#2b2620", "#f3ecd8", "#5a3d22", "#d08080", "#d9cfb4"
+local BOOK_COLORS = {
+	book_cover = "#5a3a22", book_cover_edge = "#7a5232", book_page = "#f4eddb", book_page_edge = "#ddd3b8",
+	book_ink = "#2b2620", book_rule = "#bfd0de", book_margin = "#d88080", book_ribbon = "#a02828",
+	book_tab_field = "#f2d65c", book_tab_core = "#8cc0e8", book_hover = "#00000018",
+}
+function rockmech.ui_color(key)
+	local v = storage:get_string("ui_color:" .. key)
+	return v ~= "" and v or BOOK_COLORS[key] or rockmech.ui_color_defaults and rockmech.ui_color_defaults[key]
+end
+rockmech.ui_color_defaults = rockmech.ui_color_defaults or {}
+for k, v in pairs(BOOK_COLORS) do rockmech.ui_color_defaults[k] = v end
+local C = rockmech.ui_color
+
 local book_state = {}       -- 玩家名稱 → {tab = "core" | "field", hole = 目錄第幾孔}
 local logging = {}          -- 玩家名稱 → {pos, acc, n, depth, t, need, hud}
-local function ink(t) return core.formspec_escape(core.colorize(INK, t)) end
+local function ink(t) return core.formspec_escape(core.colorize(C("book_ink"), t)) end
 
 -- 這本記到的鑽孔：判讀過的（logs）在前，只做過點荷重的接在後面（岩性、品位看不懂，記成 ?）
 local function book_holes(stack)
@@ -659,53 +673,94 @@ local function plt_by_metre(stack, acc, n)
 	return t
 end
 
-local function book_frame(st)
-	local out = {"formspec_version[6]size[16,12]",
-		("box[0,0;16,12;%s]box[0.3,0.3;15.4,11.4;%s]box[1.3,0.3;0.05,11.4;%s]"):format(COVER, PAPER, MARGIN)}
-	for _, tab in ipairs({"field", "core"}) do
-		local on = st.tab == tab
-		out[#out + 1] = ("style[tab_%s;bgcolor=%s;textcolor=%s]"):format(tab, on and "#e8d9a8" or "#8a7450", on and INK or "#f3ecd8")
+-- 版面（單位：formspec 格）
+local BW, BH = 10.8, 14.2             -- 書（硬皮）的寬、高
+local PX, PY, PW, PH = 0.45, 0.35, 9.8, 13.3   -- 紙
+local LX, RX = 1.75, PX + PW - 0.25   -- 紅色邊線右邊開始寫字、右邊界
+local LINE = 0.5                      -- 橫線間距（表格一列一格）
+local BODY_Y, BODY_H = 2.35, 10.5     -- 表格內容（可以捲動）
+
+local function book_frame(st, page_no)
+	local out = {("formspec_version[6]size[%g,%g]bgcolor[#00000000;false]"):format(BW + 2.1, BH + 0.3)}
+	-- 便條紙分頁（先畫，被封皮蓋住一半，看起來是夾在書裡、從右邊露出來）
+	local tabs = {{"field", S("Field survey"), 1.3}, {"core", S("Cores"), 2.75}}
+	for _, t in ipairs(tabs) do
+		local on = st.tab == t[1]
+		local x = BW - 0.6 + (on and 0.25 or 0)
+		out[#out + 1] = ("box[%g,%g;2.4,1.25;%s]"):format(x + 0.08, t[3] + 0.08, "#00000040")
+		out[#out + 1] = ("box[%g,%g;2.4,1.25;%s]"):format(x, t[3], C("book_tab_" .. t[1]) .. (on and "" or "c0"))
 	end
-	out[#out + 1] = "button[10.6,0.4;2.4,0.6;tab_field;" .. core.formspec_escape(S("Field survey")) .. "]"
-	out[#out + 1] = "button[13.1,0.4;2.4,0.6;tab_core;" .. core.formspec_escape(S("Cores")) .. "]"
-	out[#out + 1] = "button_exit[14.6,11.0;1,0.6;close;×]"
+	-- 陰影、硬皮、書頁的邊（一疊紙）
+	out[#out + 1] = ("box[0.18,0.22;%g,%g;#00000055]"):format(BW, BH)
+	out[#out + 1] = ("box[0,0;%g,%g;%s]"):format(BW, BH, C("book_cover"))
+	out[#out + 1] = ("box[0,0;%g,0.06;%s]box[0,0;0.06,%g;%s]"):format(BW, C("book_cover_edge"), BH, C("book_cover_edge"))
+	for i = 3, 1, -1 do
+		out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(PX, PY, PW + i * 0.05, PH + i * 0.05, i % 2 == 1 and C("book_page_edge") or C("book_page"))
+	end
+	out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(PX, PY, PW, PH, C("book_page"))
+	-- 裝訂邊的陰影
+	for i = 0, 3 do out[#out + 1] = ("box[%g,%g;%g,%g;#0000000c]"):format(PX, PY, 0.35 - i * 0.08, PH) end
+	-- 橫線、紅色邊線
+	for y = BODY_Y, PY + PH - 0.6, LINE do out[#out + 1] = ("box[%g,%g;%g,0.02;%s]"):format(PX + 0.1, y, PW - 0.2, C("book_rule")) end
+	out[#out + 1] = ("box[%g,%g;0.03,%g;%s]"):format(LX - 0.15, PY, PH, C("book_margin"))
+	-- 書籤繩
+	out[#out + 1] = ("box[%g,%g;0.22,0.95;%s]"):format(PX + PW - 1.4, PY, C("book_ribbon"))
+	-- 頁碼
+	if page_no then out[#out + 1] = ("label[%g,%g;%s]"):format(PX + PW / 2 - 0.3, PY + PH - 0.35, ink("— " .. page_no .. " —")) end
+	-- 分頁的字和按鈕（蓋在露出來的那一截上）
+	for _, t in ipairs(tabs) do
+		local on = st.tab == t[1]
+		local x = BW + 0.05 + (on and 0.25 or 0)
+		out[#out + 1] = ("style[tab_%s;bgcolor=#00000000;border=false;textcolor=%s]"):format(t[1], C("book_ink"))
+		out[#out + 1] = ("button[%g,%g;1.7,1.25;tab_%s;%s]"):format(x, t[3], t[1], core.formspec_escape(t[2]))
+	end
+	out[#out + 1] = ("style[close;bgcolor=#00000000;border=false;textcolor=%s]"):format(C("book_ink"))
+	out[#out + 1] = ("button_exit[%g,%g;0.6,0.6;close;×]"):format(PX + PW - 0.75, PY + 0.1)
 	return out
 end
--- 一頁紙上的橫線
-local function rules(out, y0, y1, step)
-	for y = y0, y1, step do out[#out + 1] = ("box[1.5,%g;14,0.02;%s]"):format(y, RULE) end
+local function title(out, text)
+	out[#out + 1] = ("label[%g,1.05;%s]"):format(LX, ink(text))
+	out[#out + 1] = ("box[%g,1.4;%g,0.03;%s]"):format(LX, RX - LX, C("book_ink"))
+end
+local function scroll_body(out, n)
+	local content = n * LINE
+	out[#out + 1] = "scroll_container_end[]"
+	if content > BODY_H then
+		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=%d;largestep=%d]"):format(
+			math.floor(math.ceil((content - BODY_H) / LINE) * LINE * 10 + 0.5), math.floor(LINE * 10 + 0.5), math.floor(math.floor(BODY_H / LINE) * LINE * 10 + 0.5))
+		out[#out + 1] = ("scrollbar[%g,%g;0.25,%g;vertical;bk_scroll;0]"):format(PX + PW - 0.3, BODY_Y, BODY_H)
+	end
 end
 
 local function core_toc(out, holes)
-	out[#out + 1] = ("label[1.6,0.75;%s]"):format(ink(S("Cores")))
-	rules(out, 1.6, 10.6, 0.7)
-	if #holes == 0 then return end
-	local names = {}
-	for i = 1, #holes do names[i] = "h_" .. i end
-	out[#out + 1] = ("style[%s;bgcolor=#00000000;border=false;textcolor=%s]"):format(table.concat(names, ","), INK)
+	title(out, S("Cores"))
+	out[#out + 1] = ("scroll_container[0,%g;%g,%g;bk_scroll;vertical;0.1]"):format(BODY_Y, BW, BODY_H)
 	for i, h in ipairs(holes) do
-		local col, row = math.floor((i - 1) / 13), (i - 1) % 13
+		local y = (i - 1) * LINE
 		local text = S("@1 (@2)", bh_label(h.acc, h.n), rockmech.account_label and rockmech.account_label(h.acc) or h.acc)
 			.. (h.rm and "" or " " .. S("rock mass?")) .. (h.gr and "" or " " .. S("grade?"))
-		out[#out + 1] = ("button[%g,%g;6.8,0.6;h_%d;%s]"):format(1.6 + col * 7, 1.0 + row * 0.7, i, core.formspec_escape(text))
+		out[#out + 1] = ("label[%g,%g;%s]"):format(LX, y + LINE / 2, ink(text))
+		out[#out + 1] = ("style[h_%d;bgcolor=#00000000;border=false]style[h_%d:hovered;bgcolor=%s]"):format(i, i, C("book_hover"))
+		out[#out + 1] = ("button[%g,%g;%g,%g;h_%d;]"):format(LX - 0.1, y + 0.02, RX - LX, LINE - 0.04, i)
 	end
+	scroll_body(out, #holes)
 end
 
 local function core_page(out, h, stack)
 	local b = find_bh(h.acc, h.n)
-	out[#out + 1] = "style[back;bgcolor=#00000000;border=false;textcolor=" .. INK .. "]"
-	out[#out + 1] = "button[1.5,0.4;2.2,0.6;back;" .. core.formspec_escape("← " .. S("Cores")) .. "]"
+	out[#out + 1] = ("style[back;bgcolor=#00000000;border=false;textcolor=%s]"):format(C("book_ink"))
+	out[#out + 1] = ("button[%g,0.45;1.6,0.5;back;%s]"):format(LX - 0.1, core.formspec_escape("← " .. S("Cores")))
 	if not b then
-		out[#out + 1] = ("label[1.6,1.6;%s]"):format(ink(S("[Core box] No record found for this hole")))
+		title(out, "?")
+		out[#out + 1] = ("label[%g,%g;%s]"):format(LX, BODY_Y + 0.25, ink(S("[Core box] No record found for this hole")))
 		return
 	end
 	local rm, gr = h.rm, h.gr
-	out[#out + 1] = ("label[4.0,0.7;%s]"):format(ink(S("@1   Collar (@2, @3, @4)   Depth @5 m", label_of(b),
-		tostring(b.pos.x), tostring(b.pos.y), tostring(b.pos.z), tostring(b.depth))))
-	local cols = {{1.6, S("Depth")}, {3.3, S("Log")}, {4.4, S("Lithology")}, {6.9, S("Grade")}, {8.2, S("Joints")},
-		{9.4, "RQD"}, {10.7, "Is(50) MPa"}, {12.8, "UCS MPa"}}
-	for _, c in ipairs(cols) do out[#out + 1] = ("label[%g,1.35;%s]"):format(c[1], ink(c[2])) end
-	out[#out + 1] = ("box[1.5,1.62;14,0.03;%s]"):format(INK)
+	title(out, S("@1   Collar (@2, @3, @4)   Depth @5 m", label_of(b), tostring(b.pos.x), tostring(b.pos.y), tostring(b.pos.z), tostring(b.depth)))
+	local X = {LX, LX + 1.0, LX + 1.8, LX + 3.5, LX + 4.45, LX + 5.25, LX + 6.2, LX + 7.4}
+	local heads = {S("Depth"), S("Log"), S("Lithology"), S("Grade"), S("Joints"), "RQD", "Is(50)", "UCS"}
+	for i, t in ipairs(heads) do out[#out + 1] = ("label[%g,1.75;%s]"):format(X[i], ink(t)) end
+	out[#out + 1] = ("label[%g,2.08;%s]label[%g,2.08;%s]"):format(X[7], ink("MPa"), X[8], ink("MPa"))
 	local rows = b.rows or {}
 	local plt = plt_by_metre(stack, h.acc, h.n)
 	local K = rockmech.PLT_K or 22
@@ -714,69 +769,56 @@ local function core_page(out, h, stack)
 		for j = math.max(1, i - 1), math.min(#rows, i + 1) do s = s + (rows[j].joints or 0); c = c + 1 end
 		return c > 0 and s / c or 0
 	end
-	local H, TOP, VIEW = 0.42, 1.75, 9.1
-	out[#out + 1] = ("scroll_container[0,%g;15.4,%g;bk_scroll;vertical;0.1]"):format(TOP, VIEW)
+	out[#out + 1] = ("scroll_container[0,%g;%g,%g;bk_scroll;vertical;0.1]"):format(BODY_Y, BW, BODY_H)
 	for i, r in ipairs(rows) do
-		local y = (i - 1) * H
+		local y = (i - 1) * LINE
 		local soil = r.lith == "soil"
 		local is_ore = rockmech.cfg.ores[r.lith] ~= nil or (rockmech.cfg.lithologies[r.lith] or {}).ore ~= nil
 		local g = "—"
 		if is_ore or r.grade then g = gr and r.grade and ("%.0f%%"):format(r.grade / 255 * 100) or (gr and "—" or "?") end
 		local p = plt[i - 1]
-		local cells = {{1.6, ("%d–%d"):format(i - 1, i)}, {4.4, rm and lith_label(r.lith) or "?"}, {6.9, g},
-			{8.2, soil and "—" or rm and tostring(r.joints or 0) or "?"},
-			{9.4, soil and "—" or rm and ("%.0f%%"):format(rqd_of(lambda(i))) or "?"},
-			{10.7, p and ("%.2f"):format(p.sum / p.c) .. (p.c > 1 and (" (" .. p.c .. ")") or "") or ""},
-			{12.8, p and ("%.0f"):format(K * p.sum / p.c) or ""}}
-		for _, c in ipairs(cells) do out[#out + 1] = ("label[%g,%g;%s]"):format(c[1], y + H / 2, ink(c[2])) end
-		out[#out + 1] = ("image[3.3,%g;0.8,%g;%s]"):format(y + 0.05, H - 0.1, core.formspec_escape(strip_tex(seg_tex(r), 2)))   -- 照實際方塊的樣子
-		out[#out + 1] = ("box[1.5,%g;14,0.02;%s]"):format(y + H - 0.01, RULE)
+		local cells = {("%d–%d"):format(i - 1, i), nil, rm and lith_label(r.lith) or "?", g,
+			soil and "—" or rm and tostring(r.joints or 0) or "?",
+			soil and "—" or rm and ("%.0f%%"):format(rqd_of(lambda(i))) or "?",
+			p and ("%.2f"):format(p.sum / p.c) .. (p.c > 1 and (" ×" .. p.c) or "") or "",
+			p and ("%.0f"):format(K * p.sum / p.c) or ""}
+		for k = 1, 8 do
+			if cells[k] then out[#out + 1] = ("label[%g,%g;%s]"):format(X[k], y + LINE / 2, ink(cells[k])) end
+		end
+		out[#out + 1] = ("image[%g,%g;0.6,%g;%s]"):format(X[2], y + 0.08, LINE - 0.14, core.formspec_escape(strip_tex(seg_tex(r), 2)))
 	end
-	out[#out + 1] = "scroll_container_end[]"
-	local content = #rows * H
-	if content > VIEW then
-		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=%d;largestep=%d]"):format(
-			math.ceil((content - VIEW) * 10), math.floor(H * 30), math.floor(VIEW * 10))
-		out[#out + 1] = ("scrollbar[15.25,%g;0.35,%g;vertical;bk_scroll;0]"):format(TOP, VIEW)
-	end
+	scroll_body(out, #rows)
 end
 
 local function field_page(out, list)
-	out[#out + 1] = ("label[1.6,0.75;%s]"):format(ink(S("Field survey")))
-	local cols = {{1.6, S("No.")}, {3.0, S("Position")}, {7.0, S("Rock")}, {10.0, S("Rebound R")}}
-	for _, c in ipairs(cols) do out[#out + 1] = ("label[%g,1.35;%s]"):format(c[1], ink(c[2])) end
-	out[#out + 1] = ("box[1.5,1.62;14,0.03;%s]"):format(INK)
-	local H, TOP, VIEW = 0.42, 1.75, 8.9
-	out[#out + 1] = ("scroll_container[0,%g;15.4,%g;bk_scroll;vertical;0.1]"):format(TOP, VIEW)
+	title(out, S("Field survey"))
+	local X = {LX, LX + 1.0, LX + 3.9, LX + 6.4}
+	local heads = {S("No."), S("Position"), S("Rock"), S("Rebound R")}
+	for i, t in ipairs(heads) do out[#out + 1] = ("label[%g,1.9;%s]"):format(X[i], ink(t)) end
+	out[#out + 1] = ("scroll_container[0,%g;%g,%g;bk_scroll;vertical;0.1]"):format(BODY_Y, BW, BODY_H)
 	for i, e in ipairs(list) do
-		local y = (i - 1) * H
-		local cells = {{1.6, tostring(i)}, {3.0, ("(%d, %d, %d)"):format(e.x, e.y, e.z)}, {7.0, e.lith and lith_label(e.lith) or "?"},
-			{10.0, tostring(e.r)}}
-		for _, c in ipairs(cells) do out[#out + 1] = ("label[%g,%g;%s]"):format(c[1], y + H / 2, ink(c[2])) end
-		out[#out + 1] = ("box[1.5,%g;14,0.02;%s]"):format(y + H - 0.01, RULE)
+		local y = (i - 1) * LINE
+		local cells = {tostring(i), ("(%d, %d, %d)"):format(e.x, e.y, e.z), e.lith and lith_label(e.lith) or "?", tostring(e.r)}
+		for k = 1, 4 do out[#out + 1] = ("label[%g,%g;%s]"):format(X[k], y + LINE / 2, ink(cells[k])) end
 	end
-	out[#out + 1] = "scroll_container_end[]"
-	local content = #list * H
-	if content > VIEW then
-		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=%d;largestep=%d]"):format(
-			math.ceil((content - VIEW) * 10), math.floor(H * 30), math.floor(VIEW * 10))
-		out[#out + 1] = ("scrollbar[15.25,%g;0.35,%g;vertical;bk_scroll;0]"):format(TOP, VIEW)
-	end
+	scroll_body(out, #list)
 	if #list > 0 then
 		out[#out + 1] = "style[clear_sch;bgcolor=#00000000;border=false;textcolor=#8a3a30]"
-		out[#out + 1] = "button[1.5,10.9;3.2,0.6;clear_sch;" .. core.formspec_escape(S("Tear out this page")) .. "]"
+		out[#out + 1] = ("button[%g,%g;2.6,0.5;clear_sch;%s]"):format(LX - 0.1, PY + PH - 0.6, core.formspec_escape(S("Tear out this page")))
 	end
 end
 
 local function book_form(name, stack)
 	local st = book_state[name] or {tab = "core"}
 	book_state[name] = st
-	local out = book_frame(st)
+	local out
 	if st.tab == "field" then
+		out = book_frame(st, 1)
 		field_page(out, schmidt_of(stack))
 	else
 		local holes = book_holes(stack)
 		local h = st.hole and holes[st.hole]
+		out = book_frame(st, h and (st.hole + 2) or 2)
 		if h then core_page(out, h, stack) else st.hole = nil; core_toc(out, holes) end
 	end
 	return table.concat(out)
