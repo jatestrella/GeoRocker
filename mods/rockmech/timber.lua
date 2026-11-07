@@ -405,6 +405,67 @@ core.register_abm({
 	end,
 })
 
+---------------------------------------------------------------------------
+-- 木柱壓斷（應力解，femstress.lua 每次解完呼叫）：木柱用 P/9 往上推柱頂 3×3 格的頂板（支護壓力，已經在應力解裡）。
+-- 連木柱全力推著，那幾格頂板還是破壞（FS < 1）→ 岩體要的支撐超過木柱給得起的，木柱壓斷，跟頂板一起垮下來（不退還）。
+-- 沒破壞就把上方頂板最低的 FS 寫在名牌上：開挖讓跨度變大，FS 一路往下掉，看得到木柱快撐不住了
+---------------------------------------------------------------------------
+
+local function post_tops(a, b)
+	local out = {}
+	for _, p in ipairs(core.find_nodes_in_area(a, b, {POST, POST_TOP})) do
+		if is_rock(core.get_node({x = p.x, y = p.y + 1, z = p.z}).name) then out[#out + 1] = p end
+	end
+	return out
+end
+
+local function break_post(top)
+	local base, len = post_of(top)
+	falling = true
+	for s = 0, len - 1 do
+		local p = {x = base.x, y = base.y + s, z = base.z}
+		if IS_POST[core.get_node(p).name] then core.remove_node(p) end
+	end
+	falling = false
+	core.add_particlespawner({amount = 40, time = 0.3,
+		minpos = {x = base.x - 0.2, y = base.y - 0.4, z = base.z - 0.2}, maxpos = {x = base.x + 0.2, y = top.y + 0.4, z = base.z + 0.2},
+		minvel = {x = -2, y = -1, z = -2}, maxvel = {x = 2, y = 2, z = 2}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
+		minexptime = 0.6, maxexptime = 1.4, minsize = 1, maxsize = 2.5, texture = "[fill:4x4:#8a6438"})
+	core.sound_play("default_dig_choppy", {pos = top, gain = 1.0, max_hear_distance = 32}, true)
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), top) <= 32 then
+			core.chat_send_player(pl:get_player_name(), ("[木柱] %s 的木柱被壓斷了：上面的頂板撐不住"):format(core.pos_to_string(top)))
+		end
+	end
+	core.log("action", ("[rockmech] 木柱壓斷 %s（長 %d m）"):format(core.pos_to_string(top), len))
+	core.after(0, check_around, vector.copy(base))
+end
+
+-- a：應力解範圍的原點、n：格數；failed：這一輪破壞的格（世界座標）；roof_fs(x, y, z)：那一格頂板往下那一面的 FS（範圍外 nil）
+function rockmech.timber_fem_check(a, n, failed, roof_fs)
+	local bad = {}
+	for _, p in ipairs(failed) do bad[key(p)] = true end
+	local tops = post_tops({x = a.x + 1, y = a.y + 1, z = a.z + 1}, {x = a.x + n - 2, y = a.y + n - 3, z = a.z + n - 2})
+	for _, t in ipairs(tops) do
+		local crushed, low = false, nil
+		for u = -1, 1 do for v = -1, 1 do
+			local r = {x = t.x + u, y = t.y + 1, z = t.z + v}
+			if bad[key(r)] then crushed = true end
+			local fs = roof_fs(r.x, r.y, r.z)
+			if fs and (not low or fs < low) then low = fs end
+		end end
+		if crushed then
+			break_post(t)
+		else
+			local L = rockmech.timber_post_len(t.x, t.y, t.z)
+			local base = post_of(t)
+			local txt = info(L or 1, L ~= nil) .. (low and (L and ("\n上方頂板 FS %s（< 1 木柱壓斷）"):format(
+				low == math.huge and "∞" or ("%.2f"):format(low)) or "") or "")
+			for y = base.y, t.y do core.get_meta({x = t.x, y = y, z = t.z}):set_string("infotext", txt) end
+		end
+	end
+end
+
 -- 判定用的方塊 id（groundsupport.lua 建好 rockmech.support_ids 之後補上木柱）
 core.register_on_mods_loaded(function()
 	if rockmech.support_ids then

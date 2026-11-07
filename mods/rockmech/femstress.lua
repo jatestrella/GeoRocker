@@ -544,6 +544,17 @@ pump = function()
 		local t0 = core.get_us_time()
 		local failed, faces, warned = find_failed(job, res, meta, not cur.far and cur.pos or nil)
 		update_cracks(meta, job.nx, warned)
+		-- 木柱（timber.lua）：柱頂 3×3 格頂板（木柱的推力已經算在支護壓力裡）有破壞 → 木柱壓斷；否則名牌寫上方頂板的 FS
+		if rockmech.timber_fem_check then
+			local n, a = job.nx, meta.a
+			rockmech.timber_fem_check(a, n, failed, function(wx, wy, wz)
+				local x, y, z = wx - a.x, wy - a.y, wz - a.z
+				if x < 1 or y < 1 or z < 1 or x >= n - 1 or y >= n - 1 or z >= n - 1 then return nil end
+				local c = 1 + x + y * n + z * n * n
+				if not job.solid[c] or job.soft[c] or not meta.lith[c] or not meta.open[c - n] then return nil end
+				return (face_fs(job, res, meta, x, y, z, FACES[4]))
+			end)
+		end
 		if not cur.far then squeeze_rubble(job, res, meta) end
 		if rockmech.fswarn_refresh then rockmech.fswarn_refresh(cur.pos) end
 		rockmech.collapse.queue_block_check(cur.pos)
