@@ -260,6 +260,10 @@ config.support_defaults = {
 	post_ucs = 20,            -- 木材順紋抗壓強度 σc (MPa)
 	post_e = 10000,           -- 木材彈性模數 E (MPa)
 	post_max_len = 6,         -- 木柱最長 (m)：放的時候往上長到碰到頂板，超過就只放 1 m（當建材）
+	-- 應力解裡木柱的等效斷面積 A_eff (m²)：木柱那一格的勁度 = 岩石 × A_eff / 1 m²（假設木材與岩石的 E 同級，約 10 GPa）。
+	-- 真實斷面（直徑 20 cm）只有 0.031 m²，太軟，對頂板幾乎沒幫助；假設性放大到 0.5 m²。越大分到的荷重越多、
+	-- 越容易被壓斷（1.0 m² 時 9 m 跨度軸力就到承載力 80%）。承載力照真實直徑，不跟著變
+	post_fem_area = 0.5,
 }
 
 -- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
@@ -643,6 +647,7 @@ function config.load(get)
 	cfg.support.post_ucs = math.max(0, cfg.support.post_ucs)
 	cfg.support.post_e = math.max(0, cfg.support.post_e)
 	cfg.support.post_max_len = math.max(1, math.floor(cfg.support.post_max_len))
+	cfg.support.post_fem_area = math.max(0.001, math.min(1, cfg.support.post_fem_area))
 
 	-- 爆破破碎
 	cfg.blast = load_section("blast", config.blast_defaults)

@@ -406,9 +406,11 @@ core.register_abm({
 })
 
 ---------------------------------------------------------------------------
--- 木柱壓斷（應力解，femstress.lua 每次解完呼叫）：木柱用 P/9 往上推柱頂 3×3 格的頂板（支護壓力，已經在應力解裡）。
--- 連木柱全力推著，那幾格頂板還是破壞（FS < 1）→ 岩體要的支撐超過木柱給得起的，木柱壓斷，跟頂板一起垮下來（不退還）。
--- 沒破壞就把上方頂板最低的 FS 寫在名牌上：開挖讓跨度變大，FS 一路往下掉，看得到木柱快撐不住了
+-- 木柱壓斷（應力解，femstress.lua 每次解完呼叫）：應力解裡木柱是有勁度的元素（勁度 = 岩石 × 等效斷面積 A_eff / 1 m²），
+-- 頂板往下收斂壓它，它就受力、頂板就穩一點（跟岩柱一樣）。木柱格的 σv × 1 m² 就是軸力 N：
+-- N > 承載力 P（min(壓碎, 挫屈)，照真實直徑）→ 木柱壓斷（不退還）；柱頂上方頂板破壞也一起斷。
+-- 撐好之後繼續往前挖，荷重往木柱集中，N 一路變大，名牌看得到。
+-- （沒有開應力解的世界，木柱照舊用 P/9 當支護壓力，不會壓斷）
 ---------------------------------------------------------------------------
 
 local function post_tops(a, b)
@@ -441,10 +443,12 @@ local function break_post(top)
 	core.after(0, check_around, vector.copy(base))
 end
 
--- a：應力解範圍的原點、n：格數；failed：這一輪破壞的格（世界座標）；roof_fs(x, y, z)：那一格頂板往下那一面的 FS（範圍外 nil）
-function rockmech.timber_fem_check(a, n, failed, roof_fs)
+-- a：應力解範圍的原點、n：格數；failed：這一輪破壞的格（世界座標）；
+-- roof_fs(x, y, z)：那一格頂板往下那一面的 FS（範圍外 nil）；force(x, y, z)：木柱那一格的軸力 kN（範圍外 nil）
+function rockmech.timber_fem_check(a, n, failed, roof_fs, force)
 	local bad = {}
 	for _, p in ipairs(failed) do bad[key(p)] = true end
+	local Nm = rockmech.cfg.model_scale or 1
 	local tops = post_tops({x = a.x + 1, y = a.y + 1, z = a.z + 1}, {x = a.x + n - 2, y = a.y + n - 3, z = a.z + n - 2})
 	for _, t in ipairs(tops) do
 		local crushed, low = false, nil
@@ -454,13 +458,26 @@ function rockmech.timber_fem_check(a, n, failed, roof_fs)
 			local fs = roof_fs(r.x, r.y, r.z)
 			if fs and (not low or fs < low) then low = fs end
 		end end
+		local L = rockmech.timber_post_len(t.x, t.y, t.z)
+		local base = post_of(t)
+		local N
+		if L and force then
+			for y = base.y, t.y do
+				local f = force(t.x, y, t.z)
+				if f and (not N or f > N) then N = f end
+			end
+		end
+		local P = L and capacity(L) / Nm
+		if N and P and N > P then crushed = true end
 		if crushed then
 			break_post(t)
 		else
-			local L = rockmech.timber_post_len(t.x, t.y, t.z)
-			local base = post_of(t)
-			local txt = info(L or 1, L ~= nil) .. (low and (L and ("\n上方頂板 FS %s（< 1 木柱壓斷）"):format(
-				low == math.huge and "∞" or ("%.2f"):format(low)) or "") or "")
+			local lines = {info(L or 1, L ~= nil)}
+			if N and P then lines[#lines + 1] = ("軸力 %d kN／承載力 %d kN（%d%%）"):format(math.floor(N + 0.5), math.floor(P + 0.5), math.floor(N / P * 100 + 0.5)) end
+			if L and low then
+				lines[#lines + 1] = ("上方頂板 FS %s"):format(low == math.huge and "∞" or ("%.2f"):format(low))
+			end
+			local txt = table.concat(lines, "\n")
 			for y = base.y, t.y do core.get_meta({x = t.x, y = y, z = t.z}):set_string("infotext", txt) end
 		end
 	end

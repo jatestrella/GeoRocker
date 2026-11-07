@@ -190,6 +190,7 @@ rockmech 模組所有可調參數，依學科分類。設定名都加上前綴 `
 | `support_post_ucs` | 木材順紋抗壓強度 σc (MPa) | 20 |  |
 | `support_post_e` | 木材彈性模數 E (MPa) | 10000 |  |
 | `support_post_max_len` | 木柱最長 (m)：從地板長到頂板 | 6 |  |
+| `support_post_fem_area` | 應力解裡木柱的等效斷面積 A_eff (m²)：木柱格勁度 = 岩石 × A_eff / 1 m²；軸力 σv × 1 m² 超過承載力就壓斷（真實 0.031 m² 太軟，假設性放大） | 0.5 |  |
 
 ### C3 裝載與運輸
 

@@ -63,7 +63,7 @@ function support.scan(g, ids, prm)
 	local N = prm.N or 1
 	local p_sc = (prm.p_sc or 0) / N
 	local grip, ty = (prm.grip or 0) / N, (prm.yield or math.huge) / N
-	local sup = {face = {}, sc = {}, bolts = {}, posts = {}}
+	local sup = {face = {}, sc = {}, bolts = {}, posts = {}, pface = {}}   -- pface：face 裡木柱的那一份（應力解改用勁度，扣掉）
 	local any = false
 	local posts = ids.post or {}
 	local function idx(x, y, z)
@@ -105,6 +105,7 @@ function support.scan(g, ids, prm)
 						local jo = idx(x + u, y, z + v)
 						if j and jo and bonded_of[data[j]] and not bonded_of[data[jo]] then
 							add(sup.face, j * 8 + 4, P / 9 / 1000)
+							add(sup.pface, j * 8 + 4, P / 9 / 1000)
 						end
 					end end
 					sup.posts[#sup.posts + 1] = {i = top, P = P}

@@ -42,7 +42,9 @@ end
 local function set_press(job, g, to_cell, scale)
 	if not g.support then return end
 	local sum = {}
-	for key, p in pairs(g.support.face) do
+	local pface = g.support.pface or {}
+	for key, p0 in pairs(g.support.face) do
+		local p = p0 - (pface[key] or 0)     -- 木柱在應力解裡是有勁度的元素，不是推力（make_job）
 		local k = key % 8
 		local i = (key - k) / 8 - 1
 		local x = i % g.nx
@@ -136,6 +138,10 @@ local function make_job(pos)
 	local gsy, gsz = g.nx, g.nx * g.ny
 	local gam_sum, gam_n = 0, 0
 	local is_excavated_at = rockmech.collapse.is_excavated_at
+	-- 木柱（timber.lua）：有勁度的元素，勁度 = 岩石 × 等效斷面積 A_eff / 1 m²（假設木材與岩石的 E 同級）。
+	-- 跟碎石一樣沒有現地應力、不加重力，頂板往下收斂壓它才受力；這格的 σv × 1 m² 就是木柱的軸力
+	local post_ids = rockmech.support_ids and rockmech.support_ids.post or {}
+	local post_r = math.max(1e-4, cfg.support.post_fem_area or 0.5)
 	for z = 0, n - 1 do for x = 0, n - 1 do
 		-- 這一欄的地表：岩石頂面，或 surface_y（挖掉的算回去，所以開挖才會放出應力）
 		local gx, gz = a.x + x - g.ox, a.z + z - g.oz
@@ -156,9 +162,10 @@ local function make_job(pos)
 			local gamma = lith and lith.gamma or cfg.failure.gamma_other
 			local solid = g.bonded_of[cid] and true or false
 			local soft = fcfg.rubble_e > 0 and g.rubble_of[cid] == 1
+			if post_ids[cid] then soft = post_r end
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			local sv = gamma * math.max(0, top + 0.5 - wy)     -- kPa
-			job.solid[c] = solid or soft
+			job.solid[c] = solid or (soft and true) or false
 			job.soft[c] = soft or nil
 			if soft or (solid and is_excavated_at(a.x + x, wy, a.z + z)) then
 				job.syy[c], job.sxx[c], job.szz[c], job.sxz[c] = 0, 0, 0, 0
@@ -442,11 +449,12 @@ local SQUEEZE_MAX = 32
 local function squeeze_rubble(job, res, meta)
 	local n = job.nx
 	local list = {}
-	for c in pairs(job.soft) do
+	for c, s in pairs(job.soft) do
 		local k = c - 1
 		local x, y, z = k % n, math.floor(k / n) % n, math.floor(k / (n * n))
 		local above = c + n
-		if x >= 2 and y >= 2 and z >= 2 and x < n - 2 and y < n - 2 and z < n - 2
+		if type(s) ~= "number"          -- 木柱不是碎石
+				and x >= 2 and y >= 2 and z >= 2 and x < n - 2 and y < n - 2 and z < n - 2
 				and job.solid[above] and not job.soft[above] and res.syy[c] > 0 then
 			for _, o in ipairs({1, -1, n * n, -n * n}) do
 				if meta.open[c + o] and not job.soft[c + o] then
@@ -544,15 +552,23 @@ pump = function()
 		local t0 = core.get_us_time()
 		local failed, faces, warned = find_failed(job, res, meta, not cur.far and cur.pos or nil)
 		update_cracks(meta, job.nx, warned)
-		-- 木柱（timber.lua）：柱頂 3×3 格頂板（木柱的推力已經算在支護壓力裡）有破壞 → 木柱壓斷；否則名牌寫上方頂板的 FS
+		-- 木柱（timber.lua）：木柱格的 σv × 1 m² = 軸力，超過承載力就壓斷；柱頂上方頂板破壞也一起斷。
+		-- 名牌寫軸力和上方頂板的 FS
 		if rockmech.timber_fem_check then
 			local n, a = job.nx, meta.a
-			rockmech.timber_fem_check(a, n, failed, function(wx, wy, wz)
+			local function cell(wx, wy, wz)
 				local x, y, z = wx - a.x, wy - a.y, wz - a.z
 				if x < 1 or y < 1 or z < 1 or x >= n - 1 or y >= n - 1 or z >= n - 1 then return nil end
-				local c = 1 + x + y * n + z * n * n
-				if not job.solid[c] or job.soft[c] or not meta.lith[c] or not meta.open[c - n] then return nil end
+				return 1 + x + y * n + z * n * n, x, y, z
+			end
+			rockmech.timber_fem_check(a, n, failed, function(wx, wy, wz)
+				local c, x, y, z = cell(wx, wy, wz)
+				if not c or not job.solid[c] or job.soft[c] or not meta.lith[c] or not meta.open[c - n] then return nil end
 				return (face_fs(job, res, meta, x, y, z, FACES[4]))
+			end, function(wx, wy, wz)
+				local c = cell(wx, wy, wz)
+				if not c or type(job.soft[c]) ~= "number" then return nil end
+				return math.max(0, res.syy[c])        -- kPa × 1 m² = kN（壓為正）
 			end)
 		end
 		if not cur.far then squeeze_rubble(job, res, meta) end
