@@ -8,6 +8,9 @@
 -- 氣象站（rockmech:rain_gauge，工具室管理員）：指著看目前的時雨量、這場雨的累積雨量。
 -- 畫面：每個玩家身邊下雨（粒子，雨越大越密）、雲變厚變灰。雨的狀態存在 mod storage，伺服器重開照樣下完
 
+local S = rockmech.S
+local function g(x) return ("%g"):format(x) end
+local function f0(x) return ("%.0f"):format(x) end
 local store = core.get_mod_storage()
 local cfg = rockmech.cfg.slope
 local RAIN_MAX = math.max(1, cfg.rain_max or 100)
@@ -77,8 +80,8 @@ local function sync()
 		if on then start_fx(p, i) else stop_fx(p) end
 	end
 	if was ~= nil and was ~= on then
-		core.chat_send_all(on and ("開始下雨（時雨量 %g mm/h）：土的強度降低，邊坡要小心"):format(i)
-			or ("雨停了（這場累積 %.0f mm）"):format(rockmech.rain_total()))
+		core.chat_send_all(on and S("It starts raining (@1 mm/h): soil is getting weaker, watch the slopes.", g(i))
+			or S("The rain has stopped (@1 mm in total).", f0(rockmech.rain_total())))
 	end
 	was = on
 end
@@ -96,26 +99,26 @@ core.register_on_leaveplayer(function(player)
 end)
 
 core.register_chatcommand("rain", {
-	params = "<時雨量 mm/h> [分鐘] | off",
-	description = ("下雨：時雨量 I mm/h（最大 %g，颱風級），預設 %d 分鐘。土的弱化跟 I 成正比。/rain off 停雨，不加參數看現在的狀態")
-		:format(RAIN_MAX, DEFAULT_MIN),
+	params = S("<rainfall mm/h> [minutes] | off"),
+	description = S("Rain at intensity I mm/h (max @1, typhoon level), @2 minutes by default. Soil weakening is proportional to I. /rain off stops it; no argument shows the current state.",
+		g(RAIN_MAX), tostring(DEFAULT_MIN)),
 	privs = {rockmech = true},
 	func = function(name, param)
 		param = (param or ""):trim()
 		local now = core.get_gametime()
 		if param == "" then
-			if not raining() then return true, "沒有下雨" end
-			return true, ("下雨中：時雨量 %g mm/h，還有 %.1f 分鐘，這場累積 %.0f mm"):format(intensity(),
-				(rain_end() - now) / 60, rockmech.rain_total())
+			if not raining() then return true, S("It is not raining.") end
+			return true, S("Raining: @1 mm/h, @2 minutes left, @3 mm so far.", g(intensity()),
+				("%.1f"):format((rain_end() - now) / 60), f0(rockmech.rain_total()))
 		end
 		if param == "off" then
 			store:set_int("rain_end", now)
 			sync()
-			return true, "停雨"
+			return true, S("Rain stopped.")
 		end
 		local a, b = param:match("^(%S+)%s*(%S*)$")
 		local i, m = tonumber(a), tonumber(b ~= "" and b or DEFAULT_MIN)
-		if not i or i <= 0 or not m or m <= 0 then return false, "用法：/rain <時雨量 mm/h> [分鐘]，例如 /rain 60 20；/rain off 停雨" end
+		if not i or i <= 0 or not m or m <= 0 then return false, S("Usage: /rain <rainfall mm/h> [minutes], e.g. /rain 60 20; /rain off to stop") end
 		i = math.min(i, RAIN_MAX)
 		-- 新的一場從 0 累積；下雨中改時雨量：前一段先記進 rain_acc
 		if raining() then store:set_float("rain_acc", rockmech.rain_total()) else store:set_float("rain_acc", 0) end
@@ -124,8 +127,8 @@ core.register_chatcommand("rain", {
 		store:set_int("rain_end", now + math.floor(m * 60))
 		sync()
 		local L = i / RAIN_MAX
-		return true, ("下雨 %g 分鐘，時雨量 %g mm/h：鬆土安息角 %g° → %.1f°，表土凝聚力 × %.2f"):format(m, i, cfg.angle,
-			math.max(1, cfg.angle - cfg.rain_drop * L), 1 - (cfg.rain_c_loss or 0) * L)
+		return true, S("Rain for @1 minutes at @2 mm/h: loose soil angle of repose @3° → @4°, topsoil cohesion × @5", g(m), g(i), g(cfg.angle),
+			("%.1f"):format(math.max(1, cfg.angle - cfg.rain_drop * L)), ("%.2f"):format(1 - (cfg.rain_c_loss or 0) * L))
 	end,
 })
 
@@ -135,12 +138,12 @@ local function gauge_text()
 	local i = intensity()
 	if i <= 0 then
 		local tot = rockmech.rain_total()
-		return tot > 0 and ("氣象站\n沒有下雨（上一場累積 %.0f mm）"):format(tot) or "氣象站\n沒有下雨"
+		return tot > 0 and S("Weather station\nNot raining (last rain: @1 mm in total)", f0(tot)) or S("Weather station\nNot raining")
 	end
-	return ("氣象站\n時雨量 %g mm/h\n這場累積 %.0f mm"):format(i, rockmech.rain_total())
+	return S("Weather station\nRainfall @1 mm/h\n@2 mm so far", g(i), f0(rockmech.rain_total()))
 end
 core.register_node(GAUGE, {
-	description = "氣象站（百葉箱）Weather station\n指著它看目前的時雨量、這場雨的累積雨量",
+	description = S("Weather station (Stevenson screen)\nPoint at it to see the current rainfall rate and the total of this rain"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	node_box = {type = "fixed", fixed = {
 		{-0.32, -0.5, -0.27, -0.26, 0.05, -0.21}, {0.26, -0.5, -0.27, 0.32, 0.05, -0.21},   -- 四支腳

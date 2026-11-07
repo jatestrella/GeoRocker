@@ -1,0 +1,36 @@
+# textdomain: rockmech
+
+### testing.lua
+Schmidt hammer@nLeft-click a rock face: 10 impacts give the rebound number R, converted to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=施密特錘@n對岩面左鍵：敲 10 次讀回彈值 R，換算單軸抗壓強度（Katz 2000：UCS ≈ 2.21·e^(0.067R)）
+[Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=[施密特錘] 要敲在完整的岩面上（碎石、土敲不出讀數）
+The rock here=這裡的岩石
+[Schmidt hammer] @1 @2: rebound @3 → median R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa=[施密特錘] @1 @2：回彈值 @3 → 中位數 R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa
+Point load test: cores of @1 (3 tests per run, UCS ≈ @2 · Is(50))=點荷重試驗：@1 的岩芯（每段 3 次，UCS ≈ @2 · Is(50)）
+This box has no core data=這箱沒有岩芯資料
+Depth (m)=深度 (m)
+Core=岩芯
+Is(50), 3 tests (MPa)=Is(50) 三次 (MPa)
+Mean Is(50)=平均 Is(50)
+UCS ≈ K·Is(50)=UCS ≈ K·Is(50)
+Sample=岩樣
+(rubble, no sample)=（碎石，取不到岩樣）
+Is(50): point load strength index of a 50 mm core. "Repeat" tests a new set of specimens (readings scatter).=Is(50)：直徑 50 mm 岩芯的點荷重強度指數。每次按「重做」是新的一組試驗（試體不同，讀數會散布）
+Repeat=重做
+Close=關閉
+Point load tester@nRight-click a core box on the ground: 3 tests per core run, read Is(50), UCS ≈ @1·Is(50)=點荷重試驗機@n對地上的岩芯箱右鍵：每段岩芯做 3 次試驗，讀 Is(50)，UCS ≈ @1·Is(50)
+[Point load] Right-click a core box on the ground (drill a core first and put the box down)=[點荷重] 對地上的岩芯箱右鍵（先用岩芯鑽機鑽孔、把岩芯箱放在地上）
+
+### weather.lua
+It starts raining (@1 mm/h): soil is getting weaker, watch the slopes.=開始下雨（時雨量 @1 mm/h）：土的強度降低，邊坡要小心
+The rain has stopped (@1 mm in total).=雨停了（這場累積 @1 mm）
+<rainfall mm/h> [minutes] | off=<時雨量 mm/h> [分鐘] | off
+Rain at intensity I mm/h (max @1, typhoon level), @2 minutes by default. Soil weakening is proportional to I. /rain off stops it; no argument shows the current state.=下雨：時雨量 I mm/h（最大 @1，颱風級），預設 @2 分鐘。土的弱化跟 I 成正比。/rain off 停雨，不加參數看現在的狀態
+It is not raining.=沒有下雨
+Raining: @1 mm/h, @2 minutes left, @3 mm so far.=下雨中：時雨量 @1 mm/h，還有 @2 分鐘，這場累積 @3 mm
+Rain stopped.=停雨
+Usage: /rain <rainfall mm/h> [minutes], e.g. /rain 60 20; /rain off to stop=用法：/rain <時雨量 mm/h> [分鐘]，例如 /rain 60 20；/rain off 停雨
+Rain for @1 minutes at @2 mm/h: loose soil angle of repose @3° → @4°, topsoil cohesion × @5=下雨 @1 分鐘，時雨量 @2 mm/h：鬆土安息角 @3° → @4°，表土凝聚力 × @5
+Weather station@nNot raining (last rain: @1 mm in total)=氣象站@n沒有下雨（上一場累積 @1 mm）
+Weather station@nNot raining=氣象站@n沒有下雨
+Weather station@nRainfall @1 mm/h@n@2 mm so far=氣象站@n時雨量 @1 mm/h@n這場累積 @2 mm
+Weather station (Stevenson screen)@nPoint at it to see the current rainfall rate and the total of this rain=氣象站（百葉箱）@n指著它看目前的時雨量、這場雨的累積雨量

@@ -6,6 +6,9 @@ local modname = core.get_current_modname()
 local modpath = core.get_modpath(modname)
 
 rockmech = {modname = modname, modpath = modpath}
+-- 多語言：程式裡的原文是英文，翻譯在 locale/rockmech.<語言>.tr（zh_TW 是繁體中文）。玩家的 client 照自己的語言顯示。
+-- 用法：S("Rain @1 mm/h", tostring(i))，參數用 @1..@9（數字先格式化成字串）。抽字串、檢查缺翻譯：tools/i18n.py
+rockmech.S = core.get_translator(modname)
 
 -- 純模組
 rockmech.config = dofile(modpath .. "/config.lua")

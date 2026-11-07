@@ -1,0 +1,36 @@
+# textdomain: rockmech
+
+### testing.lua
+Schmidt hammer@nLeft-click a rock face: 10 impacts give the rebound number R, converted to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=
+[Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=
+The rock here=
+[Schmidt hammer] @1 @2: rebound @3 → median R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa=
+Point load test: cores of @1 (3 tests per run, UCS ≈ @2 · Is(50))=
+This box has no core data=
+Depth (m)=
+Core=
+Is(50), 3 tests (MPa)=
+Mean Is(50)=
+UCS ≈ K·Is(50)=
+Sample=
+(rubble, no sample)=
+Is(50): point load strength index of a 50 mm core. "Repeat" tests a new set of specimens (readings scatter).=
+Repeat=
+Close=
+Point load tester@nRight-click a core box on the ground: 3 tests per core run, read Is(50), UCS ≈ @1·Is(50)=
+[Point load] Right-click a core box on the ground (drill a core first and put the box down)=
+
+### weather.lua
+It starts raining (@1 mm/h): soil is getting weaker, watch the slopes.=
+The rain has stopped (@1 mm in total).=
+<rainfall mm/h> [minutes] | off=
+Rain at intensity I mm/h (max @1, typhoon level), @2 minutes by default. Soil weakening is proportional to I. /rain off stops it; no argument shows the current state.=
+It is not raining.=
+Raining: @1 mm/h, @2 minutes left, @3 mm so far.=
+Rain stopped.=
+Usage: /rain <rainfall mm/h> [minutes], e.g. /rain 60 20; /rain off to stop=
+Rain for @1 minutes at @2 mm/h: loose soil angle of repose @3° → @4°, topsoil cohesion × @5=
+Weather station@nNot raining (last rain: @1 mm in total)=
+Weather station@nNot raining=
+Weather station@nRainfall @1 mm/h@n@2 mm so far=
+Weather station (Stevenson screen)@nPoint at it to see the current rainfall rate and the total of this rain=
