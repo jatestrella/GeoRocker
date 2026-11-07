@@ -106,6 +106,8 @@ config.shop = {
 	{key = "workbench", shop = "tools", item = "rockmech:workbench", label = "木工桌（木牆板、樓梯、門…）", price = 300},
 	{key = "rain_gauge", shop = "tools", item = "rockmech:rain_gauge", label = "氣象站（百葉箱，時雨量）", price = 500},
 	{key = "survey_prism", shop = "tools", item = "rockmech:survey_prism", label = "監測稜鏡（岩面位移）", price = 500, count = 5},
+	{key = "schmidt", shop = "tools", item = "rockmech:schmidt_hammer", label = "施密特錘（岩面回彈值 → UCS）", price = 1500},
+	{key = "point_load", shop = "tools", item = "rockmech:point_load", label = "點荷重試驗機（岩芯 Is50 → UCS）", price = 3000},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = "木柱（支撐、蓋房子）", price = 200, count = 10},
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = "木板", price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = "木板半格", price = 100, count = 10},

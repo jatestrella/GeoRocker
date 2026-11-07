@@ -35,6 +35,7 @@ local function bh_label(acc, n)
 	return b and label_of(b) or ("BH-" .. n)
 end
 rockmech.borehole_label = bh_label
+rockmech.find_borehole = find_bh          -- 點荷重試驗（testing.lua）讀岩芯
 local NAME_MAX = 20          -- 名字最多幾個字
 
 -- Priest & Hudson：節理頻率 λ（條/m）→ RQD（%）
@@ -49,6 +50,7 @@ local function lith_label(key)
 	local l = rockmech.cfg.lithologies[key]
 	return l and (l.description:match("（(.-)）") or l.description:match("%((.-)%)") or key) or key
 end
+rockmech.lith_label = lith_label
 local function lith_color(key)
 	if key == "rubble" then return "#8a8070" end
 	local l = rockmech.cfg.lithologies[key]
