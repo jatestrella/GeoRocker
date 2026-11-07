@@ -360,14 +360,26 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	for key in pairs(fields) do
 		local it = cfg.shop[tonumber(key:match("^buy_(%d+)$"))]
 		if it and (not kind or it.shop == kind) then
-			local stack = ItemStack(it.item .. " " .. (it.count or 1))
+			-- 大東西不進背包（delivery.lua）：車停到營地的交車區，設施給施工單
+			local kind = rockmech.vehicle_kind_of_item and rockmech.vehicle_kind_of_item(it.item)
+			local order = rockmech.order_of_item and rockmech.order_of_item(it.item)
+			local stack = ItemStack((order or it.item) .. " " .. (it.count or 1))
 			local inv = player:get_inventory()
+			local ok, msg = true, nil
 			if rockmech.money(name) < it.price then
 				core.chat_send_player(name, ("[供應商] 錢不夠：%s 要 $%d"):format(it.label, it.price))
+				ok = false
+			elseif kind then
+				ok, msg = rockmech.deliver_vehicle(name, kind)
+				if not ok then core.chat_send_player(name, "[供應商] " .. msg) end
 			elseif not inv:room_for_item("main", stack) then
 				core.chat_send_player(name, "[供應商] 物品欄滿了")
+				ok = false
 			else
 				inv:add_item("main", stack)
+				if order then msg = it.label .. "施工單在物品欄：拿著對地面按右鍵施工" end
+			end
+			if ok then
 				rockmech.add_money(name, -it.price)
 				local acc = rockmech.account_of(name)
 				if acc ~= name then
@@ -378,6 +390,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 					core.log("action", ("[rockmech] %s (%s) bought %s for $%d"):format(name, acc, it.key, it.price))
 				else
 					core.chat_send_player(name, ("[供應商] 買了 %s"):format(it.label))
+				end
+				if msg then
+					for _, m in ipairs(acc ~= name and rockmech.account_members(acc) or {name}) do
+						core.chat_send_player(m, "[供應商] " .. msg)
+					end
 				end
 				if it.final then
 					-- 終極目標：全服廣播

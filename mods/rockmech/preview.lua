@@ -125,6 +125,8 @@ core.register_globalstep(function(dtime)
 	for _, player in ipairs(core.get_connected_players()) do
 		local name = player:get_player_name()
 		local item = player:get_wielded_item():get_name()
+		local order = rockmech.order_target and rockmech.order_target(item)   -- 施工單（delivery.lua）照原本的設施畫
+		if order then item = order end
 		local ent = item:sub(-5) == "_item" and core.registered_entities[item:sub(1, -6)]
 		local vdef = ent and ent.vkind and V.TYPES[ent.vkind]
 		local is_crusher, is_plant = item == "rockmech:crusher" or item == "rockmech:crusher_big", item == "rockmech:plant" and rockmech.plant_site_ok
@@ -144,19 +146,13 @@ core.register_globalstep(function(dtime)
 			if key ~= last[name] then
 				last[name] = key
 				if vdef then
-					draw(name, vehicle_cells(vdef, a, yaw), a.y, true)
+					local cells = vehicle_cells(vdef, a, yaw)
+					draw(name, cells, a.y, not (rockmech.cells_blocked and rockmech.cells_blocked(cells, a.y, a.y + 2 * vdef.half)))
 				else
-					local cells = {}
-					square(cells, a.x, a.z, 1)                                      -- 機身
-					local half = (H.SIZE - 1) / 2
-					square(cells, a.x + dx * (2 + half), a.z + dz * (2 + half), half)   -- 受料倉
-					local ok
-					if is_plant then
-						for _, tc in ipairs((rockmech.plant_towers(a, dx, dz))) do square(cells, tc.x, tc.z, 1) end
-						ok = rockmech.plant_site_ok(a, dx, dz)
-					else
-						ok = H.site_ok(a, dx, dz)
-					end
+					-- 機身、受料倉（選礦場再加兩座塔）；地不平，或範圍裡有人、有車（delivery.lua）就標紅色
+					local cells = rockmech.facility_cells(item, a, dx, dz)
+					local ok = is_plant and rockmech.plant_site_ok(a, dx, dz) or (not is_plant and H.site_ok(a, dx, dz))
+					if ok and rockmech.cells_blocked(cells, a.y - 1, a.y + 4) then ok = false end
 					draw(name, cells, a.y, ok)
 				end
 			end
