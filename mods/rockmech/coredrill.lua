@@ -50,9 +50,15 @@ local function log_form(name, bh)
 		for j = math.max(1, i - 1), math.min(#rows, i + 1) do s = s + (rows[j].joints or 0); n = n + 1 end
 		return n > 0 and s / n or 0
 	end
+	-- 資料列放在捲動區（60 m 的孔有 60 行，視窗放不下）；表頭和關閉鈕固定
 	local H = 0.34
+	local TOP, VIEW = 1.5, 9.5          -- 捲動區的上緣、高度
+	local note = not (rm and gr)
+	local content = #rows * H + (note and 0.6 or 0) + 0.1
+	local scroll = content > VIEW
+	out[#out + 1] = ("scroll_container[0,%g;14.4,%g;bh_scroll;vertical;0.1]"):format(TOP, VIEW)
 	for i, r in ipairs(rows) do
-		local y = 1.5 + (i - 1) * H
+		local y = (i - 1) * H
 		local is_ore = rockmech.cfg.ores[r.lith] ~= nil or (rockmech.cfg.lithologies[r.lith] or {}).ore ~= nil
 		out[#out + 1] = ("label[0.5,%g;%d–%d m]"):format(y + H / 2, i - 1, i)
 		out[#out + 1] = ("box[3.0,%g;1.0,%g;%s]"):format(y + 0.02, H - 0.04, rm and lith_color(r.lith) or "#707070")
@@ -63,11 +69,19 @@ local function log_form(name, bh)
 		out[#out + 1] = ("label[9.6,%g;%s]"):format(y + H / 2, rm and tostring(r.joints or 0) or "?")
 		out[#out + 1] = ("label[11.6,%g;%s]"):format(y + H / 2, rm and ("%.0f%%"):format(rqd_of(lambda(i))) or "?")
 	end
-	if not (rm and gr) then
-		out[#out + 1] = ("label[0.5,%g;%s]"):format(1.6 + #rows * H, core.formspec_escape(
+	if note then
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(0.1 + #rows * H + 0.2, core.formspec_escape(
 			"看不懂的欄位：岩性、節理、RQD 要「岩體分類」，品位要「品位判讀」（儀器、雇用地質學家或找大學教授進修）"))
 	end
-	out[#out + 1] = ("button_exit[6,%g;3,0.8;ok;關閉]"):format(math.max(2.4 + #rows * H, 3))
+	out[#out + 1] = "scroll_container_end[]"
+	if scroll then
+		-- 捲軸：每格 0.1（scroll_container 的係數），拉到底剛好看到最後一行
+		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=%d;largestep=%d]"):format(
+			math.ceil((content - VIEW) * 10), math.floor(H * 10 * 3), math.floor(VIEW * 10))
+		out[#out + 1] = ("scrollbar[14.4,%g;0.4,%g;vertical;bh_scroll;0]"):format(TOP, VIEW)
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(TOP + VIEW + 0.4, core.formspec_escape("滑鼠滾輪或右邊捲軸往下看"))
+	end
+	out[#out + 1] = ("button_exit[6,%g;3,0.8;ok;關閉]"):format(TOP + VIEW + 0.3)
 	return table.concat(out)
 end
 
