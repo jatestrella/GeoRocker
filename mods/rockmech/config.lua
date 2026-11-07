@@ -772,6 +772,8 @@ function config.load(get)
 	cfg.plant_reach = math.max(1, tonumber(get("rockmech_plant_reach")) or 10)     -- 放料臂伸得到的水平距離 (m)
 	-- 油壓破碎錘（vehicle_excavator.lua）：敲碎一格岩石的時間 = UCS × 這個 (s/MPa)。頁岩 30 MPa 約 1.5 秒、花崗岩 180 MPa 約 9 秒
 	cfg.breaker_rate = math.max(0, tonumber(get("rockmech_breaker_s_per_mpa")) or 0.05)
+	-- 表土（根系）的凝聚力 (kPa)：決定自立高度 H_c = 4c/γ·tan(45° + φ/2)（woodwork.lua）
+	cfg.topsoil_c = math.max(0, tonumber(get("rockmech_topsoil_c")) or 5)
 	-- 輸送帶（conveyor.lua）：運量 (t/s)、帶速 (m/s)、最大傾角 (deg，碎石在輸送帶上不往回滑的上限)
 	cfg.conveyor_rate = math.max(0.1, tonumber(get("rockmech_conveyor_rate")) or 4)
 	cfg.conveyor_speed = math.max(0.2, math.min(10, tonumber(get("rockmech_conveyor_speed")) or 2))

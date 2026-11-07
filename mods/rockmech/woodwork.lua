@@ -329,9 +329,9 @@ end
 -- 表土（有植物根系的土）：根系凝聚力讓它在陡坡上也站得住，所以不參與顆粒流（不是碎石）。
 -- 一被擾動，根系就斷，變成一般的鬆土（nodes.lua 的土壤碎石），照安息角流動：
 --   學生挖表土 → 挖起來的就是一份土（同撿碎石）
---   貼著的格子被挖掉、炸掉、坍塌 → 貼著的表土變鬆土；底下被掏空的表土變鬆土、掉下來
---   鬆土流走也算擾動：陡坡上一格鬆了流走，旁邊的表土跟著鬆、跟著流，連鎖成整片邊坡滑動；
---   緩坡上鬆掉的土在安息角內不流，連鎖自己停住
+--   底下被掏空的表土變鬆土、掉下來
+--   旁邊被挖開（挖、炸、坍塌、鬆土流走）：根系有凝聚力，臨空面不超過自立高度 H_c 就站得住；超過才鬆掉、照安息角流，
+--   流走又讓上面的表土臨空，坡腳切太高就連鎖成整片邊坡滑動
 -- 不是岩體（is_ground_content = false）：應力解、崩落判定都不算它；樹苗種得活（group soil）
 ---------------------------------------------------------------------------
 
@@ -344,19 +344,52 @@ local function loosen(p)
 	core.after(0, function() rockmech.collapse.check_cell(p) end)     -- 底下空了就掉、陡了就流
 	return true
 end
-local NB6 = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
--- pos 被擾動（東西被拿掉）：貼著的表土變鬆土
-local function disturb(pos)
-	for _, d in ipairs(NB6) do loosen({x = pos.x + d[1], y = pos.y + d[2], z = pos.z + d[3]}) end
+-- 表土的凝聚力（根系，rockmech_topsoil_c）→ 自立高度 H_c = 4c/γ·tan(45° + φ/2)：表土旁邊挖開的臨空面不超過 H_c 就站得住。
+-- γ 用非岩性格的單位重，φ 用安息角（鬆土沒有凝聚力，就是安息角）。c = 5 kPa、γ = 20、φ = 35° → H_c ≈ 1.9 m
+local HC = 4 * cfg.topsoil_c / math.max(1, cfg.failure.gamma_other) * math.tan(math.rad(45 + cfg.slope.angle / 2))
+rockmech.topsoil_hc = HC
+local NB4 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+-- (x, z) 這一欄從 y 往下的地面高度（m）：空氣、植物、不滿格的碎石／鬆土／薄表土往下找，最多 8 格
+local function ground_below(x, y, z)
+	for yy = y, y - 8, -1 do
+		local n = core.get_node({x = x, y = yy, z = z}).name
+		local k = rockmech.rubble_level[n] or TOPSOIL_K[n]
+		if k then return yy - 0.5 + k / NLEV end
+		local def = core.registered_nodes[n]
+		if not def or def.walkable ~= false then return yy + 0.5 end
+	end
+	return y - 8.5
 end
--- pos 變空了：正上方的表土失去支撐，變鬆土掉下來（鬆土流走也算，不然表土會懸空）
-local function undercut(pos)
-	local def = core.registered_nodes[core.get_node(pos).name]
-	if def and def.walkable == false then loosen({x = pos.x, y = pos.y + 1, z = pos.z}) end
+-- pos 變空了（被挖、炸掉、坍塌，或碎石／鬆土流走一部分）：
+--   正上方的表土失去支撐 → 變鬆土掉下來
+--   旁邊四格的表土：從它的頂面到 pos 這一欄地面的落差（臨空面高度）超過 H_c → 凝聚力撐不住，變鬆土
+-- 臨空面不到 H_c 就站得住：山坡上挖一兩格只是一個小坑，坡腳切出高過 H_c 的陡壁才會一路往上滑
+local function disturb(pos)
+	local n = core.get_node(pos).name
+	local def = core.registered_nodes[n]
+	local k = rockmech.rubble_level[n]
+	if (def and def.walkable == false) or (k and k < NLEV) then loosen({x = pos.x, y = pos.y + 1, z = pos.z}) end
+	local g
+	for _, d in ipairs(NB4) do
+		local p = {x = pos.x + d[1], y = pos.y, z = pos.z + d[2]}
+		local tk = TOPSOIL_K[core.get_node(p).name]
+		if tk then
+			-- 臨空面從這一疊表土的頂量起（上面疊著的表土也靠這一格撐著）
+			local top, y = p.y - 0.5 + tk / NLEV, p.y
+			while tk == NLEV do
+				y = y + 1
+				tk = TOPSOIL_K[core.get_node({x = p.x, y = y, z = p.z}).name]
+				if not tk then break end
+				top = y - 0.5 + tk / NLEV
+			end
+			g = g or ground_below(pos.x, pos.y, pos.z)
+			if top - g > HC then loosen(p) end
+		end
+	end
 end
 
 core.register_node(TOPSOIL, {
-	description = "表土 Topsoil\n長著草和樹根的土：根系抓住，陡坡上也站得住；一挖、或旁邊被挖開，就變成鬆土照安息角流",
+	description = "表土 Topsoil\n長著草和樹根的土：根系有凝聚力，陡坡上也站得住；被挖、底下被掏空、或旁邊挖開的陡壁太高（超過自立高度），就變成鬆土照安息角流",
 	tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
 	is_ground_content = false, groups = {crumbly = 3, soil = 1},
 	sounds = default.node_sound_dirt_defaults(), drop = SOIL,
@@ -404,7 +437,6 @@ rockmech.granular_moved = disturb
 -- 擾動的來源：玩家挖東西、坍塌／爆破／碎石和鬆土移動（都會排穩定判定）
 core.register_on_dignode(function(pos, oldnode)
 	disturb(pos)
-	undercut(pos)
 end)
 do
 	local col = rockmech.collapse
@@ -413,7 +445,6 @@ do
 		orig(pos, prev)
 		local p = vector.round(pos)
 		disturb(p)
-		undercut(p)
 	end
 end
 
