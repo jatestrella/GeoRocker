@@ -91,7 +91,8 @@ for dx = -1, 1 do for dy = -1, 1 do for dz = -1, 1 do
 	if dx ~= 0 or dy ~= 0 or dz ~= 0 then NB[#NB + 1] = {dx, dy, dz} end
 end end end
 local felling = false
-local function fell(pos, digger)
+-- whole：連 pos 那一格也拿掉（自然倒下；砍的時候那一格由引擎挖掉）
+local function fell(pos, digger, whole)
 	if felling then return end
 	felling = true
 	-- 相連的樹幹（含斜的樹枝），往上、往旁邊找，最多 64 格
@@ -107,8 +108,7 @@ local function fell(pos, digger)
 	end
 	local logs, apples = 0, 0
 	for i, p in ipairs(trunk) do
-		if i > 1 then core.remove_node(p) end      -- 砍的那一格由引擎挖掉（照常掉一根原木）
-		logs = logs + (i > 1 and 1 or 0)
+		if i > 1 or whole then core.remove_node(p); logs = logs + 1 end   -- 砍的那一格由引擎挖掉（照常掉一根原木）
 		-- 這段樹幹周圍 2 格的樹葉、蘋果拿掉（樹距 3 m，不碰隔壁那棵）
 		for _, l in ipairs(core.find_nodes_in_area(vector.subtract(p, 2), vector.add(p, 2), {"default:leaves", "default:apple"})) do
 			if core.get_node(l).name == "default:apple" then apples = apples + 1 end
@@ -128,12 +128,51 @@ local function fell(pos, digger)
 		maxpos = vector.add(pos, {x = 2, y = 6, z = 2}), minvel = {x = -1, y = -2, z = -1}, maxvel = {x = 1, y = 0, z = 1},
 		minexptime = 1, maxexptime = 2, minsize = 1, maxsize = 2, texture = "[fill:4x4:#3a7a2a"})
 	core.sound_play("default_dig_choppy", {pos = pos, gain = 1.0, max_hear_distance = 32}, true)
-	if digger and digger:is_player() then tell(digger:get_player_name(), ("樹倒了：原木 %d 根"):format(logs + 1)) end
+	if digger and digger:is_player() then tell(digger:get_player_name(), ("樹倒了：原木 %d 根"):format(logs + (whole and 0 or 1))) end
 	felling = false
 end
 core.register_on_dignode(function(pos, oldnode, digger)
 	if oldnode.name == LOG and digger and digger:is_player() then fell(pos, digger) end
 end)
+
+-- 被土埋：樹那一格的土面高度（樹幹那格放不下土，用前後左右四格土面的平均代表）超過樹根上方 1 m → 樹倒下
+-- （原木、樹苗、蘋果掉在地上），土壤維持土壤。
+-- 邊坡上的樹：上坡那側高、下坡那側低，平均不到 1 m 就站得住；整圈被土石埋起來才倒
+-- 一欄的土面離樹根（base 那格的底面）多高 (m)：從 base 往上 3 格找最上面的碎石／土；沒有就是 0。
+-- 那一欄是岩石或別的實心東西（例如貼著岩壁）：不算埋，回傳 0
+local function surface_above(x, z, base)
+	local h = 0
+	for y = base.y, base.y + 3 do
+		local name = core.get_node({x = x, y = y, z = z}).name
+		local k = rockmech.rubble_level[name]
+		if k then h = (y - base.y) + k / rockmech.RUBBLE_LEVELS
+		elseif name ~= "air" then break end
+	end
+	return h
+end
+local function buried(base)
+	local sum = 0
+	for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do sum = sum + surface_above(base.x + d[1], base.z + d[2], base) end
+	return sum / 4 > 1
+end
+local function topple(base)
+	fell(base, nil, true)
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), base) <= 32 then
+			tell(pl:get_player_name(), ("%s 的樹被土埋超過 1 m 倒下了"):format(core.pos_to_string(base)))
+		end
+	end
+	core.log("action", ("[rockmech] 樹被埋倒下 %s"):format(core.pos_to_string(base)))
+end
+-- 樹幹最下面那一格（底下不是樹幹）每幾秒檢查一次
+core.register_abm({
+	label = "rockmech: 樹被土埋超過 1 m 就倒",
+	nodenames = {LOG}, interval = 3, chance = 1,
+	action = function(pos)
+		if core.get_node({x = pos.x, y = pos.y - 1, z = pos.z}).name == LOG then return end
+		if buried(pos) then topple(pos) end
+	end,
+})
 
 ---------------------------------------------------------------------------
 -- 鋸木台、木工桌：單純的台子，右鍵開選單；材料從手上／物品欄拿
