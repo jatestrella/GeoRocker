@@ -384,6 +384,8 @@ granular_settle = function(pos, chain, q_ext, side)
     local base, k = rockmech.rubble_base[tn], rubble_k(tn)
     local below = {x = T.x, y = T.y - 1, z = T.z}
     local bn = core.get_node(below).name
+    -- 壓在薄的表土上（woodwork.lua）：表土被壓、被擾動變成同樣厚度的鬆土，碎石往下倒進去合併，不會架在薄片上面
+    if rockmech.loosen_under and rockmech.loosen_under(below, bn) then bn = core.get_node(below).name end
     if passable(bn) then
         fall_with_slope_settle(T)
         return

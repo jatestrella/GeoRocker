@@ -344,6 +344,13 @@ local function loosen(p)
 	core.after(0, function() rockmech.collapse.check_cell(p) end)     -- 底下空了就掉、陡了就流
 	return true
 end
+-- 薄的表土上面壓了碎石、鬆土：變成同樣厚度的鬆土，讓上面的往下倒進來合併（collapse.lua granular_settle 呼叫）
+function rockmech.loosen_under(p, name)
+	local k = TOPSOIL_K[name]
+	if not k or k >= NLEV then return false end
+	core.swap_node(p, {name = rockmech.rubble_with_level(SOIL, k)})
+	return true
+end
 -- 表土的凝聚力（根系，rockmech_topsoil_c）→ 自立高度 H_c = 4c/γ·tan(45° + φ/2)：表土旁邊挖開的臨空面不超過 H_c 就站得住。
 -- γ 用非岩性格的單位重，φ 用安息角（鬆土沒有凝聚力，就是安息角）。c = 5 kPa、γ = 20、φ = 35° → H_c ≈ 1.9 m
 local HC = 4 * cfg.topsoil_c / math.max(1, cfg.failure.gamma_other) * math.tan(math.rad(45 + cfg.slope.angle / 2))
@@ -432,21 +439,56 @@ core.register_abm({
 		core.swap_node(pos, {name = TOPSOIL})
 	end,
 })
--- 懸空的表土：大規模崩塌用 VoxelManip 寫入、岩塊整塊掉落翻滾，這些路徑不會通知表土底下空了。
--- 定期掃露在外面的表土，正下方是空的（或不滿格的碎石、鬆土）就變鬆土掉下來
+-- 懸空的表土：大規模崩塌、爆破用 VoxelManip 寫入，不會通知表土底下空了。
+-- 這些寫入都會通知 jointmesh.dirty_box：在那個範圍（往上多看幾格，表土最厚 3 m）找表土檢查，
+-- 正下方是空的（或不滿格的碎石、鬆土）就變鬆土掉下來。另外低頻率抽查露在外面的表土補漏（不能每格都常掃：山上幾萬格）
+local function check_topsoil(pos)
+	local b = {x = pos.x, y = pos.y - 1, z = pos.z}
+	local n = core.get_node(b).name
+	if n == "ignore" then return end
+	local def = core.registered_nodes[n]
+	local k = rockmech.rubble_level[n]
+	if (def and def.walkable == false) or (k and k < NLEV) then loosen(pos) return end
+	-- 薄的表土上面壓著碎石、鬆土（掉下來架在薄片上）：鬆掉，上面的往下倒進來合併
+	local tk = TOPSOIL_K[core.get_node(pos).name]
+	if tk and tk < NLEV and rockmech.rubble_level[core.get_node({x = pos.x, y = pos.y + 1, z = pos.z}).name] then
+		rockmech.loosen_under(pos, core.get_node(pos).name)
+		-- 整欄往下倒：每一格從上面那格補滿（上面疊好幾格也一路補上去）
+		for y = pos.y, pos.y + 16 do
+			local a, b = {x = pos.x, y = y, z = pos.z}, {x = pos.x, y = y + 1, z = pos.z}
+			local na, nb = core.get_node(a), core.get_node(b)
+			local ka, kb = rockmech.rubble_level[na.name], rockmech.rubble_level[nb.name]
+			local ba, bb = rockmech.rubble_base[na.name], rockmech.rubble_base[nb.name]
+			if not (ka and kb) or not rockmech.rubble_mixable(ba, bb) then break end
+			local put = math.min(NLEV - ka, kb)
+			if put > 0 then
+				local b2, g2 = rockmech.rubble_merge(ba, ka, na.param2, bb, put, nb.param2)
+				core.swap_node(a, {name = rockmech.rubble_with_level(b2, ka + put, g2), param2 = g2})
+				if kb - put > 0 then core.swap_node(b, {name = rockmech.rubble_with_level(bb, kb - put, nb.param2), param2 = nb.param2})
+				else core.swap_node(b, {name = "air"}) end
+			end
+		end
+	end
+end
 core.register_abm({
-	label = "rockmech: 懸空的表土掉下來",
+	label = "rockmech: 懸空的表土掉下來（抽查）",
 	nodenames = {"group:rockmech_topsoil"}, neighbors = {"air"},
-	interval = 2, chance = 1, catch_up = false,
-	action = function(pos)
-		local b = {x = pos.x, y = pos.y - 1, z = pos.z}
-		local n = core.get_node(b).name
-		if n == "ignore" then return end
-		local def = core.registered_nodes[n]
-		local k = rockmech.rubble_level[n]
-		if (def and def.walkable == false) or (k and k < NLEV) then loosen(pos) end
-	end,
+	interval = 10, chance = 20, catch_up = false,
+	action = check_topsoil,
 })
+core.register_on_mods_loaded(function()
+	local jm = rockmech.jointmesh
+	if not jm then return end
+	local orig = jm.dirty_box
+	jm.dirty_box = function(a, b)
+		orig(a, b)
+		local p1 = {x = math.min(a.x, b.x) - 1, y = math.min(a.y, b.y), z = math.min(a.z, b.z) - 1}
+		local p2 = {x = math.max(a.x, b.x) + 1, y = math.max(a.y, b.y) + 4, z = math.max(a.z, b.z) + 1}
+		core.after(0.5, function()
+			for _, q in ipairs(core.find_nodes_in_area(p1, p2, {"group:rockmech_topsoil"})) do check_topsoil(q) end
+		end)
+	end
+end)
 -- 鬆土、碎石從一格流出去（流掉一部分也算）：貼著的表土被拖動、跟著鬆掉（collapse.lua granular_settle 呼叫）
 rockmech.granular_moved = disturb
 -- 擾動的來源：玩家挖東西、坍塌／爆破／碎石和鬆土移動（都會排穩定判定）
@@ -458,8 +500,9 @@ do
 	local orig = col.queue_stability_check
 	col.queue_stability_check = function(pos, prev)
 		orig(pos, prev)
+		-- 等下一個 tick 再看：on_destruct 裡呼叫的時候，被移除的那一格還在（表土會以為底下還撐著）
 		local p = vector.round(pos)
-		disturb(p)
+		core.after(0, disturb, p)
 	end
 end
 
