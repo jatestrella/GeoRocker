@@ -75,22 +75,37 @@ core.register_globalstep(function(dtime)
 			storage:set_string(bucket_key(acc, day), core.serialize(b))
 		end
 	end
-	-- 前幾天沒被破碎站日結拿走的人事費：另外發單子（換日後等 BILL_GRACE 秒，讓破碎站先結）
+	-- 前幾天沒被破碎站日結拿走的人事費、燃料費（fuel.lua）：另外發一張營運費單子
+	-- （換日後等 BILL_GRACE 秒，讓破碎站先結）
 	local into = core.get_gametime() - day * cfg.price_period
 	if into >= BILL_GRACE then
+		local due = {}          -- "帳戶|交易日" → {acc, d}
 		for _, k in ipairs(storage:get_keys()) do
 			local acc, d = k:match("^" .. WAGE .. "(.+):(%d+)$")
 			d = tonumber(d)
-			if acc and d and d < day then
-				local amt, sec = rockmech.wage_take(acc, d)
-				if amt and amt > 0 then
-					local r = rockmech.wage_row(amt, sec)
-					for _, m in ipairs(rockmech.account_members(acc)) do
-						core.chat_send_player(m, ("[人事] 第 %d 個交易日人事費 −$%.0f"):format(d + 1, amt))
-						if rockmech.show_bill then
-							rockmech.show_bill(m, ("人事費日結　第 %d 個交易日"):format(d + 1),
-								{{r[1], r[2], r[3], rockmech.money_text(r[4]), 0xFF8080}})
-						end
+			if acc and d and d < day then due[acc .. "|" .. d] = {acc, d} end
+		end
+		for _, ad in ipairs(rockmech.fuel_days and rockmech.fuel_days(day) or {}) do due[ad[1] .. "|" .. ad[2]] = ad end
+		for _, ad in pairs(due) do
+			local acc, d = ad[1], ad[2]
+			local rows, total = {}, 0
+			local amt, sec = rockmech.wage_take(acc, d)
+			if amt and amt > 0 then
+				local r = rockmech.wage_row(amt, sec)
+				rows[#rows + 1] = {r[1], r[2], r[3], rockmech.money_text(r[4]), 0xFF8080}
+				total = total + amt
+			end
+			local famt, fl = (rockmech.fuel_take or function() end)(acc, d)
+			if famt and famt > 0 then
+				local r = rockmech.fuel_row(famt, fl)
+				rows[#rows + 1] = {r[1], r[2], r[3], rockmech.money_text(r[4]), 0xFF8080}
+				total = total + famt
+			end
+			if #rows > 0 then
+				for _, m in ipairs(rockmech.account_members(acc)) do
+					core.chat_send_player(m, ("[營運費] 第 %d 個交易日 −$%.0f"):format(d + 1, total))
+					if rockmech.show_bill then
+						rockmech.show_bill(m, ("營運費日結　第 %d 個交易日"):format(d + 1), rows)
 					end
 				end
 			end

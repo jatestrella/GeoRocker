@@ -308,10 +308,11 @@ end
 ---------------------------------------------------------------------------
 
 function def.hud(self)
-	return ("\n滾筒：%s（E）　切深：%s（空白鍵）"):format(self.cut and "【切削中】" or "停止",
-			(self.depth or 1) > 0 and "下切 1 m" or "平切")
-		.. "\n卸料：" .. (self.target_msg or "料倉是空的")
+	return "\n卸料：" .. (self.target_msg or "料倉是空的")
 		.. (self.cut_msg and ("\n" .. self.cut_msg) or "")
+end
+function def.keys(self)
+	return {{"E", "滾筒切削", on = self.cut}, {"空白鍵", "下切 1 m（關＝平切）", on = (self.depth or 1) > 0}}
 end
 function def.busy(self) return self.cut end
 function def.on_load(self, data) self.cut, self.depth = data.cut, data.depth end

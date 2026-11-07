@@ -23,11 +23,51 @@ local function hud_text(self)
 	end
 	if def.hud then s = s .. def.hud(self) end
 	if def.top_speed then s = s .. ("　%d km/h"):format(self.kmh or 0) end
+	if rockmech.fuel_hud then s = s .. rockmech.fuel_hud(self) end
 	local hp = self.hp or 100
 	if hp <= 0 then s = s .. "\n" .. core.colorize("#ff6040", "【報廢】不能開，找機械技工修理")
 	elseif hp < 100 then s = s .. core.colorize(hp < V.WORN and "#ff9040" or "#ffffff", ("　耐久 %d%%"):format(math.floor(hp + 0.5))) end
 	if self.steep then s = s .. "\n" .. self.steep end
-	return s .. (def.pushed and "　Shift 放手" or "　Z 切換視角　Shift 下車")
+	return s
+end
+
+-- 儀表板上的按鍵列：每個鍵一個按鈕，上面寫鍵名和功能；開著的功能（def.keys 回傳 on = true）按鈕亮起來。
+-- 各車的 def.keys(self) 回傳 {{鍵名, 功能, on = 開著嗎}, ...}，後面再接共用的 Z（追蹤相機）、Shift（下車）。
+-- HUD 只能看不能點：還是用鍵盤按
+local KEY_W, KEY_H, KEY_GAP, KEY_Y = 11.5, 5.6, 0.8, 0.875     -- 按鈕寬、高、間距（螢幕的 %）、中心高度（螢幕比例）
+local KEY_OFF = "[fill:16x8:#0c0c0c^[fill:14x6:1,1:#34383c"
+local KEY_ON = "[fill:16x8:#0c0c0c^[fill:14x6:1,1:#b07a10"
+local function keys_of(self)
+	local def = TYPES[self.vkind]
+	local out = {}
+	for _, k in ipairs(def.keys and def.keys(self) or {}) do out[#out + 1] = k end
+	if not def.pushed then out[#out + 1] = {"Z", "追蹤相機", on = self.chase ~= nil} end
+	out[#out + 1] = {"Shift", def.pushed and "放手" or "下車"}
+	return out
+end
+local function keys_clear(self, player)
+	for _, id in ipairs(self.hud_keys or {}) do player:hud_remove(id) end
+	self.hud_keys, self.keys_sig = nil, nil
+end
+-- 按鍵列跟目前狀態不一樣才重畫（vehicles.lua 每 0.5 秒也叫一次，抓沒呼叫 update_hud 的狀態變化）
+function V.update_keys(self, d)
+	local keys = keys_of(self)
+	local sig = {}
+	for _, k in ipairs(keys) do sig[#sig + 1] = k[1] .. "/" .. k[2] .. (k.on and "+" or "") end
+	sig = table.concat(sig, "|")
+	if sig == self.keys_sig then return end
+	keys_clear(self, d)
+	self.keys_sig, self.hud_keys = sig, {}
+	local n = #keys
+	local x0 = 50 - (n * KEY_W + (n - 1) * KEY_GAP) / 2 + KEY_W / 2
+	for i, k in ipairs(keys) do
+		local x = (x0 + (i - 1) * (KEY_W + KEY_GAP)) / 100
+		local ids = self.hud_keys
+		ids[#ids + 1] = d:hud_add({type = "image", position = {x = x, y = KEY_Y}, alignment = {x = 0, y = 0},
+			scale = {x = -KEY_W, y = -KEY_H}, text = k.on and KEY_ON or KEY_OFF, z_index = 90})
+		ids[#ids + 1] = d:hud_add({type = "text", position = {x = x, y = KEY_Y}, alignment = {x = 0, y = 0},
+			text = k[1] .. "\n" .. k[2], number = k.on and 0xFFFFFF or 0xD8D8D8, z_index = 91})
+	end
 end
 
 -- 駕駛艙框（全螢幕 HUD 圖片，中間透明）：上方車頂邊條、左右 A 柱（車身顏色）、左右上方後照鏡、下方儀表板
@@ -358,8 +398,10 @@ function V.hud_clear(self, player)
 		if self.hud then player:hud_remove(self.hud) end
 		if self.hud_cockpit then player:hud_remove(self.hud_cockpit) end
 		for _, id in ipairs(self.hud_mirror or {}) do player:hud_remove(id) end
+		keys_clear(self, player)
 	end
 	self.hud, self.hud_cockpit, self.hud_mirror = nil, nil, nil
+	self.hud_keys, self.keys_sig = nil, nil
 end
 
 function V.update_hud(self)
@@ -387,8 +429,10 @@ function V.update_hud(self)
 	end
 	if self.hud then d:hud_change(self.hud, "text", hud_text(self))
 	else
-		self.hud = d:hud_add({type = "text", position = {x = 0.5, y = 0.85}, alignment = {x = 0, y = 0},
+		-- 說明文字在按鍵列上方，往上長
+		self.hud = d:hud_add({type = "text", position = {x = 0.5, y = KEY_Y - KEY_H / 200 - 0.01}, alignment = {x = 0, y = -1},
 			text = hud_text(self), number = 0xFFE080, z_index = 100})
 	end
+	V.update_keys(self, d)
 	V.refresh(self)
 end

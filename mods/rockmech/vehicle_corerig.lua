@@ -120,12 +120,11 @@ function def.hud(self)
 	if self.coring then
 		local d, max = rockmech.coredrill_depth(self.coring)
 		s = s .. ("鑽岩芯中 %d / %d m（車子不能動）"):format(d or 0, max or MAX_DEPTH)
-	else
-		s = s .. ("E 在桅桿下方往下鑽岩芯孔（最深 %d m）"):format(MAX_DEPTH)
 	end
 	if self.msg then s = s .. "\n" .. self.msg end
 	return s
 end
+function def.keys(self) return {{"E", ("鑽岩芯（最深 %d m）"):format(MAX_DEPTH), on = self.coring ~= nil}} end
 function def.on_spawn(self) place_head(self, HEAD_TOP) end
 
 V.register("corerig", def)

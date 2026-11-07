@@ -379,11 +379,18 @@ local function report(meta, owner, dump, day)
 		rows[#rows + 1] = {"處理費", ("%.1f t"):format(bt), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
 		-- 人事費（wages.lua：雇員薪水在組員在線時已經陸續扣了，這裡列出來、算進淨收入）
 		local wage = 0
-		local wamt, wsec = rockmech.wage_take and rockmech.wage_take(rockmech.account_of(owner), day)
+		local wamt, wsec = (rockmech.wage_take or function() end)(rockmech.account_of(owner), day)
 		if wamt and wamt > 0 then
 			local r = rockmech.wage_row(wamt, wsec)
 			rows[#rows + 1] = {r[1], r[2], r[3], money_text(r[4]), RED}
 			wage = wamt
+		end
+		-- 燃料費（fuel.lua：引擎發動時陸續扣了，這裡列出來）
+		local famt, fl = (rockmech.fuel_take or function() end)(rockmech.account_of(owner), day)
+		if famt and famt > 0 then
+			local r = rockmech.fuel_row(famt, fl)
+			rows[#rows + 1] = {r[1], r[2], r[3], money_text(r[4]), RED}
+			wage = wage + famt
 		end
 		local net = bg - bf - wage
 		rows[#rows + 1] = {"淨收入", "", "", money_text(net), net >= 0 and GREEN or RED}

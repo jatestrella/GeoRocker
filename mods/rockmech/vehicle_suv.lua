@@ -45,6 +45,6 @@ do
 end
 -- 擋人：車身後段（碰撞箱後方）
 def.overhangs = {{x0 = -1.0, x1 = 1.0, z0 = -3.5, z1 = -1.0, y0 = -1.0, y1 = 0.8, body = "z1"}}
-function def.hud() return "\n代步車：沒有作業功能" end
+function def.hud() return "　代步車" end
 
 V.register("suv", def)

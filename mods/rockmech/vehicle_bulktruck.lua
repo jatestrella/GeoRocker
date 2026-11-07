@@ -104,7 +104,10 @@ function def.hud(self)
 		V.store_count(self, ANFO), def.store[1][2], V.store_count(self, EMULSION), def.store[2][2])
 	if self.pumping then s = s .. ("　灌孔中 %d / %d"):format(self.pumping.done, #self.pumping.list) end
 	if self.msg then s = s .. "\n" .. self.msg end
-	return s .. ("\nE 灌吊臂範圍內（%d m）往下的鑽孔　空白鍵 儲槽"):format(BOOM_LEN)
+	return s
+end
+function def.keys(self)
+	return {{"E", ("灌孔（吊臂 %d m 內）"):format(BOOM_LEN), on = self.pumping ~= nil}, {"空白鍵", "儲槽"}}
 end
 function def.on_spawn(self) place_boom(self, nil) end
 

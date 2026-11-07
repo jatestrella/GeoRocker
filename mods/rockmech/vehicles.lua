@@ -858,6 +858,7 @@ end
 local function gross_mass(self, kind)
 	return (V.MASS[kind] or 20) + load_total(self) / NLEV * rockmech.cfg.failure.gamma_other / 10
 end
+V.gross_mass = gross_mass
 
 -- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
 -- 在碎石坡上（tanθ > 0.35）整個車寬都判定、往下坡擠：坡在安息角附近時，加上車重就往下垮，並往坡上傳。
@@ -1235,6 +1236,12 @@ function V.register(kind, def)
 			if self.driver == name then get_off(self); return end
 			if self.driver then return end
 			if not V.may_use(self, name) then return end
+			-- 無人機飛行中（或拿著遙控器）按右鍵：起飛／回到起飛點，不上車
+			if rockmech.drone_flying and rockmech.drone_flying(name) or rockmech.drone_remote_item
+					and rockmech.drone_remote_item(clicker:get_wielded_item():get_name()) then
+				rockmech.drone_toggle(clicker)
+				return
+			end
 			if clicker:get_wielded_item():get_name() == "rockmech:radio" then   -- 對講機：右鍵和左鍵一樣，不上車
 				rockmech.radio_click(clicker, {type = "object", ref = self.object})
 				return
@@ -1440,6 +1447,8 @@ function V.register(kind, def)
 					or (def.busy ~= nil and def.busy(self))
 				engine_update(self, kind, working)
 				V.exhaust(self, def, working, dtime)
+				-- 燃料費（fuel.lua）：引擎發動（有人駕駛或自動駕駛）才耗油，空車停著不算
+				if driven and rockmech.fuel_step then rockmech.fuel_step(self, kind, working, dtime) end
 			end
 			obj:set_velocity({x = dir.x * ctx.speed + slide_x, y = vel.y, z = dir.z * ctx.speed + slide_z})
 			-- HUD 時速（每 5 km/h 更新一次）
@@ -1448,6 +1457,11 @@ function V.register(kind, def)
 				if kmh ~= self.kmh then self.kmh = kmh; update_hud(self) end
 			end
 			if def.step then def.step(self, ctx) end
+			-- 儀表板按鍵列（vehicle_views.lua）：開關狀態變了就重畫
+			if d then
+				self.keys_t = (self.keys_t or 0) + dtime
+				if self.keys_t >= 0.5 then self.keys_t = 0; V.update_keys(self, d) end
+			end
 			-- Z（zoom 鍵）：切換追蹤相機（駕駛掛到車子後上方的點上）／車頂第一人稱
 			if d then
 				if ctrl.zoom and not self.zoom_held and not def.pushed then

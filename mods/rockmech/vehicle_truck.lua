@@ -119,7 +119,13 @@ local function hauler(def, spec)
 		V.nametag(self, "載量 " .. V.volume_text(t, cap) .. mix .. (st and ("\n" .. st) or ""), t >= cap and "#ff8060" or "#ffffff")
 		if not self.tip then place_bed(self, 0) end
 	end
-	function def.hud(self) return "\n空白鍵 把車斗倒在車尾　E 無人駕駛設定" end
+	function def.keys(self)
+		local k = {{"空白鍵", "倒車斗", on = self.tip ~= nil}}
+		if not def.no_ahs then
+			k[2] = {"E", self.ahs and self.ahs.rec and "錄製路線中" or "無人駕駛設定", on = self.ahs and self.ahs.rec}
+		end
+		return k
+	end
 	function def.on_save(self, data) V.ahs.save(self, data) end
 	function def.on_load(self, data) V.ahs.load(self, data) end
 	-- 車斗那段會撞到（或正在倒土）：不轉

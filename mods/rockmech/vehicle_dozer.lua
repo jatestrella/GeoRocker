@@ -267,10 +267,11 @@ end
 function def.hud(self)
 	return (self.blade and "　【放鏟】往前開把碎石推走" or "　【收鏟】不推碎石")
 		.. "\n設計坡度：" .. grade_text(self.grade) .. (self.design and ("，從 (%d, %d) 高 %.1f 起算"):format(self.design.x, self.design.z, self.design.h) or "")
-		.. "（空白鍵切換，切換時從鏟刀這裡重新起算）"
+		.. "（切換時從鏟刀這裡重新起算）"
 		.. "\n鏟刀前碎石 " .. V.volume_text(self.pile_lv or 0)
-		.. (self.push_msg and ("\n推不動：" .. self.push_msg .. "，倒車換個方向或先推開前面") or "") .. "\nE 放鏟／收鏟"
+		.. (self.push_msg and ("\n推不動：" .. self.push_msg .. "，倒車換個方向或先推開前面") or "")
 end
+function def.keys(self) return {{"E", "放鏟（推碎石）", on = self.blade}, {"空白鍵", "設計坡度"}} end
 function def.on_load(self, data)
 	if data.blade ~= nil then self.blade = data.blade else self.blade = true end
 	self.blade_h = self.blade and 0 or BLADE_UP

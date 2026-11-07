@@ -102,8 +102,9 @@ function def.hud(self)
 	if self.boring and self.boring.up then s = s .. "　抽出鑽桿中"
 	elseif self.boring then s = s .. ("　鑽孔中 %.0f / %d m"):format(self.boring.t / SEC_PER_M, self.boring.depth) end
 	if self.msg then s = s .. "\n" .. self.msg end
-	return s .. "\nE 在桅桿下方往下鑽孔　空白鍵 設定孔深"
+	return s
 end
+function def.keys(self) return {{"E", "鑽孔（桅桿下方）", on = self.boring ~= nil}, {"空白鍵", "設定孔深"}} end
 function def.on_load(self, data) self.depth = data.depth end
 function def.on_save(self, data) data.depth = self.depth end
 function def.on_spawn(self) place_head(self, HEAD_TOP) end

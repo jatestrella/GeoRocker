@@ -100,11 +100,16 @@ config.shop = {
 	{key = "bolt", shop = "tools", item = "rockmech:rock_bolt", label = "岩栓", price = 300, count = 10},
 	{key = "shotcrete", shop = "tools", item = "rockmech:shotcrete", label = "噴凝土", price = 800, count = 10},
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = "無人機", price = 2000},
+	{key = "drone_cmd", shop = "tools", item = "rockmech:drone_cmd", label = "指揮無人機（無人機＋對講機）", price = 5000},
 	{key = "xrf", shop = "tools", item = "rockmech:xrf", label = "XRF 分析儀（品位）", price = 5000},
 	{key = "gsi_card", shop = "tools", item = "rockmech:gsi_card", label = "GSI 評估圖卡（岩體）", price = 1000},
 	{key = "core_drill", shop = "tools", item = "rockmech:core_drill", label = "手持岩芯鑽機（10 m）", price = 3000},
 	{key = "compass", shop = "tools", item = "rockmech:compass", label = "地質羅盤（力學）", price = 200},
 }
+
+-- 引擎額定功率（kW，fuel.lua 算油耗）：沒列的車不耗油（手推車靠人推）
+config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, lowboy = 400, dozer = 250,
+	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500}
 
 -- 破碎站的收入：噸數 ×（品位 × 回收率 × 價格 − 處理費）。ore = nil 是廢石，只付處理費
 function config.crush_income(tons, grade, ore, fee)
@@ -718,6 +723,7 @@ function config.load(get)
 	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)
 	-- 怪手操作員日薪（wages.lua）：每個交易日 $，按雇用時間比例、只在組員在線時計
 	cfg.operator_wage = math.max(0, tonumber(get("rockmech_operator_wage")) or 3000)
+	cfg.diesel_price = math.max(0, tonumber(get("rockmech_diesel_price")) or 50)   -- 柴油價（$/L，fuel.lua）
 	-- 煤層帶不帶節理（預設不帶：節理組只在頁岩裡）
 	cfg.coal_joints = parse_bool(get("rockmech_coal_joints")) == true
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)

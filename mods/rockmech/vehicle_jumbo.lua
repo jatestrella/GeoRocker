@@ -207,8 +207,9 @@ do
 		local s = ("\n爆破孔設計圖 %d × %d"):format(plan.w, plan.h)
 		if self.drill then s = s .. ("　鑽孔中 %d / %d"):format(self.drill.done, #self.drill.list) end
 		if self.msg then s = s .. "\n" .. self.msg end
-		return s .. "\nE 依設計圖鑽孔　空白鍵 編輯設計圖"
+		return s
 	end
+	function def.keys(self) return {{"E", "依設計圖鑽孔", on = self.drill ~= nil}, {"空白鍵", "編輯設計圖"}} end
 	function def.on_load(self, data)
 		if data.plan and data.plan.cells and #data.plan.cells == data.plan.w * data.plan.h then self.plan = data.plan end
 	end
@@ -412,8 +413,9 @@ do
 		s = s .. (n == math.huge and "　（創造模式不扣）" or ("　物品欄 %d 條"):format(n))
 		if self.charging then s = s .. ("　裝藥中 %d / %d"):format(self.charging.done, #self.charging.list) end
 		if self.msg then s = s .. "\n" .. self.msg end
-		return s .. "\nE 裝前方工作面的鑽孔（空孔跳過）　空白鍵 設定每孔條數"
+		return s
 	end
+	function def.keys(self) return {{"E", "裝藥（前方工作面）", on = self.charging ~= nil}, {"空白鍵", "每孔條數"}} end
 	function def.on_load(self, data) self.cart = data.cart end
 	function def.on_save(self, data) data.cart = self.cart end
 	function def.on_spawn(self) place_basket(self, BASKET_REST) end

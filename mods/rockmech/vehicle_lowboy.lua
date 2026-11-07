@@ -138,9 +138,9 @@ end
 function def.hud(self)
 	local e = carried(self)
 	return "\n平板：" .. (e and V.TYPES[e.vkind].desc or (self.carry_uid and "（載的車還沒載入）" or "空的"))
-		.. ("　E %s"):format(self.carry_uid and "卸車" or "載車（平板旁邊的車）")
 		.. (self.msg and ("\n" .. self.msg) or "")
 end
+function def.keys(self) return {{"E", self.carry_uid and "卸車" or "載車（平板旁的車）", on = self.carry_uid ~= nil}} end
 function def.on_save(self, data) data.carry_uid = self.carry_uid end
 function def.on_load(self, data) self.carry_uid = data.carry_uid end
 

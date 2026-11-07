@@ -9,6 +9,8 @@
 
 local cfg = rockmech.cfg
 local DRONE, PART, REMOTE = "rockmech:drone", "rockmech:drone_part", "rockmech:drone_remote"
+local CMD = "rockmech:drone_cmd"     -- 指揮無人機（無人機＋對講機，檔案最後）
+local CMD_RANGE = 128
 local SPEED, BOOST, CLIMB = 12, 2, 6      -- 水平速度 (m/s)、E 加速倍數、升降速度 (m/s)
 local CEILING = 80          -- 高度上限：起飛點上方 (m)
 local LOAD_R = 40           -- 飛行時強制載入下方 ±LOAD_R m（約 80 × 80 m）
@@ -272,7 +274,8 @@ core.register_globalstep(function(dtime)
 					g and ("%.0f m"):format(pos.y - g) or "—", pos.y - f.home.y, CEILING, hd, cfg.drone_range,
 					math.floor(math.sqrt(vel.x ^ 2 + vel.y ^ 2 + vel.z ^ 2) * 3.6 + 0.5), heading_text(yaw),
 					math.floor(pos.x + 0.5), math.floor(pos.y + 0.5), math.floor(pos.z + 0.5),
-					f.out and "已到最大飛行距離，不能再往外飛　再按右鍵回到起飛點" or "再按右鍵回到起飛點"))
+					(f.out and "已到最大飛行距離，不能再往外飛　再按右鍵回到起飛點" or "再按右鍵回到起飛點")
+					.. (player:get_wielded_item():get_name() == CMD and "　左鍵指揮：點怪手、卡車" or "")))
 			end
 		end
 	end
@@ -299,11 +302,31 @@ local function click(itemstack, user)
 	if flights[name] then land(name) else take_off(user) end
 	return itemstack
 end
+rockmech.drone_toggle = function(user) click(nil, user) end
+function rockmech.drone_flying(name) return flights[name] ~= nil end
+function rockmech.drone_remote_item(item) return item == REMOTE or item == CMD end
 core.register_craftitem(REMOTE, {
 	description = ("無人機遙控器\n右鍵起飛（第一人稱）；WASD 移動、E 加速、空白鍵上升、Shift 下降\n再按右鍵回到起飛點；高度上限：起飛點上方 %d m"):format(CEILING),
 	inventory_image = "[fill:16x16:#00000000^[fill:12x8:2,6:#3a3a3a^[fill:4x4:3,8:#808080^[fill:4x4:9,8:#808080"
 		.. "^[fill:1x6:3,0:#c0c0c0^[fill:1x6:12,0:#c0c0c0^[fill:2x2:7,9:#40c0ff",
 	stack_max = 1,
+	on_place = click,
+	on_secondary_use = click,
+})
+
+-- 指揮無人機：無人機＋對講機。右鍵起飛／回到起飛點，左鍵就是對講機（vehicle_excavator.lua 的 rockmech.radio_click）：
+-- 點怪手選定、點地面叫它開過去、點移動中的那台叫它停；點卡車、礦卡打開它的無人駕駛設定。
+-- 從空中指得比地上的對講機遠（CMD_RANGE m）
+core.register_craftitem(CMD, {
+	description = ("指揮無人機（無人機＋對講機）\n右鍵起飛、再按右鍵回到起飛點；WASD 移動、E 加速、空白鍵上升、Shift 下降\n"
+		.. "左鍵（地上、空中都可以）：點怪手選定、點地面叫它開過去；點卡車、礦卡打開無人駕駛設定\n指揮距離 %d m"):format(CMD_RANGE),
+	inventory_image = "[fill:16x16:#00000000^[fill:12x8:2,6:#3a3a3a^[fill:4x4:3,8:#808080^[fill:4x4:9,8:#70c070"
+		.. "^[fill:1x6:3,0:#c0c0c0^[fill:1x6:12,0:#c0c0c0^[fill:2x2:7,9:#ffb030",
+	stack_max = 1,
+	range = CMD_RANGE,
+	on_use = function(itemstack, user, pointed)
+		if user and user:is_player() and rockmech.radio_click then rockmech.radio_click(user, pointed) end
+	end,
 	on_place = click,
 	on_secondary_use = click,
 })

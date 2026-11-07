@@ -97,12 +97,31 @@ local function excavator_of(ref)
 		ref = ref and ref:get_attach()
 	end
 end
+-- 有車斗、能無人駕駛的車（卡車、礦卡）
+local function hauler_of(ref)
+	for _ = 1, 3 do
+		local e = ref and ref:get_luaentity()
+		if e and e.vkind then
+			local def = V.TYPES[e.vkind]
+			return def and def.bed and not def.no_ahs and e or nil
+		end
+		ref = ref and ref:get_attach()
+	end
+end
 -- 左鍵、右鍵都一樣（右鍵點車子由 vehicles.lua 轉過來，不會上車）
+-- 點卡車、礦卡：遠端打開那台的無人駕駛設定（啟動、停止、立即出發…），跟坐在車上按 E 一樣
 function rockmech.radio_click(user, pointed)
 	local name = user:get_player_name()
 	if pointed.type == "object" then
+		local h = hauler_of(pointed.ref)
+		if h then
+			if not V.may_use(h, name) then return end
+			if h.driver then radio_tell(name, "那台車上有人在開"); return end
+			V.ahs.open(h, user)
+			return
+		end
 		local e = excavator_of(pointed.ref)
-		if not e then radio_tell(name, "要點怪手"); return end
+		if not e then radio_tell(name, "要點怪手或卡車"); return end
 		if not rockmech.vehicles.may_use(e, name) then return end
 		if e.op and e.op.go and radio_sel[name] == e.uid then
 			e.op.go, e.op.esc, e.op.msg = nil, nil, nil
@@ -124,7 +143,7 @@ function rockmech.radio_click(user, pointed)
 	end
 end
 core.register_craftitem(RADIO, {
-	description = "對講機 Radio\n點怪手選定，再點地面：叫怪手的操作員開過去（左鍵、右鍵都可以）\n點正在移動的那台：叫它停下",
+	description = "對講機 Radio\n點怪手選定，再點地面：叫怪手的操作員開過去（左鍵、右鍵都可以）\n點正在移動的那台：叫它停下\n點卡車、礦卡：打開它的無人駕駛設定（啟動、停止、立即出發）",
 	inventory_image = "[fill:16x16:#00000000^[fill:6x11:5,4:#303030^[fill:4x3:6,6:#70c070^[fill:1x4:9,0:#303030^[fill:4x3:6,11:#555555",
 	stack_max = 1,
 	range = 64,
@@ -343,7 +362,10 @@ local function excavator(kind, P)
 			s = s .. ("\n前方%s：%s"):format(TYPES[truck.vkind].short, V.volume_text(tt, cap))
 		end
 		if self.msg then s = s .. "\n" .. self.msg end
-		return s .. "\nE 挖滑鼠指的位置　空白鍵 倒在滑鼠指的位置（指著卡車就倒進卡車）"
+		return s
+	end
+	function def.keys(self)
+		return {{"E", "挖（滑鼠指的地方）", on = self.dig ~= nil}, {"空白鍵", "倒土（指卡車就裝車）"}}
 	end
 
 	-- 擋人：鏟斗（跟著手臂動；用把鏟斗連同裡面的碎石包起來的方塊，不照迴轉角轉），大車再加上整個車身
