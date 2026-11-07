@@ -1278,6 +1278,11 @@ function V.register(kind, def)
 				if V.ahs and V.ahs.install then V.ahs.install(self, clicker) end
 				return
 			end
+			if clicker:get_wielded_item():get_name() == "rockmech:breaker_kit" then  -- 油壓破碎錘改裝套件：只有怪手裝得上
+				if def.install_breaker then def.install_breaker(self, clicker)
+				else core.chat_send_player(name, "[破碎錘] 只有怪手裝得上") end
+				return
+			end
 			if def.rightclick and def.rightclick(self, clicker) then return end   -- 拿著特定物品按右鍵（怪手操作員）
 			-- 上車要走到車旁邊：手上的東西指得遠（對講機 64 m）時，右鍵點得到遠處的車
 			local cp, vp = clicker:get_pos(), self.object:get_pos()
@@ -1334,6 +1339,10 @@ function V.register(kind, def)
 				if self.uid then rockmech.collapse.storage:set_string("ahsmod:" .. self.uid, "") end
 				local l4 = inv:add_item("main", ItemStack("rockmech:ahs_module"))
 				if not l4:is_empty() then core.add_item(self.object:get_pos(), l4) end
+			end
+			if self.breaker then
+				local l5 = inv:add_item("main", ItemStack("rockmech:breaker_kit"))
+				if not l5:is_empty() then core.add_item(self.object:get_pos(), l5) end
 			end
 			-- 有操作員（在車上或站在旁邊等）：回營地休息（operator.lua）
 			if self.op and (self.op.on or self.op.standby) and rockmech.op_send_rest then rockmech.op_send_rest(self, puncher) end

@@ -92,6 +92,7 @@ config.shop = {
 	-- 終極目標：買下時全服廣播（career.lua）
 	{key = "miner", shop = "vehicle", item = "rockmech:miner_item", label = "連續採礦機", price = 1500000, final = true},
 	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = "怪手操作員（雇用另付日薪）", price = 0},
+	{key = "breaker_kit", shop = "vehicle", item = "rockmech:breaker_kit", label = "油壓破碎錘（怪手改裝套件）", price = 20000},
 	{key = "ahs_module", shop = "vehicle", item = "rockmech:ahs_module", label = "自動駕駛模組（卡車、礦卡）", price = 8000},
 	{key = "radio", shop = "vehicle", item = "rockmech:radio", label = "對講機", price = 0},
 	{key = "drill", shop = "blast", item = "rockmech:rock_drill", label = "鑿岩機", price = 500},
@@ -768,6 +769,8 @@ function config.load(get)
 	cfg.plant_bin = math.max(1, tonumber(get("rockmech_plant_bin")) or 50)
 	cfg.plant_load_rate = math.max(0.1, tonumber(get("rockmech_plant_load_rate")) or 4)
 	cfg.plant_reach = math.max(1, tonumber(get("rockmech_plant_reach")) or 10)     -- 放料臂伸得到的水平距離 (m)
+	-- 油壓破碎錘（vehicle_excavator.lua）：敲碎一格岩石的時間 = UCS × 這個 (s/MPa)。頁岩 30 MPa 約 1.5 秒、花崗岩 180 MPa 約 9 秒
+	cfg.breaker_rate = math.max(0, tonumber(get("rockmech_breaker_s_per_mpa")) or 0.05)
 	-- 輸送帶（conveyor.lua）：運量 (t/s)、帶速 (m/s)、最大傾角 (deg，碎石在輸送帶上不往回滑的上限)
 	cfg.conveyor_rate = math.max(0.1, tonumber(get("rockmech_conveyor_rate")) or 4)
 	cfg.conveyor_speed = math.max(0.2, math.min(10, tonumber(get("rockmech_conveyor_speed")) or 2))

@@ -53,6 +53,14 @@ end
 -- 他坐在怪手上原地作業（不開動履帶，換工作面由玩家開過去）：在手臂範圍內挖表面露出、品位 ≥ 截止品位的碎石
 -- （最近的先挖；鏟斗會帶到旁邊的格子，界線附近的廢石一起上來就是貧化），有卡車停在手臂範圍內就倒進去
 -- （無人卡車、玩家開來的都算），沒車就拿著滿斗等。車子（自己、卡車）底下的格子不挖
+-- 油壓破碎錘改裝套件：拿著對怪手右鍵裝上（vehicles.lua）。鏟斗空的時候空白鍵切換鏟斗／破碎錘；
+-- 破碎錘對著岩石按 E：敲 UCS × rockmech_breaker_s_per_mpa 秒（比能：破碎同體積的岩石，所需能量跟強度成正比），
+-- 那格變成原地的碎石（同鎬子，品位留著）
+core.register_craftitem("rockmech:breaker_kit", {
+	description = "油壓破碎錘（怪手改裝套件）Hydraulic breaker kit\n拿著對怪手按右鍵裝上；鏟斗空的時候空白鍵切換鏟斗／破碎錘\n破碎錘對著岩石按 E 敲碎：時間跟岩石強度（UCS）成正比",
+	inventory_image = "[fill:16x16:#00000000^[fill:6x9:5,1:#2a2a2a^[fill:6x2:5,4:#c8a020^[fill:2x5:7,10:#8a8e92",
+	stack_max = 1,
+})
 local OP_ITEM = "rockmech:operator"
 local OP_THINK, OP_IDLE = 0.5, 2     -- 每隔幾秒想下一步；沒東西可挖時隔久一點再找 (s)
 local op_editing = {}                -- 玩家名稱 → 正在設定的怪手
@@ -360,11 +368,16 @@ local function excavator(kind, P)
 			local tt, cap = load_total(truck), TYPES[truck.vkind].cap
 			s = s .. ("\n前方%s：%s"):format(TYPES[truck.vkind].short, V.volume_text(tt, cap))
 		end
+		if self.breaker then s = s .. (self.tool == "breaker" and "\n工具：油壓破碎錘" or "\n工具：鏟斗（鏟斗空的時候空白鍵換破碎錘）") end
 		if self.msg then s = s .. "\n" .. self.msg end
 		return s
 	end
 	function def.keys(self)
-		return {{"E", "挖（滑鼠指的地方）", on = self.dig ~= nil}, {"空白鍵", "倒土（指卡車就裝車）"}}
+		if self.tool == "breaker" then
+			return {{"E", "敲碎岩石（滑鼠指的那格）", on = self.dig ~= nil}, {"空白鍵", "換回鏟斗"}}
+		end
+		return {{"E", "挖（滑鼠指的地方）", on = self.dig ~= nil},
+			{"空白鍵", self.breaker and load_total(self) == 0 and "換破碎錘" or "倒土（指卡車就裝車）"}}
 	end
 
 	-- 擋人：鏟斗（跟著手臂動；用把鏟斗連同裡面的碎石包起來的方塊，不照迴轉角轉），大車再加上整個車身
@@ -381,14 +394,32 @@ local function excavator(kind, P)
 
 	function def.on_load(self, data)
 		self.swing, self.op = data.swing, data.op
+		self.breaker, self.tool = data.breaker, data.tool
 		-- 舊版的操作員（還沒算進全組的雇用人數）：補算一個
 		if self.op and (self.op.on or self.op.standby) and not self.op.counted then
 			self.op.counted = true
 			if rockmech.op_adopt then rockmech.op_adopt(data.owner) end
 		end
 	end
-	function def.on_save(self, data) data.swing, data.op = self.swing, self.op end
-	function def.on_spawn(self) place_arm(self, BUCKET_REST); op_show(self) end
+	function def.on_save(self, data) data.swing, data.op, data.breaker, data.tool = self.swing, self.op, self.breaker, self.tool end
+	-- 鏟斗的樣子：裝著破碎錘時是深灰色的錘頭
+	local function show_tool(self)
+		local o = self.parts and self.parts.bucket
+		if o then o:set_properties({textures = box_tex(self.tool == "breaker" and "#2a2a2a" or P.bucket_color)}) end
+	end
+	function def.on_spawn(self) place_arm(self, BUCKET_REST); op_show(self); show_tool(self) end
+	-- 油壓破碎錘改裝套件（vehicles.lua：拿著套件對怪手右鍵）
+	function def.install_breaker(self, player)
+		local name = player:get_player_name()
+		if self.breaker then core.chat_send_player(name, "[破碎錘] 這台已經裝了"); return end
+		self.breaker, self.tool = true, "bucket"
+		if not core.is_creative_enabled(name) then
+			local st = player:get_wielded_item(); st:take_item(); player:set_wielded_item(st)
+		end
+		core.chat_send_player(name, "[破碎錘] 裝好了：鏟斗空的時候按空白鍵換成破碎錘，對著岩石按 E 敲碎")
+		update_hud(self)
+	end
+	def.show_tool = show_tool
 
 	-- 右鍵：操作員坐在車上 → 操作員頁面（不上車）；拿著「怪手操作員」對沒人的怪手 → 派他上車
 	function def.rightclick(self, clicker)
@@ -620,7 +651,29 @@ local function excavator(kind, P)
 		if self.dig then
 			local dg = self.dig
 			dg.t = dg.t + ctx.dtime
-			if not dg.done and dg.t >= DIG_PHASES[1] + DIG_PHASES[2] then
+			-- 破碎錘：錘頭碰到岩石後停在那裡敲 need 秒（冒岩粉、有敲擊聲），敲完那格變成原地的碎石
+			if dg.mode == "break" and not dg.done and dg.t >= DIG_PHASES[1] + DIG_PHASES[2] then
+				dg.t = DIG_PHASES[1] + DIG_PHASES[2]
+				dg.hold = dg.hold + ctx.dtime
+				dg.snd = (dg.snd or 0) - ctx.dtime
+				if dg.snd <= 0 then
+					dg.snd = 0.25
+					core.sound_play("default_dig_cracky", {pos = dg.target, gain = 0.8, max_hear_distance = 32}, true)
+					core.add_particlespawner({amount = 8, time = 0.2, minpos = vector.subtract(dg.target, 0.5), maxpos = vector.add(dg.target, 0.5),
+						minvel = {x = -1, y = 0, z = -1}, maxvel = {x = 1, y = 2, z = 1}, minacc = {x = 0, y = -9, z = 0}, maxacc = {x = 0, y = -9, z = 0},
+						minexptime = 0.3, maxexptime = 0.8, minsize = 1, maxsize = 2, texture = "[fill:4x4:#8a8680"})
+				end
+				if dg.hold >= dg.need then
+					dg.done = true
+					local node = core.get_node(dg.target)
+					if rockmech.lith_of_node[node.name] then
+						local rn, rp = rockmech.rubble_node(node)
+						core.remove_node(dg.target)          -- 跟鎬子一樣：先移除（觸發開挖、穩定、應力解），原地留碎石
+						if core.get_node(dg.target).name == "air" then core.set_node(dg.target, {name = rn, param2 = rp}) end
+					end
+					dg.t = DIG_PHASES[1] + DIG_PHASES[2] + 1e-3
+				end
+			elseif not dg.done and dg.t >= DIG_PHASES[1] + DIG_PHASES[2] then
 				dg.done = true
 				if dg.mode == "dump" then dump_bucket(self, dg) else dig_bucket(self, dg.target) end
 			end
@@ -670,6 +723,39 @@ local function excavator(kind, P)
 
 	function def.action(self, ctx)
 		local ctrl, d, pos = ctx.ctrl, ctx.d, ctx.pos
+		-- 破碎錘（只有人開的時候；操作員照舊用鏟斗）：E 敲碎滑鼠指的那格岩石；空白鍵換回鏟斗
+		if d and self.tool == "breaker" then
+			if ctrl.jump and not self.dig then
+				self.tool, self.t_act = "bucket", 0.6
+				show_tool(self); self.msg = "換成鏟斗"; update_hud(self)
+			elseif ctrl.aux1 and not self.dig then
+				self.t_act = DIG_TOTAL + 0.1
+				local hit = aim(self, d, pos, false)
+				local target = hit and hit.under
+				local lith = target and rockmech.lith_of_node[core.get_node(target).name]
+				if not lith then
+					self.msg = "破碎錘要對著岩石"
+				else
+					local psi, th, reach = swing_to(to_local(self, target))
+					if reach > ARM_REACH then
+						self.msg = ("超出手臂範圍（%.1f m，手臂約 %.1f m）"):format(reach, ARM_REACH)
+					else
+						local ucs = (rockmech.cfg.lithologies[lith.name] or {}).ucs or 30
+						self.dig = {t = 0, mode = "break", target = target, to = th, psi = psi, psi0 = self.swing or 0,
+							need = ucs * rockmech.cfg.breaker_rate, hold = 0}
+						self.msg = ("敲碎岩石（UCS %d MPa，約 %.1f 秒）"):format(ucs, self.dig.need)
+					end
+				end
+				update_hud(self)
+			end
+			return
+		end
+		-- 鏟斗空的、裝了破碎錘：空白鍵換成破碎錘
+		if d and self.breaker and ctrl.jump and not self.dig and load_total(self) == 0 then
+			self.tool, self.t_act = "breaker", 0.6
+			show_tool(self); self.msg = "換成破碎錘：對著岩石按 E 敲碎"; update_hud(self)
+			return
+		end
 		if ctrl.aux1 and not self.dig then
 			self.t_act = DIG_TOTAL + 0.1
 			-- 滑鼠指的方塊：從相機沿視線找第一個方塊。沒人駕駛時 ctrl 就是這一步開始時的 self.autopilot
