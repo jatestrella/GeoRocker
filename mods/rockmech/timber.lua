@@ -149,7 +149,7 @@ core.register_node(POST, {
 	tiles = {PLAIN, PLAIN, BARK},
 	inventory_image = "[fill:16x16:#00000000^[fill:4x14:6,1:#6e5032^[fill:1x14:7,1:#5a3f26^[fill:4x2:6,1:#c9a46a",
 	wield_image = "[fill:16x16:#00000000^[fill:4x14:6,1:#6e5032^[fill:1x14:7,1:#5a3f26^[fill:4x2:6,1:#c9a46a",
-	is_ground_content = false, groups = groups(G, {timber_post = 1}), sounds = sounds, drop = "",
+	is_ground_content = false, groups = groups(G, {timber_post = 1, timber_stick = 1}), sounds = sounds, drop = "",
 	on_dig = post_dig,
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
@@ -214,7 +214,7 @@ core.register_node(POST_TOP, {
 	node_box = POST_TOP_BOX.node_box, connects_to = POST_TOP_BOX.connects_to,
 	selection_box = {type = "fixed", fixed = SHAFT},
 	tiles = {PLAIN, PLAIN, BARK},
-	is_ground_content = false, groups = groups(G_HIDDEN, {timber_post = 1}), sounds = sounds, drop = "",
+	is_ground_content = false, groups = groups(G_HIDDEN, {timber_post = 1, timber_stick = 1}), sounds = sounds, drop = "",
 	on_dig = post_dig,
 })
 
@@ -229,14 +229,14 @@ for _, v in ipairs({
 		node_box = v[2].node_box, connects_to = v[2].connects_to,
 		selection_box = {type = "fixed", fixed = v[3]},
 		tiles = v[4],
-		is_ground_content = false, groups = groups(G_HIDDEN, {[v[5]] = 1}), sounds = sounds, drop = POST,
+		is_ground_content = false, groups = groups(G_HIDDEN, {[v[5]] = 1, timber_stick = 1}), sounds = sounds, drop = POST,
 	})
 end
 -- 舊版的樑（facedir 轉向的單一方塊）：換成順 x／順 z 的樑
 core.register_node(BEAM, {
 	description = "木樑（舊版）", drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 	node_box = {type = "fixed", fixed = SHAFT}, tiles = {ENDS, ENDS, BARK},
-	is_ground_content = false, groups = table.copy(G_HIDDEN), sounds = sounds, drop = POST,
+	is_ground_content = false, groups = groups(G_HIDDEN, {timber_stick = 1}), sounds = sounds, drop = POST,
 })
 core.register_lbm({
 	label = "rockmech: 舊版木樑換成順 x／順 z 的樑",

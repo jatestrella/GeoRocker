@@ -390,6 +390,28 @@ granular_settle = function(pos, chain, q_ext, side)
     end
     -- 直接壓在皮帶上的那一格：皮帶兩側有擋料板（skirt board），不往旁邊流，等皮帶帶走（conveyor.lua）
     if core.get_item_group(bn, "rockmech_belt") > 0 then return end
+    -- 壓在木柱、樑上（只有 20 cm 粗，timber.lua）：撐不住碎石，整格往旁邊空的格子滑下去，木頭留著。
+    -- 四周都擋住就留在上面（木板、半格是整面的，照一般地面）
+    if core.get_item_group(bn, "timber_stick") > 0 then
+        local dirs = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+        local s = math.random(4)
+        for j = 0, 3 do
+            local d = dirs[(s + j - 1) % 4 + 1]
+            local n = {x = T.x + d[1], y = T.y, z = T.z + d[2]}
+            if passable(core.get_node(n).name) then
+                local prev = physics_updating
+                physics_updating = true
+                local g = core.get_node(T).param2
+                core.set_node(n, {name = tn, param2 = g})
+                set_rubble(T, base, 0)
+                physics_updating = prev
+                rubble_sound(T, k)
+                settle_later(n, chain - 1)
+                return
+            end
+        end
+        return
+    end
     -- 壓實的碎石摩擦角比較高（rockmech_compact_phi）：安息角變陡，車輪也比較擠不動（懸空照樣掉）
     local tan_r, kp = SLOPE_TAN, PASSIVE_K
     if rockmech.compacted[tn] then tan_r, kp = COMPACT_TAN, COMPACT_KP end
