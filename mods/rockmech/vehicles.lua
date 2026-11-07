@@ -958,6 +958,11 @@ function V.dump_to_ground(self, cells, ytop)
 		V.load_keep(self, base, rest)
 		::continue::
 	end
+	-- 倒下去的碎石、土是上覆荷重（femstress.lua）：在倒的地方解一次應力，坡頂堆太多可能壓垮下面的岩面
+	if rockmech.cfg.fem and rockmech.cfg.fem.drive and rockmech.fem_queue and cells[1] then
+		local c = cells[math.ceil(#cells / 2)]
+		rockmech.fem_queue({x = c.x, y = ytop - 1, z = c.z}, 1, false, true)
+	end
 end
 
 -- 車身在 pos、朝向 yaw 時，車身座標的長方形範圍 x0..x1、z0..z1（高度在車底到車頂之間）裡有沒有

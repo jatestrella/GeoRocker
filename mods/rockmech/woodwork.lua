@@ -529,6 +529,12 @@ end
 -- γ 用非岩性格的單位重，φ 用安息角（鬆土沒有凝聚力，就是安息角）。c = 5 kPa、γ = 20、φ = 35° → H_c ≈ 1.9 m
 local HC = rockmech.mix.standing_height(cfg.topsoil_c, cfg.failure.gamma_other, cfg.slope.angle)
 rockmech.topsoil_hc = HC
+-- 下雨時的自立高度：凝聚力 c × (1 − rain_c_loss × L)，L = 時雨量 / rain_max（weather.lua）；H_c 跟 c 成正比
+local function hc_now()
+	local L = rockmech.rain_level and rockmech.rain_level() or 0
+	return HC * math.max(0, 1 - (cfg.slope.rain_c_loss or 0) * L)
+end
+rockmech.topsoil_hc_now = hc_now
 local NB4 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 -- (x, z) 這一欄從 y 往下的地面高度（m）：空氣、植物、不滿格的碎石／鬆土／薄表土往下找，最多 8 格
 local function ground_below(x, y, z)
@@ -584,7 +590,7 @@ local function disturb(pos)
 				top = y - 0.5 + tk / NLEV
 			end
 			g = g or ground_below(pos.x, pos.y, pos.z)
-			if top - g > HC then loosen(p) end
+			if top - g > hc_now() then loosen(p) end
 		end
 	end
 end
@@ -669,6 +675,35 @@ core.register_abm({
 	nodenames = {"group:rockmech_topsoil"}, neighbors = {"air"},
 	interval = 10, chance = 20, catch_up = false,
 	action = check_topsoil,
+})
+-- 下雨時：表土的凝聚力降低，自立高度 H_c 跟著降。抽查露出來的表土：這一疊表土頂到旁邊較低那欄地面的落差
+-- 超過當下的 H_c 就鬆掉（照安息角流，流走又讓上面的表土臨空，可能連成邊坡滑動）。沒下雨不跑
+core.register_abm({
+	label = "rockmech: 下雨時表土陡壁鬆動（抽查）",
+	nodenames = {"group:rockmech_topsoil"}, neighbors = {"air"},
+	interval = 5, chance = 8, catch_up = false,
+	action = function(pos)
+		if not (rockmech.raining_now and (rockmech.rain_level() or 0) > 0) then return end
+		local tk = TOPSOIL_K[core.get_node(pos).name]
+		if not tk then return end
+		-- 這一疊表土的頂
+		local top, y = pos.y - 0.5 + tk / NLEV, pos.y
+		while tk == NLEV do
+			y = y + 1
+			tk = TOPSOIL_K[core.get_node({x = pos.x, y = y, z = pos.z}).name]
+			if not tk then break end
+			top = y - 0.5 + tk / NLEV
+		end
+		local hc = hc_now()
+		for _, d in ipairs(NB4) do
+			local q = {x = pos.x + d[1], y = pos.y, z = pos.z + d[2]}
+			local def = core.registered_nodes[core.get_node(q).name]
+			if def and def.walkable == false and top - ground_below(q.x, q.y, q.z) > hc then
+				loosen(pos)
+				return
+			end
+		end
+	end,
 })
 core.register_abm({
 	label = "rockmech: 懸空的原木毀掉（抽查）",

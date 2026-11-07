@@ -104,6 +104,7 @@ config.shop = {
 	{key = "axe", shop = "tools", item = "default:axe_steel", label = "斧頭（砍樹）", price = 100},
 	{key = "sawbench", shop = "tools", item = "rockmech:sawbench", label = "鋸木台（原木鋸成木柱、木板）", price = 800},
 	{key = "workbench", shop = "tools", item = "rockmech:workbench", label = "木工桌（木牆板、樓梯、門…）", price = 300},
+	{key = "rain_gauge", shop = "tools", item = "rockmech:rain_gauge", label = "氣象站（百葉箱，時雨量）", price = 500},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = "木柱（支撐、蓋房子）", price = 200, count = 10},
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = "木板", price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = "木板半格", price = 100, count = 10},
@@ -363,7 +364,9 @@ config.shear_defaults = {
 config.slope_defaults = {
 	enabled = true,           -- 碎石超過安息角會移動（完整岩石不受安息角影響）
 	angle = 35,               -- 碎石安息角 (deg)
-	rain_drop = 10,           -- 下雨時鬆土的安息角降低幾度（weather.lua，/rain 指令）
+	rain_drop = 10,           -- 時雨量 rain_max 時，鬆土的安息角降低幾度（照時雨量比例；weather.lua，/rain 指令）
+	rain_max = 100,           -- 時雨量的上限 (mm/h)：台灣颱風的量級。降雨弱化跟 時雨量 / rain_max 成正比
+	rain_c_loss = 0.35,       -- 時雨量 rain_max 時，表土凝聚力降低的比例（自立高度 H_c 跟著降）
 }
 
 -- 落石翻滾（rockfall.lua）的預設值；設定鍵為 rockmech_rockfall_<key>
