@@ -598,8 +598,11 @@ local function build_cid_maps()
     end
     for name, def in pairs(core.registered_nodes) do
         local cid = core.get_content_id(name)
-        solid_of[cid] = def.walkable ~= false
-        if def.walkable ~= false then
+        -- 木柱、木板等木材（group rockmech_timber）：人撞得到，但在岩石力學裡算空格，
+        -- 不能當剛性的墊支撐；木柱只透過承載力 P 換成的 pᵢ 托住頂板（support.lua）
+        local timber = def.groups and (def.groups.rockmech_timber or 0) > 0
+        solid_of[cid] = def.walkable ~= false and not timber
+        if def.walkable ~= false and not timber then
             weight_of[cid] = fcfg.gamma_other
             -- 鍵結：天然的實心地層（完整岩石、土、礦石…）；碎石、沙等鬆散材料
             -- 以及玩家建築（is_ground_content = false）不鍵結
@@ -651,7 +654,9 @@ function collapse.read_grid(minp, maxp, no_overburden)
              bolt_len = function(x, y, z)
                 local v = core.get_meta({x = x, y = y, z = z}):get_float("depth")
                 return v > 0 and v or hd
-             end})
+             end,
+             post_d = sc.post_d, post_ucs = sc.post_ucs, post_e = sc.post_e,
+             post_len = rockmech.timber_post_len})
     end
     return g
 end

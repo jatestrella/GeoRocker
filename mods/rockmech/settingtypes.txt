@@ -494,6 +494,20 @@ rockmech_support_bolt_grip (Rock bolt grip) float 200 0 1000
 # Steel yield capacity of a rock bolt (kN).
 rockmech_support_bolt_yield (Rock bolt steel yield) float 360 0 10000
 
+# Timber post capacity P = min(crushing sigma_c * A, Euler buckling pi^2 E I / L^2) (pinned ends, round section),
+# spread over the 3x3 roof faces above the post top, like a rock bolt. Post diameter (m).
+rockmech_support_post_d (Timber post diameter) float 0.2 0 1
+
+# Timber compressive strength parallel to grain (MPa).
+rockmech_support_post_ucs (Timber compressive strength) float 20 0 200
+
+# Timber Young's modulus (MPa).
+rockmech_support_post_e (Timber Young's modulus) float 10000 0 100000
+
+# Longest timber post (m). A post grows up from the floor to the roof; with no roof within this height
+# only a 1 m piece is placed (building material, no support).
+rockmech_support_post_max_len (Timber post max length) int 6 1 20
+
 [Blasting]
 
 # TNT explosions fragment rock: within r_out = R * (ucs_ref / UCS)^ucs_exp of the blast centre rock

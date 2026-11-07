@@ -5,7 +5,10 @@
 --   岩栓（bolt，貼壁方塊，param2 指向岩面）：錨定力 T = min(握裹力 g × 有效長度 L, 鋼材降伏 T_y)，
 --     平均分給以它為中心、同一面上 3×3 格的岩面（每面 T/9 kN/m²）→ 間距 s 的格狀岩栓約等於 T/s²。
 --     有效長度：從孔口往裡連續在岩石裡的長度（被挖斷只算到斷點）。
--- 兩種疊加。壓力與力都已除以相似比 N（同岩體強度）。
+--   木柱（post，直立、從地板頂到頂板）：承載力 P = min(壓碎 σc·A, 尤拉挫屈 π²EI/L²)（兩端鉸接，A、I 用圓斷面直徑 d），
+--     平均分給柱頂上方、頂板同一面 3×3 格（每面 P/9 kN/m²），跟岩栓一樣。柱子要站在實心地板上、柱頂碰到岩石才算。
+--     木柱本身在網格裡算空格（不是剛性的墊支撐），頂板只透過 P 感受到它。
+-- 三種疊加。壓力與力都已除以相似比 N（同岩體強度）。
 --
 -- 用法：
 --   failure.cell_state：臨空面的法向應力 = pᵢ（側面：σx／σz；頂板：σy），Hoek-Brown 的 σ3 與節理面的 σn 跟著提高。
@@ -17,12 +20,16 @@
 --
 -- support.scan(g, ids, prm) → sup 或 nil（範圍內沒有支護）
 --   g：failure／keyblock 的網格（data、p2、ox..nz、bonded_of）
---   ids = {lining = {[cid] = 層數（true = 1 層）}, bolt = {[cid] = true}}
+--   ids = {lining = {[cid] = 層數（true = 1 層）}, bolt = {[cid] = true}, post = {[cid] = true}（可省略）}
 --   prm = {p_sc (MPa), grip（握裹力 g，kN/m）, yield（鋼材降伏 T_y，kN）, L (m，沒有 bolt_len 時的岩栓長度), N,
---          bolt_len(x, y, z) → 該岩栓的長度 (m)（世界座標）}
+--          bolt_len(x, y, z) → 該岩栓的長度 (m)（世界座標），
+--          post_d (m)、post_ucs (MPa)、post_e (MPa)：木柱直徑、抗壓強度、彈性模數，
+--          post_len(x, y, z) → 柱頂在 (x, y, z) 的木柱長度 (m)，沒有站在地板上回傳 nil（世界座標；
+--            省略時在網格裡往下數木柱格，底下要是鍵結格）}
 --   sup.face[i·8 + k] = pᵢ (MPa)：岩格 i（網格索引）往 AX[k] 方向的面
 --   sup.sc[i·8 + k]   = 只有噴凝土的 p_sc (MPa)
 --   sup.bolts = {{i = 岩栓穿過的第一格, path = {往岩體裡的後續各格}, k = 墊板那一面的方向, T = kN}...}
+--   sup.posts = {{i = 柱頂上方的岩格, P = kN（已除以 N）}...}
 
 local support = {}
 
@@ -38,6 +45,17 @@ support.k_of = k_of
 -- 貼壁方塊 param2 → 指向岩面的方向（Luanti wallmounted：0 +y、1 −y、2 +x、3 −x、4 +z、5 −z）
 local WALL = {[0] = {0, 1, 0}, {0, -1, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}
 
+-- 木柱承載力 (kN)：P = min(壓碎 σc·A, 尤拉挫屈 π²EI/L²)，圓斷面直徑 d (m)、σc 與 E (MPa)、長 L (m)。
+-- 回傳 P、控制模式（"crush" 壓碎／"buckle" 挫屈）、壓碎值、挫屈值
+function support.post_capacity(L, d, ucs, E)
+	local A = math.pi * d * d / 4
+	local I = math.pi * d ^ 4 / 64
+	local crush = ucs * A * 1000
+	local buckle = L > 0 and math.pi ^ 2 * E * I * 1000 / (L * L) or math.huge
+	if buckle < crush then return buckle, "buckle", crush, buckle end
+	return crush, "crush", crush, buckle
+end
+
 function support.scan(g, ids, prm)
 	local data, bonded_of = g.data, g.bonded_of
 	local nx, ny, nz = g.nx, g.ny, g.nz
@@ -45,8 +63,9 @@ function support.scan(g, ids, prm)
 	local N = prm.N or 1
 	local p_sc = (prm.p_sc or 0) / N
 	local grip, ty = (prm.grip or 0) / N, (prm.yield or math.huge) / N
-	local sup = {face = {}, sc = {}, bolts = {}}
+	local sup = {face = {}, sc = {}, bolts = {}, posts = {}}
 	local any = false
+	local posts = ids.post or {}
 	local function idx(x, y, z)
 		if x < 0 or y < 0 or z < 0 or x >= nx or y >= ny or z >= nz then return nil end
 		return 1 + x + y * sy + z * sz
@@ -54,7 +73,44 @@ function support.scan(g, ids, prm)
 	local function add(t, key, v) t[key] = (t[key] or 0) + v end
 	for i = 1, #data do
 		local c = data[i]
-		local lin, bolt = ids.lining[c], ids.bolt[c]
+		local lin, bolt, post = ids.lining[c], ids.bolt[c], posts[c]
+		if post then
+			-- 木柱：只看柱頂那格（上方是鍵結的岩格）
+			local r = i - 1
+			local x = r % nx; r = (r - x) / nx
+			local y = r % ny
+			local z = (r - y) / ny
+			local top = idx(x, y + 1, z)
+			if top and bonded_of[data[top]] and (prm.post_d or 0) > 0 then
+				any = true
+				local L
+				if prm.post_len then
+					L = prm.post_len(g.ox + x, g.oy + y, g.oz + z)
+				else
+					local n, yy = 0, y
+					while true do
+						local j = idx(x, yy, z)
+						if not j then break end
+						if posts[data[j]] then n = n + 1; yy = yy - 1
+						else
+							if bonded_of[data[j]] then L = n end
+							break
+						end
+					end
+				end
+				if L and L > 0 then
+					local P = support.post_capacity(L, prm.post_d, prm.post_ucs or 0, prm.post_e or 0) / N
+					for u = -1, 1 do for v = -1, 1 do
+						local j = idx(x + u, y + 1, z + v)
+						local jo = idx(x + u, y, z + v)
+						if j and jo and bonded_of[data[j]] and not bonded_of[data[jo]] then
+							add(sup.face, j * 8 + 4, P / 9 / 1000)
+						end
+					end end
+					sup.posts[#sup.posts + 1] = {i = top, P = P}
+				end
+			end
+		end
 		if lin or bolt then
 			any = true
 			local r = i - 1
@@ -116,7 +172,8 @@ function support.at(sup, i, k)
 end
 
 -- 一群岩格（網格索引的集合 set，cells = {{lx, ly, lz}...}）受到的支護力，依面的方向分 6 桶 (kN)：
--- 臨空面上的噴凝土 p_sc × 1 m²；岩栓穿過這群 → min(g × 群外那段的長度, T_y)。
+-- 臨空面上的噴凝土 p_sc × 1 m²；岩栓穿過這群 → min(g × 群外那段的長度, T_y)；
+-- 木柱頂在這群的底面 → P（往上托，算在 −y 那一面）。
 -- 回傳 S[1..6] 或 nil
 function support.forces(g, sup, cells, set)
 	if not sup then return nil end
@@ -139,6 +196,9 @@ function support.forces(g, sup, cells, set)
 				S[b.k] = S[b.k] + math.min(b.grip * out, b.ty); any = true
 			end
 		end
+	end
+	for _, p in ipairs(sup.posts or {}) do
+		if set[p.i] then S[4] = S[4] + p.P; any = true end
 	end
 	return any and S or nil
 end

@@ -99,6 +99,9 @@ config.shop = {
 	{key = "anfo", shop = "blast", item = "rockmech:anfo", label = "ANFO", price = 1000, count = 10},
 	{key = "bolt", shop = "tools", item = "rockmech:rock_bolt", label = "岩栓", price = 300, count = 10},
 	{key = "shotcrete", shop = "tools", item = "rockmech:shotcrete", label = "噴凝土", price = 800, count = 10},
+	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = "木柱（支撐、蓋房子）", price = 200, count = 10},
+	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = "木板", price = 100, count = 10},
+	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = "木板半格", price = 100, count = 10},
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = "無人機", price = 2000},
 	{key = "drone_cmd", shop = "tools", item = "rockmech:drone_cmd", label = "指揮無人機（無人機＋對講機）", price = 5000},
 	{key = "xrf", shop = "tools", item = "rockmech:xrf", label = "XRF 分析儀（品位）", price = 5000},
@@ -251,6 +254,12 @@ config.support_defaults = {
 	-- 關鍵塊體只算打進岩塊外那一段的長度
 	bolt_grip = 200,          -- 握裹力 g (kN/m)：全長灌漿岩栓，約 1 m 就達到鋼材降伏
 	bolt_yield = 360,         -- 鋼材降伏 T_y (kN)：約 32 mm 鋼棒（450 MPa）
+	-- 木柱承載力 P = min(壓碎 σc·A, 尤拉挫屈 π²EI/L²)，平均分給柱頂周圍 3×3 m² 的頂板：
+	-- 2 m 約 630 kN（壓碎）、4 m 約 480 kN、6 m 約 210 kN（挫屈）
+	post_d = 0.2,             -- 木柱直徑 d (m)
+	post_ucs = 20,            -- 木材順紋抗壓強度 σc (MPa)
+	post_e = 10000,           -- 木材彈性模數 E (MPa)
+	post_max_len = 6,         -- 木柱最長 (m)：放的時候往上長到碰到頂板，超過就只放 1 m（當建材）
 }
 
 -- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
@@ -630,6 +639,10 @@ function config.load(get)
 	cfg.support.shotcrete_p = math.max(0, cfg.support.shotcrete_p)
 	cfg.support.bolt_grip = math.max(0, cfg.support.bolt_grip)
 	cfg.support.bolt_yield = math.max(0, cfg.support.bolt_yield)
+	cfg.support.post_d = math.max(0, cfg.support.post_d)
+	cfg.support.post_ucs = math.max(0, cfg.support.post_ucs)
+	cfg.support.post_e = math.max(0, cfg.support.post_e)
+	cfg.support.post_max_len = math.max(1, math.floor(cfg.support.post_max_len))
 
 	-- 爆破破碎
 	cfg.blast = load_section("blast", config.blast_defaults)

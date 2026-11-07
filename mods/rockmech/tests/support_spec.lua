@@ -75,6 +75,63 @@ describe("support 支護壓力", function()
 		assert.near(0.03, sup.sc[gi(g, 0, 1, 0) * 8 + 4], 1e-12)
 	end)
 
+	it("木柱承載力 = min(壓碎, 尤拉挫屈)：d 20 cm、σc 20 MPa、E 10 GPa", function()
+		local P2, m2 = support.post_capacity(2, 0.2, 20, 10000)
+		local P4, m4 = support.post_capacity(4, 0.2, 20, 10000)
+		local P6, m6 = support.post_capacity(6, 0.2, 20, 10000)
+		assert.near(20 * math.pi * 0.01 * 1000, P2, 1e-6)              -- 壓碎 ≈ 628 kN
+		assert.are.equal("crush", m2)
+		local EI = 10000 * math.pi * 0.2 ^ 4 / 64 * 1000               -- kN·m²
+		assert.near(math.pi ^ 2 * EI / 16, P4, 1e-6)                   -- ≈ 484 kN
+		assert.are.equal("buckle", m4)
+		assert.near(math.pi ^ 2 * EI / 36, P6, 1e-6)                   -- ≈ 215 kN
+		assert.are.equal("buckle", m6)
+		assert.is_true(P2 > P4 and P4 > P6)
+	end)
+
+	local POST = 6
+	local PIDS = {lining = {}, bolt = {}, post = {[POST] = true}}
+	local PP = {post_d = 0.2, post_ucs = 20, post_e = 10000, N = 1}
+	-- 地板 y ≤ −3、頂板 y ≥ 1，木柱在 x = z = 0、y −2..0（長 3 m）
+	local function room(post_fn)
+		return grid(function(x, y, z)
+			if y >= 1 or y <= -3 then return ROCK end
+			return post_fn(x, y, z) and POST or AIR
+		end)
+	end
+
+	it("木柱：P/9 分給柱頂上方頂板的 3×3 格", function()
+		local g = room(function(x, y, z) return x == 0 and z == 0 end)
+		local sup = support.scan(g, PIDS, PP)
+		local P = support.post_capacity(3, 0.2, 20, 10000)
+		for _, c in ipairs({{0, 0}, {1, 1}, {-1, 0}, {0, -1}}) do
+			assert.near(P / 9 / 1000, support.at(sup, gi(g, c[1], 1, c[2]), 4), 1e-12)
+		end
+		assert.near(0, support.at(sup, gi(g, 2, 1, 0), 4), 1e-12)
+		assert.are.equal(1, #sup.posts)
+		assert.near(P, sup.posts[1].P, 1e-9)
+	end)
+
+	it("木柱：除以相似比 N；長度用 post_len", function()
+		local g = room(function(x, y, z) return x == 0 and z == 0 end)
+		local p = {post_d = 0.2, post_ucs = 20, post_e = 10000, N = 4, post_len = function() return 6 end}
+		local sup = support.scan(g, PIDS, p)
+		assert.near(support.post_capacity(6, 0.2, 20, 10000) / 4 / 9 / 1000, support.at(sup, gi(g, 0, 1, 0), 4), 1e-12)
+	end)
+
+	it("木柱沒站在地板上或沒頂到頂板：沒有支撐", function()
+		-- 懸空：底下 y = −2 是空氣
+		local g = room(function(x, y, z) return x == 0 and z == 0 and y >= -1 end)
+		assert.are.equal(0, #support.scan(g, PIDS, PP).posts)
+		-- 沒頂到：柱頂 y = −1，上面是空氣
+		local g2 = room(function(x, y, z) return x == 0 and z == 0 and y <= -1 end)
+		assert.is_nil(support.scan(g2, PIDS, PP))
+		-- post_len 回傳 nil（世界裡判定沒站在地板上）
+		local g3 = room(function(x, y, z) return x == 0 and z == 0 end)
+		local p = {post_d = 0.2, post_ucs = 20, post_e = 10000, N = 1, post_len = function() return nil end}
+		assert.are.equal(0, #support.scan(g3, PIDS, p).posts)
+	end)
+
 	it("沒有支護方塊 → nil", function()
 		local g = grid(function(_, y) return y >= 1 and ROCK or AIR end)
 		assert.is_nil(support.scan(g, IDS, {p_sc = 0.2, grip = 50, L = 2}))
@@ -164,6 +221,20 @@ describe("support 關鍵塊體", function()
 		assert.near(50 / W, fs(3), 1e-9)            -- 岩塊厚 2 m：打出去 1 m
 		assert.near(100 / W, fs(4), 1e-9)
 		assert.near(150 / W, fs(6), 1e-9)           -- g·4 = 200 > T_y = 150
+	end)
+
+	it("木柱頂住岩塊底面：FS = P / W", function()
+		local POST = 6
+		-- 地板 y ≤ −3；木柱 (0, −2..0, 0) 長 3 m
+		local g, p = roof(function(x, y, z)
+			if y <= -3 then return ROCK end
+			return (x == 0 and z == 0) and POST or AIR
+		end)
+		g.support = support.scan(g, {lining = {}, bolt = {}, post = {[POST] = true}},
+			{post_d = 0.2, post_ucs = 20, post_e = 10000, N = 1})
+		local b = keyblock.find_blocks(g, p, {{x = 0, y = 1, z = 0}})[1]
+		local P = support.post_capacity(3, 0.2, 20, 10000)
+		assert.near(P / W, b.fs, 2e-3)
 	end)
 
 	it("噴凝土蓋住岩塊底面：FS = p_sc·A / W", function()
