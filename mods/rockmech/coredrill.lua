@@ -4,7 +4,7 @@
 -- 鑽完：孔口留一根套管（混凝土墊、橘色套管、管蓋），岩芯裝進岩芯箱放進背包（右鍵看柱狀圖）。
 -- 每公尺記錄：岩性、品位（param2）、穿過的節理條數；RQD 由節理頻率 λ（前後 1 m 的平均，條/m）用
 -- Priest & Hudson（1976）RQD = 100·e^(−0.1λ)·(0.1λ + 1) 換算（模型裡只有明確的節理，沒有次網格裂隙）。
--- 孔口套管右鍵、背包裡的岩芯箱右鍵都看得到柱狀圖；全組共用的鑽孔日誌在背包「我的組」頁。
+-- 孔口套管右鍵、背包裡的岩芯箱右鍵都看得到柱狀圖。
 -- 柱狀圖照看的人的知識能力顯示（knowledge.lua）：岩性、節理、RQD 要岩體分類，品位要品位判讀；能力之後學會，舊的紀錄也看得到。
 
 local storage = rockmech.collapse.storage
@@ -208,7 +208,7 @@ local function finish(name, d, why)
 	end
 	if rockmech.account_members then
 		for _, m in ipairs(rockmech.account_members(acc)) do
-			core.chat_send_player(m, ("[岩芯鑽探] %s 鑽好 BH-%d，深 %d m%s（岩芯箱在背包；我的組 → 鑽孔日誌）"):format(name, n, #d.rows,
+			core.chat_send_player(m, ("[岩芯鑽探] %s 鑽好 BH-%d，深 %d m%s（岩芯箱在背包）"):format(name, n, #d.rows,
 				why and ("，" .. why) or ""))
 		end
 	end
@@ -286,7 +286,7 @@ core.register_on_leaveplayer(function(player) drilling[player:get_player_name()]
 
 core.register_tool(ITEM, {
 	description = ("手持岩芯鑽機\n對著地面右鍵：往下鑽一個垂直孔取岩芯（每公尺 %d 秒、最深 %d m，更深要用岩芯鑽探車），鑽的時候不能走開\n"
-		.. "得到岩芯箱與鑽孔柱狀圖（岩性、品位、節理、RQD），全組共用鑽孔日誌"):format(SEC_PER_M, HAND_DEPTH),
+		.. "得到岩芯箱與鑽孔柱狀圖（岩性、品位、節理、RQD）"):format(SEC_PER_M, HAND_DEPTH),
 	inventory_image = "[fill:16x16:#00000000^[fill:4x10:6,1:#d0a020^[fill:2x5:7,11:#808488^[fill:8x3:4,3:#303030^[fill:2x1:7,15:#c0c0c0",
 	stack_max = 1,
 	on_place = function(itemstack, placer, pointed) if placer then start_hand(placer, pointed) end return itemstack end,

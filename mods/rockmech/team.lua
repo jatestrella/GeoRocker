@@ -10,7 +10,8 @@
 --     伺服器啟動時，還沒有的帳號用那個密碼建好；有寫組別就分進去（以名單為準）。
 --     有名單時，名單外的名稱不能登入（rockmech_career_roster_only）。密碼學生自己在 Esc 選單「變更密碼」改。
 --   道具：「回營地」旗子（每人一支，登入時沒有就補），左鍵或右鍵回自己組的營地（沒分組回出生點）。
---   按鈕：背包（I）的「我的組」分頁：看資金和組員、回營地、參觀別組；老師另有各組資金、加扣錢、重讀名單。
+--   學生沒有「我的組」分頁：資金在畫面右上角，回營地用旗子，參觀別組就走過去。
+--   老師：背包（I）的「老師」分頁：各組資金、加扣錢、重讀名單、加入某組試玩、傳送到各組營地。
 --   指令（備用）：/team、/team list、/team set <帳號> <組|none>、/team money <組> <金額>、/team reload、/site [組]
 
 local cfg = rockmech.cfg
@@ -98,7 +99,7 @@ local function set_team(name, t)
 	if player then
 		rockmech.show_money(player)
 		if t then
-			core.chat_send_player(name, ("[分組] 你在第 %s 組。全組共用一筆資金，營地在 x = %d（按 I →「我的組」回營地）"):format(t, site_x(t)))
+			core.chat_send_player(name, ("[分組] 你在第 %s 組。全組共用一筆資金，營地在 x = %d（拿著「回營地」旗子按左鍵回營地）"):format(t, site_x(t)))
 			send_home(name, t)
 		else
 			core.chat_send_player(name, "[分組] 你已經不在任何一組")
@@ -127,7 +128,7 @@ core.register_on_joinplayer(function(player)
 		if storage:get_string(TP .. name) ~= "" then
 			storage:set_string(TP .. name, "")
 			core.after(0.5, function()
-				core.chat_send_player(name, ("[分組] 歡迎！你在第 %s 組，全組共用一筆資金。按 I →「我的組」可以看資金、回營地"):format(t))
+				core.chat_send_player(name, ("[分組] 歡迎！你在第 %s 組，全組共用一筆資金。資金在畫面右上角，拿著「回營地」旗子按左鍵回營地"):format(t))
 				send_home(name, t)
 			end)
 		end
@@ -290,15 +291,17 @@ core.register_chatcommand("site", {
 })
 
 ---------------------------------------------------------------------------
--- 背包（I）的「我的組」分頁：不用打指令，全部用按鈕
+-- 背包（I）的「老師」分頁（只有老師看得到）：不用打指令，全部用按鈕
 ---------------------------------------------------------------------------
 
 if core.get_modpath("sfinv") and sfinv then
 	local F = core.formspec_escape
 	local PAGE = "rockmech:team"
 
-	-- 打開背包先看到這一頁
-	function sfinv.get_homepage_name() return PAGE end
+	-- 老師打開背包先看到這一頁，學生看到一般的背包
+	function sfinv.get_homepage_name(player)
+		return player and is_teacher(player:get_player_name()) and PAGE or "sfinv:crafting"
+	end
 
 	local function refresh(player)
 		if sfinv.get_page(player) == PAGE then sfinv.set_player_inventory_formspec(player) end
@@ -328,7 +331,8 @@ if core.get_modpath("sfinv") and sfinv then
 	end
 
 	sfinv.register_page(PAGE, {
-		title = "我的組",
+		title = "老師",
+		is_in_nav = function(self, player) return is_teacher(player:get_player_name()) end,
 		get = function(self, player, context)
 			local name = player:get_player_name()
 			local t = rockmech.team_of(name)
@@ -346,14 +350,13 @@ if core.get_modpath("sfinv") and sfinv then
 				end
 				y = y + 0.3
 				add("button[0,%g;4,0.8;rm_home;%s]", y, F(("回第 %s 組營地"):format(t)))
-				if rockmech.borehole_list then add("button[4.2,%g;3.8,0.8;rm_boreholes;%s]", y, F("鑽孔日誌")) end
 			else
 				add("label[0,%g;%s]", y, F(teacher and "老師（沒有分組）" or "你還沒分組，請找老師分組"))
 				y = y + 0.6
 				add("button[0,%g;4,0.8;rm_spawn;%s]", y, F("回出生點"))
 			end
 			y = y + 1.1
-			add("label[0,%g;%s]", y, F("參觀其他組的礦帶："))
+			add("label[0,%g;%s]", y, F("傳送到各組的營地："))
 			y = y + 0.45
 			for i = 1, cfg.career_teams do
 				local col, row = (i - 1) % 4, math.floor((i - 1) / 4)
@@ -393,10 +396,7 @@ if core.get_modpath("sfinv") and sfinv then
 		on_player_receive_fields = function(self, player, context, fields)
 			local name = player:get_player_name()
 			local t = rockmech.team_of(name)
-			if fields.rm_boreholes and rockmech.borehole_list then
-				rockmech.borehole_list(name)
-				return
-			end
+			if not is_teacher(name) then return end      -- 這一頁只有老師能用
 			if fields.rm_home and t then
 				core.close_formspec(name, "")
 				send_home(name, t)
@@ -411,7 +411,7 @@ if core.get_modpath("sfinv") and sfinv then
 				if fields["rm_go_" .. i] then
 					core.close_formspec(name, "")
 					send_to(name, site_x(team_name(i)))
-					core.chat_send_player(name, ("[參觀] 第 %d 組的營地。按 I →「我的組」可以回去"):format(i))
+					core.chat_send_player(name, ("[老師] 第 %d 組的營地"):format(i))
 					return
 				end
 			end
@@ -460,7 +460,7 @@ if core.get_modpath("sfinv") and sfinv then
 	core.register_on_joinplayer(function(player)
 		local name = player:get_player_name()
 		core.after(2, function()
-			core.chat_send_player(name, "[提示] 拿著「回營地」旗子按左鍵就回營地；按 I →「我的組」看資金、參觀別組")
+			core.chat_send_player(name, "[提示] 拿著「回營地」旗子按左鍵就回營地；全組的資金在畫面右上角")
 		end)
 	end)
 end
