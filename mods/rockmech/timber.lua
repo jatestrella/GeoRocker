@@ -263,18 +263,126 @@ core.register_node(SLAB, {
 	end,
 })
 
--- 地板沒了：整根木柱倒下（拆掉、掉一支在地上）；只看 base（meta len）或單獨的柱身
-core.register_abm({
-	label = "rockmech: 木柱的地板沒了就倒",
-	nodenames = {POST, POST_TOP}, interval = 2, chance = 1,
+---------------------------------------------------------------------------
+-- 木頭要有東西撐著：相連的木材（木柱、樑、木板、半格，六個面相鄰）算一組，
+-- 這組裡至少要有一塊貼著木頭以外的實心方塊（地面、岩壁、建築…）才站得住；沒有就整組掉下來變成物品
+-- （樑、木柱各掉一支木柱，木板、半格掉原本的）。挖掉、炸掉木頭或它旁邊的東西時檢查
+---------------------------------------------------------------------------
+
+local NB6 = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
+local GROUP_MAX = 2000          -- 一組超過這麼多塊就當作站得住（不再找）
+local function is_timber(name) return core.get_item_group(name, "rockmech_timber") > 0 end
+local function holds(name)      -- 撐得住木頭的方塊：木頭以外的實心方塊（沒載入的區塊也算，保守）
+	if name == "ignore" then return true end
+	local def = core.registered_nodes[name]
+	return def and def.walkable ~= false and not is_timber(name)
+end
+local function key(p) return p.x .. "," .. p.y .. "," .. p.z end
+
+-- 從 start 找相連的整組木頭：回傳 list, 站得住嗎
+local function group_of(start, seen)
+	local list, q, head = {}, {start}, 1
+	seen[key(start)] = true
+	local anchored = false
+	while q[head] do
+		local p = q[head]; head = head + 1
+		list[#list + 1] = p
+		if #list > GROUP_MAX then return list, true end
+		for _, d in ipairs(NB6) do
+			local n = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
+			local name = core.get_node(n).name
+			if is_timber(name) then
+				local k = key(n)
+				if not seen[k] then seen[k] = true; q[#q + 1] = n end
+			elseif holds(name) then
+				anchored = true
+			end
+		end
+	end
+	return list, anchored
+end
+
+local falling = false
+local function fall(list)
+	local drops, bases = {}, {}
+	for _, p in ipairs(list) do
+		local name = core.get_node(p).name
+		if IS_POST[name] then
+			local b = post_of(p)
+			local k = key(b)
+			if not bases[k] then bases[k] = true; drops[#drops + 1] = {p, POST} end
+		elseif name == BEAM_X or name == BEAM_Z or name == BEAM then drops[#drops + 1] = {p, POST}
+		elseif name == PLANK or name == SLAB then drops[#drops + 1] = {p, name} end
+	end
+	falling = true
+	for _, p in ipairs(list) do
+		local name = core.get_node(p).name
+		core.remove_node(p)
+		if name == POST_TOP then resolve(p, POST_TOP) end      -- 頂著頂板的木柱沒了：頂板重新判定
+	end
+	falling = false
+	for _, d in ipairs(drops) do core.add_item(d[1], ItemStack(d[2])) end
+	if #list > 0 then
+		core.sound_play("default_wood_footstep", {pos = list[1], gain = 1.0, max_hear_distance = 24}, true)
+	end
+end
+
+-- pos 改變了（木頭被拿掉、旁邊的東西沒了）：檢查相鄰的每一組木頭
+local function check_around(pos)
+	if falling then return end
+	local seen = {}
+	for _, d in ipairs(NB6) do
+		local n = {x = pos.x + d[1], y = pos.y + d[2], z = pos.z + d[3]}
+		if not seen[key(n)] and is_timber(core.get_node(n).name) then
+			local list, anchored = group_of(n, seen)
+			if not anchored then fall(list) end
+		end
+	end
+end
+rockmech.timber_check_around = check_around
+
+-- 木頭被拿掉（挖、炸、拆木柱）
+for _, name in ipairs({POST, POST_TOP, BEAM_X, BEAM_Z, BEAM, PLANK, SLAB}) do
+	core.override_item(name, {
+		after_destruct = function(pos)
+			if not falling then core.after(0, check_around, vector.copy(pos)) end
+		end,
+	})
+end
+-- 旁邊的東西被挖掉
+core.register_on_dignode(function(pos) core.after(0, check_around, vector.copy(pos)) end)
+-- 坍塌、爆破、碎石移動（都會排穩定判定）
+do
+	local col = rockmech.collapse
+	local orig = col.queue_stability_check
+	col.queue_stability_check = function(pos, prev)
+		orig(pos, prev)
+		if not falling then core.after(0, check_around, vector.round(pos)) end
+	end
+end
+-- 這條規則之前就懸空的木頭：每個區塊第一次載入時檢查一次
+core.register_lbm({
+	label = "rockmech: 懸空的木頭掉下來（一次）",
+	name = "rockmech:timber_float_check",
+	nodenames = {POST, POST_TOP, BEAM_X, BEAM_Z, BEAM, PLANK, SLAB},
+	run_at_every_load = false,
 	action = function(pos)
-		local below = {x = pos.x, y = pos.y - 1, z = pos.z}
-		local bn = core.get_node(below).name
-		if IS_POST[bn] or bn == "ignore" then return end
-		local def = core.registered_nodes[bn]
-		if def and def.walkable ~= false then return end
-		local len = math.max(1, core.get_meta(pos):get_int("len"))
-		remove_post(pos, len, nil)
+		core.after(0, function()
+			if not is_timber(core.get_node(pos).name) then return end
+			local list, anchored = group_of(vector.copy(pos), {})
+			if not anchored then fall(list) end
+		end)
+	end,
+})
+-- 保險：木柱底下空了（例如地圖直接被改掉）就檢查一次
+core.register_abm({
+	label = "rockmech: 木柱底下空了就檢查有沒有東西撐著",
+	nodenames = {POST}, interval = 5, chance = 1,
+	action = function(pos)
+		local bn = core.get_node({x = pos.x, y = pos.y - 1, z = pos.z}).name
+		if is_timber(bn) or holds(bn) then return end
+		local list, anchored = group_of(pos, {})
+		if not anchored then fall(list) end
 	end,
 })
 
