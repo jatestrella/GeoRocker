@@ -171,24 +171,15 @@ Point load test=進行點荷重試驗
 [Point load] @1: Is(50) @= @2 MPa (field notebook, @3)=[點荷重] @1：Is(50) @= @2 MPa（野帳本第 @3 筆）
 [Point load] @1: Is(50) @= @2 MPa (no field notebook: not recorded)=[點荷重] @1：Is(50) @= @2 MPa（沒帶野帳本，沒記到）
 [Core box] No borehole record found for this box=[岩芯箱] 找不到這一箱的鑽孔紀錄
-Field notebook: point load tests (@1)=野帳本：點荷重試驗（@1 筆）
-No.=編號
-Hole=鑽孔
-Depth (m)=深度 (m)
-Back=返回
-Clear readings=清除讀數
-Field notebook: Schmidt hammer readings (@1)=野帳本：施密特錘讀數（@1 筆）
-No readings yet: right-click a rock face with the Schmidt hammer=還沒有讀數：拿施密特錘對岩面右鍵
-Position=位置
-Rebound R=回彈值 R
-Take about 10 readings at the same spot, sort them and take the median R. Uniaxial compressive strength (Katz 2000): UCS ≈ 2.21·e^(0.067R) MPa.=同一處敲 10 次左右，排序後取中位數 R。單軸抗壓強度（Katz 2000）：UCS ≈ 2.21·e^(0.067R) MPa。
-Field notebook (@1 / @2 holes)=野帳本（@1 / @2 孔）
+Field survey=野外調查
+Cores=岩芯
 @1 (@2)=@1（@2）
 rock mass?=岩體?
 grade?=品位?
-No holes logged yet: hold the field notebook and right-click a core box to log it=還沒記任何孔：拿著野帳本對岩芯箱按右鍵判讀
-Schmidt hammer readings (@1)=施密特錘讀數（@1 筆）
-Point load tests (@1)=點荷重試驗（@1）
+No.=編號
+Position=位置
+Rebound R=回彈值 R
+Tear out this page=撕掉這頁
 [Field notebook]=[野帳本]
 [Field notebook] No borehole record found for this box=[野帳本] 找不到這一箱的鑽孔紀錄
 [Field notebook] Full (@1 holes): buy a new one=[野帳本] 寫滿了（@1 孔）：買一本新的
@@ -652,6 +643,7 @@ Slope: not measured yet (sneak + left-click to measure the slope)=坡面：還�
 Red circle: friction circle φj @= @1°=紅圈：摩擦圓 φj @= @1°
 Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up=赤平投影（下半球、等角投影）　傾角/傾向　上方是北
 Left-click a rock face: measure joints (one reading per set)@nSneak + left-click: measure the slope@n@nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible=左鍵岩面：量節理（每組一筆）@n蹲下＋左鍵：量坡面@n@nMarkland 平面滑動：節理的極點在摩擦圓外、跟坡面極點在同一側、而且比坡面緩（大圓在坡面大圓裡面）→ 可能滑動
+Clear readings=清除讀數
 Geological compass@nRight- or left-click a rock face; sneak for more=地質羅盤@n對岩面右鍵、左鍵；蹲下看更多
 Cannot measure a slope here=這裡量不到坡面
 Slope @1°/@2° (dip/dip direction) recorded=坡面 @1°/@2°（傾角/傾向）已記下
@@ -1358,6 +1350,17 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Field notebook: point load tests (@1)=野帳本：點荷重試驗（@1 筆）
+Hole=鑽孔
+Depth (m)=深度 (m)
+Back=返回
+Field notebook: Schmidt hammer readings (@1)=野帳本：施密特錘讀數（@1 筆）
+No readings yet: right-click a rock face with the Schmidt hammer=還沒有讀數：拿施密特錘對岩面右鍵
+Take about 10 readings at the same spot, sort them and take the median R. Uniaxial compressive strength (Katz 2000): UCS ≈ 2.21·e^(0.067R) MPa.=同一處敲 10 次左右，排序後取中位數 R。單軸抗壓強度（Katz 2000）：UCS ≈ 2.21·e^(0.067R) MPa。
+Field notebook (@1 / @2 holes)=野帳本（@1 / @2 孔）
+No holes logged yet: hold the field notebook and right-click a core box to log it=還沒記任何孔：拿著野帳本對岩芯箱按右鍵判讀
+Schmidt hammer readings (@1)=施密特錘讀數（@1 筆）
+Point load tests (@1)=點荷重試驗（@1）
 Hand-held core drill@nRight-click the ground to drill down=手持岩芯鑽機@n對地面右鍵往下鑽
 Pickaxe@nDigs rock slowly; rock turns into rubble@nDigging rubble picks it up, one block at a time@nRight-click to put down the rubble you are holding=挖礦鎬@n挖岩石很慢，岩石會變成碎石@n挖碎石就是拿起來，一次一塊@n右鍵放下手上的碎石
 Shovel@nQuickly shovels up rubble, one block at a time@nCannot dig rock@nRight-click to put down the rubble you are holding=鏟子@n很快把碎石鏟起來，一次一塊@n挖不動岩石@n右鍵放下手上的碎石

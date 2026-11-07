@@ -586,7 +586,7 @@ box_spot = function(c)
 end
 
 ---------------------------------------------------------------------------
--- 野帳本：右鍵對岩芯箱判讀，左鍵看記過的孔。記在物品 meta：{{acc, n, rm, gr, by}, ...}
+-- 野帳本：右鍵對岩芯箱判讀，左鍵翻開。記在物品 meta：logs = {{acc, n, rm, gr, by}, ...}、schmidt、plt
 ---------------------------------------------------------------------------
 
 local function book_entries(stack) return core.deserialize(stack:get_meta():get_string("logs")) or {} end
@@ -622,131 +622,199 @@ function rockmech.fieldbook_add_plt(player, rec)
 		end
 	end
 end
-local PLT_BOOK_FORM = "rockmech:fieldbook_plt"
-local function plt_book_form(name, list)
-	local esc = core.formspec_escape
-	local out = {"formspec_version[6]size[12,11]",
-		("label[0.5,0.6;%s]"):format(esc(S("Field notebook: point load tests (@1)", tostring(#list))))}
-	if #list > 0 then
-		out[#out + 1] = "tablecolumns[text,align=right;text;text;text;text,align=right]"
-		local cells = {esc(S("No.")), esc(S("Hole")), esc(S("Depth (m)")), esc(S("Rock")), "Is(50) MPa"}
-		for i, e in ipairs(list) do
-			cells[#cells + 1] = tostring(i)
-			cells[#cells + 1] = esc(bh_label(e.acc, e.n))
-			cells[#cells + 1] = ("%d–%d"):format(e.d, e.d + 1)
-			cells[#cells + 1] = esc(e.lith and lith_label(e.lith) or "?")
-			cells[#cells + 1] = ("%.2f"):format(e.is)
-		end
-		out[#out + 1] = "table[0.5,1.0;11,8.6;plt;" .. table.concat(cells, ",") .. ";0]"
-	end
-	out[#out + 1] = "button[0.5,10.1;3,0.7;back;" .. esc(S("Back")) .. "]"
-	out[#out + 1] = "button[4.5,10.1;3,0.7;clear;" .. esc(S("Clear readings")) .. "]"
-	out[#out + 1] = "button_exit[8.5,10.1;3,0.7;close;" .. esc(S("Close")) .. "]"
-	return table.concat(out)
-end
-local SCHMIDT_FORM = "rockmech:fieldbook_schmidt"
-local function schmidt_form(name, list)
-	local out = {"formspec_version[6]size[12,11]",
-		("label[0.5,0.6;%s]"):format(core.formspec_escape(S("Field notebook: Schmidt hammer readings (@1)", tostring(#list))))}
-	if #list == 0 then
-		out[#out + 1] = "label[0.5,1.4;" .. core.formspec_escape(S("No readings yet: right-click a rock face with the Schmidt hammer")) .. "]"
-	else
-		out[#out + 1] = "tablecolumns[text,align=right;text;text;text,align=right]"
-		local cells = {core.formspec_escape(S("No.")), core.formspec_escape(S("Position")), core.formspec_escape(S("Rock")),
-			core.formspec_escape(S("Rebound R"))}
-		for i, e in ipairs(list) do
-			cells[#cells + 1] = tostring(i)
-			cells[#cells + 1] = core.formspec_escape(("(%d,%d,%d)"):format(e.x, e.y, e.z))
-			cells[#cells + 1] = core.formspec_escape(e.lith and lith_label(e.lith) or "?")
-			cells[#cells + 1] = tostring(e.r)
-		end
-		out[#out + 1] = "table[0.5,1.0;11,7.6;sch;" .. table.concat(cells, ",") .. ";0]"
-	end
-	out[#out + 1] = "textarea[0.5,8.8;11,1.2;;;" .. core.formspec_escape(S("Take about 10 readings at the same spot, sort them and take the median R. Uniaxial compressive strength (Katz 2000): UCS ≈ 2.21·e^(0.067R) MPa.")) .. "]"
-	out[#out + 1] = "button[0.5,10.1;3,0.7;back;" .. core.formspec_escape(S("Back")) .. "]"
-	out[#out + 1] = "button[4.5,10.1;3,0.7;clear;" .. core.formspec_escape(S("Clear readings")) .. "]"
-	out[#out + 1] = "button_exit[8.5,10.1;3,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"
-	return table.concat(out)
-end
+---------------------------------------------------------------------------
+-- 野帳本的樣子：一本書（咖啡色封皮、米色紙、紅色邊線），右上角兩張書籤分頁：
+--   野外調查：施密特錘的讀數
+--   岩芯：目錄是記過的鑽孔（判讀過的、或做過點荷重的），點一孔翻到那一孔的柱狀圖；
+--         點荷重做過的那幾公尺，強度欄自動標上 Is(50) 和換算的 UCS（同一公尺做過幾次取平均）
+---------------------------------------------------------------------------
+local INK, PAPER, COVER, MARGIN, RULE = "#2b2620", "#f3ecd8", "#5a3d22", "#d08080", "#d9cfb4"
+local book_state = {}       -- 玩家名稱 → {tab = "core" | "field", hole = 目錄第幾孔}
 local logging = {}          -- 玩家名稱 → {pos, acc, n, depth, t, need, hud}
-local book_view = {}        -- 玩家名稱 → 打開的那本的紀錄
+local function ink(t) return core.formspec_escape(core.colorize(INK, t)) end
 
-local function book_form(name, entries)
-	local out = {"formspec_version[6]size[12,11]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(
-		S("Field notebook (@1 / @2 holes)", tostring(#entries), tostring(BOOK_MAX))))}
-	for i, e in ipairs(entries) do
-		local col, row = (i - 1) % 2, math.floor((i - 1) / 2)
-		out[#out + 1] = ("button[%g,%g;5.4,0.7;e_%d;%s]"):format(0.5 + col * 5.6, 1.2 + row * 0.8, i, core.formspec_escape(
-			S("@1 (@2)", bh_label(e.acc, e.n), rockmech.account_label and rockmech.account_label(e.acc) or e.acc)
-				.. (e.rm and "" or " " .. S("rock mass?")) .. (e.gr and "" or " " .. S("grade?"))))
+-- 這本記到的鑽孔：判讀過的（logs）在前，只做過點荷重的接在後面（岩性、品位看不懂，記成 ?）
+local function book_holes(stack)
+	local list, seen = {}, {}
+	for _, e in ipairs(book_entries(stack)) do
+		local k = e.acc .. "#" .. e.n
+		if not seen[k] then seen[k] = true; list[#list + 1] = {acc = e.acc, n = e.n, rm = e.rm, gr = e.gr, logged = true} end
 	end
-	if #entries == 0 then
-		out[#out + 1] = "label[0.5,1.6;" .. core.formspec_escape(S("No holes logged yet: hold the field notebook and right-click a core box to log it")) .. "]"
+	for _, p in ipairs(plt_of(stack)) do
+		local k = p.acc .. "#" .. p.n
+		if not seen[k] then seen[k] = true; list[#list + 1] = {acc = p.acc, n = p.n, rm = false, gr = false} end
 	end
-	local player = core.get_player_by_name(name)
-	local st = player and player:get_wielded_item()
-	local nsch = st and st:get_name() == BOOK and #schmidt_of(st) or 0
-	out[#out + 1] = "button[0.5,10.1;5.4,0.7;schmidt;" .. core.formspec_escape(S("Schmidt hammer readings (@1)", tostring(nsch))) .. "]"
-	local nplt = st and st:get_name() == BOOK and #plt_of(st) or 0
-	out[#out + 1] = "button[6.1,10.1;5.4,0.7;plt;" .. core.formspec_escape(S("Point load tests (@1)", tostring(nplt))) .. "]"
+	return list
+end
+-- 某一孔每公尺的點荷重平均：d（從幾公尺）→ {sum, c}
+local function plt_by_metre(stack, acc, n)
+	local t = {}
+	for _, p in ipairs(plt_of(stack)) do
+		if p.acc == acc and p.n == n then
+			local s = t[p.d] or {sum = 0, c = 0}
+			s.sum, s.c = s.sum + p.is, s.c + 1
+			t[p.d] = s
+		end
+	end
+	return t
+end
+
+local function book_frame(st)
+	local out = {"formspec_version[6]size[16,12]",
+		("box[0,0;16,12;%s]box[0.3,0.3;15.4,11.4;%s]box[1.3,0.3;0.05,11.4;%s]"):format(COVER, PAPER, MARGIN)}
+	for _, tab in ipairs({"field", "core"}) do
+		local on = st.tab == tab
+		out[#out + 1] = ("style[tab_%s;bgcolor=%s;textcolor=%s]"):format(tab, on and "#e8d9a8" or "#8a7450", on and INK or "#f3ecd8")
+	end
+	out[#out + 1] = "button[10.6,0.4;2.4,0.6;tab_field;" .. core.formspec_escape(S("Field survey")) .. "]"
+	out[#out + 1] = "button[13.1,0.4;2.4,0.6;tab_core;" .. core.formspec_escape(S("Cores")) .. "]"
+	out[#out + 1] = "button_exit[14.6,11.0;1,0.6;close;×]"
+	return out
+end
+-- 一頁紙上的橫線
+local function rules(out, y0, y1, step)
+	for y = y0, y1, step do out[#out + 1] = ("box[1.5,%g;14,0.02;%s]"):format(y, RULE) end
+end
+
+local function core_toc(out, holes)
+	out[#out + 1] = ("label[1.6,0.75;%s]"):format(ink(S("Cores")))
+	rules(out, 1.6, 10.6, 0.7)
+	if #holes == 0 then return end
+	local names = {}
+	for i = 1, #holes do names[i] = "h_" .. i end
+	out[#out + 1] = ("style[%s;bgcolor=#00000000;border=false;textcolor=%s]"):format(table.concat(names, ","), INK)
+	for i, h in ipairs(holes) do
+		local col, row = math.floor((i - 1) / 13), (i - 1) % 13
+		local text = S("@1 (@2)", bh_label(h.acc, h.n), rockmech.account_label and rockmech.account_label(h.acc) or h.acc)
+			.. (h.rm and "" or " " .. S("rock mass?")) .. (h.gr and "" or " " .. S("grade?"))
+		out[#out + 1] = ("button[%g,%g;6.8,0.6;h_%d;%s]"):format(1.6 + col * 7, 1.0 + row * 0.7, i, core.formspec_escape(text))
+	end
+end
+
+local function core_page(out, h, stack)
+	local b = find_bh(h.acc, h.n)
+	out[#out + 1] = "style[back;bgcolor=#00000000;border=false;textcolor=" .. INK .. "]"
+	out[#out + 1] = "button[1.5,0.4;2.2,0.6;back;" .. core.formspec_escape("← " .. S("Cores")) .. "]"
+	if not b then
+		out[#out + 1] = ("label[1.6,1.6;%s]"):format(ink(S("[Core box] No record found for this hole")))
+		return
+	end
+	local rm, gr = h.rm, h.gr
+	out[#out + 1] = ("label[4.0,0.7;%s]"):format(ink(S("@1   Collar (@2, @3, @4)   Depth @5 m", label_of(b),
+		tostring(b.pos.x), tostring(b.pos.y), tostring(b.pos.z), tostring(b.depth))))
+	local cols = {{1.6, S("Depth")}, {3.3, S("Log")}, {4.4, S("Lithology")}, {6.9, S("Grade")}, {8.2, S("Joints")},
+		{9.4, "RQD"}, {10.7, "Is(50) MPa"}, {12.8, "UCS MPa"}}
+	for _, c in ipairs(cols) do out[#out + 1] = ("label[%g,1.35;%s]"):format(c[1], ink(c[2])) end
+	out[#out + 1] = ("box[1.5,1.62;14,0.03;%s]"):format(INK)
+	local rows = b.rows or {}
+	local plt = plt_by_metre(stack, h.acc, h.n)
+	local K = rockmech.PLT_K or 22
+	local function lambda(i)
+		local s, c = 0, 0
+		for j = math.max(1, i - 1), math.min(#rows, i + 1) do s = s + (rows[j].joints or 0); c = c + 1 end
+		return c > 0 and s / c or 0
+	end
+	local H, TOP, VIEW = 0.42, 1.75, 9.1
+	out[#out + 1] = ("scroll_container[0,%g;15.4,%g;bk_scroll;vertical;0.1]"):format(TOP, VIEW)
+	for i, r in ipairs(rows) do
+		local y = (i - 1) * H
+		local soil = r.lith == "soil"
+		local is_ore = rockmech.cfg.ores[r.lith] ~= nil or (rockmech.cfg.lithologies[r.lith] or {}).ore ~= nil
+		local g = "—"
+		if is_ore or r.grade then g = gr and r.grade and ("%.0f%%"):format(r.grade / 255 * 100) or (gr and "—" or "?") end
+		local p = plt[i - 1]
+		local cells = {{1.6, ("%d–%d"):format(i - 1, i)}, {4.4, rm and lith_label(r.lith) or "?"}, {6.9, g},
+			{8.2, soil and "—" or rm and tostring(r.joints or 0) or "?"},
+			{9.4, soil and "—" or rm and ("%.0f%%"):format(rqd_of(lambda(i))) or "?"},
+			{10.7, p and ("%.2f"):format(p.sum / p.c) .. (p.c > 1 and (" (" .. p.c .. ")") or "") or ""},
+			{12.8, p and ("%.0f"):format(K * p.sum / p.c) or ""}}
+		for _, c in ipairs(cells) do out[#out + 1] = ("label[%g,%g;%s]"):format(c[1], y + H / 2, ink(c[2])) end
+		out[#out + 1] = ("image[3.3,%g;0.8,%g;%s]"):format(y + 0.05, H - 0.1, core.formspec_escape(strip_tex(seg_tex(r), 2)))   -- 照實際方塊的樣子
+		out[#out + 1] = ("box[1.5,%g;14,0.02;%s]"):format(y + H - 0.01, RULE)
+	end
+	out[#out + 1] = "scroll_container_end[]"
+	local content = #rows * H
+	if content > VIEW then
+		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=%d;largestep=%d]"):format(
+			math.ceil((content - VIEW) * 10), math.floor(H * 30), math.floor(VIEW * 10))
+		out[#out + 1] = ("scrollbar[15.25,%g;0.35,%g;vertical;bk_scroll;0]"):format(TOP, VIEW)
+	end
+end
+
+local function field_page(out, list)
+	out[#out + 1] = ("label[1.6,0.75;%s]"):format(ink(S("Field survey")))
+	local cols = {{1.6, S("No.")}, {3.0, S("Position")}, {7.0, S("Rock")}, {10.0, S("Rebound R")}}
+	for _, c in ipairs(cols) do out[#out + 1] = ("label[%g,1.35;%s]"):format(c[1], ink(c[2])) end
+	out[#out + 1] = ("box[1.5,1.62;14,0.03;%s]"):format(INK)
+	local H, TOP, VIEW = 0.42, 1.75, 8.9
+	out[#out + 1] = ("scroll_container[0,%g;15.4,%g;bk_scroll;vertical;0.1]"):format(TOP, VIEW)
+	for i, e in ipairs(list) do
+		local y = (i - 1) * H
+		local cells = {{1.6, tostring(i)}, {3.0, ("(%d, %d, %d)"):format(e.x, e.y, e.z)}, {7.0, e.lith and lith_label(e.lith) or "?"},
+			{10.0, tostring(e.r)}}
+		for _, c in ipairs(cells) do out[#out + 1] = ("label[%g,%g;%s]"):format(c[1], y + H / 2, ink(c[2])) end
+		out[#out + 1] = ("box[1.5,%g;14,0.02;%s]"):format(y + H - 0.01, RULE)
+	end
+	out[#out + 1] = "scroll_container_end[]"
+	local content = #list * H
+	if content > VIEW then
+		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=%d;largestep=%d]"):format(
+			math.ceil((content - VIEW) * 10), math.floor(H * 30), math.floor(VIEW * 10))
+		out[#out + 1] = ("scrollbar[15.25,%g;0.35,%g;vertical;bk_scroll;0]"):format(TOP, VIEW)
+	end
+	if #list > 0 then
+		out[#out + 1] = "style[clear_sch;bgcolor=#00000000;border=false;textcolor=#8a3a30]"
+		out[#out + 1] = "button[1.5,10.9;3.2,0.6;clear_sch;" .. core.formspec_escape(S("Tear out this page")) .. "]"
+	end
+end
+
+local function book_form(name, stack)
+	local st = book_state[name] or {tab = "core"}
+	book_state[name] = st
+	local out = book_frame(st)
+	if st.tab == "field" then
+		field_page(out, schmidt_of(stack))
+	else
+		local holes = book_holes(stack)
+		local h = st.hole and holes[st.hole]
+		if h then core_page(out, h, stack) else st.hole = nil; core_toc(out, holes) end
+	end
 	return table.concat(out)
+end
+-- 打開野帳本（hole：直接翻到這一孔 {acc, n}）
+local function open_book(player, stack, hole)
+	local name = player:get_player_name()
+	local st = {tab = "core"}
+	if hole then
+		for i, h in ipairs(book_holes(stack)) do
+			if h.acc == hole.acc and h.n == hole.n then st.hole = i end
+		end
+	end
+	book_state[name] = st
+	core.show_formspec(name, BOOK_FORM, book_form(name, stack))
 end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= BOOK_FORM then return end
 	local name = player:get_player_name()
-	if fields.plt then
-		local st = player:get_wielded_item()
-		core.show_formspec(name, PLT_BOOK_FORM, plt_book_form(name, st:get_name() == BOOK and plt_of(st) or {}))
-		return true
-	end
-	if fields.schmidt then
-		local st = player:get_wielded_item()
-		core.show_formspec(name, SCHMIDT_FORM, schmidt_form(name, st:get_name() == BOOK and schmidt_of(st) or {}))
-		return true
+	if fields.quit then book_state[name] = nil; return true end
+	local stack = player:get_wielded_item()
+	local st = book_state[name]
+	if stack:get_name() ~= BOOK or not st then return true end
+	local changed = false
+	if fields.tab_field then st.tab, st.hole, changed = "field", nil, true end
+	if fields.tab_core then st.tab, st.hole, changed = "core", nil, true end
+	if fields.back then st.hole, changed = nil, true end
+	if fields.clear_sch then
+		stack:get_meta():set_string("schmidt", "")
+		player:set_wielded_item(stack)
+		changed = true
 	end
 	for k in pairs(fields) do
-		local i = tonumber(k:match("^e_(%d+)$"))
-		local e = i and (book_view[name] or {})[i]
-		if e then
-			local b = find_bh(e.acc, e.n)
-			if b then core.show_formspec(name, FORM, log_form(name, b, e.rm, e.gr)) end
-			return true
-		end
+		local i = tonumber(k:match("^h_(%d+)$"))
+		if i then st.hole, changed = i, true end
 	end
-	if fields.quit then book_view[name] = nil end
-	return true
-end)
-
-core.register_on_player_receive_fields(function(player, formname, fields)
-	if formname ~= SCHMIDT_FORM then return end
-	local name = player:get_player_name()
-	local st = player:get_wielded_item()
-	if st:get_name() ~= BOOK then return true end
-	if fields.clear then
-		st:get_meta():set_string("schmidt", "")
-		player:set_wielded_item(st)
-		core.show_formspec(name, SCHMIDT_FORM, schmidt_form(name, {}))
-	elseif fields.back then
-		book_view[name] = book_entries(st)
-		core.show_formspec(name, BOOK_FORM, book_form(name, book_view[name]))
-	end
-	return true
-end)
-
-core.register_on_player_receive_fields(function(player, formname, fields)
-	if formname ~= PLT_BOOK_FORM then return end
-	local name = player:get_player_name()
-	local st = player:get_wielded_item()
-	if st:get_name() ~= BOOK then return true end
-	if fields.clear then
-		st:get_meta():set_string("plt", "")
-		player:set_wielded_item(st)
-		core.show_formspec(name, PLT_BOOK_FORM, plt_book_form(name, {}))
-	elseif fields.back then
-		book_view[name] = book_entries(st)
-		core.show_formspec(name, BOOK_FORM, book_form(name, book_view[name]))
-	end
+	if changed then core.show_formspec(name, BOOK_FORM, book_form(name, stack)) end
 	return true
 end)
 
@@ -807,14 +875,13 @@ core.register_globalstep(function(dtime)
 					stop_logging(name, (e.rm and e.gr)
 						and S("@1 logged: left-click to open the field notebook", bh_label(L.acc, L.n))
 						or S("@1 logged (some fields you cannot interpret were recorded as ?): left-click to open the field notebook", bh_label(L.acc, L.n)))
-					local b = find_bh(L.acc, L.n)
-					if b then core.show_formspec(name, FORM, log_form(name, b, e.rm, e.gr)) end
+					open_book(p, stack, {acc = L.acc, n = L.n})
 				end
 			end
 		end
 	end
 end)
-core.register_on_leaveplayer(function(player) logging[player:get_player_name()] = nil; book_view[player:get_player_name()] = nil end)
+core.register_on_leaveplayer(function(player) logging[player:get_player_name()] = nil; book_state[player:get_player_name()] = nil end)
 
 core.register_craftitem(BOOK, {
 	description = S("Field notebook\nRight-click a core box to log it; left-click to read"),
@@ -835,8 +902,7 @@ core.register_craftitem(BOOK, {
 	on_use = function(itemstack, user)
 		if not user then return end
 		local name = user:get_player_name()
-		book_view[name] = book_entries(itemstack)
-		core.show_formspec(name, BOOK_FORM, book_form(name, book_view[name]))
+		open_book(user, itemstack)
 	end,
 })
 
