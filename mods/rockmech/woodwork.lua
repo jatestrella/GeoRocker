@@ -509,7 +509,7 @@ end
 ---------------------------------------------------------------------------
 -- 山上的表土和樹林：每條礦帶交界的山脊，比地表高 1 m 以上、頂上是天然岩石的每一欄都鋪 1–3 m 的表土（有厚有薄）
 -- （陡坡也鋪：根系抓住；2 m 才蓋得住 1 m 一階的岩石台階；屋頂、帳篷等建築上面不鋪），
--- 上面稀疏種蘋果樹；鋸木台、木工桌放在營地裡。
+-- 上面稀疏種蘋果樹；鋸木台、木工桌跟工具室管理員買。
 -- 2026-11-07 的教訓：蓋的時候絕不動岩石（換掉岩石等於開挖），而且用 VoxelManip 寫（不觸發破壞判定）
 ---------------------------------------------------------------------------
 
@@ -703,39 +703,11 @@ local function redo_apron(xr)
 	core.log("action", ("[rockmech] 山脊 x = %d 坡腳重鋪 %d 格"):format(xr, n))
 end
 
--- 鋸木台、木工桌：營地中心往東南，交車區北邊（營地中心 (x0, 0)）
-local function put_benches(x0)
-	local function free(x, z)
-		for y = 40, -30, -1 do
-			local n = core.get_node({x = x, y = y, z = z}).name
-			if n ~= "air" and n ~= "ignore" then
-				local def = core.registered_nodes[n]
-				return def and def.walkable ~= false and core.get_node({x = x, y = y + 1, z = z}).name == "air" and y + 1 or nil
-			end
-		end
-	end
-	local placed = 0
-	for _, c in ipairs({{12, -9}, {14, -9}, {12, -7}, {14, -7}, {16, -9}, {16, -7}, {10, -9}, {10, -7}}) do
-		if placed >= 2 then break end
-		local x, z = x0 + c[1], c[2]
-		local y = free(x, z)
-		if y then
-			core.set_node({x = x, y = y, z = z}, {name = placed == 0 and SAW or BENCH, param2 = 0})
-			placed = placed + 1
-		end
-	end
-end
-
-local function flag_of(x0) return "grove_site:" .. x0 end
--- 營地 x0：鋸木台、木工桌，加上這條礦帶東西兩側的山脊（隔壁帶共用的那條種過就不再種）
+-- 營地 x0：這條礦帶東西兩側的山脊鋪表土、種樹（隔壁帶共用的那條種過就不再種）。
+-- 鋸木台、木工桌不預設擺：跟工具室管理員買（config.shop）
 function rockmech.career_build_grove(x0)
 	local W = cfg.coal_seam and cfg.coal_seam.lane_w
 	local c = x0 - (cfg.career_camp_dx or 0)
-	core.emerge_area({x = x0 - 2, y = -30, z = -12}, {x = x0 + 20, y = 40, z = -4}, function(_, _, rem)
-		if rem > 0 or storage:get_string(flag_of(x0)) ~= "" then return end
-		put_benches(x0)
-		storage:set_string(flag_of(x0), "1")
-	end)
 	if not W then return end
 	for _, xr in ipairs({c - W / 2, c + W / 2}) do
 		local fresh = storage:get_string("ridge_forest:" .. xr) == ""
