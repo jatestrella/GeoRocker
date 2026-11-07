@@ -283,6 +283,7 @@ core.register_node(rockmech.RUBBLE_SOIL, {
 		{name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}} or {"[fill:16x16:#6a5030"},
 	groups = {crumbly = 3, rockmech_rubble = 1, soil = 1},
 	sounds = has_default and default.node_sound_dirt_defaults and default.node_sound_dirt_defaults() or gravel_sounds,
+	is_ground_content = false,   -- 否則相鄰區塊生成時，會被 rockmech_strip_soil 當成土壤剝掉（半格也是，見下面）
 })
 
 rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE, rockmech.RUBBLE_SOIL}
@@ -388,6 +389,7 @@ for _, base in ipairs(rockmech.rubble_nodes) do
 			node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, top, 0.5}},
 			groups = groups,
 			sounds = bdef.sounds,
+			is_ground_content = bdef.is_ground_content,
 			drop = k >= rockmech.RUBBLE_LEVELS / 2 and base or "",
 		})
 		rockmech.rubble_level[name] = k

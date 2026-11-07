@@ -90,31 +90,113 @@ local NB = {}
 for dx = -1, 1 do for dy = -1, 1 do for dz = -1, 1 do
 	if dx ~= 0 or dy ~= 0 or dz ~= 0 then NB[#NB + 1] = {dx, dy, dz} end
 end end end
+---------------------------------------------------------------------------
+-- 含土樹幹（像 Minecraft 的含水柱子）：樹幹最下面那一格可以同時裝 1–8 級的土（土壤碎石）。
+-- 顆粒流把它當成那一格的土（rubble_level k、rubble_base 土壤）：旁邊的土流得進來（rubble_host）、也流得出去、
+-- 鏟得走；土拿光變回一般樹幹。寫入格子的地方很多（流動、鏟土、車、破碎站…），所以在 set_node／swap_node／
+-- remove_node 這一層統一轉換：對最下面那格樹幹寫土 → 含土樹幹；含土樹幹寫空氣或少了土 → 一般樹幹／較少的土。
+-- 只有倒樹（felling）時才真的拿掉樹幹，留下的土照舊是土。
+-- 樹倒下：
+--   1. 樹那一格裝滿 1 m 的土，旁邊的土面還比它高出 tan(安息角) × 1 m 以上（土要往樹幹第二格流）→ 被埋超過 1 m
+--   2. 樹根底下那一格的土流失（不滿格或沒了）
+---------------------------------------------------------------------------
+
+local SOIL = rockmech.RUBBLE_SOIL
+local NLEV = rockmech.RUBBLE_LEVELS
+local COMBO, IS_COMBO = {}, {}
+do
+	local tdef = core.registered_nodes[LOG]
+	local g = table.copy(tdef.groups or {})
+	g.rockmech_timber, g.rockmech_rubble, g.rockmech_tree_soil, g.not_in_creative_inventory = nil, 1, 1, 1
+	for k = 1, NLEV do
+		local name = "rockmech:tree_soil_" .. k
+		local side = ("default_tree.png^[lowpart:%d:default_dirt.png"):format(math.floor(k * 100 / NLEV + 0.5))
+		core.register_node(name, {
+			description = ("原木（埋在土裡 %d/8）"):format(k),
+			tiles = {"default_tree_top.png", "default_dirt.png", side},
+			groups = table.copy(g), sounds = tdef.sounds, is_ground_content = false, drop = LOG,
+		})
+		COMBO[k], IS_COMBO[name] = name, k
+		rockmech.rubble_level[name] = k
+		rockmech.rubble_base[name] = SOIL
+		rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name
+	end
+end
+local function is_trunk(name) return name == LOG or IS_COMBO[name] ~= nil end
+-- 樹幹最下面那一格（下面不是樹幹）
+-- 樹根那一格：是樹幹，正下方和斜下方 8 格都沒有樹幹（樹枝是斜著接在樹幹上的，下面有樹幹）
+local function bottom_trunk(pos, name)
+	if not is_trunk(name or core.get_node(pos).name) then return false end
+	for dx = -1, 1 do for dz = -1, 1 do
+		if is_trunk(core.get_node({x = pos.x + dx, y = pos.y - 1, z = pos.z + dz}).name) then return false end
+	end end
+	return true
+end
+-- 顆粒流（collapse.lua neighbor_surface）：最下面那格一般樹幹可以裝土
+function rockmech.rubble_host(p, name, base)
+	return name == LOG and base == SOIL and bottom_trunk(p, name)
+end
+
 local felling = false
+local raw_set, raw_swap, raw_remove = core.set_node, core.swap_node, core.remove_node
+-- 要寫進 pos 的 node：pos 是樹幹最下面那格時換成含土樹幹／一般樹幹
+local function remap(pos, node)
+	if felling then return node end
+	local cur = core.get_node(pos)
+	local ck = IS_COMBO[cur.name]
+	if not ck and cur.name ~= LOG then return node end
+	local new = node.name
+	local nk = rockmech.rubble_level[new]
+	if nk and rockmech.rubble_base[new] == SOIL then
+		if ck or bottom_trunk(pos, cur.name) then return {name = COMBO[math.min(NLEV, nk)]} end
+	elseif new == "air" and ck then
+		return {name = LOG}
+	end
+	return node
+end
+function core.set_node(pos, node) return raw_set(pos, remap(pos, node)) end
+core.add_node = core.set_node
+function core.swap_node(pos, node) return raw_swap(pos, remap(pos, node)) end
+function core.remove_node(pos)
+	if not felling and IS_COMBO[core.get_node(pos).name] then return raw_swap(pos, {name = LOG}) end
+	return raw_remove(pos)
+end
+
 -- whole：連 pos 那一格也拿掉（自然倒下；砍的時候那一格由引擎挖掉）
 local function fell(pos, digger, whole)
 	if felling then return end
 	felling = true
-	-- 相連的樹幹（含斜的樹枝），往上、往旁邊找，最多 64 格
-	local trunk, seen, q, head = {}, {[core.hash_node_position(pos)] = true}, {pos}, 1
+	-- 相連的樹幹（含斜的樹枝），往上、往旁邊找，最多 64 格；pos 正下方是含土樹幹也算進來
+	local start = {x = pos.x, y = pos.y, z = pos.z}
+	local below = {x = pos.x, y = pos.y - 1, z = pos.z}
+	local trunk = {}
+	if IS_COMBO[core.get_node(below).name] then start = below; trunk[1] = below end
+	local seen, q, head = {[core.hash_node_position(start)] = true, [core.hash_node_position(pos)] = true}, {pos}, 1
 	while q[head] and #trunk < 64 do
 		local p = q[head]; head = head + 1
 		trunk[#trunk + 1] = p
 		for _, d in ipairs(NB) do
 			local n = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
 			local h = core.hash_node_position(n)
-			if not seen[h] and n.y >= pos.y and core.get_node(n).name == LOG then seen[h] = true; q[#q + 1] = n end
+			if not seen[h] and n.y >= pos.y and is_trunk(core.get_node(n).name) then seen[h] = true; q[#q + 1] = n end
 		end
 	end
 	local logs, apples = 0, 0
-	for i, p in ipairs(trunk) do
-		if i > 1 or whole then core.remove_node(p); logs = logs + 1 end   -- 砍的那一格由引擎挖掉（照常掉一根原木）
+	for _, p in ipairs(trunk) do
+		local name = core.get_node(p).name
+		local ck = IS_COMBO[name]
+		if ck then
+			raw_swap(p, {name = rockmech.rubble_with_level(SOIL, ck)}); logs = logs + 1      -- 樹幹拿掉，土留著
+		elseif is_trunk(name) and (whole or not vector.equals(p, pos)) then
+			raw_remove(p); logs = logs + 1                      -- 砍的那一格由引擎挖掉（照常掉一根原木）
+		end
 		-- 這段樹幹周圍 2 格的樹葉、蘋果拿掉（樹距 3 m，不碰隔壁那棵）
 		for _, l in ipairs(core.find_nodes_in_area(vector.subtract(p, 2), vector.add(p, 2), {"default:leaves", "default:apple"})) do
 			if core.get_node(l).name == "default:apple" then apples = apples + 1 end
-			core.remove_node(l)
+			raw_remove(l)
 		end
 	end
+	felling = false
 	local give = {ItemStack(LOG .. " " .. logs), ItemStack("default:sapling " .. math.random(1, 2))}
 	if apples > 0 then give[#give + 1] = ItemStack("default:apple " .. apples) end
 	local inv = digger and digger:is_player() and digger:get_inventory()
@@ -129,48 +211,55 @@ local function fell(pos, digger, whole)
 		minexptime = 1, maxexptime = 2, minsize = 1, maxsize = 2, texture = "[fill:4x4:#3a7a2a"})
 	core.sound_play("default_dig_choppy", {pos = pos, gain = 1.0, max_hear_distance = 32}, true)
 	if digger and digger:is_player() then tell(digger:get_player_name(), ("樹倒了：原木 %d 根"):format(logs + (whole and 0 or 1))) end
-	felling = false
+	-- 留下的土照安息角流
+	core.after(0, function() rockmech.collapse.granular_settle(start) end)
 end
 core.register_on_dignode(function(pos, oldnode, digger)
 	if oldnode.name == LOG and digger and digger:is_player() then fell(pos, digger) end
 end)
 
--- 被土埋：樹那一格的土面高度（樹幹那格放不下土，用前後左右四格土面的平均代表）超過樹根上方 1 m → 樹倒下
--- （原木、樹苗、蘋果掉在地上），土壤維持土壤。
--- 邊坡上的樹：上坡那側高、下坡那側低，平均不到 1 m 就站得住；整圈被土石埋起來才倒
--- 一欄的土面離樹根（base 那格的底面）多高 (m)：從 base 往上 3 格找最上面的碎石／土；沒有就是 0。
--- 那一欄是岩石或別的實心東西（例如貼著岩壁）：不算埋，回傳 0
-local function surface_above(x, z, base)
-	local h = 0
-	for y = base.y, base.y + 3 do
-		local name = core.get_node({x = x, y = y, z = z}).name
-		local k = rockmech.rubble_level[name]
-		if k then h = (y - base.y) + k / rockmech.RUBBLE_LEVELS
-		elseif name ~= "air" then break end
-	end
-	return h
-end
-local function buried(base)
-	local sum = 0
-	for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do sum = sum + surface_above(base.x + d[1], base.z + d[2], base) end
-	return sum / 4 > 1
-end
-local function topple(base)
+local function topple(base, why)
 	fell(base, nil, true)
 	for _, pl in ipairs(core.get_connected_players()) do
 		if vector.distance(pl:get_pos(), base) <= 32 then
-			tell(pl:get_player_name(), ("%s 的樹被土埋超過 1 m 倒下了"):format(core.pos_to_string(base)))
+			tell(pl:get_player_name(), ("%s 的樹倒了：%s"):format(core.pos_to_string(base), why))
 		end
 	end
-	core.log("action", ("[rockmech] 樹被埋倒下 %s"):format(core.pos_to_string(base)))
+	core.log("action", ("[rockmech] 樹倒下 %s：%s"):format(core.pos_to_string(base), why))
 end
--- 樹幹最下面那一格（底下不是樹幹）每幾秒檢查一次
+local TAN = math.tan(math.rad(rockmech.cfg.slope.angle))
+-- 樹幹最下面那一格（或樹苗）每幾秒檢查一次
 core.register_abm({
-	label = "rockmech: 樹被土埋超過 1 m 就倒",
-	nodenames = {LOG}, interval = 3, chance = 1,
-	action = function(pos)
-		if core.get_node({x = pos.x, y = pos.y - 1, z = pos.z}).name == LOG then return end
-		if buried(pos) then topple(pos) end
+	label = "rockmech: 樹被土埋超過 1 m、或樹根的土流失就倒",
+	nodenames = {LOG, "default:sapling", "group:rockmech_tree_soil"}, interval = 3, chance = 1,
+	action = function(pos, node)
+		local sap = node.name == "default:sapling"
+		if not sap and not bottom_trunk(pos, node.name) then return end
+		-- 2. 樹根底下的土流失：不滿格的土，或是空的（土壤以外的實心地面，例如岩石、草皮，照常站得住）
+		local bn = core.get_node({x = pos.x, y = pos.y - 1, z = pos.z}).name
+		local bk = rockmech.rubble_level[bn]
+		local bdef = core.registered_nodes[bn]
+		if (bk and bk < NLEV) or (bdef and bdef.walkable == false) then
+			if sap then
+				raw_remove(pos); core.add_item(pos, "default:sapling")
+			else
+				topple(pos, "樹根底下的土流失了")
+			end
+			return
+		end
+		-- 1. 被埋超過 1 m：旁邊的土面比樹根（這格的底）高出 1 m + tan(安息角) × 1 m 以上 —— 這格裝滿 1 m 的土，
+		--    旁邊還比它高出安息角撐得住的高度，土要往樹幹第二格流。（不等土真的流進這格：四周堆得比這格高很多時，
+		--    顆粒流只從土堆頂上流，不會先灌進下面的樹幹格）
+		if sap then return end
+		for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
+			local h = 0
+			for y = pos.y, pos.y + 4 do
+				local k = rockmech.rubble_level[core.get_node({x = pos.x + d[1], y = y, z = pos.z + d[2]}).name]
+				if not k then break end
+				h = (y - pos.y) + k / NLEV
+			end
+			if h > 1 + TAN then topple(pos, "被土埋超過 1 m"); return end
+		end
 	end,
 })
 
@@ -308,7 +397,7 @@ end
 ---------------------------------------------------------------------------
 
 local GROVE_DX, GROVE_Z = 36, -20      -- 林地西南角（營地中心往東、z）；研究帳篷在 office_dx（27）± 3、z −19..−13
-local GROVE_W = 10
+local GROVE_W = 11
 local function ground_y(x, z)
 	for y = 40, -30, -1 do
 		local n = core.get_node({x = x, y = y, z = z}).name
@@ -340,10 +429,16 @@ function rockmech.career_build_grove(x0)
 			soil[x .. "," .. z] = true
 		end
 	end end
-	-- 蘋果樹：間隔 3 m（9 棵），只種在鋪了土的地方
+	-- 蘋果樹：間隔 3 m（最多 9 棵）
 	local n = 0
-	for x = x1 + 1, x1 + GROVE_W - 2, 3 do for z = z1 + 1, z1 + GROVE_W - 2, 3 do
-		if soil[x .. "," .. z] then default.grow_new_apple_tree({x = x, y = base + 2, z = z}); n = n + 1 end
+	-- 只種在四周 8 格都是土的內側：最外圈的土會照安息角流掉一點，樹根的土流失樹就倒
+	local function inner(x, z)
+		for dx = -1, 1 do for dz = -1, 1 do if not soil[(x + dx) .. "," .. (z + dz)] then return false end end end
+		return true
+	end
+	for x = x1 + 2, x1 + GROVE_W - 3, 3 do for z = z1 + 2, z1 + GROVE_W - 3, 3 do
+		-- grow_tree：樹幹就長在這一格（蘋果樹的範本放下去會偏移）
+		if inner(x, z) then default.grow_tree({x = x, y = base + 2, z = z}, true); n = n + 1 end
 	end end
 	-- 鋸木台、木工桌：林地西邊（靠研究帳篷那側）
 	local function put(x, z, name)

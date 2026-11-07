@@ -244,6 +244,10 @@ local function neighbor_surface(x, z, ty, base, lift)
         end
         return nil
     end
+    -- 可以裝土的格子（樹幹最下面那一格，woodwork.lua）：當成空的半格，土流進去變成含土樹幹
+    if rockmech.rubble_host and rockmech.rubble_host(p, n.name, base) then
+        return granular.surface(ty, 0), {pos = p, k = 0}
+    end
     if not passable(n.name) then return nil end
     for y = ty - 1, ty - 48, -1 do
         local q = {x = x, y = y, z = z}
@@ -382,9 +386,6 @@ granular_settle = function(pos, chain, q_ext, side)
     local T, tn = rubble_top(pos)
     if not T then return end
     local base, k = rockmech.rubble_base[tn], rubble_k(tn)
-    -- 樹根抓住土：樹幹、樹苗正下方那一格不流動（樹才不會浮在空中，woodwork.lua）
-    local above_n = core.get_node({x = T.x, y = T.y + 1, z = T.z}).name
-    if core.get_item_group(above_n, "tree") > 0 or core.get_item_group(above_n, "sapling") > 0 then return end
     local below = {x = T.x, y = T.y - 1, z = T.z}
     local bn = core.get_node(below).name
     if passable(bn) then

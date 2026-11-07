@@ -293,7 +293,11 @@ core.register_node(SLAB, {
 
 local NB6 = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}
 local GROUP_MAX = 2000          -- 一組超過這麼多塊就當作站得住（不再找）
-local function is_timber(name) return core.get_item_group(name, "rockmech_timber") > 0 end
+-- 樹（樹幹、含土樹幹、樹葉）不算：樹倒不倒由 woodwork.lua 自己判定（樹根的土、被埋）
+local function is_timber(name)
+	return core.get_item_group(name, "rockmech_timber") > 0 and core.get_item_group(name, "tree") == 0
+		and core.get_item_group(name, "leaves") == 0
+end
 local function holds(name)      -- 撐得住木頭的方塊：木頭以外的實心方塊（沒載入的區塊也算，保守）
 	if name == "ignore" then return true end
 	local def = core.registered_nodes[name]
