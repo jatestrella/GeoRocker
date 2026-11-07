@@ -409,7 +409,7 @@ core.register_globalstep(function(dtime)
 			local alive = o and o:get_pos()
 			if k <= n and not alive then
 				local q = s.seats[k]
-				list[k] = core.add_entity({x = q.x, y = q.y + 0.55, z = q.z}, SEATED)
+				list[k] = core.add_entity({x = q.x, y = q.y + 0.05, z = q.z}, SEATED)      -- 同營地攤主坐椅子：椅子那格 + 0.05
 			elseif k > n and alive then
 				o:remove(); list[k] = nil
 			end
