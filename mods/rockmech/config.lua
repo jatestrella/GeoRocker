@@ -99,6 +99,7 @@ config.shop = {
 	{key = "anfo", shop = "blast", item = "rockmech:anfo", label = "ANFO", price = 1000, count = 10},
 	{key = "bolt", shop = "tools", item = "rockmech:rock_bolt", label = "岩栓", price = 300, count = 10},
 	{key = "shotcrete", shop = "tools", item = "rockmech:shotcrete", label = "噴凝土", price = 800, count = 10},
+	{key = "axe", shop = "tools", item = "default:axe_steel", label = "斧頭（砍樹）", price = 100},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = "木柱（支撐、蓋房子）", price = 200, count = 10},
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = "木板", price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = "木板半格", price = 100, count = 10},

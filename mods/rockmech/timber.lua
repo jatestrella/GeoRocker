@@ -248,10 +248,23 @@ core.register_lbm({
 	end,
 })
 
+-- 木板：1/8 格厚的薄板（不是整格方塊，免得看起來像礦柱；岩石力學裡本來就算空格、撐不住岩石）。
+-- 對頂面放是地板，對底面放貼在天花板下；牆壁用木牆板（woodwork.lua）
 core.register_node(PLANK, {
-	description = "木板 Timber plank（建材，不算支撐）",
+	description = "木板 Timber plank（建材，不算支撐）\n薄木板：對地面放是地板，對頂面放貼在天花板下",
+	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
+	node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.375, 0.5}},
 	tiles = {WOOD},
 	is_ground_content = false, groups = table.copy(G), sounds = sounds,
+	on_place = function(itemstack, placer, pointed)
+		if pointed.type ~= "node" then return core.item_place(itemstack, placer, pointed) end
+		local up = pointed.above.y < pointed.under.y
+		if pointed.above.y == pointed.under.y and placer and placer:is_player() then
+			local fp = core.pointed_thing_to_face_pos(placer, pointed)
+			up = fp and fp.y - pointed.under.y > 0
+		end
+		return core.item_place(itemstack, placer, pointed, up and 20 or 0)
+	end,
 })
 
 core.register_node(SLAB, {

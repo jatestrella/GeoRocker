@@ -857,6 +857,7 @@ local function build_camp(owner, x0)
 	if rockmech.career_build_research then rockmech.career_build_research(x0) end      -- 研究帳篷（research.lua）
 	if rockmech.career_build_professor then rockmech.career_build_professor(x0) end    -- 大學教授的講堂（knowledge.lua）
 	if rockmech.career_build_opbench then rockmech.career_build_opbench(x0, owner) end  -- 操作員休息長椅（operator.lua）
+	if rockmech.career_build_grove then rockmech.career_build_grove(x0) end            -- 林地、鋸木台、木工桌（woodwork.lua）
 	local team = owner:match("^team:(%d)$")
 	if team then build_sign(x0, team) end
 	local y = ground_y(x0 + CRUSHER_X, CAMP_Z) or 0
