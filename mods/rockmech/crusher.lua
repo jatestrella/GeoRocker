@@ -451,13 +451,22 @@ local function crush(pos, dtime)
 	if eaten == 0 then return end
 	local t = tons_of(eaten)
 	if income ~= 0 then rockmech.add_money(owner, income) end
+	-- 剝採比（全組累計）：送來的料裡，礦石（照品位折算）和廢石各幾噸
+	local acc = rockmech.account_of and rockmech.account_of(owner) or owner
+	storage:set_float("strip_o:" .. acc, storage:get_float("strip_o:" .. acc) + ore_t)
+	storage:set_float("strip_w:" .. acc, storage:get_float("strip_w:" .. acc) + math.max(0, t - ore_t))
 	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_g = gross, batch_f = fee, batch_m = income,
 			total_t = t, total_q = ore_t, total_g = gross, total_f = fee, total_m = income}) do
 		meta:set_float(key, meta:get_float(key) + v)
 	end
 end
 
-local function formspec(pos)
+-- 剝採比 = 廢石噸數 ÷ 礦石噸數（全組累計，破碎站和廢石場送來的料）
+function rockmech.strip_ratio(acc)
+	local o, w = storage:get_float("strip_o:" .. acc), storage:get_float("strip_w:" .. acc)
+	return o > 0 and w / o or nil, w, o
+end
+local function formspec(pos, viewer)
 	local meta = core.get_meta(pos)
 	local queue = hopper_levels(hopper_center(meta))
 	local total = meta:get_float("total_t")
@@ -472,7 +481,7 @@ local function formspec(pos)
 			rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * 100)
 	end
 	return table.concat({
-		"formspec_version[6]size[11,7.6]",
+		"formspec_version[6]size[11,8.4]",
 		("label[0.5,0.6;%s]"):format(dump and "廢石場（倒進來的碎石直接棄置，不收入）" or title_of(pos)),
 		dump and ("label[0.5,1.2;處理能力：%g t/s　棄置費：每噸 $%g]"):format(rate, cfg.dump_fee)
 			or ("label[0.5,1.2;處理能力：%g t/s　處理費：每噸 $%g]"):format(rate, cfg.crusher_fee),
@@ -485,6 +494,16 @@ local function formspec(pos)
 		("label[0.5,4.2;資金（%s）：$%.0f]"):format(core.formspec_escape(rockmech.account_label(meta:get_string("owner"))),
 			rockmech.money(meta:get_string("owner"))),
 		"button_exit[3,4.8;3,0.8;ok;關閉]",
+		(function()
+			-- 剝採比：要有採礦規劃能力（knowledge.lua）
+			if viewer and rockmech.can_see and not rockmech.can_see(viewer, "planning") then
+				return "label[0.5,7.9;剝採比：要學會採礦規劃才看得懂]"
+			end
+			local acc = rockmech.account_of and rockmech.account_of(meta:get_string("owner")) or meta:get_string("owner")
+			local sr, w, o = rockmech.strip_ratio(acc)
+			return ("label[0.5,7.9;%s]"):format(core.formspec_escape(sr and ("剝採比 %.2f（廢石 %.0f t ÷ 礦石 %.0f t，全組累計）"):format(sr, w, o)
+				or "剝採比：還沒有礦石送來"))
+		end)(),
 	})
 end
 local editing = {}          -- 玩家名稱 → 正在看的破碎站
@@ -497,7 +516,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		local meta = core.get_meta(pos)
 		meta:set_string("mode", meta:get_string("mode") == "dump" and "" or "dump")
 		meta:set_string("infotext", meta:get_string("mode") == "dump" and "廢石場（右鍵查看）" or (title_of(pos) .. "（右鍵查看）"))
-		core.show_formspec(name, CRUSHER, formspec(pos))
+		core.show_formspec(name, CRUSHER, formspec(pos, name))
 	end
 	if fields.quit or fields.ok then editing[name] = nil end
 	return true
@@ -712,7 +731,7 @@ local crusher_def = {
 	end,
 	on_rightclick = function(pos, node, clicker)
 		editing[clicker:get_player_name()] = pos
-		core.show_formspec(clicker:get_player_name(), CRUSHER, formspec(pos))
+		core.show_formspec(clicker:get_player_name(), CRUSHER, formspec(pos, clicker:get_player_name()))
 	end,
 	can_dig = function(pos, player)
 		return player and rockmech.owner_ok(core.get_meta(pos):get_string("owner"), player:get_player_name())

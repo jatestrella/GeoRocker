@@ -28,6 +28,9 @@ local ITEMS = {
 	{key = "conveyor_rate", who = "mechanic", label = "輸送帶改良", max = 5, base = 15000, minutes = 10,
 		desc = "輸送帶運量 +10%（之後放的、已經放的都算）",
 		value = function(acc) return ("×%.1f"):format(rockmech.eff_conveyor_mult(acc)) end},
+	{key = "mine_planning", who = "geologist", label = "採礦規劃", max = 1, base = 30000, minutes = 10,
+		desc = "全組看得到剝採比（破碎站，廢石 ÷ 礦石）",
+		value = function(acc) return rockmech.research_level(acc, "mine_planning") >= 1 and "已會" or "還不會" end},
 	{key = "ore_recovery", who = "geologist", label = "品位控制", max = 5, base = 25000, minutes = 10,
 		desc = "破碎站賣礦的回收率 +1%",
 		value = function(acc)

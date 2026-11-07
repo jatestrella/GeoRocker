@@ -15,6 +15,8 @@ local ABILITIES = {
 	{key = "grade", label = "品位判讀", item = "rockmech:xrf"},
 	{key = "rockmass", label = "岩體分類", item = "rockmech:gsi_card"},
 	{key = "mechanics", label = "岩石力學", item = "rockmech:compass"},
+	-- 剝採比（破碎站顯示）：沒有儀器，要進修（教授考試）或研究帳篷研發「採礦規劃」（全組），雇用的地質學家不算
+	{key = "planning", label = "採礦規劃", research = "mine_planning"},
 }
 local AB = {}
 for _, a in ipairs(ABILITIES) do AB[a.key] = a end
@@ -45,8 +47,9 @@ function rockmech.can_see(name, ability)
 	if meta:get_int("godmode:on") == 1 then return true end
 	if meta:get_string(KNOW .. ability) == "1" then return true end
 	local a = AB[ability]
-	if a and player:get_inventory():contains_item("main", a.item) then return true end
-	if rockmech.account_of and hire_left(rockmech.account_of(name)) > 0 then return true end
+	if a and a.item and player:get_inventory():contains_item("main", a.item) then return true end
+	if a and a.research and rockmech.research_level and rockmech.research_level(name, a.research) >= 1 then return true end
+	if not (a and a.research) and rockmech.account_of and hire_left(rockmech.account_of(name)) > 0 then return true end
 	return false
 end
 
@@ -395,7 +398,75 @@ D: 剪脹角
 ANS: A
 ]]
 
-local SUBJECT = {["品位判讀"] = "grade", ["岩體分類"] = "rockmass", ["岩石力學"] = "mechanics"}
+local SUBJECT = {["品位判讀"] = "grade", ["岩體分類"] = "rockmass", ["岩石力學"] = "mechanics", ["採礦規劃"] = "planning"}
+-- 採礦規劃的預設題目：舊世界的 questions.txt 沒有這一科時用這些（不改老師的檔案）
+local PLANNING_BANK = [[
+[採礦規劃]
+Q: 露天開採的「剝採比」（stripping ratio）指的是？
+A: 要挖掉的廢石量 ÷ 開採的礦石量
+B: 礦石量 ÷ 廢石量
+C: 礦石的品位 ÷ 截止品位
+D: 開挖深度 ÷ 礦體厚度
+ANS: A
+
+Q: 剝採比越高，代表？
+A: 每開採一噸礦要搬越多廢石，成本越高
+B: 礦石品位越高
+C: 邊坡越穩定
+D: 礦石越容易選礦
+ANS: A
+
+Q: 「平衡剝採比」（break-even stripping ratio）的意思是？
+A: 剝採比達到這個值時，開採一噸礦的收入剛好等於成本（含剝廢石）
+B: 礦石和廢石一樣多
+C: 邊坡安全係數等於 1
+D: 礦價等於處理費
+ANS: A
+
+Q: 露天礦越挖越深，剝採比通常會？
+A: 變大（要剝的廢石越來越多）
+B: 變小
+C: 不變
+D: 變成零
+ANS: A
+
+Q: 當露天開採的剝採比太高、不划算時，常見的做法是？
+A: 改成地下開採
+B: 把邊坡挖得更緩
+C: 提高處理費
+D: 停止鑽探
+ANS: A
+
+Q: 某礦帶挖了 300 t 廢石、100 t 礦石，剝採比是多少？
+NUM: 3
+TOL: 0.01
+
+Q: 某礦帶剝採比 4，開採了 50 t 礦石，總共要搬多少噸的料（礦石加廢石）？
+NUM: 250
+TOL: 0.5
+UNIT: t
+
+Q: 邊坡挖得越陡，對剝採比的影響是？
+A: 剝採比變小（少挖廢石），但邊坡風險變高
+B: 剝採比變大
+C: 沒有影響
+D: 品位變高
+ANS: A
+
+Q: 礦體上方的覆蓋層（表土、廢石）在開採前要先移除，這叫做？
+A: 剝離（stripping）
+B: 選礦
+C: 回填
+D: 貧化
+ANS: A
+
+Q: 截止品位提高時，算進礦石的量會減少、當廢石的量增加，剝採比會？
+A: 變大
+B: 變小
+C: 不變
+D: 變成負的
+ANS: A
+]]
 
 local function load_bank()
 	local f = io.open(BANK_FILE, "r")
@@ -404,11 +475,12 @@ local function load_bank()
 		text = f:read("*a")
 		f:close()
 	else
-		text = DEFAULT_BANK
+		text = DEFAULT_BANK .. PLANNING_BANK
 		local w = io.open(BANK_FILE, "w")
-		if w then w:write(DEFAULT_BANK); w:close() end
+		if w then w:write(text); w:close() end
 	end
-	local bank = {grade = {}, rockmass = {}, mechanics = {}}
+	if not text:find("[採礦規劃]", 1, true) then text = text .. "\n" .. PLANNING_BANK end
+	local bank = {grade = {}, rockmass = {}, mechanics = {}, planning = {}}
 	local subj, q
 	local function finish()
 		if q and subj and q.text and (q.num or (#q.opts >= 2 and q.ans)) then table.insert(bank[subj], q) end
@@ -586,11 +658,14 @@ local function ability_status(name, key)
 	local a = AB[key]
 	local src = {}
 	if meta:get_string(KNOW .. key) == "1" then src[#src + 1] = "進修通過（永久）" end
-	if player:get_inventory():contains_item("main", a.item) then
+	if a.item and player:get_inventory():contains_item("main", a.item) then
 		local d = core.registered_items[a.item]
 		src[#src + 1] = "背包裡的" .. ((d and d.description or a.item):gsub("\n.*", ""))
 	end
-	local left = rockmech.account_of and hire_left(rockmech.account_of(name)) or 0
+	if a.research and rockmech.research_level and rockmech.research_level(name, a.research) >= 1 then
+		src[#src + 1] = "研究所研發完成（全組）"
+	end
+	local left = (not a.research) and rockmech.account_of and hire_left(rockmech.account_of(name)) or 0
 	if left > 0 then src[#src + 1] = ("雇用的地質學家（剩 %s）"):format(mmss(left)) end
 	if meta:get_int("godmode:on") == 1 then src[#src + 1] = "/god" end
 	return #src > 0, table.concat(src, "、")
@@ -626,7 +701,7 @@ local PROF_Z = -26          -- 講堂中心的 z（研究帳篷在 z −19..−1
 
 local function prof_form(name)
 	local player = core.get_player_by_name(name)
-	local out = {"formspec_version[6]size[13,7.4]",
+	local out = {("formspec_version[6]size[13,%g]"):format(3.6 + #ABILITIES * 1.1),
 		"label[0.5,0.6;大學教授：進修考試]",
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(("每科從題庫抽 %d 題，答對 %d 題就永久學會；沒過要等 %d 分鐘才能重考同一科。"):format(
 			EXAM_N, EXAM_PASS, EXAM_COOLDOWN / 60)))}
