@@ -326,6 +326,7 @@ function rockmech.corebox_put(pos, data, facedir)
 				local opened_now = node.name == open_of[k]
 				core.swap_node(pos, {name = (opened_now and open_of or closed_of)[k + 1], param2 = node.param2})
 				box_infotext(meta, data, k + 1)
+				if rockmech.corebox_label_update then rockmech.corebox_label_update(pos) end
 				return true
 			end
 			pos = {x = pos.x, y = pos.y + 1, z = pos.z}
@@ -336,6 +337,7 @@ function rockmech.corebox_put(pos, data, facedir)
 			local meta = core.get_meta(pos)
 			set_top(meta, data)
 			box_infotext(meta, data, 1)
+			if rockmech.corebox_label_update then rockmech.corebox_label_update(pos) end
 			return true
 		end
 	end
@@ -364,9 +366,79 @@ function rockmech.corebox_take(pos, player)
 		core.remove_node(pos)
 		core.check_for_falling({x = pos.x, y = pos.y + 1, z = pos.z})
 	end
+	if rockmech.corebox_label_update then rockmech.corebox_label_update(pos) end
 	return data
 end
 rockmech.COREBOX = COREBOX
+
+-- 箱蓋上的編號牌：白底黑字「BH-n」（最上面那箱的孔號）。方塊表面沒辦法每格不同，所以用一片薄薄的實體貼在箱蓋上；
+-- 字是 3×5 的像素字（只有數字、B、H、-）。實體不存檔：放下、拿起、疊上去時更新，載入時（LBM）補上
+local LABEL = "rockmech:corebox_label"
+local GLYPH = {
+	["0"] = "111101101101111", ["1"] = "010110010010111", ["2"] = "111001111100111", ["3"] = "111001111001111",
+	["4"] = "101101111001001", ["5"] = "111100111001111", ["6"] = "111100111101111", ["7"] = "111001010010010",
+	["8"] = "111101111101111", ["9"] = "111101111001111", B = "110101110101110", H = "101101111101101", ["-"] = "000000111000000",
+}
+local label_tex_cache = {}
+local function label_tex(text)
+	if label_tex_cache[text] then return label_tex_cache[text] end
+	local w = #text * 4 + 1
+	local t = {("[fill:%dx7:#f2efe4"):format(w)}
+	for i = 1, #text do
+		local g = GLYPH[text:sub(i, i)]
+		if g then
+			for j = 1, 15 do
+				if g:sub(j, j) == "1" then
+					t[#t + 1] = ("[fill:1x1:%d,%d:#1c1c1c"):format((i - 1) * 4 + 1 + (j - 1) % 3, 1 + math.floor((j - 1) / 3))
+				end
+			end
+		end
+	end
+	label_tex_cache[text] = {tex = table.concat(t, "^"), w = w}
+	return label_tex_cache[text]
+end
+core.register_entity(LABEL, {
+	initial_properties = {visual = "cube", physical = false, pointable = false, static_save = false,
+		textures = {"blank.png"}, use_texture_alpha = true},
+	on_step = function(self, dtime)
+		self.t = (self.t or 0) + dtime
+		if self.t < 2 then return end
+		self.t = 0
+		-- 底下的箱子不見了、換了一箱：自己消失（新的那箱會再貼一張）
+		local p = self.node_pos
+		local m = p and core.get_meta(p)
+		if not (p and count_of[core.get_node(p).name] and m:get_int("n") == self.n and m:get_string("acc") == self.acc) then
+			self.object:remove()
+		end
+	end,
+})
+local function label_update(pos)
+	for _, o in ipairs(core.get_objects_inside_radius(pos, 0.9)) do
+		local e = o:get_luaentity()
+		if e and e.name == LABEL and e.node_pos and vector.equals(e.node_pos, pos) then o:remove() end
+	end
+	local node = core.get_node(pos)
+	local k = count_of[node.name]
+	if not k then return end
+	local meta = core.get_meta(pos)
+	local n = meta:get_int("n")
+	local lt = label_tex("BH-" .. n)
+	local h = 0.17
+	local o = core.add_entity({x = pos.x, y = pos.y - 0.5 + k * BOX_H + 0.004, z = pos.z}, LABEL)
+	if not o then return end
+	local tex = lt.tex
+	o:set_properties({visual_size = {x = h * lt.w / 7, y = 0.006, z = h}, textures = {tex, tex, "blank.png", "blank.png", "blank.png", "blank.png"}})
+	o:set_yaw(-(node.param2 % 4) * math.pi / 2)
+	local e = o:get_luaentity()
+	e.node_pos, e.n, e.acc = vector.copy(pos), n, meta:get_string("acc")
+end
+rockmech.corebox_label_update = label_update
+core.register_lbm({
+	label = "Core box number labels", name = "rockmech:corebox_labels", run_at_every_load = true,
+	nodenames = (function() local t = {} for k = 1, STACK_MAX do t[#t + 1] = closed_of[k]; t[#t + 1] = open_of[k] end return t end)(),
+	action = function(pos) core.after(0, label_update, vector.copy(pos)) end,
+})
+
 rockmech.corebox_names = {}
 for k = 1, STACK_MAX do table.insert(rockmech.corebox_names, closed_of[k]); table.insert(rockmech.corebox_names, open_of[k]) end
 function rockmech.corebox_relabel(p)
