@@ -18,7 +18,7 @@ local LOAD_DOWN, LOAD_UP = 32, 16   -- 強制載入的高度範圍：起飛點�
 local HOME_KEY = "rockmech:drone_home"
 -- 旋翼聲：懸停、飛行各一段（同一個音檔，飛行的音高高 PITCH_MOVE 倍），兩段一起循環播放、交叉淡入淡出
 -- （正在播的聲音改不了音高）。音量跟 rockmech_vehicle_sound_gain 相乘
-local SOUND_HOVER, SOUND_MOVE, PITCH_MOVE = 0.2, 0.8, 1.12
+local SOUND_HOVER, SOUND_MOVE, PITCH_MOVE = 0.1, 0.4, 1.12   -- 2026-11-07 降一半
 local SOUND_OFF = 0.001     -- 淡到 0 引擎會把聲音停掉，用很小的值代替
 local FADE = 2              -- 淡入淡出速度（音量／秒）
 
