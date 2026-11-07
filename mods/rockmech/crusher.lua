@@ -252,12 +252,27 @@ end
 -- 受料倉還放得下幾級（無人駕駛用來判斷要不要等）
 function rockmech.hopper_room(c) return CAPACITY - hopper_levels(c) end
 
--- 倉裡的碎石往給料口流：每次掃整個倉，每欄走一步。只叫給料口旁邊的格子的話，外圈階梯上的料不會動
+-- 倉裡的碎石往給料口流：每次掃整個倉，每欄走一步。只叫給料口旁邊的格子的話，外圈階梯上的料不會動。
+-- 倉裡被車壓過變成夯實碎石的（安息角較陡，會卡在倉壁階梯上）換回一般碎石：倉裡的料是鬆的
+local loose_of
 local function drain(c)
+	if not loose_of then
+		loose_of = {}
+		for name, cname in pairs(rockmech.compact_of) do loose_of[cname] = name end
+	end
 	local r = (SIZE - 1) / 2
 	for x = c.x - r, c.x + r do for z = c.z - r, c.z + r do
 		for y = c.y + PILE, c.y + 1, -1 do
 			local q = {x = x, y = y, z = z}
+			local node = core.get_node(q)
+			if loose_of[node.name] then
+				core.swap_node(q, {name = loose_of[node.name], param2 = node.param2})
+				for yy = y - 1, c.y + 1, -1 do        -- 同一欄下面的也一起鬆開
+					local qq = {x = x, y = yy, z = z}
+					local nn = core.get_node(qq)
+					if loose_of[nn.name] then core.swap_node(qq, {name = loose_of[nn.name], param2 = nn.param2}) end
+				end
+			end
 			if rockmech.rubble_level[core.get_node(q).name] then
 				rockmech.collapse.granular_settle(q, 1)
 				break
