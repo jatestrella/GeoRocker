@@ -72,6 +72,16 @@ local function cube(c)
 	return ("[inventorycube{%s{%s{%s"):format(t, t, t)
 end
 
+-- 手上的岩芯箱：扁長的藍箱子（正面、頂面、右側面，斜投影），跟地上的岩芯箱一樣的比例
+local BOX_IMG = (function()
+	local t = {"[fill:40x20:#00000000", "[fill:30x10:0,9:#2a62c8", "[fill:28x1:1,12:#1a3a80", "[fill:28x1:1,15:#1a3a80"}
+	for i = 0, 5 do
+		t[#t + 1] = ("[fill:30x1:%d,%d:#5a8ee8"):format(6 - i, 3 + i)          -- 頂面
+		t[#t + 1] = ("[fill:1x10:%d,%d:#1e4ca0"):format(30 + i, 8 - i)        -- 右側面
+	end
+	return table.concat(t, "^")
+end)()
+
 local function carried(player)
 	local s = player:get_meta():get_string(CARRY_KEY)
 	return s ~= "" and core.deserialize(s) or nil
@@ -94,15 +104,14 @@ local function show_carry(player, c)
 			number = 0xFFE080, text = text, z_index = 100})
 	end
 	local img = ""
-	if c and c.box then
-		local t = (rockmech.corebox_tex or "[fill:16x16:#2a62c8"):gsub("%^", "&")
-		img = ("[inventorycube{%s{%s{%s"):format(t, t, t)
+	if c and c.box then img = BOX_IMG
 	elseif c then img = cube(c) end
 	if carry_img[name] then
 		player:hud_change(carry_img[name], "text", img)
+		player:hud_change(carry_img[name], "scale", c and c.box and {x = 2.5, y = 2.5} or {x = 4, y = 4})
 	else
 		carry_img[name] = player:hud_add({type = "image", position = {x = 0.5, y = 0.74}, alignment = {x = 0, y = 0},
-			scale = {x = 4, y = 4}, text = img, z_index = 90})
+			scale = c and c.box and {x = 2.5, y = 2.5} or {x = 4, y = 4}, text = img, z_index = 90})
 	end
 end
 local function set_carried(player, c)
