@@ -744,6 +744,20 @@ core.register_lbm({
 	action = function(pos) core.after(1, keep_loaded, pos) end,
 })
 
+-- 保險：計時器停了（例如區塊沒存到計時器）破碎站、選礦場就不再吃料，料堆在格柵上。
+-- 每 5 秒檢查一次，停了就重新啟動並記一行警告（強制載入的區塊一直是活動的，ABM 會跑到）
+core.register_abm({
+	label = "rockmech: 破碎站、選礦場的計時器停了就重新啟動",
+	nodenames = {CRUSHER, CRUSHER_BIG, "rockmech:plant"},
+	interval = 5, chance = 1,
+	action = function(pos, node)
+		local t = core.get_node_timer(pos)
+		if t:is_started() then return end
+		t:start(STEP)
+		core.log("warning", ("[rockmech] %s %s 的計時器停了，重新啟動"):format(node.name, core.pos_to_string(pos)))
+	end,
+})
+
 -- 給選礦場（plant.lua）共用
 rockmech.hopper_lib = {
 	SIZE = SIZE, PILE = PILE, STEP = STEP, GRATE = GRATE, tons_of = tons_of, eat = eat,
