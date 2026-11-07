@@ -1,4 +1,5 @@
--- 開始畫面：打包時（make_package.ps1）放到 builtin/mainmenu/init.lua，取代 Luanti 的主選單（沒有公開伺服器清單）。
+-- 開始畫面：先是標題畫面（背景插圖、標題、開始遊戲／加入連線／操作說明／設定／離開），點進去才是各頁。
+-- 進了世界就直接玩，遊戲裡不再跳標題畫面（mm_title 只剩圖）。打包時（make_package.ps1）放到 builtin/mainmenu/init.lua，取代 Luanti 的主選單（沒有公開伺服器清單）。
 --   選地圖：standalone/maps/<id>/ 一張地圖一個資料夾：map.conf（title、description、mode = solo|class、order）、
 --     rockmech.conf（世界設定，建新遊戲時複製進世界資料夾）、其他檔案（例如 students.csv）也一起複製。
 --     每張地圖一個世界（worlds/map_<id>）：「繼續遊戲」進去、「新遊戲」刪掉重建。
@@ -22,7 +23,7 @@ local MAPGEN = {
 	mgflat_ground_level = "0", water_level = "-31000", mapgen_limit = "800", chunksize = "5",
 }
 
-local state = {page = "main", map = nil, msg = nil, confirm = false}
+local state = {page = "title", map = nil, msg = nil, confirm = false}
 
 local function game_info()
 	for _, g in ipairs(core.get_games()) do
@@ -150,13 +151,66 @@ local function header(fs)
 	fs[#fs + 1] = ("hypertext[0.5,0.4;13,1.3;title;<center><style size=40><b>%s</b></style></center>]"):format(F(g and g.title or GAME))
 end
 
+-- 標題畫面的圖（mods/mm_title/textures，menu/make_menu_art.ps1 產生）
+local function art(file)
+	local g = game_info()
+	return g and F(g.path .. DS .. "mods" .. DS .. "mm_title" .. DS .. "textures" .. DS .. file) or ""
+end
+local TW, TH = 19.2, 10.8
+local BUTTONS = "style_type[button;font=bold;font_size=*1.4;textcolor=#f4e6c8;bgcolor=#2a2016;border=false]"
+	.. "style_type[button:hovered;bgcolor=#6a4a18;textcolor=#ffffff]"
+local function title_frame()
+	return {("formspec_version[6]size[%g,%g]padding[0,0]no_prepend[]bgcolor[#000000;both;#000000]"):format(TW, TH),
+		("image[0,0;%g,%g;%s]"):format(TW, TH, art("mm_title_bg.png"))}
+end
+
+local HELP = table.concat({
+	"<global margin=12 color=#f4e6c8 size=17>",
+	"<big><b><style color=#ffcf60>操作說明</style></b></big>\n\n",
+	"<b><style color=#ffcf60>基本</style></b>\n",
+	"WASD 移動　空白鍵 跳　Shift 蹲下　I 物品欄　右鍵帳篷下的供應商買東西（車輛停到營地的交車區，設施給施工單）\n",
+	"挖碎石就是把它拿起來（一次一塊，不進物品欄），右鍵放下或裝進車斗；拿著「回營地」旗子按左鍵回營地\n\n",
+	"<b><style color=#ffcf60>地質與岩石力學</style></b>\n",
+	"<b>地質羅盤</b>：右鍵一格岩石，顯示岩性、深度、應力、節理與破壞判定\n",
+	"岩面出現<b>裂紋</b>代表快撐不住（安全係數 1～1.5）；安全係數 ≤ 1 就崩落。用岩柱、岩栓、噴凝土撐住，或縮小開挖跨度\n",
+	"<b>岩芯鑽探</b>：鑽完岩芯箱放在孔口旁邊，拿野帳本對它右鍵判讀\n\n",
+	"<b><style color=#ffcf60>鑽孔爆破</style></b>\n",
+	"<b>鑿岩機</b>：對岩面按住左鍵鑽孔　<b>乳膠炸藥</b>：對鑽孔按右鍵裝藥（一孔最多 4 條）\n",
+	"<b>打火石</b>：點一個裝藥孔，4 秒後爆　<b>起爆器</b>：右鍵，30 m 內的裝藥倒數 5 秒後依序起爆\n",
+	"旁邊有<b>自由面</b>（空間、碎石、沒裝藥的空孔）威力較大：先鑽空孔或先炸中間的孔（拔心），外圈再炸\n\n",
+	"<b><style color=#ffcf60>車輛</style></b>\n",
+	"右鍵上車　Shift 下車　W／S 前進後退　A／D 轉向　Z 切換追蹤相機\n",
+	"各車的作業鍵（E、空白鍵…）顯示在儀表板的按鈕上，開著的功能按鈕會亮\n",
+})
+
 local function formspec()
-	local fs = {"formspec_version[6]size[14,10.5]bgcolor[#00000000;true]", "box[0,0;14,10.5;#000000b0]"}
-	header(fs)
 	if gamedata.errormessage then
 		state.msg = gamedata.errormessage
 		gamedata.errormessage = nil
 	end
+	if state.page == "title" then
+		local fs = title_frame()
+		fs[#fs + 1] = ("image[3.6,0.9;12,2.49;%s]"):format(art("mm_title_logo.png"))
+		fs[#fs + 1] = BUTTONS
+		local y = 4.3
+		for _, b in ipairs({{"play", "開始遊戲"}, {"join_page", "加入連線"}, {"help", "操作說明"}, {"settings", "設定"}, {"quit", "離開"}}) do
+			fs[#fs + 1] = ("button[7.1,%g;5,0.95;%s;%s]"):format(y, b[1], F(b[2]))
+			y = y + 1.15
+		end
+		if state.msg then
+			fs[#fs + 1] = ("box[0.4,%g;%g,1.2;#000000c0]textarea[0.6,%g;%g,1.1;;;%s]"):format(TH - 1.5, TW - 0.8, TH - 1.45, TW - 1.2, F(state.msg))
+		end
+		return table.concat(fs)
+	elseif state.page == "help" then
+		local fs = title_frame()
+		fs[#fs + 1] = ("box[1.2,0.6;%g,%g;#0c0a08d8]"):format(TW - 2.4, TH - 2.2)
+		fs[#fs + 1] = ("hypertext[1.6,0.9;%g,%g;help;%s]"):format(TW - 3.2, TH - 2.8, F(HELP))
+		fs[#fs + 1] = BUTTONS
+		fs[#fs + 1] = ("button[7.1,%g;5,0.9;back;%s]"):format(TH - 1.35, F("返回"))
+		return table.concat(fs)
+	end
+	local fs = {"formspec_version[6]size[14,10.5]bgcolor[#00000000;true]", "box[0,0;14,10.5;#000000b0]"}
+	header(fs)
 	local list = maps()
 	if state.page == "main" then
 		fs[#fs + 1] = "label[0.5,2.1;" .. F("選地圖") .. "]"
@@ -168,9 +222,7 @@ local function formspec()
 			y = y + 1.25
 		end
 		y = math.max(y + 0.2, 5.4)
-		fs[#fs + 1] = ("button[0.5,%g;4.2,0.9;join_page;%s]"):format(y, F("加入連線"))
-		fs[#fs + 1] = ("button[4.9,%g;4.2,0.9;settings;%s]"):format(y, F("設定"))
-		fs[#fs + 1] = ("button[9.3,%g;4.2,0.9;quit;%s]"):format(y, F("離開"))
+		fs[#fs + 1] = ("button[4.9,%g;4.2,0.9;back;%s]"):format(y, F("返回"))
 	elseif state.page == "map" and list[state.map] then
 		local m = list[state.map]
 		local has = find_world(m) ~= nil
@@ -195,7 +247,7 @@ local function formspec()
 			fs[#fs + 1] = ("button[0.5,%g;6.4,0.9;open_dir;%s]"):format(y, F("打開地圖資料夾（編輯學生名單）"))
 			y = y + 1.2
 		end
-		fs[#fs + 1] = ("button[0.5,%g;6.4,0.9;back;%s]"):format(y, F("返回"))
+		fs[#fs + 1] = ("button[0.5,%g;6.4,0.9;back_maps;%s]"):format(y, F("返回"))
 	elseif state.page == "join" then
 		fs[#fs + 1] = "label[0.5,2.1;" .. F("加入連線：輸入老師給的位址和你的帳號密碼") .. "]"
 		fs[#fs + 1] = ("field[0.5,3.0;8.5,0.8;j_addr;%s;%s]"):format(F("位址（IP）"), F(core.settings:get("address") or ""))
@@ -232,8 +284,14 @@ core.button_handler = function(fields)
 		local i = tonumber(k:match("^map_(%d+)$"))
 		if i and list[i] then state.page, state.map, state.confirm, state.msg = "map", i, false, nil end
 	end
-	if fields.back then
+	if fields.play then
 		state.page, state.confirm, state.msg = "main", false, nil
+	elseif fields.help then
+		state.page, state.msg = "help", nil
+	elseif fields.back_maps then
+		state.page, state.confirm, state.msg = "main", false, nil
+	elseif fields.back then
+		state.page, state.confirm, state.msg = "title", false, nil
 	elseif fields.join_page then
 		state.page, state.msg = "join", nil
 	elseif fields.settings then
@@ -271,7 +329,8 @@ end
 
 core.event_handler = function(event)
 	if event == "MenuQuit" then
-		if state.page ~= "main" then state.page, state.confirm = "main", false; refresh()
+		if state.page == "map" then state.page, state.confirm = "main", false; refresh()
+		elseif state.page ~= "title" then state.page, state.confirm = "title", false; refresh()
 		else core.close() end
 	end
 end
