@@ -227,6 +227,8 @@ local function excavator(kind, P)
 	local hs = "[fill:16x16:#2a2a2c^[fill:16x2:0,2:#d8a020^[fill:16x1:0,13:#18181a^[fill:2x6:7,6:#3a3a3e"
 	local HAMMER_TEX = {"[fill:16x16:#3a3a3e", "[fill:16x16:#18181a", hs, hs, hs, hs}
 	parts[#parts + 1] = {id = "chisel", pos = BUCKET_REST, size = CHISEL, tex = box_tex("#b8bcc2")}
+	local HAMMER_REST = {x = BUCKET_REST.x, y = BUCKET_REST.y - P.bucket.y / 2 + HAMMER.y + CHISEL.y, z = BUCKET_REST.z}
+	local function rest(self) return self.tool == "breaker" and HAMMER_REST or BUCKET_REST end
 	parts[#parts + 1] = {id = "boom", pos = BUCKET_REST, size = {x = P.boom_w, y = BOOM_LEN, z = P.boom_w}, tex = box_tex(def.color)}
 	parts[#parts + 1] = {id = "stick", pos = BUCKET_REST, size = {x = P.stick_w, y = STICK_LEN, z = P.stick_w}, tex = box_tex(def.color)}
 	-- 鏟斗裡的碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
@@ -291,13 +293,16 @@ local function excavator(kind, P)
 				o:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, rot)
 			end
 		end
-		local hammer = self.tool == "breaker"
-		-- 錘身比鏟斗高：往上提，讓錘身底部在原本鏟斗底部的位置，鋼鑿從那裡往下伸
-		local by = hammer and (vb.y + (HAMMER.y - P.bucket.y) / 2) or vb.y
-		if ps.bucket then ps.bucket:set_attach(self.object, "", {x = vb.x * 10, y = by * 10, z = vb.z * 10}, rot) end
-		if ps.chisel then
-			local cy = by - HAMMER.y / 2 - CHISEL.y / 2
-			ps.chisel:set_attach(self.object, "", {x = vb.x * 10, y = cy * 10, z = vb.z * 10}, rot)
+		if self.tool == "breaker" then
+			-- 破碎錘：挖臂末端是錘身的上端，錘身、鋼鑿順著 hammer_dir（車身座標，平常垂直往下；
+			-- 敲側面時 45° 往下指著作用面）伸出去，鋼鑿尖碰到岩面，不跟岩塊重疊
+			local dir = self.hammer_dir or {x = 0, y = -1, z = 0}
+			local mid = vector.add(vb, vector.multiply(dir, HAMMER.y))
+			local tip = vector.add(mid, vector.multiply(dir, CHISEL.y))
+			seg_attach(self, ps.bucket, vb, mid)
+			seg_attach(self, ps.chisel, mid, tip)
+		else
+			if ps.bucket then ps.bucket:set_attach(self.object, "", {x = vb.x * 10, y = vb.y * 10, z = vb.z * 10}, rot) end
 		end
 		place_fill(self, vb, psi)
 		self.bucket_at = vb
@@ -431,9 +436,9 @@ local function excavator(kind, P)
 				or {visual_size = P.bucket, textures = box_tex(P.bucket_color)})
 		end
 		if ps.chisel then ps.chisel:set_properties({is_visible = hammer}) end
-		place_arm(self, self.bucket_at and v2h(self.bucket_at, self.swing or 0) or BUCKET_REST)
+		place_arm(self, rest(self))
 	end
-	function def.on_spawn(self) place_arm(self, BUCKET_REST); op_show(self); show_tool(self) end
+	function def.on_spawn(self) place_arm(self, rest(self)); op_show(self); show_tool(self) end
 	-- 油壓破碎錘改裝套件（vehicles.lua：拿著套件對怪手右鍵）
 	function def.install_breaker(self, player)
 		local name = player:get_player_name()
@@ -709,13 +714,13 @@ local function excavator(kind, P)
 			local t, ph = dg.t, DIG_PHASES
 			local b
 			if t < ph[1] then
-				b = lerp(BUCKET_REST, above, t / ph[1])
+				b = lerp(rest(self), above, t / ph[1])
 				self.swing = lerp_angle(dg.psi0, dg.psi, t / ph[1])
 			elseif t < ph[1] + ph[2] then b = lerp(above, to, (t - ph[1]) / ph[2]); self.swing = dg.psi
 			elseif t < ph[1] + ph[2] + ph[3] then b = lerp(to, above, (t - ph[1] - ph[2]) / ph[3]); self.swing = dg.psi
 			else
 				local u = math.min(1, (t - ph[1] - ph[2] - ph[3]) / ph[4])
-				b = lerp(above, BUCKET_REST, u)
+				b = lerp(above, rest(self), u)
 				local back = (dg.mode == "dump" or self.follow) and dg.psi or 0
 				self.swing = lerp_angle(dg.psi, back, u)
 			end
@@ -723,7 +728,8 @@ local function excavator(kind, P)
 			if t >= DIG_TOTAL then
 				self.dig = nil
 				self.swing = (dg.mode == "dump" or self.follow) and dg.psi or 0
-				place_arm(self, BUCKET_REST)
+				self.hammer_dir = nil
+				place_arm(self, rest(self))
 			end
 		end
 		if self.op and self.op.on and not ctx.d then operate(self, ctx) end
@@ -739,7 +745,7 @@ local function excavator(kind, P)
 			if math.abs(diff) > 1e-3 then
 				local st = P.swing_rate * ctx.dtime
 				self.swing = cur + math.max(-st, math.min(st, diff))
-				place_arm(self, BUCKET_REST)
+				place_arm(self, rest(self))
 				if math.abs(diff) > 0.02 then self.swing_t = 0.5 end
 			end
 		end
@@ -762,8 +768,23 @@ local function excavator(kind, P)
 				if not lith then
 					self.msg = S("Point the breaker at rock")
 				else
-					local psi, th, reach = swing_to(to_local(self, target))
+					-- 上面是空的：錘子垂直站在岩塊上方，鋼鑿尖碰頂面；上面不空（敲牆面）：從瞄到的那一面外側，45° 往下指著那一面
+					local up = {x = target.x, y = target.y + 1, z = target.z}
+					local n = vector.subtract(hit.above, hit.under)
+					local contact, wdir
+					if V.passable(core.get_node(up).name) or n.y == 1 then
+						contact, wdir = {x = target.x, y = target.y + 0.5, z = target.z}, {x = 0, y = -1, z = 0}
+					else
+						if n.y ~= 0 then n = {x = 0, y = 0, z = 1} end    -- 從下面瞄到底面：當成正面
+						contact = vector.add(target, vector.multiply(n, 0.5))
+						wdir = vector.normalize({x = -n.x, y = -1, z = -n.z})
+					end
+					local cv, dv = to_local(self, contact), vector.subtract(to_local(self, vector.add(contact, wdir)), to_local(self, contact))
+					local top = vector.subtract(cv, vector.multiply(dv, HAMMER.y + CHISEL.y))
+					local psi, th, reach = swing_to(top)
+					self.hammer_dir = dv
 					if reach > ARM_REACH then
+						self.hammer_dir = nil
 						self.msg = S("Out of arm reach (@1 m, arm about @2 m)", ("%.1f"):format(reach), ("%.1f"):format(ARM_REACH))
 					else
 						local ucs = (rockmech.cfg.lithologies[lith.name] or {}).ucs or 30
