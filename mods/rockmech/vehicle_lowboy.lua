@@ -133,10 +133,14 @@ function def.move(self, ctx)
 			if ctx.speed > 0 then ctx.speed = math.min(ctx.speed, self.cruise) end
 		end
 		ctx.speed = math.max(-LOADED_SPEED, math.min(LOADED_SPEED, ctx.speed))
-		-- 區塊重新載入後，載的車還沒掛回來：找到就掛
-		if not carried(self) then
-			local e = V.by_uid[self.carry_uid]
-			if e and e.object:get_pos() and not e.object:get_attach() then attach(self, e) end
+		-- 區塊重新載入後，載的車載入了卻沒掛在平板上（附著不會存檔，它會照自己存的位置出現、掉到地上）：掛回來。
+		-- 要看它是不是真的掛在這台上（ObjectRef 不能用 == 比，比 luaentity）
+		local e = carried(self)
+		if e then
+			local parent = e.object:get_attach()
+			if not (parent and parent:get_luaentity() == self) then
+				if not parent then attach(self, e) end
+			end
 		end
 	end
 end
