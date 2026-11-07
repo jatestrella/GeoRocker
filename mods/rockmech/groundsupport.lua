@@ -237,8 +237,7 @@ end
 
 -- 岩栓：對鑽孔按右鍵裝進去
 core.register_craftitem(BOLT_ITEM, {
-	description = S("Rock bolt\nRight-click a drill hole to install it (length = hole depth; anchorage capacity = bond strength @1 kN/m × length, max @2 kN)",
-		("%d"):format(math.floor(scfg.bolt_grip)), ("%d"):format(math.floor(scfg.bolt_yield))),
+	description = S("Rock bolt\nRight-click a drill hole"),
 	short_description = S("Rock bolt"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x11:7,1:#a8a8a4^[fill:8x2:4,12:#6a6a66^[fill:4x2:6,10:#8a8a86",
 	on_place = function(itemstack, placer, pointed)
@@ -263,8 +262,7 @@ core.register_craftitem(BOLT_ITEM, {
 
 -- 噴凝土：對岩面按右鍵，噴這一面 3×3 格
 core.register_craftitem(SHOTCRETE, {
-	description = S("Shotcrete (one bag)\nRight-click a rock face to spray a 3×3 area of that face (support pressure @1 MPa)\nSpray again to thicken it, up to @2 layers; the pressure adds up per layer\nRight-click rubble: compacts the top 3×3 surface directly (no flow, no ruts)",
-		("%.2f"):format(scfg.shotcrete_p), tostring(MAX_LAYERS)),
+	description = S("Shotcrete\nRight-click a rock face"),
 	short_description = S("Shotcrete"),
 	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#b8b6b0^[fill:10x2:3,3:#8e8c86^[fill:6x3:5,8:#5a6a8a",
 	on_place = function(itemstack, placer, pointed)

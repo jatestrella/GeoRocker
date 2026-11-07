@@ -51,7 +51,7 @@ end
 local CARRY = cfg.career and rockmech.carry_get ~= nil
 local function lying(node) return node.name == LOG and node.param2 >= 4 end
 core.override_item(LOG, {
-	description = S("Log\nCarry it to a saw bench to saw it into posts or planks"),
+	description = S("Log"),
 	short_description = S("Timber log"),
 	-- 經營模式：砍下來的原木不進背包（倒在地上，fell）；左鍵橫躺的原木就扛起來（不用斧頭）
 	drop = CARRY and "" or nil,
@@ -91,7 +91,7 @@ do
 	local sdef = core.registered_items["default:sapling"]
 	local orig_place = sdef and sdef.on_place
 	core.override_item("default:sapling", {
-		description = S("Sapling\nPlant it on a full block of soil; it grows into a tree after a while"),
+		description = S("Sapling\nPlant it on full soil"),
 		short_description = S("Sapling"),
 		on_place = function(itemstack, placer, pointed)
 			if pointed.type == "node" then
@@ -110,13 +110,13 @@ do
 		end,
 	})
 end
-core.override_item("default:axe_steel", {description = S("Axe\nChop any block of a trunk and the whole tree falls into logs"), short_description = S("Axe")})
+core.override_item("default:axe_steel", {description = S("Axe"), short_description = S("Axe")})
 -- 木板、半格改用內建的木頭貼圖，跟樓梯、門、柵欄一致
 for _, name in ipairs({PLANK, SLAB}) do core.override_item(name, {tiles = {"default_wood.png"}}) end
 
 -- 木牆板：1/8 格厚的直立板（貼在格子的後面，面向放的人）
 core.register_node(WALL, {
-	description = S("Wooden wall panel (building material, not a support)\nA thin upright board for building walls"),
+	description = S("Wooden wall panel"),
 	short_description = S("Wooden wall panel"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	node_box = {type = "fixed", fixed = {-0.5, -0.5, 0.375, 0.5, 0.5, 0.5}},
@@ -609,7 +609,7 @@ local function disturb(pos)
 end
 
 core.register_node(TOPSOIL, {
-	description = S("Topsoil\nSoil with grass and roots: the roots give it cohesion, so it stands even on steep slopes. If dug, undermined, or if an excavated face next to it is too high (above its critical standing height), it turns into loose soil and flows at its angle of repose"),
+	description = S("Topsoil"),
 	short_description = S("Topsoil"),
 	tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
 	is_ground_content = false, groups = {crumbly = 3, soil = 1, rockmech_topsoil = 1},

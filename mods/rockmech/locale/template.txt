@@ -16,9 +16,9 @@ Your hands are full: right-click to put it down before picking up a core box=
 You are carrying a log: right-click to put it down first=
 Your hands are full: right-click to put it down, or right-click a cart bed to load it=
 You are holding a different kind of rubble: put it down first=
-Pickaxe@nDigs rock slowly; rock turns into rubble@nDigging rubble picks it up, one block at a time@nRight-click to put down the rubble you are holding=
+Pickaxe@nRight-click: put down what you carry=
 Pickaxe=
-Shovel@nQuickly shovels up rubble, one block at a time@nCannot dig rock@nRight-click to put down the rubble you are holding=
+Shovel@nRight-click: put down what you carry=
 Shovel=
 Equipment Manager=
 Vehicles · crushers · conveyor belts=
@@ -126,7 +126,7 @@ flat=
 uphill @1°=
 downhill @1°=
 Conveyor belt (@1)@nRight-click to place: click a belt to extend from that block, click the ground to start from the ground@nLeft-click a belt to pick up that block; left-click elsewhere to change the slope=
-Conveyor belt@nRight-click to place: click a belt to extend from that block, click the ground to start from the ground@nLeft-click a belt to pick up that block; left-click elsewhere to change the slope=
+Conveyor belt@nRight-click to lay; left-click a belt to take it back=
 [Conveyor] Slope: @1 (maximum inclination @2°)=
 [Conveyor]=
 Cannot extend backwards=
@@ -199,7 +199,7 @@ Logging @1   @2 / @3 m=
 Field notebook (@1 / @2 holes)@nRight-click a core box to log it; left-click to see logged holes=
 @1 logged: left-click to open the field notebook=
 @1 logged (some fields you cannot interpret were recorded as ?): left-click to open the field notebook=
-Field notebook@nRight-click a core box to log it (@1 s per metre, stay nearby) into a borehole log@nLeft-click to see logged holes (up to @2 holes)@nWhat you record depends on your skills at logging time: fields you cannot interpret are recorded as ?=
+Field notebook@nRight-click a core box to log it; left-click to read=
 [Field notebook] Right-click a core box to log it=
 [Core drilling] Nothing was drilled (@1)=
 [Core drilling] Nothing was drilled=
@@ -214,7 +214,7 @@ you walked away=
 hit a void=
 map not loaded yet=
 hit a facility=
-Hand-held core drill@nRight-click the ground: drill a vertical hole and take core (@1 s per metre, max @2 m; deeper holes need the core drill rig); don't walk away while drilling@nThe core goes into a blue core box next to the collar; log it with a field notebook into a borehole log (lithology, grade, joints, RQD)=
+Hand-held core drill@nRight-click the ground to drill down=
 Hand-held core drill=
 
 ### crusher.lua
@@ -258,13 +258,13 @@ Stripping ratio @1 (waste @2 t ÷ ore @3 t, team total)=
 Stripping ratio: no ore delivered yet=
 Waste dump (right-click to view)=
 @1 (right-click to view)=
-Hopper lining@nReinforced concrete holding back the hopper wall rock (so it is not cut loose by joints and does not fall)=
+Hopper concrete lining=
 Hopper lining=
 @1 (@2, right-click to view)=
 Crusher grate=
-Crusher@nRight-click on flat ground to place; digs a @1×@2 m receiving hopper toward you@nRubble dumped into the hopper is weighed and paid for; waste rock costs a processing fee=
+Crusher@nRight-click on flat ground to build=
 [Crusher] Place it on flat ground: the 3×3 m machine and the @1×@2 m area in front need level ground, solid rock below and clear space above=
-Large crusher@nCapacity @1 t/s (regular crusher @2 t/s)@nRight-click on flat ground to place; digs a @3×@4 m receiving hopper toward you=
+Large crusher@nRight-click on flat ground to build=
 
 ### delivery.lua
 a person=
@@ -317,12 +317,12 @@ ANFO can only be poured into downward drill holes=
 No primer yet: add one emulsion cartridge, otherwise it will misfire=
 No charges within @1 m=
 @1 charges, firing in @2 seconds, move to a safe distance!=
-Rock drill@nHold left-click on a rock face to drill a hole (@1 s, @2 m); keep holding on a hole to deepen it 1 m every @3 s (max @4 m)=
+Rock drill@nHold left-click on a rock face=
 Rock drill: hold left-click on a rock face to drill a hole=
-Emulsion explosive@nRight-click a drill hole to load it (max @1 per hole); without a hole it can only be stuck on the surface, with little power=
-ANFO (ammonium nitrate/fuel oil, one bag)@nRight-click a downward drill hole to pour it in as a column charge; needs one emulsion cartridge as a primer=
+Emulsion explosive@nRight-click a drill hole=
+ANFO@nRight-click a downward hole=
 ANFO=
-Blasting machine@nRight-click: charges within @1 m count down @2 seconds, then fire in sequence=
+Blasting machine@nRight-click to fire=
 
 ### drone.lua
 N=
@@ -339,9 +339,9 @@ Drone   Above ground @1   vs take-off point @2 m (limit +@3)   Distance @4 / @5 
 Maximum flight distance reached, can't fly further out   Right-click again to return to the take-off point=
 Right-click again to return to the take-off point=
 Left-click to command: click an excavator or truck=
-Drone remote@nRight-click to take off (first person); WASD to move, E to speed up, Space to climb, Shift to descend@nRight-click again to return to the take-off point; height limit: @1 m above the take-off point=
+Drone controller@nRight-click to take off / come back=
 Drone remote=
-Command drone (drone + radio)@nRight-click to take off, right-click again to return to the take-off point; WASD to move, E to speed up, Space to climb, Shift to descend@nLeft-click (on the ground or in the air): click an excavator to select it, click the ground to send it there; click a dump truck or haul truck to open its AHS settings@nCommand range @1 m=
+Command drone@nRight-click to take off / come back; left-click to command=
 
 ### femstress.lua
 tension=
@@ -387,9 +387,9 @@ Shotcrete lining (@1 layers)=
 Rock bolt (installed)=
 Rock bolt with shotcrete (@1 layers)=
 Rock bolt section=
-Rock bolt@nRight-click a drill hole to install it (length @= hole depth; anchorage capacity @= bond strength @1 kN/m × length, max @2 kN)=
+Rock bolt@nRight-click a drill hole=
 Rock bolts go into drill holes (drill a hole with the rock drill first, then right-click the hole)=
-Shotcrete (one bag)@nRight-click a rock face to spray a 3×3 area of that face (support pressure @1 MPa)@nSpray again to thicken it, up to @2 layers; the pressure adds up per layer@nRight-click rubble: compacts the top 3×3 surface directly (no flow, no ruts)=
+Shotcrete@nRight-click a rock face=
 The rubble here is already compacted=
 Shotcrete must be sprayed on a rock face=
 This is already sprayed to @1 layers (or the space in front of the rock face is not empty)=
@@ -402,9 +402,9 @@ Grade assessment=
 Rock mass classification=
 Rock mechanics=
 Mine planning=
-Handheld XRF analyzer@nKeep it in your inventory: shows the grade of rock, rubble and material in truck beds=
+Handheld XRF analyzer@nWorks from your inventory=
 Handheld XRF analyzer=
-GSI chart (Hoek & Marinos)@nKeep it in your inventory: shows lithology, GSI and overburden thickness=
+GSI chart@nWorks from your inventory=
 [Geologist] @1=
 [Geologist] Already hired, @1 left=
 [Geologist] You are not in a team yet, so you have no funds=
@@ -468,13 +468,12 @@ Loadout bin boom: loads trucks stopped within @1 m=
 Loadout bin (filled)=
 Loadout bin grate=
 Loadout bin chute=
-Loadout bin@n@1 m³ bin; the grate on top takes conveyor feed (or trucks and excavators dumping onto it); the loading boom loads trucks and haul trucks parked within @2 m@nSet an autonomous truck's loading point near the boom and it will wait there to be loaded@nRight-click on flat ground to build: 3×3 m, @3 m tall, boom facing you=
+Loadout bin@nRight-click on flat ground to build=
 Build it on flat ground: 3×3 m of level ground with @1 m of clearance above=
 There is @1 in the construction area: move it first=
 
 ### locker.lua
 Locker (@1)=
-Locker@nHolds small items, @1 slots; shared by the whole team, only your team and the teacher can open it@nDig it (empty it first) to get the work order back=
 [Locker] There are still items inside: take them out before removing it=
 
 ### monitor.lua
@@ -486,7 +485,7 @@ No readings yet: they are recorded after nearby excavation and a stress solve=
 Latest: displacement @1 mm (E-W @2, up-down @3, N-S @4 mm), @5 readings=
 mm (vertical axis) / one reading per stress solve (horizontal axis). Be careful if readings keep growing; after support is installed they should level off=
 Reset to zero=
-Survey prism@nAttach to a rock face to record the rock displacement there (updated on nearby excavation and stress solves); right-click for the curve=
+Survey prism@nPlace it on a rock face; right-click to read=
 [Monitor] Must be attached to a rock face=
 
 ### nametag.lua
@@ -500,11 +499,8 @@ Set nickname=
 Set: classmates see "@1"=
 
 ### nodes.lua
-@1@nγ@=@2 kN/m³  UCS@=@3 MPa  σt@=@4 MPa@nOnce placed, shows the joints at its location=
-Rubble@nBroken rock=
-Granite rubble@nBroken granite=
+@1=
 Granite rubble=
-Loose soil@nLike rubble, it flows at its angle of repose and has weight; a full block left alone grows grass and turns back into topsoil=
 Loose soil=
 @1 rubble=
 @1 rubble, mixed with @2=
@@ -553,7 +549,7 @@ The operator is coming with you: hold him and right-click an empty excavator to 
 Your inventory is full=
 Nobody is resting (only resting operators can be dismissed)=
 Dismissed one operator; the slot is free again=
-Excavator operator@nHold and right-click an empty excavator: send him to work it@nRight-click the camp bench: let him rest=
+Excavator operator@nRight-click an excavator=
 You cannot drop an operator on the ground: take him back to the camp bench to rest=
 Operators resting: @1 (those who don't fit on the bench are in the office)=
 Operators resting: @1 (right-click)=
@@ -576,7 +572,7 @@ When a truck or haul truck stands still within @1 m of a loading boom, the boom 
 Ore plant @1 tower, @2/8 full=
 Ore plant @1 tower=
 Ore plant chute=
-Ore plant@nRight-click on flat ground to place: digs a @1×@2 m receiving hopper toward you, with a storage tower on each side of the machine@nSeparates feed into clean coal and rejects; trucks and haul trucks stopped within reach of a loading boom get loaded=
+Ore plant@nRight-click on flat ground to build=
 [Ore plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above=
 
 ### research.lua
@@ -636,11 +632,11 @@ Rubble wand=
 [@1] Cleared @2 rubble blocks (limit of @3 reached, click again for the rest)=
 [@1] Cleared @2 rubble blocks=
 @1, collected into inventory: @2=
-Rubble wand@nLeft-click: clear 3×3×3 rubble in front of you@nRight-click: clear all connected rubble@nHold Shift: put the cleared rubble into your inventory=
+Mucking wand@nLeft-click: clear 3×3×3; right-click: clear connected rubble=
 [Blast wand] The tnt mod is not loaded=
-Blast wand@nLeft-click: detonate TNT (rock breaks according to its strength)@nRight-click: one-click mucking (nearby and connected rubble)@nShift + right-click: put the cleared rubble into your inventory=
+Blast wand@nLeft-click: detonate TNT; right-click: muck out=
 Blast wand=
-Dig wand@nLeft-click: remove the 3×3×3 centered on the pointed block (rock, rubble, etc.)@nRight-click: one-click mucking (nearby and connected rubble)@nShift + right-click: put the cleared rubble into your inventory=
+Dig wand@nLeft-click: remove 3×3×3; right-click: muck out=
 Dig wand=
 
 ### stereonet.lua
@@ -654,7 +650,7 @@ Slope: not measured yet (sneak + left-click to measure the slope)=
 Red circle: friction circle φj @= @1°=
 Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up=
 Left-click a rock face: measure joints (one reading per set)@nSneak + left-click: measure the slope@n@nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible=
-Geological compass@nRight-click a rock face: stress and factor of safety; sneak + right-click: full data@nLeft-click a rock face: measure joint orientation (stereonet); sneak + left-click: measure the slope; right-click the air: open the stereonet=
+Geological compass@nRight- or left-click a rock face; sneak for more=
 Cannot measure a slope here=
 Slope @1°/@2° (dip/dip direction) recorded=
 Measure on a rock face=
@@ -714,11 +710,11 @@ Leave my team=
 [Tip] Hold the "Back to camp" flag and left-click to return to camp; your team's funds are at the top right of the screen=
 [Back to camp] Camp of team @1=
 [Back to camp] Spawn=
-Back to camp@nHold it and left-click or right-click to return to your team's camp=
+Back to camp@nClick to go back to your team's camp=
 Back to camp=
 
 ### testing.lua
-Schmidt hammer@nRight-click a rock face: one impact gives one rebound number R, recorded in your field notebook. Take about 10 readings at a spot; the median converts to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=
+Schmidt hammer@nRight-click a rock face=
 [Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=
 [Schmidt hammer] @1: R @= @2 (recorded in the field notebook, @3 readings; left-click the notebook to see them)=
 [Schmidt hammer] @1: R @= @2 (no field notebook in your inventory: not recorded)=
@@ -729,13 +725,13 @@ buckling=
 crushing=
 Timber post (length @1 m, diameter @2 cm)@nCapacity @3 kN (governed by @4: crushing @5 kN, buckling @6 kN)=
 Timber post (length @1 m, diameter @2 cm)@nCapacity @3 kN (governed by @4: crushing @5 kN, buckling @6 kN)@nNot reaching a rock roof: does not count as support=
-Timber post (diameter @1 cm)@nRight-click a floor: it extends upward until it reaches the roof, up to @2 m@nReaching a rock roof → support: capacity P @= min(crushing, buckling), spread over the 3×3 m² of roof around the post top@n2 m about @3 kN, 4 m about @4 kN, 6 m about @5 kN (longer posts buckle more easily)@nRight-click a wall: placed horizontally as a beam=
+Timber post@nRight-click the floor to stand it up, a wall to lay it as a beam=
 A @1 m timber post holds up the roof: capacity @2 kN (governed by @3)=
 Timber post (top)=
 Timber beam=
 Timber beam (old)=
-Timber plank (building material, not a support)@nThin board: placed on the ground it is a floor; placed against a ceiling it sits under the ceiling=
-Timber slab (building material, not a support)@nPlaced on a top face it is a lower half block; on a bottom face, an upper half block=
+Wooden plank=
+Wooden half slab=
 [Timber post] The timber post at @1 was crushed: it could not hold the roof above=
 Axial force @1 kN / capacity @2 kN (@3%)=
 Roof above: FS @1=
@@ -762,7 +758,7 @@ Joint sets (snapped to the grid):=
 @1 joint (k@=@2, r@=@3<P@=@4)=
 @1 rock bridge (k@=@2, r@=@3≥P@=@4)=
 intact=
-Geological compass@nRight-click a rock face: stress and factor of safety@nSneak + right-click: full data (lithology, initial stress, joints on all six faces)=
+Geological compass@nRight-click a rock face; sneak for more=
 This is not rock=
 [radius 1-16, default 8]=
 Show joint traces on nearby exposed rock faces with particles (color @= joint set)=
@@ -1016,7 +1012,7 @@ Dump area full (doze it flat, then reset it in the settings screen)=
 Heading to the excavator=
 Turning to line up with the excavator=
 Backing up to the excavator=
-Autonomous haulage kit@nHold it and right-click a dump truck or haul truck to install it (one module per vehicle); needed for autonomous driving=
+Autonomous haulage kit@nRight-click a truck to install=
 [AHS] The autonomous haulage kit can only be installed on dump trucks and haul trucks=
 [AHS] This vehicle already has an autonomous haulage kit=
 [AHS] Autonomous haulage kit installed on @1: get in and press E to set a route=
@@ -1086,7 +1082,7 @@ Deleted @1 (vehicles already using it keep running)=
 ### vehicle_bulktruck.lua
 ANFO (bags)=
 Emulsion explosive (sticks)=
-Right-click to get in; Space loads the tank with ANFO and emulsion, E fills the downward holes within reach of the boom with ANFO + a primer=
+Right-click to get in; Space loads, E charges the holes=
 Tank: ANFO @1 / @2 bags  Emulsion @3 / @4 sticks=
 Filling holes @1 / @2=
 Fill holes (within @1 m of the boom)=
@@ -1099,12 +1095,12 @@ No downward holes to fill within @1 m of the boom=
 
 ### vehicle_cart.lua
 Cart=
-Right-click to push; Space tips the bed forward (capacity @1 blocks)@nRight-click while holding rubble to load it=
+Right-click to push; Space tips the bed=
 Space: tip the bed forward=
 
 ### vehicle_corerig.lua
 Core rig=
-Right-click to get in; E drills a core hole downward below the mast (up to @1 m) and gives you core boxes and a borehole log=
+Right-click to get in; E drills=
 The hole collar must be clear=
 There is no rock under the mast=
 Already drilling=
@@ -1115,7 +1111,7 @@ Core drilling (up to @1 m)=
 
 ### vehicle_dozer.lua
 Dozer=
-Right-click to get in; E lowers/raises the blade; with the blade down, drive forward to push rubble away=
+Right-click to get in; E lowers/raises the blade=
 Off (blade follows the ground)=
 Rock above the design grade in front of the blade=
 Rock in front of the blade=
@@ -1130,7 +1126,7 @@ Blade down (push rubble)=
 Design grade=
 
 ### vehicle_drillrig.lua
-Right-click to get in; E drills a vertical hole below the mast, Space sets the hole depth (surface bench blasting, the hole is filled with ANFO)=
+Right-click to get in; E drills, Space sets the depth=
 There is no rock under the mast (rubble cannot be drilled)=
 Less than 2 m of rock below=
 Hole depth setting @1 m=
@@ -1146,7 +1142,7 @@ Done=
 Only @1 m of rock below: drilling to the bottom of the rock=
 
 ### vehicle_excavator.lua
-Hydraulic breaker kit (excavator attachment)@nHold it and right-click an excavator to install; with an empty bucket, Space switches bucket / breaker@nPoint the breaker at rock and press E to break it: the time is proportional to rock strength (UCS)=
+Hydraulic breaker@nRight-click an excavator to fit it=
 Hydraulic breaker kit=
 @1 operator=
 Working=
@@ -1165,7 +1161,7 @@ Excavator selected, but it has no operator (send one in with an Excavator operat
 Select an excavator first=
 That excavator has no operator=
 Copy, heading to (@1, @2, @3), @4 m=
-Radio@nClick an excavator to select it, then click the ground: send its operator there (left or right click)@nClick the one that is moving: stop it@nClick a truck or haul truck: open its autonomous haulage settings (start, stop, depart now)=
+Radio@nClick an excavator, then the ground=
 Operator: @1 (cut-off grade @2%)=
 [Operator] Stepped down and waiting beside the excavator; right-click him to send him back to work or to rest at base=
 @1 ahead: @2=
@@ -1199,15 +1195,14 @@ Bucket can't reach (no block within @1 m)=
 Can't reach the truck bed (@1 m, arm about @2 m)=
 Out of arm reach; dumping at the farthest point (about @1 m)=
 Dump where? (no block or truck within @1 m)=
-Right-click to get in; E digs where the cursor points (4 m³ bucket), Space dumps where the cursor points (point at a truck to load it)=
-Right-click to get in; E digs where the cursor points (12 m³ bucket, arm about 15 m), Space dumps where the cursor points (point at a haul truck to load its bed)=
+Right-click to get in; E digs, Space dumps=
 
 ### vehicle_haul.lua
 Hauler=
-Right-click to get in; Space tips the bed out at the rear (capacity @1 m³)=
+Right-click to get in; Space tips the bed=
 
 ### vehicle_jumbo.lua
-Right-click to get in; E drills the face ahead following the blast hole pattern, Space edits the pattern=
+Right-click to get in; E drills, Space edits the pattern=
 Blast hole pattern @1 × @2=
 Drilling @1 / @2=
 Drill to pattern=
@@ -1224,7 +1219,7 @@ Center relief-hole cut=
 Cross relief-hole cut=
 Clear=
 No rock face to drill within @1 m ahead (point the front at the rock wall)=
-Right-click to get in; E charges the holes in the face ahead (relief holes are skipped), Space sets the sticks per hole=
+Right-click to get in; E charges, Space sets sticks per hole=
 @1 emulsion sticks per hole=
 (not used up in creative mode)=
 @1 sticks in inventory=
@@ -1238,7 +1233,7 @@ No holes to charge within @1 m ahead=
 
 ### vehicle_lowboy.lua
 Trailer=
-Right-click to get in; E pulls a vehicle next to the deck onto it (own weight ≤ @1 t: excavators, dozers, drill rigs, trucks…, wrecked ones too); press E again to unload it at the rear=
+Right-click to get in; E loads / unloads a vehicle=
 No vehicle to load within @1 m of the deck=
 @1 weighs @2 t, more than the @3 t it can carry=
 Unloaded @1=
@@ -1251,7 +1246,7 @@ Load vehicle (next to the deck)=
 
 ### vehicle_miner.lua
 Miner=
-Right-click to get in; E turns the drum on/off (drive forward with it on to cut rock directly, no blasting needed); Space sets the cut depth: 1 m down / level@nOn-board bin 60 m³, unloads automatically into a nearby truck, conveyor or crusher; autonomous trucks can bind to it=
+Right-click to get in; E turns the drum on/off, Space sets the cut=
 Unloading into @1=
 Truck=
 Unloading onto the conveyor=
@@ -1266,7 +1261,7 @@ Something ahead can't be cut (facility, conveyor)=
 
 ### vehicle_suv.lua
 4WD SUV=
-Right-click to get in (for getting around; four-wheel drive, climbs slopes up to 30°)=
+Right-click to get in=
 Personnel carrier=
 
 ### vehicle_truck.lua
@@ -1319,17 +1314,13 @@ Rain for @1 minutes at @2 mm/h: loose soil angle of repose @3° → @4°, topsoi
 Weather station@nNot raining (last rain: @1 mm in total)=
 Weather station@nNot raining=
 Weather station@nRainfall @1 mm/h@n@2 mm so far=
-Weather station (Stevenson screen)@nPoint at it to see the current rainfall rate and the total of this rain=
 
 ### woodwork.lua
 [Woodwork] @1=
-Log@nCarry it to a saw bench to saw it into posts or planks=
 Timber log=
-Sapling@nPlant it on a full block of soil; it grows into a tree after a while=
+Sapling@nPlant it on full soil=
 Sapling=
 Saplings must be planted on a full block of soil (on top of the soil)=
-Axe@nChop any block of a trunk and the whole tree falls into logs=
-Wooden wall panel (building material, not a support)@nA thin upright board for building walls=
 Wooden wall panel=
 The tree fell: @1 logs lie on the ground (left-click to carry them, one at a time)=
 The tree fell: @1 logs=
@@ -1354,7 +1345,6 @@ You are not carrying a log=
 Come closer=
 Workbench@nRight-click: make wall panels, stairs, doors, fences, ladders… from planks=
 Saw bench@nRight-click: saw a log into posts, planks or slabs=
-Topsoil@nSoil with grass and roots: the roots give it cohesion, so it stands even on steep slopes. If dug, undermined, or if an excavated face next to it is too high (above its critical standing height), it turns into loose soil and flows at its angle of repose=
 Topsoil=
 Topsoil (@1/8 m)=
 

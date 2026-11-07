@@ -58,13 +58,13 @@ end
 
 -- 儀器（工具室管理員賣；地質羅盤在 tools.lua）
 core.register_craftitem("rockmech:xrf", {
-	description = S("Handheld XRF analyzer\nKeep it in your inventory: shows the grade of rock, rubble and material in truck beds"),
+	description = S("Handheld XRF analyzer\nWorks from your inventory"),
 	short_description = S("Handheld XRF analyzer"),
 	inventory_image = "[fill:16x16:#00000000^[fill:8x12:4,3:#e8e8e0^[fill:6x4:5,4:#3a6a9a^[fill:4x3:6,11:#3a3a3a^[fill:2x2:7,0:#c03020",
 	stack_max = 1,
 })
 core.register_craftitem("rockmech:gsi_card", {
-	description = S("GSI chart (Hoek & Marinos)\nKeep it in your inventory: shows lithology, GSI and overburden thickness"),
+	description = S("GSI chart\nWorks from your inventory"),
 	short_description = S("GSI chart"),
 	inventory_image = "[fill:16x16:#00000000^[fill:14x12:1,2:#f4f0e0^[fill:12x2:2,4:#c08040^[fill:12x2:2,7:#80a060^[fill:12x2:2,10:#6080c0",
 	stack_max = 1,

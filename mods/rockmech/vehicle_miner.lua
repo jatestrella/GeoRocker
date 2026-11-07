@@ -37,7 +37,7 @@ local def = {desc = S("Surface miner"), short = S("Miner"), color = "#e8e4d8", c
 	-- 作業攝影機（駕駛艙上方中央的小畫面，像露天鑽機）：從車頂往前下方看切削區，紅十字 = 滾筒切到的位置
 	cam = {o = {x = 0, y = 3.2, z = 0.6}, target = {x = 0, y = -2.5, z = 3.5}, mark = {x = 0, y = -2.5, z = 3.5},
 		hfov = math.rad(80), vfov = math.rad(48), w = 56, h = 31},
-	item_desc = S("Right-click to get in; E turns the drum on/off (drive forward with it on to cut rock directly, no blasting needed); Space sets the cut depth: 1 m down / level\nOn-board bin 60 m³, unloads automatically into a nearby truck, conveyor or crusher; autonomous trucks can bind to it")}
+	item_desc = S("Right-click to get in; E turns the drum on/off, Space sets the cut")}
 
 do   -- 圖示：白色長車身、四組履帶、中間的滾筒、上面的駕駛室、車尾斜上的卸料臂
 	local c, r = def.color, {}

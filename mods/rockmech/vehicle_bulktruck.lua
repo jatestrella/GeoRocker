@@ -28,7 +28,7 @@ local def = {desc = S("ANFO bulk truck"), color = "#3a8a50", cap = 0, speed = 5.
 	cam = {o = {x = 0, y = 1.6, z = -5.8}, target = {x = 0, y = -1.5, z = -10}, holes = BOOM_LEN + 2, flip = false,
 		hfov = math.rad(80), vfov = math.rad(48), w = 56, h = 31},
 	store = {{ANFO, 40, S("ANFO (bags)")}, {EMULSION, 40, S("Emulsion explosive (sticks)")}},
-	item_desc = S("Right-click to get in; Space loads the tank with ANFO and emulsion, E fills the downward holes within reach of the boom with ANFO + a primer")}
+	item_desc = S("Right-click to get in; Space loads, E charges the holes")}
 do   -- 圖示：白色儲槽（綠、粉紅條紋）、槽頂的黃色吊臂、駕駛室、三軸
 	local c, r = def.color, {}
 	r[#r + 1] = {2, 12, 20, 10, "#e8e8e0"}; r[#r + 1] = {2, 12, 1, 10, "#c8c8c0"}

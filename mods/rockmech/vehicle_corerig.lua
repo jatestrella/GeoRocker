@@ -20,7 +20,7 @@ local def = {desc = S("Core drill rig"), short = S("Core rig"), color = "#e8e8e0
 	cam = {o = {x = 2.6, y = 1.8, z = 5.2}, target = MAST_FOOT, mark = MAST_FOOT,
 		hfov = math.rad(75), vfov = math.rad(46), w = 56, h = 31},
 	exhaust = {x = 0.9, y = 1.4, z = -2.2},
-	item_desc = S("Right-click to get in; E drills a core hole downward below the mast (up to @1 m) and gives you core boxes and a borehole log", ("%d"):format(MAX_DEPTH))}
+	item_desc = S("Right-click to get in; E drills")}
 V.MASS.corerig = 22
 do   -- 圖示：履帶、白色車身、藍色高桅桿
 	local c, r = def.color, {}

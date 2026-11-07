@@ -59,7 +59,7 @@ end
 -- 破碎錘對著岩石按 E：敲 UCS × rockmech_breaker_s_per_mpa 秒（比能：破碎同體積的岩石，所需能量跟強度成正比），
 -- 那格變成原地的碎石（同鎬子，品位留著）
 core.register_craftitem("rockmech:breaker_kit", {
-	description = S("Hydraulic breaker kit (excavator attachment)\nHold it and right-click an excavator to install; with an empty bucket, Space switches bucket / breaker\nPoint the breaker at rock and press E to break it: the time is proportional to rock strength (UCS)"),
+	description = S("Hydraulic breaker\nRight-click an excavator to fit it"),
 	short_description = S("Hydraulic breaker kit"),
 	inventory_image = "[fill:16x16:#00000000^[fill:6x9:5,1:#2a2a2a^[fill:6x2:5,4:#c8a020^[fill:2x5:7,10:#8a8e92",
 	stack_max = 1,
@@ -154,7 +154,7 @@ function rockmech.radio_click(user, pointed)
 	end
 end
 core.register_craftitem(RADIO, {
-	description = S("Radio\nClick an excavator to select it, then click the ground: send its operator there (left or right click)\nClick the one that is moving: stop it\nClick a truck or haul truck: open its autonomous haulage settings (start, stop, depart now)"),
+	description = S("Radio\nClick an excavator, then the ground"),
 	short_description = S("Radio"),
 	inventory_image = "[fill:16x16:#00000000^[fill:6x11:5,4:#303030^[fill:4x3:6,6:#70c070^[fill:1x4:9,0:#303030^[fill:4x3:6,11:#555555",
 	stack_max = 1,
@@ -838,7 +838,7 @@ do
 	local def = {desc = S("Excavator"), color = "#e0a020", cap = 4 * NLEV, speed = 1.4,
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4},
 		tilt = {front = 1.3, rear = -1.3, side_z = 0, side_x = 1.25}, max_grade = math.rad(35),   -- 履帶挖土機約 70%
-		item_desc = S("Right-click to get in; E digs where the cursor points (4 m³ bucket), Space dumps where the cursor points (point at a truck to load it)")}
+		item_desc = S("Right-click to get in; E digs, Space dumps")}
 	def.inv_image = excavator_icon(def.color, false)
 	excavator("excavator", {
 		def = def,
@@ -868,7 +868,7 @@ do
 		half = 3.5, lat = {-3, -2, -1, 0, 1, 2, 3}, eye_up = 2.85, eye_fwd = 2.4, eye_side = -1.6,
 		mirror = {x = 2.8, y = 2.4, z = 1.6},
 		tilt = {front = 3.0, rear = -3.0, side_z = 0, side_x = 2.6}, max_grade = math.rad(35),
-		item_desc = S("Right-click to get in; E digs where the cursor points (12 m³ bucket, arm about 15 m), Space dumps where the cursor points (point at a haul truck to load its bed)")}
+		item_desc = S("Right-click to get in; E digs, Space dumps")}
 	def.inv_image = excavator_icon(def.color, true)
 	local c = def.color
 	local y = ("[fill:16x16:%s"):format(c)

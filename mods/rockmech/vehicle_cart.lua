@@ -14,7 +14,7 @@ local cart = {desc = S("Hand cart"), short = S("Cart"), color = c, cap = rockmec
 	half = 0.9, top = 0.6, lat = {-1, 0, 1}, eye_up = V.EYE_HEIGHT - 0.9, eye_fwd = -0.9, rear = 2.4,
 	tilt = {front = 0.4, rear = -2.0, side_z = -0.8, side_x = 0.6},
 	max_grade = math.rad(17),
-	item_desc = S("Right-click to push; Space tips the bed forward (capacity @1 blocks)\nRight-click while holding rubble to load it", ("%d"):format(rockmech.cfg.cart_blocks))}
+	item_desc = S("Right-click to push; Space tips the bed")}
 do
 	local r = {}
 	r[#r + 1] = {4, 12, 22, 8, c}; r[#r + 1] = {2, 10, 26, 2, "#5a4a30"}

@@ -23,7 +23,7 @@ local def = {desc = S("Lowboy trailer"), short = S("Trailer"), color = c, cap = 
 	mirror = {x = 1.35, y = 1.2, z = 0.6}, rearcam = {x = 0, y = 1.0, z = -9.7},
 	tilt = {front = 0.9, rear = -8.5, side_z = -4.0, side_x = 1.1},
 	tail_lat = {-1.3, 0, 1.3}, tail_dy = {0.6},
-	item_desc = S("Right-click to get in; E pulls a vehicle next to the deck onto it (own weight ≤ @1 t: excavators, dozers, drill rigs, trucks…, wrecked ones too); press E again to unload it at the rear", ("%d"):format(MAX_T))}
+	item_desc = S("Right-click to get in; E loads / unloads a vehicle")}
 V.MASS.lowboy = 25
 do   -- 圖示：橘色牽引車、長長的低平板、上面一台小怪手的輪廓
 	local r = {}

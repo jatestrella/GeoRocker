@@ -25,7 +25,7 @@ local def = {desc = S("Surface drill rig"), color = "#d8b020", cap = 0, speed = 
 	-- 看得到孔位（畫面中央）和周圍的台階邊、已經鑽好的孔（色點）；鏡頭被岩石擋住就自動拉近
 	cam = {o = {x = 2.6, y = 1.8, z = 5.2}, target = MAST_FOOT, holes = 8,
 		hfov = math.rad(75), vfov = math.rad(46), w = 56, h = 31},
-	item_desc = S("Right-click to get in; E drills a vertical hole below the mast, Space sets the hole depth (surface bench blasting, the hole is filled with ANFO)")}
+	item_desc = S("Right-click to get in; E drills, Space sets the depth")}
 do   -- 圖示：履帶、車身、駕駛室、車頭前的高桅桿與迴轉頭
 	local c, r = def.color, {}
 	V.icon_track(r, 2, 24, 20, 7)

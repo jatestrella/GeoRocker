@@ -266,8 +266,7 @@ core.register_node(CHUTE, {
 
 local editing = {}
 core.register_node(ITEM, {
-	description = S("Loadout bin\n@1 m³ bin; the grate on top takes conveyor feed (or trucks and excavators dumping onto it); the loading boom loads trucks and haul trucks parked within @2 m\nSet an autonomous truck's loading point near the boom and it will wait there to be loaded\nRight-click on flat ground to build: 3×3 m, @3 m tall, boom facing you",
-		tostring(CAP), ("%g"):format(cfg.plant_reach), tostring(BIN_H + 1)),
+	description = S("Loadout bin\nRight-click on flat ground to build"),
 	short_description = S("Loadout bin"),
 	tiles = {STEEL, STEEL, STEEL .. "^[fill:6x6:5,5:#303030^[fill:4x2:6,6:#40c040"},
 	inventory_image = "[fill:16x16:#00000000^[fill:10x8:3,2:#8a8e92^[fill:10x1:3,5:#c8a020^[fill:2x6:3,10:#5a5e62^[fill:2x6:11,10:#5a5e62^[fill:3x3:12,7:#404040",

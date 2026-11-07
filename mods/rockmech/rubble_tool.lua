@@ -225,7 +225,7 @@ local function use(player, pointed_thing, flood, tag)
 end
 
 core.register_tool("rockmech:rubble_wand", {
-	description = S("Rubble wand\nLeft-click: clear 3×3×3 rubble in front of you\nRight-click: clear all connected rubble\nHold Shift: put the cleared rubble into your inventory"),
+	description = S("Mucking wand\nLeft-click: clear 3×3×3; right-click: clear connected rubble"),
 	short_description = S("Rubble wand"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#ffffff" ..
 		"^[fill:4x4:11,1:#b070ff^[fill:2x2:12,2:#ffffff" ..
@@ -258,7 +258,7 @@ local function blast_at(player, pointed_thing)
 end
 
 core.register_tool("rockmech:blast_wand", {
-	description = S("Blast wand\nLeft-click: detonate TNT (rock breaks according to its strength)\nRight-click: one-click mucking (nearby and connected rubble)\nShift + right-click: put the cleared rubble into your inventory"),
+	description = S("Blast wand\nLeft-click: detonate TNT; right-click: muck out"),
 	short_description = S("Blast wand"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#fff3a0" ..
 		"^[fill:4x4:11,1:#ff5020^[fill:2x2:12,2:#ffe060" ..
@@ -278,7 +278,7 @@ core.register_tool("rockmech:blast_wand", {
 -- 挖洞魔杖：左鍵直接移除以指到的格為中心的 3×3×3（任何可挖的方塊，算玩家開挖：記錄開挖、觸發破壞與穩定判定），
 -- 右鍵一鍵清碴（同爆破魔杖）
 core.register_tool("rockmech:dig_wand", {
-	description = S("Dig wand\nLeft-click: remove the 3×3×3 centered on the pointed block (rock, rubble, etc.)\nRight-click: one-click mucking (nearby and connected rubble)\nShift + right-click: put the cleared rubble into your inventory"),
+	description = S("Dig wand\nLeft-click: remove 3×3×3; right-click: muck out"),
 	short_description = S("Dig wand"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x2:13,1:#e0fff0" ..
 		"^[fill:4x4:11,1:#20c070^[fill:2x2:12,2:#e0fff0" ..

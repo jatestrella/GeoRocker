@@ -123,7 +123,7 @@ do
 	local FRONT = 2.4          -- 收起的推進樑伸出車頭 (m)
 
 	local def = {desc = S("Drill jumbo"), color = "#d86a18", cap = 0,
-		item_desc = S("Right-click to get in; E drills the face ahead following the blast hole pattern, Space edits the pattern")}
+		item_desc = S("Right-click to get in; E drills, Space edits the pattern")}
 	do   -- 圖示：輪式車身、護頂、往前伸的兩支鑽臂
 		local c, r = def.color, {}
 		r[#r + 1] = {2, 16, 19, 8, c}; r[#r + 1] = {2, 8, 9, 2, c}
@@ -352,7 +352,7 @@ do
 	local FRONT = 1.4          -- 收起的工作籃伸出車頭 (m)
 
 	local def = {desc = S("Charging unit"), color = "#2a7ac0", cap = 0,
-		item_desc = S("Right-click to get in; E charges the holes in the face ahead (relief holes are skipped), Space sets the sticks per hole")}
+		item_desc = S("Right-click to get in; E charges, Space sets sticks per hole")}
 	do   -- 圖示：輪式車身、後面的炸藥罐、吊臂與工作籃
 		local c, r = def.color, {}
 		r[#r + 1] = {2, 17, 19, 7, c}; r[#r + 1] = {2, 10, 8, 7, "#e8e8e0"}; r[#r + 1] = {2, 13, 8, 1, c}

@@ -428,7 +428,7 @@ local function describe(stack, r)
 end
 
 core.register_craftitem(ITEM, {
-	description = S("Conveyor belt\nRight-click to place: click a belt to extend from that block, click the ground to start from the ground\nLeft-click a belt to pick up that block; left-click elsewhere to change the slope"),
+	description = S("Conveyor belt\nRight-click to lay; left-click a belt to take it back"),
 	short_description = S("Conveyor belt"),
 	inventory_image = "rockmech_icon_belt.png",      -- devtools/make_icons.py
 	stack_max = 99,

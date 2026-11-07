@@ -213,7 +213,7 @@ local function show(name, d)
 end
 
 core.override_item(COMPASS, {
-	description = S("Geological compass\nRight-click a rock face: stress and factor of safety; sneak + right-click: full data\nLeft-click a rock face: measure joint orientation (stereonet); sneak + left-click: measure the slope; right-click the air: open the stereonet"),
+	description = S("Geological compass\nRight- or left-click a rock face; sneak for more"),
 	short_description = S("Geological compass"),
 	on_use = function(itemstack, user, pointed)
 		if not (user and user:is_player()) or pointed.type ~= "node" then return itemstack end

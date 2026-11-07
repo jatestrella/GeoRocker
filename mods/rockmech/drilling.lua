@@ -563,8 +563,7 @@ function rockmech.fire_round(pos, player)
 end
 
 core.register_tool(DRILL, {
-	description = S("Rock drill\nHold left-click on a rock face to drill a hole (@1 s, @2 m); keep holding on a hole to deepen it 1 m every @3 s (max @4 m)",
-		("%g"):format(bcfg.drill_time), ("%d"):format(bcfg.hole_depth), ("%g"):format(bcfg.drill_time), ("%d"):format(bcfg.hand_max_depth)),
+	description = S("Rock drill\nHold left-click on a rock face"),
 	short_description = S("Rock drill"),
 	inventory_image = "[fill:16x16:#00000000^[fill:9x5:2,5:#d0a020^[fill:5x1:11,7:#b0b0b0^[fill:3x5:3,10:#404040^[fill:2x1:15,7:#e0e0e0",
 	-- 有 on_use 的物品按左鍵只會「使用」、不會挖方塊（只有 groupcaps 空的話會改用手挖，創造模式的手什麼都挖得動）。
@@ -577,8 +576,7 @@ core.register_tool(DRILL, {
 	end,
 })
 core.register_craftitem(EMULSION, {
-	description = S("Emulsion explosive\nRight-click a drill hole to load it (max @1 per hole); without a hole it can only be stuck on the surface, with little power",
-		tostring(bcfg.max_cartridges)),
+	description = S("Emulsion explosive\nRight-click a drill hole"),
 	short_description = S("Emulsion explosive"),
 	inventory_image = "[fill:16x16:#00000000^[fill:4x12:6,2:" .. CART .. "^[fill:4x1:6,2:#c09040^[fill:4x1:6,13:#c09040^[fill:1x3:8,0:" .. WIRE,
 	on_place = function(itemstack, placer, pointed)
@@ -591,7 +589,7 @@ core.register_craftitem(EMULSION, {
 	end,
 })
 core.register_craftitem(ANFO, {
-	description = S("ANFO (ammonium nitrate/fuel oil, one bag)\nRight-click a downward drill hole to pour it in as a column charge; needs one emulsion cartridge as a primer"),
+	description = S("ANFO\nRight-click a downward hole"),
 	short_description = S("ANFO"),
 	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#e8e4d8^[fill:10x2:3,3:#c8c0a8^[fill:6x3:5,8:#d03020",
 	on_place = function(itemstack, placer, pointed)
@@ -604,8 +602,7 @@ core.register_craftitem(ANFO, {
 	end,
 })
 core.register_craftitem("rockmech:detonator", {
-	description = S("Blasting machine\nRight-click: charges within @1 m count down @2 seconds, then fire in sequence",
-		tostring(bcfg.detonator_range), tostring(bcfg.detonator_delay)),
+	description = S("Blasting machine\nRight-click to fire"),
 	short_description = S("Blasting machine"),
 	inventory_image = "[fill:16x16:#00000000^[fill:10x7:3,8:#b03020^[fill:2x6:7,2:#606060^[fill:6x1:5,2:#404040^[fill:4x2:6,10:#202020",
 	stack_max = 1,

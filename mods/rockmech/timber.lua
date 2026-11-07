@@ -146,8 +146,7 @@ local function post_dig(pos, node, digger)
 end
 
 core.register_node(POST, {
-	description = S("Timber post (diameter @1 cm)\nRight-click a floor: it extends upward until it reaches the roof, up to @2 m\nReaching a rock roof → support: capacity P = min(crushing, buckling), spread over the 3×3 m² of roof around the post top\n2 m about @3 kN, 4 m about @4 kN, 6 m about @5 kN (longer posts buckle more easily)\nRight-click a wall: placed horizontally as a beam",
-		d(math.floor(scfg.post_d * 100 + 0.5)), d(scfg.post_max_len), d(capacity(2)), d(capacity(4)), d(capacity(6))),
+	description = S("Timber post\nRight-click the floor to stand it up, a wall to lay it as a beam"),
 	short_description = S("Timber post"),
 	drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
 	node_box = POST_BOX.node_box, connects_to = POST_BOX.connects_to,
@@ -258,7 +257,7 @@ core.register_lbm({
 -- 木板：1/8 格厚的薄板（不是整格方塊，免得看起來像礦柱；岩石力學裡本來就算空格、撐不住岩石）。
 -- 對頂面放是地板，對底面放貼在天花板下；牆壁用木牆板（woodwork.lua）
 core.register_node(PLANK, {
-	description = S("Timber plank (building material, not a support)\nThin board: placed on the ground it is a floor; placed against a ceiling it sits under the ceiling"),
+	description = S("Wooden plank"),
 	short_description = S("Timber plank"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.375, 0.5}},
@@ -276,7 +275,7 @@ core.register_node(PLANK, {
 })
 
 core.register_node(SLAB, {
-	description = S("Timber slab (building material, not a support)\nPlaced on a top face it is a lower half block; on a bottom face, an upper half block"),
+	description = S("Wooden half slab"),
 	short_description = S("Timber slab"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 	node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0, 0.5}},

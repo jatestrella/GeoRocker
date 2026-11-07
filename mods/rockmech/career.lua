@@ -387,7 +387,7 @@ end
 
 local function times(t) return {[1] = t * 2, [2] = t * 1.5, [3] = t} end
 core.register_tool(PICK, {
-	description = S("Pickaxe\nDigs rock slowly; rock turns into rubble\nDigging rubble picks it up, one block at a time\nRight-click to put down the rubble you are holding"),
+	description = S("Pickaxe\nRight-click: put down what you carry"),
 	short_description = S("Pickaxe"),
 	inventory_image = "default_tool_steelpick.png",
 	tool_capabilities = {
@@ -403,7 +403,7 @@ core.register_tool(PICK, {
 })
 
 core.register_tool(SHOVEL, {
-	description = S("Shovel\nQuickly shovels up rubble, one block at a time\nCannot dig rock\nRight-click to put down the rubble you are holding"),
+	description = S("Shovel\nRight-click: put down what you carry"),
 	short_description = S("Shovel"),
 	inventory_image = "default_tool_steelshovel.png",
 	tool_capabilities = {

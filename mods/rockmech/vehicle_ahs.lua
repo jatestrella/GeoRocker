@@ -84,7 +84,7 @@ module_price = function()
 	return 8000
 end
 core.register_craftitem(MODULE, {
-	description = S("Autonomous haulage kit\nHold it and right-click a dump truck or haul truck to install it (one module per vehicle); needed for autonomous driving"),
+	description = S("Autonomous haulage kit\nRight-click a truck to install"),
 	short_description = S("Autonomous haulage kit"),
 	inventory_image = "[fill:16x16:#00000000^[fill:14x10:1,3:#2a3a4a^[fill:12x8:2,4:#3a5a7a^[fill:4x4:3,6:#60e0ff"
 		.. "^[fill:2x2:9,6:#f0c040^[fill:2x2:12,6:#f0c040^[fill:2x2:9,9:#80ff80^[fill:1x3:7,0:#c0c0c0",

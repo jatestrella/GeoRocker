@@ -540,7 +540,7 @@ end)
 -- 但是實心、會承力，後面的岩石就沒有臨空面。爆破只炸岩石和碎石，護坡炸不壞；工具挖不動
 local LINING = "rockmech:hopper_lining"
 core.register_node(LINING, {
-	description = S("Hopper lining\nReinforced concrete holding back the hopper wall rock (so it is not cut loose by joints and does not fall)"),
+	description = S("Hopper concrete lining"),
 	short_description = S("Hopper lining"),
 	tiles = {"[fill:16x16:#9a9890^[fill:16x1:0,7:#86847c^[fill:1x16:7,0:#86847c^[fill:2x2:3,3:#a8a69e^[fill:2x2:11,12:#8e8c84"},
 	is_ground_content = false,
@@ -715,8 +715,7 @@ core.register_node(GRATE, {
 })
 
 local crusher_def = {
-	description = S("Crusher\nRight-click on flat ground to place; digs a @1×@2 m receiving hopper toward you\nRubble dumped into the hopper is weighed and paid for; waste rock costs a processing fee",
-		tostring(SIZE), tostring(SIZE)),
+	description = S("Crusher\nRight-click on flat ground to build"),
 	short_description = S("Crusher"),
 	drawtype = "nodebox",
 	paramtype = "light",
@@ -764,8 +763,7 @@ core.register_node(CRUSHER, crusher_def)
 -- 大型破碎站：一樣的機身大小和受料倉，處理能力大好幾倍（深灰機身、黃黑警示條）
 local big = table.copy(crusher_def)
 local BIG_BODY = "[fill:16x16:#4a5058^[fill:16x2:0,0:#f0c020^[fill:16x2:0,14:#f0c020^[fill:2x2:2,0:#202020^[fill:2x2:8,0:#202020^[fill:2x2:14,0:#202020"
-big.description = S("Large crusher\nCapacity @1 t/s (regular crusher @2 t/s)\nRight-click on flat ground to place; digs a @3×@4 m receiving hopper toward you",
-	("%g"):format(cfg.crusher_big_rate), ("%g"):format(cfg.crusher_rate), tostring(SIZE), tostring(SIZE))
+big.description = S("Large crusher\nRight-click on flat ground to build")
 big.short_description = S("Large crusher")
 big.tiles, big.inventory_image = {BIG_BODY}, "rockmech_icon_crusher_big.png"
 big.node_box = {type = "fixed", fixed = {{-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}, {-0.6, 2.4, -0.6, 0.6, 2.9, 0.6}}}

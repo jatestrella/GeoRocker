@@ -24,7 +24,7 @@ local function r_of_ucs(ucs) return math.log(math.max(2.3, ucs) / 2.208) / 0.067
 local function ucs_of_r(R) return 2.208 * math.exp(0.067 * R) end
 
 core.register_tool(HAMMER, {
-	description = S("Schmidt hammer\nRight-click a rock face: one impact gives one rebound number R, recorded in your field notebook. Take about 10 readings at a spot; the median converts to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))"),
+	description = S("Schmidt hammer\nRight-click a rock face"),
 	short_description = S("Schmidt hammer"),
 	inventory_image = "[fill:16x16:#00000000^[fill:4x12:6,2:#c8c8c0^[fill:4x3:6,1:#303030^[fill:6x3:5,12:#2050a0",
 	-- 右鍵敲一下：一個回彈值 R（散布約 ±3），記進背包裡的野帳本（coredrill.lua）；要自己取中位數、換算 UCS

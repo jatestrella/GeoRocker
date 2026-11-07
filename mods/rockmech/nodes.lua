@@ -119,8 +119,8 @@ for _, key in ipairs(cfg.lithology_order) do
 		local groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1, rockmech_ore = lith.ore and 1 or nil, rockmech_ore = lith.ore and 1 or nil}
 		if mask ~= 0 then groups.not_in_creative_inventory = 1 end
 		core.register_node(name, {
-			description = S("@1\nγ=@2 kN/m³  UCS=@3 MPa  σt=@4 MPa\nOnce placed, shows the joints at its location",
-				S(lith.description), ("%.1f"):format(lith.gamma), ("%g"):format(lith.ucs), ("%g"):format(lith.tensile)),
+			description = S("@1",
+				S(lith.description)),
 			short_description = S(lith.description),
 			tiles = mask == 0 and {base_tile} or joint_tiles(base_tile, mask),
 			is_ground_content = true,
@@ -270,7 +270,7 @@ local gravel_sounds = has_default and default.node_sound_gravel_defaults and def
 
 rockmech.RUBBLE = rockmech.modname .. ":rubble"
 core.register_node(rockmech.RUBBLE, {
-	description = S("Rubble\nBroken rock"),
+	description = S("Rubble"),
 	short_description = S("Rubble"),
 	tiles = {has_default and "default_gravel.png^[colorize:#5a5048:90" or "[fill:16x16:#6a6058"},
 	groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
@@ -279,7 +279,7 @@ core.register_node(rockmech.RUBBLE, {
 
 rockmech.RUBBLE_GRANITE = rockmech.modname .. ":rubble_granite"
 core.register_node(rockmech.RUBBLE_GRANITE, {
-	description = S("Granite rubble\nBroken granite"),
+	description = S("Granite rubble"),
 	short_description = S("Granite rubble"),
 	-- 與花崗岩本身相同的粉紅色調（cfg 的岩性顏色），以礫石紋理呈現
 	tiles = {has_default and ("default_gravel.png^[colorize:" .. cfg.lithologies.granite.color .. ":150")
@@ -292,7 +292,7 @@ core.register_node(rockmech.RUBBLE_GRANITE, {
 -- 營地的林地鋪這個（woodwork.lua）。以後深開挖時，上覆的土壤一樣是荷重
 rockmech.RUBBLE_SOIL = rockmech.modname .. ":rubble_soil"
 core.register_node(rockmech.RUBBLE_SOIL, {
-	description = S("Loose soil\nLike rubble, it flows at its angle of repose and has weight; a full block left alone grows grass and turns back into topsoil"),
+	description = S("Loose soil"),
 	short_description = S("Loose soil"),
 	tiles = {has_default and "default_dirt.png" or "[fill:16x16:#6a5030"},     -- 遊戲內建的泥土：沒有草（表土才有草）
 	groups = {crumbly = 3, rockmech_rubble = 1, soil = 1},

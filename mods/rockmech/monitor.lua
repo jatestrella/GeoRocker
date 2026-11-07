@@ -120,7 +120,7 @@ end
 
 local viewing = {}
 core.register_node(PRISM, {
-	description = S("Survey prism\nAttach to a rock face to record the rock displacement there (updated on nearby excavation and stress solves); right-click for the curve"),
+	description = S("Survey prism\nPlace it on a rock face; right-click to read"),
 	short_description = S("Survey prism"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "wallmounted", sunlight_propagates = true,
 	node_box = {type = "wallmounted",

@@ -801,8 +801,7 @@ end)
 core.register_on_leaveplayer(function(player) logging[player:get_player_name()] = nil; book_view[player:get_player_name()] = nil end)
 
 core.register_craftitem(BOOK, {
-	description = S("Field notebook\nRight-click a core box to log it (@1 s per metre, stay nearby) into a borehole log\nLeft-click to see logged holes (up to @2 holes)\nWhat you record depends on your skills at logging time: fields you cannot interpret are recorded as ?",
-		("%g"):format(LOG_SEC_PER_M), tostring(BOOK_MAX)),
+	description = S("Field notebook\nRight-click a core box to log it; left-click to read"),
 	short_description = S("Field notebook"),
 	inventory_image = "[fill:16x16:#00000000^[fill:11x14:3,1:#d8c048^[fill:2x14:3,1:#8a7020^[fill:7x1:6,4:#5a4a10^[fill:7x1:6,7:#5a4a10^[fill:5x1:6,10:#5a4a10",
 	stack_max = 1,
@@ -948,8 +947,7 @@ end)
 core.register_on_leaveplayer(function(player) drilling[player:get_player_name()] = nil end)
 
 core.register_tool(ITEM, {
-	description = S("Hand-held core drill\nRight-click the ground: drill a vertical hole and take core (@1 s per metre, max @2 m; deeper holes need the core drill rig); don't walk away while drilling\nThe core goes into a blue core box next to the collar; log it with a field notebook into a borehole log (lithology, grade, joints, RQD)",
-		tostring(SEC_PER_M), tostring(HAND_DEPTH)),
+	description = S("Hand-held core drill\nRight-click the ground to drill down"),
 	short_description = S("Hand-held core drill"),
 	inventory_image = "[fill:16x16:#00000000^[fill:4x10:6,1:#d0a020^[fill:2x5:7,11:#808488^[fill:8x3:4,3:#303030^[fill:2x1:7,15:#c0c0c0",
 	stack_max = 1,

@@ -120,7 +120,7 @@ local compass_img = "[fill:16x16:#00000000" ..
 	"^[fill:2x5:7,3:#d02020^[fill:2x4:7,8:#303030"
 
 core.register_tool("rockmech:compass", {
-	description = S("Geological compass\nRight-click a rock face: stress and factor of safety\nSneak + right-click: full data (lithology, initial stress, joints on all six faces)"),
+	description = S("Geological compass\nRight-click a rock face; sneak for more"),
 	short_description = S("Geological compass"),
 	inventory_image = compass_img,
 	stack_max = 1,

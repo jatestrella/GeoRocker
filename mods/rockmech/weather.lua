@@ -143,7 +143,7 @@ local function gauge_text()
 	return S("Weather station\nRainfall @1 mm/h\n@2 mm so far", g(i), f0(rockmech.rain_total()))
 end
 core.register_node(GAUGE, {
-	description = S("Weather station (Stevenson screen)\nPoint at it to see the current rainfall rate and the total of this rain"),
+	description = S("Weather station"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	node_box = {type = "fixed", fixed = {
 		{-0.32, -0.5, -0.27, -0.26, 0.05, -0.21}, {0.26, -0.5, -0.27, 0.32, 0.05, -0.21},   -- 四支腳

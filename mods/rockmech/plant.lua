@@ -348,8 +348,7 @@ core.register_node(CHUTE, {
 })
 
 core.register_node(PLANT, {
-	description = S("Ore plant\nRight-click on flat ground to place: digs a @1×@2 m receiving hopper toward you, with a storage tower on each side of the machine\nSeparates feed into clean coal and rejects; trucks and haul trucks stopped within reach of a loading boom get loaded",
-		tostring(H.SIZE), tostring(H.SIZE)),
+	description = S("Ore plant\nRight-click on flat ground to build"),
 	short_description = S("Ore plant"),
 	drawtype = "nodebox",
 	paramtype = "light",

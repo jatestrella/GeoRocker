@@ -507,7 +507,7 @@ local function go_camp(itemstack, user)
 	return itemstack
 end
 core.register_craftitem(FLAG, {
-	description = S("Back to camp\nHold it and left-click or right-click to return to your team's camp"),
+	description = S("Back to camp\nClick to go back to your team's camp"),
 	short_description = S("Back to camp"),
 	inventory_image = "[fill:16x16:#00000000^[fill:2x15:3,1:#6a4a28^[fill:9x6:5,1:#c04030^[fill:9x2:5,3:#f0e0b0",
 	stack_max = 1,

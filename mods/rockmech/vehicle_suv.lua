@@ -17,7 +17,7 @@ local def = {desc = S("4WD SUV"), short = S("SUV"), color = c, cap = 0, speed = 
 	mirror = {x = 1.1, y = 0.5, z = -0.1}, rearcam = {x = 0, y = 0.6, z = -3.6},   -- 後照鏡（A 柱旁）、倒車攝影機（車尾）
 	tilt = {front = 0.9, rear = -3.0, side_z = -1.2, side_x = 0.8},
 	tail_lat = {-0.8, 0, 0.8}, tail_dy = {0.6, 1.2},
-	item_desc = S("Right-click to get in (for getting around; four-wheel drive, climbs slopes up to 30°)")}
+	item_desc = S("Right-click to get in")}
 do   -- 圖示：車身、車窗、兩個輪子
 	local r = {}
 	r[#r + 1] = {2, 14, 27, 8, c}

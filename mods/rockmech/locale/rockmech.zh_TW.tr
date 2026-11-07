@@ -16,9 +16,9 @@ Your hands are full: right-click to put it down before picking up a core box=手
 You are carrying a log: right-click to put it down first=手上扛著原木：先右鍵放下
 Your hands are full: right-click to put it down, or right-click a cart bed to load it=手上拿滿了：右鍵放下，或對著車斗按右鍵裝上去
 You are holding a different kind of rubble: put it down first=手上是別種碎石，先放下
-Pickaxe@nDigs rock slowly; rock turns into rubble@nDigging rubble picks it up, one block at a time@nRight-click to put down the rubble you are holding=挖礦鎬@n挖岩石很慢，岩石會變成碎石@n挖碎石就是拿起來，一次一塊@n右鍵放下手上的碎石
+Pickaxe@nRight-click: put down what you carry=挖礦鎬@n右鍵放下手上的東西
 Pickaxe=挖礦鎬
-Shovel@nQuickly shovels up rubble, one block at a time@nCannot dig rock@nRight-click to put down the rubble you are holding=鏟子@n很快把碎石鏟起來，一次一塊@n挖不動岩石@n右鍵放下手上的碎石
+Shovel@nRight-click: put down what you carry=鏟子@n右鍵放下手上的東西
 Shovel=鏟子
 Equipment Manager=機械設備課長
 Vehicles · crushers · conveyor belts=車輛・破碎站・輸送帶
@@ -126,7 +126,7 @@ flat=平
 uphill @1°=上坡 @1°
 downhill @1°=下坡 @1°
 Conveyor belt (@1)@nRight-click to place: click a belt to extend from that block, click the ground to start from the ground@nLeft-click a belt to pick up that block; left-click elsewhere to change the slope=輸送帶（@1）@n右鍵放：點輸送帶從那格往前接，點地面從地上開始@n左鍵點輸送帶收回那一格，點別的地方切換坡度
-Conveyor belt@nRight-click to place: click a belt to extend from that block, click the ground to start from the ground@nLeft-click a belt to pick up that block; left-click elsewhere to change the slope=輸送帶@n右鍵放：點輸送帶從那格往前接，點地面從地上開始@n左鍵點輸送帶收回那一格，點別的地方切換坡度
+Conveyor belt@nRight-click to lay; left-click a belt to take it back=輸送帶@n右鍵鋪設；左鍵點輸送帶收回
 [Conveyor] Slope: @1 (maximum inclination @2°)=[輸送帶] 坡度：@1（最大傾角 @2°）
 [Conveyor]=[輸送帶]
 Cannot extend backwards=不能往回接
@@ -199,7 +199,7 @@ Logging @1   @2 / @3 m=判讀 @1　@2 / @3 m
 Field notebook (@1 / @2 holes)@nRight-click a core box to log it; left-click to see logged holes=野帳本（@1 / @2 孔）@n右鍵對岩芯箱判讀，左鍵看記過的孔
 @1 logged: left-click to open the field notebook=@1 記好了：左鍵打開野帳本看
 @1 logged (some fields you cannot interpret were recorded as ?): left-click to open the field notebook=@1 記好了（有些欄位不會判讀，記成 ?）：左鍵打開野帳本看
-Field notebook@nRight-click a core box to log it (@1 s per metre, stay nearby) into a borehole log@nLeft-click to see logged holes (up to @2 holes)@nWhat you record depends on your skills at logging time: fields you cannot interpret are recorded as ?=野帳本@n右鍵對岩芯箱判讀（每公尺 @1 秒，要待在旁邊），記成柱狀圖@n左鍵看記過的孔（最多 @2 孔）@n記下來的照你判讀時的能力：不會的欄位記成 ?
+Field notebook@nRight-click a core box to log it; left-click to read=野帳本@n對岩芯箱右鍵判讀；左鍵翻閱
 [Field notebook] Right-click a core box to log it=[野帳本] 對著岩芯箱按右鍵判讀
 [Core drilling] Nothing was drilled (@1)=[岩芯鑽探] 沒鑽到東西（@1）
 [Core drilling] Nothing was drilled=[岩芯鑽探] 沒鑽到東西
@@ -214,7 +214,7 @@ you walked away=人離開了
 hit a void=鑽到空洞
 map not loaded yet=地圖還沒載入
 hit a facility=碰到設施
-Hand-held core drill@nRight-click the ground: drill a vertical hole and take core (@1 s per metre, max @2 m; deeper holes need the core drill rig); don't walk away while drilling@nThe core goes into a blue core box next to the collar; log it with a field notebook into a borehole log (lithology, grade, joints, RQD)=手持岩芯鑽機@n對著地面右鍵：往下鑽一個垂直孔取岩芯（每公尺 @1 秒、最深 @2 m，更深要用岩芯鑽探車），鑽的時候不能走開@n岩芯裝在藍色岩芯箱裡放在孔口旁邊，拿野帳本判讀成柱狀圖（岩性、品位、節理、RQD）
+Hand-held core drill@nRight-click the ground to drill down=手持岩芯鑽機@n對地面右鍵往下鑽
 Hand-held core drill=手持岩芯鑽機
 
 ### crusher.lua
@@ -258,13 +258,13 @@ Stripping ratio @1 (waste @2 t ÷ ore @3 t, team total)=剝採比 @1（廢石 @2
 Stripping ratio: no ore delivered yet=剝採比：還沒有礦石送來
 Waste dump (right-click to view)=廢石場（右鍵查看）
 @1 (right-click to view)=@1（右鍵查看）
-Hopper lining@nReinforced concrete holding back the hopper wall rock (so it is not cut loose by joints and does not fall)=受料倉混凝土護坡@n鋼筋混凝土，擋住倉壁的岩石（不會被節理切開掉落）
+Hopper concrete lining=受料倉混凝土護坡
 Hopper lining=受料倉混凝土護坡
 @1 (@2, right-click to view)=@1（@2，右鍵查看）
 Crusher grate=破碎站受料格柵
-Crusher@nRight-click on flat ground to place; digs a @1×@2 m receiving hopper toward you@nRubble dumped into the hopper is weighed and paid for; waste rock costs a processing fee=破碎站@n對著平地按右鍵放置，朝自己的方向挖 @1×@2 m 受料倉@n碎石倒進倉裡就過磅入帳；廢石要賠處理費
+Crusher@nRight-click on flat ground to build=破碎站@n對平地右鍵蓋
 [Crusher] Place it on flat ground: the 3×3 m machine and the @1×@2 m area in front need level ground, solid rock below and clear space above=[破碎站] 要放在平地上：機身 3×3 m 和前方 @1×@2 m 要平坦、地下是實心、上方淨空
-Large crusher@nCapacity @1 t/s (regular crusher @2 t/s)@nRight-click on flat ground to place; digs a @3×@4 m receiving hopper toward you=大型破碎站@n處理能力 @1 t/s（一般破碎站 @2 t/s）@n對著平地按右鍵放置，朝自己的方向挖 @3×@4 m 受料倉
+Large crusher@nRight-click on flat ground to build=大型破碎站@n對平地右鍵蓋
 
 ### delivery.lua
 a person=人
@@ -317,12 +317,12 @@ ANFO can only be poured into downward drill holes=ANFO 只能倒進往下的鑽�
 No primer yet: add one emulsion cartridge, otherwise it will misfire=還沒有起爆藥包：放一條乳膠炸藥，否則會拒爆
 No charges within @1 m=@1 m 內沒有裝藥
 @1 charges, firing in @2 seconds, move to a safe distance!=@1 個裝藥，@2 秒後起爆，退到安全距離！
-Rock drill@nHold left-click on a rock face to drill a hole (@1 s, @2 m); keep holding on a hole to deepen it 1 m every @3 s (max @4 m)=鑿岩機@n對岩面按住左鍵鑽孔（@1 秒、@2 m）；對鑽孔繼續按住每 @3 秒加深 1 m（最深 @4 m）
+Rock drill@nHold left-click on a rock face=鑿岩機@n對岩面按住左鍵
 Rock drill: hold left-click on a rock face to drill a hole=鑿岩機：對岩面按住左鍵鑽孔
-Emulsion explosive@nRight-click a drill hole to load it (max @1 per hole); without a hole it can only be stuck on the surface, with little power=乳膠炸藥@n對鑽孔按右鍵裝藥（一孔最多 @1 條）；沒有鑽孔只能貼面，威力很小
-ANFO (ammonium nitrate/fuel oil, one bag)@nRight-click a downward drill hole to pour it in as a column charge; needs one emulsion cartridge as a primer=ANFO（銨油炸藥，一袋）@n對往下的鑽孔按右鍵倒進去成柱狀裝藥；要有一條乳膠炸藥當起爆藥包
+Emulsion explosive@nRight-click a drill hole=乳膠炸藥@n對鑽孔右鍵
+ANFO@nRight-click a downward hole=ANFO@n對往下的鑽孔右鍵
 ANFO=ANFO（銨油炸藥）
-Blasting machine@nRight-click: charges within @1 m count down @2 seconds, then fire in sequence=起爆器@n按右鍵：@1 m 內的裝藥倒數 @2 秒後依序起爆
+Blasting machine@nRight-click to fire=起爆器@n右鍵起爆
 
 ### drone.lua
 N=北
@@ -339,9 +339,9 @@ Drone   Above ground @1   vs take-off point @2 m (limit +@3)   Distance @4 / @5 
 Maximum flight distance reached, can't fly further out   Right-click again to return to the take-off point=已到最大飛行距離，不能再往外飛　再按右鍵回到起飛點
 Right-click again to return to the take-off point=再按右鍵回到起飛點
 Left-click to command: click an excavator or truck=左鍵指揮：點怪手、卡車
-Drone remote@nRight-click to take off (first person); WASD to move, E to speed up, Space to climb, Shift to descend@nRight-click again to return to the take-off point; height limit: @1 m above the take-off point=無人機遙控器@n右鍵起飛（第一人稱）；WASD 移動、E 加速、空白鍵上升、Shift 下降@n再按右鍵回到起飛點；高度上限：起飛點上方 @1 m
+Drone controller@nRight-click to take off / come back=無人機遙控器@n右鍵起飛／返回
 Drone remote=無人機遙控器
-Command drone (drone + radio)@nRight-click to take off, right-click again to return to the take-off point; WASD to move, E to speed up, Space to climb, Shift to descend@nLeft-click (on the ground or in the air): click an excavator to select it, click the ground to send it there; click a dump truck or haul truck to open its AHS settings@nCommand range @1 m=指揮無人機（無人機＋對講機）@n右鍵起飛、再按右鍵回到起飛點；WASD 移動、E 加速、空白鍵上升、Shift 下降@n左鍵（地上、空中都可以）：點怪手選定、點地面叫它開過去；點卡車、礦卡打開無人駕駛設定@n指揮距離 @1 m
+Command drone@nRight-click to take off / come back; left-click to command=指揮無人機@n右鍵起飛／返回；左鍵指揮
 
 ### femstress.lua
 tension=拉
@@ -387,9 +387,9 @@ Shotcrete lining (@1 layers)=噴凝土層 @1 層
 Rock bolt (installed)=岩栓（已裝好）
 Rock bolt with shotcrete (@1 layers)=噴凝土岩栓 @1 層
 Rock bolt section=岩栓斷面
-Rock bolt@nRight-click a drill hole to install it (length @= hole depth; anchorage capacity @= bond strength @1 kN/m × length, max @2 kN)=岩栓@n對鑽孔按右鍵裝進去（長度 @= 孔深；錨定力 @= 握裹力 @1 kN/m × 長度，上限 @2 kN）
+Rock bolt@nRight-click a drill hole=岩栓@n對鑽孔右鍵
 Rock bolts go into drill holes (drill a hole with the rock drill first, then right-click the hole)=岩栓要裝進鑽孔（先用鑿岩機鑽孔，再對孔按右鍵）
-Shotcrete (one bag)@nRight-click a rock face to spray a 3×3 area of that face (support pressure @1 MPa)@nSpray again to thicken it, up to @2 layers; the pressure adds up per layer@nRight-click rubble: compacts the top 3×3 surface directly (no flow, no ruts)=噴凝土（一袋）@n對岩面按右鍵，噴這一面 3×3 格（支護壓力 @1 MPa）@n重複噴可以加厚，最多 @2 層，壓力照層數累加@n對碎石按右鍵：表層 3×3 格直接壓實（不流動、沒有車轍）
+Shotcrete@nRight-click a rock face=噴凝土@n對岩面右鍵
 The rubble here is already compacted=這裡的碎石已經是夯實碎石了
 Shotcrete must be sprayed on a rock face=噴凝土要噴在岩面上
 This is already sprayed to @1 layers (or the space in front of the rock face is not empty)=這裡已經噴滿 @1 層了（或岩面前面不是空的）
@@ -402,9 +402,9 @@ Grade assessment=品位判讀
 Rock mass classification=岩體分類
 Rock mechanics=岩石力學
 Mine planning=採礦規劃
-Handheld XRF analyzer@nKeep it in your inventory: shows the grade of rock, rubble and material in truck beds=手持式 XRF 分析儀@n放在背包裡：看得到岩石、碎石、車斗裡的料的品位
+Handheld XRF analyzer@nWorks from your inventory=手持式 XRF 分析儀@n放在背包裡就有作用
 Handheld XRF analyzer=手持式 XRF 分析儀
-GSI chart (Hoek & Marinos)@nKeep it in your inventory: shows lithology, GSI and overburden thickness=GSI 評估圖卡（Hoek & Marinos）@n放在背包裡：看得到岩性、GSI、上覆厚度
+GSI chart@nWorks from your inventory=GSI 評估圖卡@n放在背包裡就有作用
 [Geologist] @1=[地質學家] @1
 [Geologist] Already hired, @1 left=[地質學家] 已經雇用中，還剩 @1
 [Geologist] You are not in a team yet, so you have no funds=[地質學家] 你還沒分組，沒有資金
@@ -468,13 +468,12 @@ Loadout bin boom: loads trucks stopped within @1 m=裝車料斗的放料臂：�
 Loadout bin (filled)=裝車料斗（有料）
 Loadout bin grate=裝車料斗格柵
 Loadout bin chute=裝車料斗放料口
-Loadout bin@n@1 m³ bin; the grate on top takes conveyor feed (or trucks and excavators dumping onto it); the loading boom loads trucks and haul trucks parked within @2 m@nSet an autonomous truck's loading point near the boom and it will wait there to be loaded@nRight-click on flat ground to build: 3×3 m, @3 m tall, boom facing you=裝車料斗@n@1 m³ 的料倉，頂上格柵接輸送帶（或卡車、怪手倒上去），放料臂裝 @2 m 內停著的卡車、礦卡@n無人卡車的裝載點設在放料臂附近就會在那裡等著裝@n對著平地按右鍵蓋：3×3 m、高 @3 m，放料臂朝自己這邊
+Loadout bin@nRight-click on flat ground to build=裝車料斗@n對平地右鍵蓋
 Build it on flat ground: 3×3 m of level ground with @1 m of clearance above=要蓋在平地上：3×3 m 地面平坦、上方 @1 m 淨空
 There is @1 in the construction area: move it first=施工範圍裡有@1：先移開
 
 ### locker.lua
 Locker (@1)=置物箱（@1）
-Locker@nHolds small items, @1 slots; shared by the whole team, only your team and the teacher can open it@nDig it (empty it first) to get the work order back=置物箱@n放小東西，@1 格；全組共用，只有自己組和老師打得開@n拆掉（要先清空）變回施工單
 [Locker] There are still items inside: take them out before removing it=[置物箱] 裡面還有東西：先拿出來才拆得掉
 
 ### monitor.lua
@@ -486,7 +485,7 @@ No readings yet: they are recorded after nearby excavation and a stress solve=�
 Latest: displacement @1 mm (E-W @2, up-down @3, N-S @4 mm), @5 readings=最新：位移 @1 mm（東西 @2、上下 @3、南北 @4 mm），共 @5 筆
 mm (vertical axis) / one reading per stress solve (horizontal axis). Be careful if readings keep growing; after support is installed they should level off=mm（縱軸）／每次應力解一筆（橫軸）。讀數一直變大要小心；加了支撐之後應該會趨於穩定
 Reset to zero=重新歸零
-Survey prism@nAttach to a rock face to record the rock displacement there (updated on nearby excavation and stress solves); right-click for the curve=監測稜鏡@n貼在岩面上，記錄那裡的岩石位移（附近開挖、算應力時更新）；右鍵看曲線
+Survey prism@nPlace it on a rock face; right-click to read=監測稜鏡@n貼在岩面上；右鍵看紀錄
 [Monitor] Must be attached to a rock face=[監測] 要貼在岩面上
 
 ### nametag.lua
@@ -500,11 +499,8 @@ Set nickname=設定
 Set: classmates see "@1"=已設定：同學看到「@1」
 
 ### nodes.lua
-@1@nγ@=@2 kN/m³  UCS@=@3 MPa  σt@=@4 MPa@nOnce placed, shows the joints at its location=@1@nγ@=@2 kN/m³  UCS@=@3 MPa  σt@=@4 MPa@n放置後依所在位置顯示節理
-Rubble@nBroken rock=碎石@n破碎的岩石
-Granite rubble@nBroken granite=花崗岩碎石@n破碎的花崗岩
+@1=@1
 Granite rubble=花崗岩碎石
-Loose soil@nLike rubble, it flows at its angle of repose and has weight; a full block left alone grows grass and turns back into topsoil=鬆土@n跟碎石一樣會照安息角流動、有重量；滿格放久了長草變回表土
 Loose soil=鬆土
 @1 rubble=@1碎石
 @1 rubble, mixed with @2=@1碎石，混@2
@@ -553,7 +549,7 @@ The operator is coming with you: hold him and right-click an empty excavator to 
 Your inventory is full=物品欄滿了
 Nobody is resting (only resting operators can be dismissed)=沒有人在休息（只能解雇休息中的）
 Dismissed one operator; the slot is free again=解雇了一個操作員，名額空出來
-Excavator operator@nHold and right-click an empty excavator: send him to work it@nRight-click the camp bench: let him rest=怪手操作員@n拿著對沒人的怪手按右鍵：派他上車作業@n對營地長椅按右鍵：交給他休息
+Excavator operator@nRight-click an excavator=怪手操作員@n對怪手右鍵
 You cannot drop an operator on the ground: take him back to the camp bench to rest=操作員不能丟在地上：帶回營地長椅交給他休息
 Operators resting: @1 (those who don't fit on the bench are in the office)=操作員休息中 @1 人（長椅坐不下的在辦公室裡）
 Operators resting: @1 (right-click)=操作員休息中 @1 人（右鍵）
@@ -576,7 +572,7 @@ When a truck or haul truck stands still within @1 m of a loading boom, the boom 
 Ore plant @1 tower, @2/8 full=選礦場@1塔，裝了 @2/8
 Ore plant @1 tower=選礦場@1塔
 Ore plant chute=選礦場放料口
-Ore plant@nRight-click on flat ground to place: digs a @1×@2 m receiving hopper toward you, with a storage tower on each side of the machine@nSeparates feed into clean coal and rejects; trucks and haul trucks stopped within reach of a loading boom get loaded=選礦場@n對著平地按右鍵放置：朝自己的方向挖 @1×@2 m 受料倉，機身左右各一座儲料塔@n分選成精煤和矸石；卡車或礦卡停在放料臂範圍內裝料
+Ore plant@nRight-click on flat ground to build=選礦場@n對平地右鍵蓋
 [Ore plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above=[選礦場] 要放在平地上：機身 3×3 m、前方 @1×@2 m 受料倉、左右兩座塔（各 3×3 m、高 @3 m）要平坦、地下是實心、上方淨空
 
 ### research.lua
@@ -636,11 +632,11 @@ Rubble wand=清碴魔杖
 [@1] Cleared @2 rubble blocks (limit of @3 reached, click again for the rest)=[@1] 清除 @2 格碎石（達上限 @3 格，其餘再點一次）
 [@1] Cleared @2 rubble blocks=[@1] 清除 @2 格碎石
 @1, collected into inventory: @2=@1，收進物品欄：@2
-Rubble wand@nLeft-click: clear 3×3×3 rubble in front of you@nRight-click: clear all connected rubble@nHold Shift: put the cleared rubble into your inventory=清碴魔杖@n左鍵：清除面前 3×3×3 碎石@n右鍵：清除相連的所有碎石@n按住 Shift：清掉的碎石收進物品欄
+Mucking wand@nLeft-click: clear 3×3×3; right-click: clear connected rubble=清碴魔杖@n左鍵清 3×3×3；右鍵清相連的碎石
 [Blast wand] The tnt mod is not loaded=[爆破魔杖] 沒有載入 tnt mod
-Blast wand@nLeft-click: detonate TNT (rock breaks according to its strength)@nRight-click: one-click mucking (nearby and connected rubble)@nShift + right-click: put the cleared rubble into your inventory=爆破魔杖@n左鍵：引爆 TNT（岩石依強度破碎）@n右鍵：一鍵清碴（附近與相連的碎石）@n按住 Shift 右鍵：清掉的碎石收進物品欄
+Blast wand@nLeft-click: detonate TNT; right-click: muck out=爆破魔杖@n左鍵引爆 TNT；右鍵清碴
 Blast wand=爆破魔杖
-Dig wand@nLeft-click: remove the 3×3×3 centered on the pointed block (rock, rubble, etc.)@nRight-click: one-click mucking (nearby and connected rubble)@nShift + right-click: put the cleared rubble into your inventory=挖洞魔杖@n左鍵：移除以指到的格為中心的 3×3×3（岩石、碎石等）@n右鍵：一鍵清碴（附近與相連的碎石）@n按住 Shift 右鍵：清掉的碎石收進物品欄
+Dig wand@nLeft-click: remove 3×3×3; right-click: muck out=挖洞魔杖@n左鍵移除 3×3×3；右鍵清碴
 Dig wand=挖洞魔杖
 
 ### stereonet.lua
@@ -654,7 +650,7 @@ Slope: not measured yet (sneak + left-click to measure the slope)=坡面：還�
 Red circle: friction circle φj @= @1°=紅圈：摩擦圓 φj @= @1°
 Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up=赤平投影（下半球、等角投影）　傾角/傾向　上方是北
 Left-click a rock face: measure joints (one reading per set)@nSneak + left-click: measure the slope@n@nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible=左鍵岩面：量節理（每組一筆）@n蹲下＋左鍵：量坡面@n@nMarkland 平面滑動：節理的極點在摩擦圓外、跟坡面極點在同一側、而且比坡面緩（大圓在坡面大圓裡面）→ 可能滑動
-Geological compass@nRight-click a rock face: stress and factor of safety; sneak + right-click: full data@nLeft-click a rock face: measure joint orientation (stereonet); sneak + left-click: measure the slope; right-click the air: open the stereonet=地質羅盤@n右鍵岩面：應力與安全係數；蹲下＋右鍵：完整資料@n左鍵岩面：量節理位態（赤平投影）；蹲下＋左鍵：量坡面；對空中右鍵：打開赤平投影
+Geological compass@nRight- or left-click a rock face; sneak for more=地質羅盤@n對岩面右鍵、左鍵；蹲下看更多
 Cannot measure a slope here=這裡量不到坡面
 Slope @1°/@2° (dip/dip direction) recorded=坡面 @1°/@2°（傾角/傾向）已記下
 Measure on a rock face=要量在岩面上
@@ -714,11 +710,11 @@ Leave my team=我退出分組
 [Tip] Hold the "Back to camp" flag and left-click to return to camp; your team's funds are at the top right of the screen=[提示] 拿著「回營地」旗子按左鍵就回營地；全組的資金在畫面右上角
 [Back to camp] Camp of team @1=[回營地] 第 @1 組營地
 [Back to camp] Spawn=[回營地] 出生點
-Back to camp@nHold it and left-click or right-click to return to your team's camp=回營地@n拿在手上按左鍵或右鍵，回到自己組的營地
+Back to camp@nClick to go back to your team's camp=回營地@n按一下回到自己組的營地
 Back to camp=回營地
 
 ### testing.lua
-Schmidt hammer@nRight-click a rock face: one impact gives one rebound number R, recorded in your field notebook. Take about 10 readings at a spot; the median converts to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=施密特錘@n對岩面右鍵：敲一下得到一個回彈值 R，記進野帳本。同一處敲 10 次左右，取中位數換算單軸抗壓強度（Katz 2000：UCS ≈ 2.21·e^(0.067R)）
+Schmidt hammer@nRight-click a rock face=施密特錘@n對岩面右鍵
 [Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=[施密特錘] 要敲在完整的岩面上（碎石、土敲不出讀數）
 [Schmidt hammer] @1: R @= @2 (recorded in the field notebook, @3 readings; left-click the notebook to see them)=[施密特錘] @1：R @= @2（已記進野帳本，共 @3 筆；左鍵打開野帳本看）
 [Schmidt hammer] @1: R @= @2 (no field notebook in your inventory: not recorded)=[施密特錘] @1：R @= @2（背包裡沒有野帳本，沒有記下來）
@@ -729,13 +725,13 @@ buckling=挫屈
 crushing=壓碎
 Timber post (length @1 m, diameter @2 cm)@nCapacity @3 kN (governed by @4: crushing @5 kN, buckling @6 kN)=木柱（長 @1 m、直徑 @2 cm）@n承載力 @3 kN（@4控制：壓碎 @5 kN、挫屈 @6 kN）
 Timber post (length @1 m, diameter @2 cm)@nCapacity @3 kN (governed by @4: crushing @5 kN, buckling @6 kN)@nNot reaching a rock roof: does not count as support=木柱（長 @1 m、直徑 @2 cm）@n承載力 @3 kN（@4控制：壓碎 @5 kN、挫屈 @6 kN）@n沒有頂到岩石頂板：不算支撐
-Timber post (diameter @1 cm)@nRight-click a floor: it extends upward until it reaches the roof, up to @2 m@nReaching a rock roof → support: capacity P @= min(crushing, buckling), spread over the 3×3 m² of roof around the post top@n2 m about @3 kN, 4 m about @4 kN, 6 m about @5 kN (longer posts buckle more easily)@nRight-click a wall: placed horizontally as a beam=木柱（直徑 @1 cm）@n對地板按右鍵：往上長到碰到頂板，最長 @2 m@n頂到岩石頂板 → 支撐：承載力 P @= min(壓碎, 挫屈)，分給柱頂周圍 3×3 m² 的頂板@n2 m 約 @3 kN、4 m 約 @4 kN、6 m 約 @5 kN（柱越長越容易挫屈）@n對牆面按右鍵：橫放當樑
+Timber post@nRight-click the floor to stand it up, a wall to lay it as a beam=木柱@n對地板右鍵立起來，對牆面右鍵橫放當樑
 A @1 m timber post holds up the roof: capacity @2 kN (governed by @3)=木柱 @1 m 頂住頂板：承載力 @2 kN（@3控制）
 Timber post (top)=木柱（柱頂）
 Timber beam=木樑
 Timber beam (old)=木樑（舊版）
-Timber plank (building material, not a support)@nThin board: placed on the ground it is a floor; placed against a ceiling it sits under the ceiling=木板（建材，不算支撐）@n薄木板：對地面放是地板，對頂面放貼在天花板下
-Timber slab (building material, not a support)@nPlaced on a top face it is a lower half block; on a bottom face, an upper half block=木板半格（建材，不算支撐）@n對頂面放是下半格、對底面放是上半格
+Wooden plank=木板
+Wooden half slab=木板半格
 [Timber post] The timber post at @1 was crushed: it could not hold the roof above=[木柱] @1 的木柱被壓斷了：上面的頂板撐不住
 Axial force @1 kN / capacity @2 kN (@3%)=軸力 @1 kN／承載力 @2 kN（@3%）
 Roof above: FS @1=上方頂板 FS @1
@@ -762,7 +758,7 @@ Joint sets (snapped to the grid):=節理組（格點對齊後）：
 @1 joint (k@=@2, r@=@3<P@=@4)=@1 節理 (k@=@2, r@=@3<P@=@4)
 @1 rock bridge (k@=@2, r@=@3≥P@=@4)=@1 岩橋 (k@=@2, r@=@3≥P@=@4)
 intact=完整
-Geological compass@nRight-click a rock face: stress and factor of safety@nSneak + right-click: full data (lithology, initial stress, joints on all six faces)=地質羅盤@n右鍵岩面：應力與安全係數@n蹲下＋右鍵：完整資料（岩性、初始應力、六面節理）
+Geological compass@nRight-click a rock face; sneak for more=地質羅盤@n對岩面右鍵；蹲下看更多
 This is not rock=這裡不是岩石
 [radius 1-16, default 8]=[半徑 1-16，預設 8]
 Show joint traces on nearby exposed rock faces with particles (color @= joint set)=以 particle 顯示附近臨空岩面上的節理跡線（顏色 @= 節理組）
@@ -1016,7 +1012,7 @@ Dump area full (doze it flat, then reset it in the settings screen)=傾倒區滿
 Heading to the excavator=前往怪手
 Turning to line up with the excavator=掉頭對準怪手
 Backing up to the excavator=倒車到怪手旁
-Autonomous haulage kit@nHold it and right-click a dump truck or haul truck to install it (one module per vehicle); needed for autonomous driving=自動駕駛模組@n拿著對卡車或礦卡按右鍵安裝（一個模組裝一台），裝了才能用無人駕駛
+Autonomous haulage kit@nRight-click a truck to install=自動駕駛模組@n對卡車右鍵安裝
 [AHS] The autonomous haulage kit can only be installed on dump trucks and haul trucks=[無人駕駛] 自動駕駛模組只能裝在卡車、礦卡上
 [AHS] This vehicle already has an autonomous haulage kit=[無人駕駛] 這台車已經裝了自動駕駛模組
 [AHS] Autonomous haulage kit installed on @1: get in and press E to set a route=[無人駕駛] @1 裝上自動駕駛模組：上車按 E 設定路線
@@ -1086,7 +1082,7 @@ Deleted @1 (vehicles already using it keep running)=已刪除@1（已經套用�
 ### vehicle_bulktruck.lua
 ANFO (bags)=ANFO（袋）
 Emulsion explosive (sticks)=乳膠炸藥（條）
-Right-click to get in; Space loads the tank with ANFO and emulsion, E fills the downward holes within reach of the boom with ANFO + a primer=右鍵上車；空白鍵 儲槽裝 ANFO 與乳膠炸藥、E 把吊臂範圍內往下的鑽孔灌 ANFO＋起爆藥包
+Right-click to get in; Space loads, E charges the holes=右鍵上車；空白鍵裝料、E 灌孔
 Tank: ANFO @1 / @2 bags  Emulsion @3 / @4 sticks=儲槽：ANFO @1 / @2 袋　乳膠炸藥 @3 / @4 條
 Filling holes @1 / @2=灌孔中 @1 / @2
 Fill holes (within @1 m of the boom)=灌孔（吊臂 @1 m 內）
@@ -1099,12 +1095,12 @@ No downward holes to fill within @1 m of the boom=吊臂 @1 m 內沒有要灌的
 
 ### vehicle_cart.lua
 Cart=推車
-Right-click to push; Space tips the bed forward (capacity @1 blocks)@nRight-click while holding rubble to load it=右鍵推車；空白鍵把車斗往前倒（載量 @1 塊）@n手上拿著碎石時右鍵是裝上去
+Right-click to push; Space tips the bed=右鍵推車；空白鍵倒料
 Space: tip the bed forward=空白鍵 把車斗往前倒
 
 ### vehicle_corerig.lua
 Core rig=鑽探車
-Right-click to get in; E drills a core hole downward below the mast (up to @1 m) and gives you core boxes and a borehole log=右鍵上車；E 在桅桿下方往下鑽岩芯孔（最深 @1 m），得到岩芯箱與鑽孔柱狀圖
+Right-click to get in; E drills=右鍵上車；E 鑽
 The hole collar must be clear=孔口要是空的
 There is no rock under the mast=桅桿下面不是岩石
 Already drilling=正在鑽
@@ -1115,7 +1111,7 @@ Core drilling (up to @1 m)=鑽岩芯（最深 @1 m）
 
 ### vehicle_dozer.lua
 Dozer=推土機
-Right-click to get in; E lowers/raises the blade; with the blade down, drive forward to push rubble away=右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走
+Right-click to get in; E lowers/raises the blade=右鍵上車；E 放鏟／收鏟
 Off (blade follows the ground)=關（鏟刀貼著地面推）
 Rock above the design grade in front of the blade=鏟刀前、設計坡面以上是岩石
 Rock in front of the blade=鏟刀前是岩石
@@ -1130,7 +1126,7 @@ Blade down (push rubble)=放鏟（推碎石）
 Design grade=設計坡度
 
 ### vehicle_drillrig.lua
-Right-click to get in; E drills a vertical hole below the mast, Space sets the hole depth (surface bench blasting, the hole is filled with ANFO)=右鍵上車；E 在桅桿下方往下鑽一個垂直孔、空白鍵 設定孔深（露天台階爆破，孔裡倒 ANFO）
+Right-click to get in; E drills, Space sets the depth=右鍵上車；E 鑽孔、空白鍵設孔深
 There is no rock under the mast (rubble cannot be drilled)=桅桿下面不是岩石（碎石鑽不了）
 Less than 2 m of rock below=下面的岩石不到 2 m
 Hole depth setting @1 m=孔深設定 @1 m
@@ -1146,7 +1142,7 @@ Done=完成
 Only @1 m of rock below: drilling to the bottom of the rock=下面岩石只有 @1 m，鑽到岩石底
 
 ### vehicle_excavator.lua
-Hydraulic breaker kit (excavator attachment)@nHold it and right-click an excavator to install; with an empty bucket, Space switches bucket / breaker@nPoint the breaker at rock and press E to break it: the time is proportional to rock strength (UCS)=油壓破碎錘（怪手改裝套件）@n拿著對怪手按右鍵裝上；鏟斗空的時候空白鍵切換鏟斗／破碎錘@n破碎錘對著岩石按 E 敲碎：時間跟岩石強度（UCS）成正比
+Hydraulic breaker@nRight-click an excavator to fit it=油壓破碎錘@n對怪手右鍵裝上
 Hydraulic breaker kit=油壓破碎錘
 @1 operator=@1 操作員
 Working=作業中
@@ -1165,7 +1161,7 @@ Excavator selected, but it has no operator (send one in with an Excavator operat
 Select an excavator first=先點一台怪手
 That excavator has no operator=那台怪手上沒有操作員
 Copy, heading to (@1, @2, @3), @4 m=收到，前往 (@1, @2, @3)，@4 m
-Radio@nClick an excavator to select it, then click the ground: send its operator there (left or right click)@nClick the one that is moving: stop it@nClick a truck or haul truck: open its autonomous haulage settings (start, stop, depart now)=對講機@n點怪手選定，再點地面：叫怪手的操作員開過去（左鍵、右鍵都可以）@n點正在移動的那台：叫它停下@n點卡車、礦卡：打開它的無人駕駛設定（啟動、停止、立即出發）
+Radio@nClick an excavator, then the ground=對講機@n點怪手，再點地面
 Operator: @1 (cut-off grade @2%)=操作員：@1（截止品位 @2%）
 [Operator] Stepped down and waiting beside the excavator; right-click him to send him back to work or to rest at base=[操作員] 下車了，在怪手旁邊等；對他按右鍵可以叫他上車作業或回基地休息
 @1 ahead: @2=前方@1：@2
@@ -1199,15 +1195,14 @@ Bucket can't reach (no block within @1 m)=挖斗搆不到（@1 m 內沒有方塊
 Can't reach the truck bed (@1 m, arm about @2 m)=搆不到車斗（@1 m，手臂約 @2 m）
 Out of arm reach; dumping at the farthest point (about @1 m)=超出手臂範圍，倒在最遠處（約 @1 m）
 Dump where? (no block or truck within @1 m)=要倒在哪裡？（@1 m 內沒有方塊或卡車）
-Right-click to get in; E digs where the cursor points (4 m³ bucket), Space dumps where the cursor points (point at a truck to load it)=右鍵上車；E 挖滑鼠指的位置（鏟斗 4 m³）、空白鍵倒在滑鼠指的位置（指著卡車就倒進卡車）
-Right-click to get in; E digs where the cursor points (12 m³ bucket, arm about 15 m), Space dumps where the cursor points (point at a haul truck to load its bed)=右鍵上車；E 挖滑鼠指的位置（鏟斗 12 m³，手臂約 15 m）、空白鍵倒在滑鼠指的位置（指著礦卡就倒進車斗）
+Right-click to get in; E digs, Space dumps=右鍵上車；E 挖、空白鍵倒
 
 ### vehicle_haul.lua
 Hauler=礦卡
-Right-click to get in; Space tips the bed out at the rear (capacity @1 m³)=右鍵上車；空白鍵把車斗倒在車尾（載量 @1 m³）
+Right-click to get in; Space tips the bed=右鍵上車；空白鍵倒車斗
 
 ### vehicle_jumbo.lua
-Right-click to get in; E drills the face ahead following the blast hole pattern, Space edits the pattern=右鍵上車；E 依爆破孔設計圖在前方工作面鑽孔、空白鍵 編輯設計圖
+Right-click to get in; E drills, Space edits the pattern=右鍵上車；E 鑽孔、空白鍵編輯設計圖
 Blast hole pattern @1 × @2=爆破孔設計圖 @1 × @2
 Drilling @1 / @2=鑽孔中 @1 / @2
 Drill to pattern=依設計圖鑽孔
@@ -1224,7 +1219,7 @@ Center relief-hole cut=中心空孔掏槽
 Cross relief-hole cut=十字空孔掏槽
 Clear=清空
 No rock face to drill within @1 m ahead (point the front at the rock wall)=前方 @1 格內沒有可鑽的岩面（車頭要對著岩壁）
-Right-click to get in; E charges the holes in the face ahead (relief holes are skipped), Space sets the sticks per hole=右鍵上車；E 把前方工作面的鑽孔裝藥（空孔跳過）、空白鍵 設定每孔幾條
+Right-click to get in; E charges, Space sets sticks per hole=右鍵上車；E 裝藥、空白鍵設每孔幾條
 @1 emulsion sticks per hole=每孔 @1 條乳膠炸藥
 (not used up in creative mode)=（創造模式不扣）
 @1 sticks in inventory=物品欄 @1 條
@@ -1238,7 +1233,7 @@ No holes to charge within @1 m ahead=前方 @1 格內沒有要裝藥的鑽孔
 
 ### vehicle_lowboy.lua
 Trailer=拖車
-Right-click to get in; E pulls a vehicle next to the deck onto it (own weight ≤ @1 t: excavators, dozers, drill rigs, trucks…, wrecked ones too); press E again to unload it at the rear=右鍵上車；E 把平板旁邊的車拉上平板（自重 ≤ @1 t：怪手、推土機、鑽機、卡車…，報廢的也行），再按 E 卸在車尾
+Right-click to get in; E loads / unloads a vehicle=右鍵上車；E 載車／卸車
 No vehicle to load within @1 m of the deck=平板旁邊 @1 m 內沒有可以載的車
 @1 weighs @2 t, more than the @3 t it can carry=@1 自重 @2 t，超過 @3 t 載不動
 Unloaded @1=卸下 @1
@@ -1251,7 +1246,7 @@ Load vehicle (next to the deck)=載車（平板旁的車）
 
 ### vehicle_miner.lua
 Miner=採礦機
-Right-click to get in; E turns the drum on/off (drive forward with it on to cut rock directly, no blasting needed); Space sets the cut depth: 1 m down / level@nOn-board bin 60 m³, unloads automatically into a nearby truck, conveyor or crusher; autonomous trucks can bind to it=右鍵上車；E 滾筒開／關（開著往前開就把岩石直接切下來，不用爆破）、空白鍵 切深 下切 1 m／平切@n車上料倉 60 m³，自動卸到旁邊的卡車、輸送帶或破碎站；無人卡車可以綁定它
+Right-click to get in; E turns the drum on/off, Space sets the cut=右鍵上車；E 開關滾筒、空白鍵設切深
 Unloading into @1=卸到@1
 Truck=卡車
 Unloading onto the conveyor=卸到輸送帶
@@ -1266,7 +1261,7 @@ Something ahead can't be cut (facility, conveyor)=前面有切不動的東西（
 
 ### vehicle_suv.lua
 4WD SUV=四輪驅動休旅車
-Right-click to get in (for getting around; four-wheel drive, climbs slopes up to 30°)=右鍵上車（代步用，四輪驅動，爬坡可到 30°）
+Right-click to get in=右鍵上車
 Personnel carrier=代步車
 
 ### vehicle_truck.lua
@@ -1319,17 +1314,13 @@ Rain for @1 minutes at @2 mm/h: loose soil angle of repose @3° → @4°, topsoi
 Weather station@nNot raining (last rain: @1 mm in total)=氣象站@n沒有下雨（上一場累積 @1 mm）
 Weather station@nNot raining=氣象站@n沒有下雨
 Weather station@nRainfall @1 mm/h@n@2 mm so far=氣象站@n時雨量 @1 mm/h@n這場累積 @2 mm
-Weather station (Stevenson screen)@nPoint at it to see the current rainfall rate and the total of this rain=氣象站（百葉箱）@n指著它看目前的時雨量、這場雨的累積雨量
 
 ### woodwork.lua
 [Woodwork] @1=[木工] @1
-Log@nCarry it to a saw bench to saw it into posts or planks=原木@n扛到鋸木台鋸成木柱或木板
 Timber log=原木
-Sapling@nPlant it on a full block of soil; it grows into a tree after a while=樹苗@n種在滿格的土上，過一陣子長成樹
+Sapling@nPlant it on full soil=樹苗@n種在滿格的土上
 Sapling=樹苗
 Saplings must be planted on a full block of soil (on top of the soil)=樹苗要種在滿格的土上（土的上面）
-Axe@nChop any block of a trunk and the whole tree falls into logs=斧頭@n砍樹幹任何一格，整棵樹倒下變成原木
-Wooden wall panel (building material, not a support)@nA thin upright board for building walls=木牆板（建材，不算支撐）@n直立的薄板，做牆壁用
 Wooden wall panel=木牆板
 The tree fell: @1 logs lie on the ground (left-click to carry them, one at a time)=樹倒了：原木 @1 根倒在地上（左鍵扛起來，一次一根）
 The tree fell: @1 logs=樹倒了：原木 @1 根
@@ -1354,7 +1345,6 @@ You are not carrying a log=手上沒有原木
 Come closer=走近一點
 Workbench@nRight-click: make wall panels, stairs, doors, fences, ladders… from planks=木工桌@n右鍵：用木板做木牆板、樓梯、門、柵欄、梯子…
 Saw bench@nRight-click: saw a log into posts, planks or slabs=鋸木台@n右鍵：把原木鋸成木柱、木板或木板半格
-Topsoil@nSoil with grass and roots: the roots give it cohesion, so it stands even on steep slopes. If dug, undermined, or if an excavated face next to it is too high (above its critical standing height), it turns into loose soil and flows at its angle of repose=表土@n長著草和樹根的土：根系有凝聚力，陡坡上也站得住；被挖、底下被掏空、或旁邊挖開的陡壁太高（超過自立高度），就變成鬆土照安息角流
 Topsoil=表土
 Topsoil (@1/8 m)=表土（@1/8 m）
 
@@ -1366,6 +1356,65 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Pickaxe@nDigs rock slowly; rock turns into rubble@nDigging rubble picks it up, one block at a time@nRight-click to put down the rubble you are holding=挖礦鎬@n挖岩石很慢，岩石會變成碎石@n挖碎石就是拿起來，一次一塊@n右鍵放下手上的碎石
+Shovel@nQuickly shovels up rubble, one block at a time@nCannot dig rock@nRight-click to put down the rubble you are holding=鏟子@n很快把碎石鏟起來，一次一塊@n挖不動岩石@n右鍵放下手上的碎石
+Conveyor belt@nRight-click to place: click a belt to extend from that block, click the ground to start from the ground@nLeft-click a belt to pick up that block; left-click elsewhere to change the slope=輸送帶@n右鍵放：點輸送帶從那格往前接，點地面從地上開始@n左鍵點輸送帶收回那一格，點別的地方切換坡度
+Field notebook@nRight-click a core box to log it (@1 s per metre, stay nearby) into a borehole log@nLeft-click to see logged holes (up to @2 holes)@nWhat you record depends on your skills at logging time: fields you cannot interpret are recorded as ?=野帳本@n右鍵對岩芯箱判讀（每公尺 @1 秒，要待在旁邊），記成柱狀圖@n左鍵看記過的孔（最多 @2 孔）@n記下來的照你判讀時的能力：不會的欄位記成 ?
+Hand-held core drill@nRight-click the ground: drill a vertical hole and take core (@1 s per metre, max @2 m; deeper holes need the core drill rig); don't walk away while drilling@nThe core goes into a blue core box next to the collar; log it with a field notebook into a borehole log (lithology, grade, joints, RQD)=手持岩芯鑽機@n對著地面右鍵：往下鑽一個垂直孔取岩芯（每公尺 @1 秒、最深 @2 m，更深要用岩芯鑽探車），鑽的時候不能走開@n岩芯裝在藍色岩芯箱裡放在孔口旁邊，拿野帳本判讀成柱狀圖（岩性、品位、節理、RQD）
+Hopper lining@nReinforced concrete holding back the hopper wall rock (so it is not cut loose by joints and does not fall)=受料倉混凝土護坡@n鋼筋混凝土，擋住倉壁的岩石（不會被節理切開掉落）
+Crusher@nRight-click on flat ground to place; digs a @1×@2 m receiving hopper toward you@nRubble dumped into the hopper is weighed and paid for; waste rock costs a processing fee=破碎站@n對著平地按右鍵放置，朝自己的方向挖 @1×@2 m 受料倉@n碎石倒進倉裡就過磅入帳；廢石要賠處理費
+Large crusher@nCapacity @1 t/s (regular crusher @2 t/s)@nRight-click on flat ground to place; digs a @3×@4 m receiving hopper toward you=大型破碎站@n處理能力 @1 t/s（一般破碎站 @2 t/s）@n對著平地按右鍵放置，朝自己的方向挖 @3×@4 m 受料倉
+Rock drill@nHold left-click on a rock face to drill a hole (@1 s, @2 m); keep holding on a hole to deepen it 1 m every @3 s (max @4 m)=鑿岩機@n對岩面按住左鍵鑽孔（@1 秒、@2 m）；對鑽孔繼續按住每 @3 秒加深 1 m（最深 @4 m）
+Emulsion explosive@nRight-click a drill hole to load it (max @1 per hole); without a hole it can only be stuck on the surface, with little power=乳膠炸藥@n對鑽孔按右鍵裝藥（一孔最多 @1 條）；沒有鑽孔只能貼面，威力很小
+ANFO (ammonium nitrate/fuel oil, one bag)@nRight-click a downward drill hole to pour it in as a column charge; needs one emulsion cartridge as a primer=ANFO（銨油炸藥，一袋）@n對往下的鑽孔按右鍵倒進去成柱狀裝藥；要有一條乳膠炸藥當起爆藥包
+Blasting machine@nRight-click: charges within @1 m count down @2 seconds, then fire in sequence=起爆器@n按右鍵：@1 m 內的裝藥倒數 @2 秒後依序起爆
+Drone remote@nRight-click to take off (first person); WASD to move, E to speed up, Space to climb, Shift to descend@nRight-click again to return to the take-off point; height limit: @1 m above the take-off point=無人機遙控器@n右鍵起飛（第一人稱）；WASD 移動、E 加速、空白鍵上升、Shift 下降@n再按右鍵回到起飛點；高度上限：起飛點上方 @1 m
+Command drone (drone + radio)@nRight-click to take off, right-click again to return to the take-off point; WASD to move, E to speed up, Space to climb, Shift to descend@nLeft-click (on the ground or in the air): click an excavator to select it, click the ground to send it there; click a dump truck or haul truck to open its AHS settings@nCommand range @1 m=指揮無人機（無人機＋對講機）@n右鍵起飛、再按右鍵回到起飛點；WASD 移動、E 加速、空白鍵上升、Shift 下降@n左鍵（地上、空中都可以）：點怪手選定、點地面叫它開過去；點卡車、礦卡打開無人駕駛設定@n指揮距離 @1 m
+Rock bolt@nRight-click a drill hole to install it (length @= hole depth; anchorage capacity @= bond strength @1 kN/m × length, max @2 kN)=岩栓@n對鑽孔按右鍵裝進去（長度 @= 孔深；錨定力 @= 握裹力 @1 kN/m × 長度，上限 @2 kN）
+Shotcrete (one bag)@nRight-click a rock face to spray a 3×3 area of that face (support pressure @1 MPa)@nSpray again to thicken it, up to @2 layers; the pressure adds up per layer@nRight-click rubble: compacts the top 3×3 surface directly (no flow, no ruts)=噴凝土（一袋）@n對岩面按右鍵，噴這一面 3×3 格（支護壓力 @1 MPa）@n重複噴可以加厚，最多 @2 層，壓力照層數累加@n對碎石按右鍵：表層 3×3 格直接壓實（不流動、沒有車轍）
+Handheld XRF analyzer@nKeep it in your inventory: shows the grade of rock, rubble and material in truck beds=手持式 XRF 分析儀@n放在背包裡：看得到岩石、碎石、車斗裡的料的品位
+GSI chart (Hoek & Marinos)@nKeep it in your inventory: shows lithology, GSI and overburden thickness=GSI 評估圖卡（Hoek & Marinos）@n放在背包裡：看得到岩性、GSI、上覆厚度
+Loadout bin@n@1 m³ bin; the grate on top takes conveyor feed (or trucks and excavators dumping onto it); the loading boom loads trucks and haul trucks parked within @2 m@nSet an autonomous truck's loading point near the boom and it will wait there to be loaded@nRight-click on flat ground to build: 3×3 m, @3 m tall, boom facing you=裝車料斗@n@1 m³ 的料倉，頂上格柵接輸送帶（或卡車、怪手倒上去），放料臂裝 @2 m 內停著的卡車、礦卡@n無人卡車的裝載點設在放料臂附近就會在那裡等著裝@n對著平地按右鍵蓋：3×3 m、高 @3 m，放料臂朝自己這邊
+Locker@nHolds small items, @1 slots; shared by the whole team, only your team and the teacher can open it@nDig it (empty it first) to get the work order back=置物箱@n放小東西，@1 格；全組共用，只有自己組和老師打得開@n拆掉（要先清空）變回施工單
+Survey prism@nAttach to a rock face to record the rock displacement there (updated on nearby excavation and stress solves); right-click for the curve=監測稜鏡@n貼在岩面上，記錄那裡的岩石位移（附近開挖、算應力時更新）；右鍵看曲線
+@1@nγ@=@2 kN/m³  UCS@=@3 MPa  σt@=@4 MPa@nOnce placed, shows the joints at its location=@1@nγ@=@2 kN/m³  UCS@=@3 MPa  σt@=@4 MPa@n放置後依所在位置顯示節理
+Rubble@nBroken rock=碎石@n破碎的岩石
+Granite rubble@nBroken granite=花崗岩碎石@n破碎的花崗岩
+Loose soil@nLike rubble, it flows at its angle of repose and has weight; a full block left alone grows grass and turns back into topsoil=鬆土@n跟碎石一樣會照安息角流動、有重量；滿格放久了長草變回表土
+Excavator operator@nHold and right-click an empty excavator: send him to work it@nRight-click the camp bench: let him rest=怪手操作員@n拿著對沒人的怪手按右鍵：派他上車作業@n對營地長椅按右鍵：交給他休息
+Ore plant@nRight-click on flat ground to place: digs a @1×@2 m receiving hopper toward you, with a storage tower on each side of the machine@nSeparates feed into clean coal and rejects; trucks and haul trucks stopped within reach of a loading boom get loaded=選礦場@n對著平地按右鍵放置：朝自己的方向挖 @1×@2 m 受料倉，機身左右各一座儲料塔@n分選成精煤和矸石；卡車或礦卡停在放料臂範圍內裝料
+Rubble wand@nLeft-click: clear 3×3×3 rubble in front of you@nRight-click: clear all connected rubble@nHold Shift: put the cleared rubble into your inventory=清碴魔杖@n左鍵：清除面前 3×3×3 碎石@n右鍵：清除相連的所有碎石@n按住 Shift：清掉的碎石收進物品欄
+Blast wand@nLeft-click: detonate TNT (rock breaks according to its strength)@nRight-click: one-click mucking (nearby and connected rubble)@nShift + right-click: put the cleared rubble into your inventory=爆破魔杖@n左鍵：引爆 TNT（岩石依強度破碎）@n右鍵：一鍵清碴（附近與相連的碎石）@n按住 Shift 右鍵：清掉的碎石收進物品欄
+Dig wand@nLeft-click: remove the 3×3×3 centered on the pointed block (rock, rubble, etc.)@nRight-click: one-click mucking (nearby and connected rubble)@nShift + right-click: put the cleared rubble into your inventory=挖洞魔杖@n左鍵：移除以指到的格為中心的 3×3×3（岩石、碎石等）@n右鍵：一鍵清碴（附近與相連的碎石）@n按住 Shift 右鍵：清掉的碎石收進物品欄
+Geological compass@nRight-click a rock face: stress and factor of safety; sneak + right-click: full data@nLeft-click a rock face: measure joint orientation (stereonet); sneak + left-click: measure the slope; right-click the air: open the stereonet=地質羅盤@n右鍵岩面：應力與安全係數；蹲下＋右鍵：完整資料@n左鍵岩面：量節理位態（赤平投影）；蹲下＋左鍵：量坡面；對空中右鍵：打開赤平投影
+Back to camp@nHold it and left-click or right-click to return to your team's camp=回營地@n拿在手上按左鍵或右鍵，回到自己組的營地
+Schmidt hammer@nRight-click a rock face: one impact gives one rebound number R, recorded in your field notebook. Take about 10 readings at a spot; the median converts to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=施密特錘@n對岩面右鍵：敲一下得到一個回彈值 R，記進野帳本。同一處敲 10 次左右，取中位數換算單軸抗壓強度（Katz 2000：UCS ≈ 2.21·e^(0.067R)）
+Timber post (diameter @1 cm)@nRight-click a floor: it extends upward until it reaches the roof, up to @2 m@nReaching a rock roof → support: capacity P @= min(crushing, buckling), spread over the 3×3 m² of roof around the post top@n2 m about @3 kN, 4 m about @4 kN, 6 m about @5 kN (longer posts buckle more easily)@nRight-click a wall: placed horizontally as a beam=木柱（直徑 @1 cm）@n對地板按右鍵：往上長到碰到頂板，最長 @2 m@n頂到岩石頂板 → 支撐：承載力 P @= min(壓碎, 挫屈)，分給柱頂周圍 3×3 m² 的頂板@n2 m 約 @3 kN、4 m 約 @4 kN、6 m 約 @5 kN（柱越長越容易挫屈）@n對牆面按右鍵：橫放當樑
+Timber plank (building material, not a support)@nThin board: placed on the ground it is a floor; placed against a ceiling it sits under the ceiling=木板（建材，不算支撐）@n薄木板：對地面放是地板，對頂面放貼在天花板下
+Timber slab (building material, not a support)@nPlaced on a top face it is a lower half block; on a bottom face, an upper half block=木板半格（建材，不算支撐）@n對頂面放是下半格、對底面放是上半格
+Geological compass@nRight-click a rock face: stress and factor of safety@nSneak + right-click: full data (lithology, initial stress, joints on all six faces)=地質羅盤@n右鍵岩面：應力與安全係數@n蹲下＋右鍵：完整資料（岩性、初始應力、六面節理）
+Autonomous haulage kit@nHold it and right-click a dump truck or haul truck to install it (one module per vehicle); needed for autonomous driving=自動駕駛模組@n拿著對卡車或礦卡按右鍵安裝（一個模組裝一台），裝了才能用無人駕駛
+Right-click to get in; Space loads the tank with ANFO and emulsion, E fills the downward holes within reach of the boom with ANFO + a primer=右鍵上車；空白鍵 儲槽裝 ANFO 與乳膠炸藥、E 把吊臂範圍內往下的鑽孔灌 ANFO＋起爆藥包
+Right-click to push; Space tips the bed forward (capacity @1 blocks)@nRight-click while holding rubble to load it=右鍵推車；空白鍵把車斗往前倒（載量 @1 塊）@n手上拿著碎石時右鍵是裝上去
+Right-click to get in; E drills a core hole downward below the mast (up to @1 m) and gives you core boxes and a borehole log=右鍵上車；E 在桅桿下方往下鑽岩芯孔（最深 @1 m），得到岩芯箱與鑽孔柱狀圖
+Right-click to get in; E lowers/raises the blade; with the blade down, drive forward to push rubble away=右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走
+Right-click to get in; E drills a vertical hole below the mast, Space sets the hole depth (surface bench blasting, the hole is filled with ANFO)=右鍵上車；E 在桅桿下方往下鑽一個垂直孔、空白鍵 設定孔深（露天台階爆破，孔裡倒 ANFO）
+Hydraulic breaker kit (excavator attachment)@nHold it and right-click an excavator to install; with an empty bucket, Space switches bucket / breaker@nPoint the breaker at rock and press E to break it: the time is proportional to rock strength (UCS)=油壓破碎錘（怪手改裝套件）@n拿著對怪手按右鍵裝上；鏟斗空的時候空白鍵切換鏟斗／破碎錘@n破碎錘對著岩石按 E 敲碎：時間跟岩石強度（UCS）成正比
+Radio@nClick an excavator to select it, then click the ground: send its operator there (left or right click)@nClick the one that is moving: stop it@nClick a truck or haul truck: open its autonomous haulage settings (start, stop, depart now)=對講機@n點怪手選定，再點地面：叫怪手的操作員開過去（左鍵、右鍵都可以）@n點正在移動的那台：叫它停下@n點卡車、礦卡：打開它的無人駕駛設定（啟動、停止、立即出發）
+Right-click to get in; E digs where the cursor points (4 m³ bucket), Space dumps where the cursor points (point at a truck to load it)=右鍵上車；E 挖滑鼠指的位置（鏟斗 4 m³）、空白鍵倒在滑鼠指的位置（指著卡車就倒進卡車）
+Right-click to get in; E digs where the cursor points (12 m³ bucket, arm about 15 m), Space dumps where the cursor points (point at a haul truck to load its bed)=右鍵上車；E 挖滑鼠指的位置（鏟斗 12 m³，手臂約 15 m）、空白鍵倒在滑鼠指的位置（指著礦卡就倒進車斗）
+Right-click to get in; Space tips the bed out at the rear (capacity @1 m³)=右鍵上車；空白鍵把車斗倒在車尾（載量 @1 m³）
+Right-click to get in; E drills the face ahead following the blast hole pattern, Space edits the pattern=右鍵上車；E 依爆破孔設計圖在前方工作面鑽孔、空白鍵 編輯設計圖
+Right-click to get in; E charges the holes in the face ahead (relief holes are skipped), Space sets the sticks per hole=右鍵上車；E 把前方工作面的鑽孔裝藥（空孔跳過）、空白鍵 設定每孔幾條
+Right-click to get in; E pulls a vehicle next to the deck onto it (own weight ≤ @1 t: excavators, dozers, drill rigs, trucks…, wrecked ones too); press E again to unload it at the rear=右鍵上車；E 把平板旁邊的車拉上平板（自重 ≤ @1 t：怪手、推土機、鑽機、卡車…，報廢的也行），再按 E 卸在車尾
+Right-click to get in; E turns the drum on/off (drive forward with it on to cut rock directly, no blasting needed); Space sets the cut depth: 1 m down / level@nOn-board bin 60 m³, unloads automatically into a nearby truck, conveyor or crusher; autonomous trucks can bind to it=右鍵上車；E 滾筒開／關（開著往前開就把岩石直接切下來，不用爆破）、空白鍵 切深 下切 1 m／平切@n車上料倉 60 m³，自動卸到旁邊的卡車、輸送帶或破碎站；無人卡車可以綁定它
+Right-click to get in (for getting around; four-wheel drive, climbs slopes up to 30°)=右鍵上車（代步用，四輪驅動，爬坡可到 30°）
+Weather station (Stevenson screen)@nPoint at it to see the current rainfall rate and the total of this rain=氣象站（百葉箱）@n指著它看目前的時雨量、這場雨的累積雨量
+Log@nCarry it to a saw bench to saw it into posts or planks=原木@n扛到鋸木台鋸成木柱或木板
+Sapling@nPlant it on a full block of soil; it grows into a tree after a while=樹苗@n種在滿格的土上，過一陣子長成樹
+Axe@nChop any block of a trunk and the whole tree falls into logs=斧頭@n砍樹幹任何一格，整棵樹倒下變成原木
+Wooden wall panel (building material, not a support)@nA thin upright board for building walls=木牆板（建材，不算支撐）@n直立的薄板，做牆壁用
+Topsoil@nSoil with grass and roots: the roots give it cohesion, so it stands even on steep slopes. If dug, undermined, or if an excavated face next to it is too high (above its critical standing height), it turns into loose soil and flows at its angle of repose=表土@n長著草和樹根的土：根系有凝聚力，陡坡上也站得住；被挖、底下被掏空、或旁邊挖開的陡壁太高（超過自立高度），就變成鬆土照安息角流
 Core drill rig (60 m)=岩芯鑽探車（60 m）
 Loadout bin (belt to truck)=裝車料斗（接輸送帶裝車）
 Excavator operator (daily wage extra)=怪手操作員（雇用另付日薪）

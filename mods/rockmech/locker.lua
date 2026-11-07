@@ -30,7 +30,7 @@ local function formspec(pos)
 end
 
 core.register_node(LOCKER, {
-	description = S("Locker\nHolds small items, @1 slots; shared by the whole team, only your team and the teacher can open it\nDig it (empty it first) to get the work order back", tostring(SLOTS)),
+	description = S("Locker"),
 	short_description = S("Locker"),
 	tiles = {SIDE, SIDE, SIDE, SIDE, SIDE, FRONT},
 	inventory_image = "rockmech_icon_locker.png",      -- devtools/make_icons.py

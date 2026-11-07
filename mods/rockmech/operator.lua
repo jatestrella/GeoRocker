@@ -360,7 +360,7 @@ end)
 
 -- 卡片不能丟在地上（人不會被丟在路邊）
 core.register_craftitem(OP_ITEM, {
-	description = S("Excavator operator\nHold and right-click an empty excavator: send him to work it\nRight-click the camp bench: let him rest"),
+	description = S("Excavator operator\nRight-click an excavator"),
 	short_description = S("Excavator operator"),
 	inventory_image = "[fill:16x16:#00000000^[fill:6x6:5,1:#e0b080^[fill:8x7:4,7:#e8a818^[fill:8x2:4,7:#303030^[fill:2x2:7,3:#303030",
 	stack_max = 1,

@@ -203,7 +203,7 @@ local truck = {desc = S("Dump truck"), short = S("Truck"), color = "#c84020", ca
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 	rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	max_grade = math.rad(17),   -- 重載砂石車約 30%
-	item_desc = S("Right-click to get in; Space tips the bed out at the rear (capacity @1 m³)", "12")}
+	item_desc = S("Right-click to get in; Space tips the bed")}
 do   -- 圖示：車斗、駕駛室、三軸
 	local c, r = truck.color, {}
 	r[#r + 1] = {2, 12, 19, 10, c}; r[#r + 1] = {2, 12, 19, 2, "#8a2a10"}

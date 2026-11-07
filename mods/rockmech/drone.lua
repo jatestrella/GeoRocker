@@ -318,7 +318,7 @@ rockmech.drone_toggle = function(user) click(nil, user) end
 function rockmech.drone_flying(name) return flights[name] ~= nil end
 function rockmech.drone_remote_item(item) return item == REMOTE or item == CMD end
 core.register_craftitem(REMOTE, {
-	description = S("Drone remote\nRight-click to take off (first person); WASD to move, E to speed up, Space to climb, Shift to descend\nRight-click again to return to the take-off point; height limit: @1 m above the take-off point", ("%d"):format(CEILING)),
+	description = S("Drone controller\nRight-click to take off / come back"),
 	short_description = S("Drone remote"),
 	inventory_image = "[fill:16x16:#00000000^[fill:12x8:2,6:#3a3a3a^[fill:4x4:3,8:#808080^[fill:4x4:9,8:#808080"
 		.. "^[fill:1x6:3,0:#c0c0c0^[fill:1x6:12,0:#c0c0c0^[fill:2x2:7,9:#40c0ff",
@@ -331,7 +331,7 @@ core.register_craftitem(REMOTE, {
 -- 點怪手選定、點地面叫它開過去、點移動中的那台叫它停；點卡車、礦卡打開它的無人駕駛設定。
 -- 從空中指得比地上的對講機遠（CMD_RANGE m）
 core.register_craftitem(CMD, {
-	description = S("Command drone (drone + radio)\nRight-click to take off, right-click again to return to the take-off point; WASD to move, E to speed up, Space to climb, Shift to descend\nLeft-click (on the ground or in the air): click an excavator to select it, click the ground to send it there; click a dump truck or haul truck to open its AHS settings\nCommand range @1 m", ("%d"):format(CMD_RANGE)),
+	description = S("Command drone\nRight-click to take off / come back; left-click to command"),
 	short_description = S("Command drone"),
 	inventory_image = "[fill:16x16:#00000000^[fill:12x8:2,6:#3a3a3a^[fill:4x4:3,8:#808080^[fill:4x4:9,8:#70c070"
 		.. "^[fill:1x6:3,0:#c0c0c0^[fill:1x6:12,0:#c0c0c0^[fill:2x2:7,9:#ffb030",

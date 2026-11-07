@@ -20,7 +20,7 @@ local def = {desc = S("Bulldozer"), short = S("Dozer"), color = "#e8c828", cap =
 	tilt = {front = 1.3, rear = -2.1, side_z = -0.4, side_x = 1.1}, max_grade = math.rad(30),   -- 履帶推土機
 	exhaust = {x = 0.5, y = 1.1, z = 1.0},   -- 排氣管口（排煙，vehicles.lua 的 V.exhaust）
 	stepheight = 0.3,   -- 放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
-	item_desc = S("Right-click to get in; E lowers/raises the blade; with the blade down, drive forward to push rubble away")}
+	item_desc = S("Right-click to get in; E lowers/raises the blade")}
 do   -- 圖示：履帶、車身、駕駛室、前面的推土鏟、後面的松土器
 	local c, r = def.color, {}
 	V.icon_track(r, 3, 23, 21, 7)
