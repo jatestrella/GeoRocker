@@ -758,8 +758,8 @@ end
 
 -- 路線指示線：粒子只送給設定的玩家，每秒畫一次他附近的路段
 local LINE_EVERY, LINE_STEP, LINE_RANGE = 1, 1, 48
-local RING_STEP = 1.5       -- 容許範圍圈上粒子的間距 (m)
 local lines = {}            -- 玩家名稱 → self.ahs
+local grid_on = {}          -- 玩家名稱 → 正在顯示受料倉範圍的格子
 local function mark(name, p, size, color)
 	local g = V.ground_top(p.x, p.y + 2, p.z, 8)
 	core.add_particle({pos = {x = p.x, y = (g or p.y) + 0.3, z = p.z}, expirationtime = LINE_EVERY * 1.1,
@@ -785,15 +785,23 @@ local function draw_line(name, a)
 		for s = 0, n - 1 do mark(name, vector.add(p, vector.multiply(vector.subtract(q, p), s / n)), 3, "#40ff70") end
 		mark(name, q, 12, "#40a0ff")
 	end
+	-- 受料倉的容許範圍：範圍邊緣那一圈地面格子各標一片薄板（preview.lua 的格子顯示）；人在範圍內綠色，不在橘色。
+	-- 只畫邊緣：R = 15 m 整片畫要七百片，邊緣一圈一百多片
 	local c = rockmech.grate_center(me, LINE_RANGE)
-	if c then
+	if c and rockmech.grid_show then
 		local R = rockmech.HOPPER_RANGE
-		local color = flat_dist(me, c) <= R and "#60ff60" or "#ffb040"
-		local n = math.floor(2 * math.pi * R / RING_STEP)
-		for i = 1, n do
-			local t = 2 * math.pi * i / n
-			mark(name, {x = c.x + R * math.cos(t), y = c.y + 6, z = c.z + R * math.sin(t)}, 4, color)
-		end
+		local function inside(x, z) return (x - c.x) ^ 2 + (z - c.z) ^ 2 <= R * R end
+		local cells = {}
+		for x = math.floor(c.x - R), math.ceil(c.x + R) do for z = math.floor(c.z - R), math.ceil(c.z + R) do
+			if inside(x, z) and not (inside(x + 1, z) and inside(x - 1, z) and inside(x, z + 1) and inside(x, z - 1)) then
+				cells[#cells + 1] = {x, z}
+			end
+		end end
+		rockmech.grid_show(name, "hopper", cells, c.y + 6, flat_dist(me, c) <= R, 16)
+		grid_on[name] = true
+	elseif grid_on[name] then
+		rockmech.grid_clear(name, "hopper")
+		grid_on[name] = nil
 	end
 end
 local line_t = 0
@@ -802,8 +810,15 @@ core.register_globalstep(function(dtime)
 	if line_t < LINE_EVERY then return end
 	line_t = 0
 	for name, a in pairs(lines) do draw_line(name, a) end
+	-- 不看路線了：格子收掉
+	for name in pairs(grid_on) do
+		if not lines[name] then
+			if rockmech.grid_clear then rockmech.grid_clear(name, "hopper") end
+			grid_on[name] = nil
+		end
+	end
 end)
-core.register_on_leaveplayer(function(player) lines[player:get_player_name()] = nil end)
+core.register_on_leaveplayer(function(player) lines[player:get_player_name()] = nil; grid_on[player:get_player_name()] = nil end)
 
 -- 存下來的路線：名稱 → {route, load, dump, bound}，所有車共用
 local ROUTES_KEY = "ahs_routes"

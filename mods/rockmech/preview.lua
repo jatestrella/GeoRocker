@@ -39,8 +39,8 @@ local function clear(name)
 end
 
 -- (x, z) 這一欄、從 y 往下找的地表高度（方塊頂面；不滿格的碎石用碎石頂面）
-local function surface(x, y, z)
-	for yy = y, y - 4, -1 do
+local function surface(x, y, z, depth)
+	for yy = y, y - (depth or 4), -1 do
 		local n = core.get_node({x = x, y = yy, z = z}).name
 		if n ~= "ignore" and not V.passable(n) then
 			local k = rockmech.rubble_level[n]
@@ -74,6 +74,46 @@ local function draw(name, cells, y0, ok)
 		list[i] = nil
 	end
 end
+
+-- 給別的模組用的格子顯示（例如無人卡車的受料倉容許範圍，vehicle_ahs.lua）：跟預覽框同一種薄板，
+-- 只有 name 看得到；key 分開不同的用途。ok = true 綠色，false 橘色
+local ORANGE = tex("#ffb04060")
+local grids = {}            -- 玩家名稱 → key → {entity, …}
+function rockmech.grid_show(name, key, cells, y0, ok, depth)
+	grids[name] = grids[name] or {}
+	local list = grids[name][key] or {}
+	grids[name][key] = list
+	local fresh = list.ok ~= ok
+	list.ok = ok
+	for i, c in ipairs(cells) do
+		local p = {x = c[1], y = surface(c[1], y0, c[2], depth) + LIFT, z = c[2]}
+		local o = list[i]
+		if not (o and o:get_pos()) then
+			o = core.add_entity(p, PREVIEW)
+			list[i] = o
+			if o and o.set_observers then o:set_observers({[name] = true}) end
+			if o then o:set_properties({textures = ok and OK or ORANGE}) end
+		elseif fresh then
+			o:set_properties({textures = ok and OK or ORANGE})
+		end
+		if o then o:set_pos(p) end
+	end
+	for i = #list, #cells + 1, -1 do
+		if list[i] and list[i]:get_pos() then list[i]:remove() end
+		list[i] = nil
+	end
+end
+function rockmech.grid_clear(name, key)
+	local g = grids[name]
+	if not (g and g[key]) then return end
+	for _, o in ipairs(g[key]) do if o:get_pos() then o:remove() end end
+	g[key] = nil
+end
+core.register_on_leaveplayer(function(player)
+	local name = player:get_player_name()
+	for key in pairs(grids[name] or {}) do rockmech.grid_clear(name, key) end
+	grids[name] = nil
+end)
 
 -- 準星指到的方塊（跟放東西時一樣的 pointed_thing）
 local function pointed_node(player)
