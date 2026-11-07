@@ -88,7 +88,7 @@ config.shop = {
 	{key = "dozer", shop = "vehicle", item = "rockmech:dozer_item", label = TR("Bulldozer"), price = 35000},
 	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = TR("ANFO bulk truck"), price = 40000},
 	{key = "charger", shop = "blast", item = "rockmech:charger_item", label = TR("Charging unit"), price = 40000},
-	{key = "corerig", shop = "blast", item = "rockmech:corerig_item", label = TR("Core drill rig (60 m)"), price = 45000},
+	{key = "corerig", shop = "vehicle", item = "rockmech:corerig_item", label = TR("Core drill rig (60 m)"), price = 45000},
 	{key = "drillrig", shop = "blast", item = "rockmech:drillrig_item", label = TR("Surface drill rig"), price = 50000},
 	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = TR("Drill jumbo"), price = 60000},
 	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = TR("Haul truck"), price = 150000},

@@ -50,12 +50,14 @@ local function rqd_of(lambda) return 100 * math.exp(-0.1 * lambda) * (0.1 * lamb
 
 local function lith_label(key)
 	if key == "rubble" then return S("Rubble") end
+	if key == "soil" then return S("Soil") end
 	local l = rockmech.cfg.lithologies[key]
 	return l and l.description and S(l.description) or key
 end
 rockmech.lith_label = lith_label
 local function lith_color(key)
 	if key == "rubble" then return "#8a8070" end
+	if key == "soil" then return "#6e5236" end
 	local l = rockmech.cfg.lithologies[key]
 	return l and l.color or "#808080"
 end
@@ -95,8 +97,9 @@ local function log_form(name, bh, rm, gr)
 		local g = "—"
 		if is_ore or r.grade then g = gr and r.grade and ("%.0f%%"):format(r.grade / 255 * 100) or (gr and "—" or "?") end
 		out[#out + 1] = ("label[7.4,%g;%s]"):format(y + H / 2, core.formspec_escape(g))
-		out[#out + 1] = ("label[9.6,%g;%s]"):format(y + H / 2, rm and tostring(r.joints or 0) or "?")
-		out[#out + 1] = ("label[11.6,%g;%s]"):format(y + H / 2, rm and ("%.0f%%"):format(rqd_of(lambda(i))) or "?")
+		local soil = r.lith == "soil"
+		out[#out + 1] = ("label[9.6,%g;%s]"):format(y + H / 2, soil and "—" or rm and tostring(r.joints or 0) or "?")
+		out[#out + 1] = ("label[11.6,%g;%s]"):format(y + H / 2, soil and "—" or rm and ("%.0f%%"):format(rqd_of(lambda(i))) or "?")
 	end
 	if note then
 		out[#out + 1] = ("label[0.5,%g;%s]"):format(0.1 + #rows * H + 0.2, core.formspec_escape(
@@ -367,8 +370,8 @@ local function corebox_form(name, bh, acc)
 			local x = X0 + (m - 1) * MW
 			local cy, ch = y0 + 0.5, 0.58
 			out[#out + 1] = ("label[%g,%g;%d]"):format(x, y0 + 0.36, i - 1)
-			if r.lith == "rubble" then
-				-- 碎石段：一堆碎塊
+			if r.lith == "rubble" or r.lith == "soil" then
+				-- 碎石段、土：一堆碎塊（取出來的土不成柱）
 				local px = x + 0.04
 				local c = 0
 				while px < x + MW - 0.15 do
@@ -391,7 +394,7 @@ local function corebox_form(name, bh, acc)
 			if rm then
 				local is_ore = rockmech.cfg.ores[r.lith] ~= nil or (rockmech.cfg.lithologies[r.lith] or {}).ore ~= nil
 				out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.27, core.formspec_escape(lith_label(r.lith)))
-				local info = S("RQD @1%  joints @2", ("%.0f"):format(rqd_of(lambda(i))), tostring(r.joints or 0))
+				local info = r.lith == "soil" and "" or S("RQD @1%  joints @2", ("%.0f"):format(rqd_of(lambda(i))), tostring(r.joints or 0))
 				if is_ore or r.grade then
 					out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.93, core.formspec_escape((gr and r.grade) and S("grade @1%", ("%.0f"):format(r.grade / 255 * 100)) or S("grade ?")))
 				end
@@ -774,7 +777,10 @@ core.register_globalstep(function(dtime)
 					local node = core.get_node(cell)
 					local lith = rockmech.lith_of_node[node.name]
 					local row
-					if lith then
+					if core.get_item_group(node.name, "rockmech_topsoil") > 0
+							or (rockmech.is_rubble(node.name) and rockmech.rubble_base[node.name] == rockmech.RUBBLE_SOIL) then
+						row = {lith = "soil"}         -- 表土、鬆土：鑽得過去，岩芯裡是一段土
+					elseif lith then
 						row = {lith = lith.name, grade = lith.ore and node.param2 or nil}
 					elseif rockmech.is_rubble(node.name) then
 						local base = rockmech.rubble_base[node.name]
@@ -785,7 +791,7 @@ core.register_globalstep(function(dtime)
 					else
 						-- 這 1 m 有幾條節理穿過鑽孔（格子的上面那個面）
 						local sets = rockmech.get_joint_sets()
-						row.joints = (joints.face_joint(sets, cell.x, cell.y, cell.z, 2) and 1 or 0)
+						row.joints = row.lith ~= "soil" and (joints.face_joint(sets, cell.x, cell.y, cell.z, 2) and 1 or 0) or 0
 						d.rows[#d.rows + 1] = row
 						if #d.rows >= d.max then finish(name, d, nil) end
 					end

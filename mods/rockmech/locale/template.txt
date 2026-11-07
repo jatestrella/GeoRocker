@@ -134,6 +134,7 @@ The next block @1 is occupied; dig it out first=
 
 ### coredrill.lua
 Rubble=
+Soil=
 @1 (BH-@2)=
 @1   Collar (@2, @3, @4)   Depth @5 m (@6)=
 @1   Collar (@2, @3, @4)   Depth @5 m=
@@ -506,7 +507,6 @@ Granite rubble@nBroken granite=
 Granite rubble=
 Loose soil@nLike rubble, it flows at its angle of repose and has weight; a full block left alone grows grass and turns back into topsoil=
 Loose soil=
-Soil=
 @1 rubble=
 @1 rubble, mixed with @2=
 Colluvium@nRubble and soil mixed together=
@@ -734,6 +734,7 @@ Is(50), 3 tests (MPa)=
 Mean Is(50)=
 UCS ≈ K·Is(50)=
 Sample=
+(soil, no sample)=
 (rubble, no sample)=
 Is(50): point load strength index of a 50 mm core. "Repeat" tests a new set of specimens (readings scatter).=
 Repeat=

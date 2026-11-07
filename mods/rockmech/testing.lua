@@ -73,7 +73,7 @@ local function plt_form(name, pos)
 			local lab = see(name, "rockmass") and (rockmech.lith_label and rockmech.lith_label(sgm.lith) or sgm.lith) or S("Sample")
 			if not ucs then
 				cells[#cells + 1], cells[#cells + 2] = ("%d–%d"):format(sgm.from, sgm.to), lab
-				cells[#cells + 1], cells[#cells + 2], cells[#cells + 3] = S("(rubble, no sample)"), "", ""
+				cells[#cells + 1], cells[#cells + 2], cells[#cells + 3] = sgm.lith == "soil" and S("(soil, no sample)") or S("(rubble, no sample)"), "", ""
 			else
 				local is, sum = {}, 0
 				for k = 1, 3 do

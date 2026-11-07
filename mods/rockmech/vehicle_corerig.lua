@@ -79,7 +79,7 @@ local function collar_of(self)
 	local above = {x = x, y = y, z = z}
 	if core.get_node(above).name ~= "air" then return nil, S("The hole collar must be clear") end
 	local below = core.get_node({x = x, y = y - 1, z = z}).name
-	if not (rockmech.lith_of_node[below] or rockmech.is_rubble(below)) then return nil, S("There is no rock under the mast") end
+	if not (rockmech.lith_of_node[below] or rockmech.is_rubble(below) or core.get_item_group(below, "rockmech_topsoil") > 0) then return nil, S("There is no rock under the mast") end
 	return above
 end
 

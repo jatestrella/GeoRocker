@@ -134,6 +134,7 @@ The next block @1 is occupied; dig it out first=下一格 @1 有東西，要先�
 
 ### coredrill.lua
 Rubble=碎石
+Soil=土
 @1 (BH-@2)=@1（BH-@2）
 @1   Collar (@2, @3, @4)   Depth @5 m (@6)=@1　孔口 (@2, @3, @4)　深 @5 m（@6）
 @1   Collar (@2, @3, @4)   Depth @5 m=@1　孔口 (@2, @3, @4)　深 @5 m
@@ -506,7 +507,6 @@ Granite rubble@nBroken granite=花崗岩碎石@n破碎的花崗岩
 Granite rubble=花崗岩碎石
 Loose soil@nLike rubble, it flows at its angle of repose and has weight; a full block left alone grows grass and turns back into topsoil=鬆土@n跟碎石一樣會照安息角流動、有重量；滿格放久了長草變回表土
 Loose soil=鬆土
-Soil=土
 @1 rubble=@1碎石
 @1 rubble, mixed with @2=@1碎石，混@2
 Colluvium@nRubble and soil mixed together=崩積土@n碎石和土混在一起
@@ -734,6 +734,7 @@ Is(50), 3 tests (MPa)=Is(50) 三次 (MPa)
 Mean Is(50)=平均 Is(50)
 UCS ≈ K·Is(50)=UCS ≈ K·Is(50)
 Sample=岩樣
+(soil, no sample)=（土，取不到岩樣）
 (rubble, no sample)=（碎石，取不到岩樣）
 Is(50): point load strength index of a 50 mm core. "Repeat" tests a new set of specimens (readings scatter).=Is(50)：直徑 50 mm 岩芯的點荷重強度指數。每次按「重做」是新的一組試驗（試體不同，讀數會散布）
 Repeat=重做
