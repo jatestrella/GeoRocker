@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoRocker 遊戲說明</title>
+<!-- 這個檔案由 build.py 產生：條目改 build.py，版面改 template.html，圖示 tex.py，遊戲內截圖放 shots/ -->
+<style>
+:root {
+	--bg: #f6f6f6; --panel: #ffffff; --text: #202122; --muted: #54595d; --line: #c8ccd1; --soft: #eaecf0;
+	--link: #3366cc; --accent: #a5481e; --code: #f1f1ee; --warn: #ac6600; --warnbg: #fef6e7; --head: #f8f9fa;
+}
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--bg: #101418; --panel: #1b1f24; --text: #e6e7e8; --muted: #a2a9b1; --line: #3a4048; --soft: #262b31;
+		--link: #88a3e8; --accent: #e0905f; --code: #262b31; --warn: #f0c060; --warnbg: #352c1c; --head: #22272d;
+	}
+}
+:root[data-theme="dark"] {
+	--bg: #101418; --panel: #1b1f24; --text: #e6e7e8; --muted: #a2a9b1; --line: #3a4048; --soft: #262b31;
+	--link: #88a3e8; --accent: #e0905f; --code: #262b31; --warn: #f0c060; --warnbg: #352c1c; --head: #22272d;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.7; font-size: 16px;
+	font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.top { background: var(--panel); border-bottom: 1px solid var(--line); }
+.top .wrap { max-width: 1240px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.brand { font-size: 22px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.brand small { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+.search { position: relative; flex: 1; min-width: 200px; max-width: 520px; }
+#q { width: 100%; padding: 7px 12px; font: inherit; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); }
+#res { position: absolute; left: 0; right: 0; top: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 0 0 4px 4px; z-index: 5; max-height: 60vh; overflow: auto; display: none; }
+#res a { display: flex; gap: 8px; align-items: center; padding: 5px 10px; color: var(--text); }
+#res a:hover, #res a.on { background: var(--soft); text-decoration: none; }
+#res img { width: 24px; height: 24px; object-fit: contain; image-rendering: pixelated; }
+.theme { margin-left: auto; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 4px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 14px; }
+.layout { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 200px 1fr; gap: 20px; padding: 16px; }
+nav { position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow: auto; font-size: 14.5px; }
+nav a { display: block; padding: 1px 8px; color: var(--link); }
+.navh { font-size: 12.5px; color: var(--muted); font-weight: 700; margin: 12px 0 2px 8px; border-bottom: 1px solid var(--line); }
+main { background: var(--panel); border: 1px solid var(--line); padding: 14px 26px 30px; min-height: 70vh; }
+.page { display: none; }
+.page.show { display: block; }
+.page::after { content: ""; display: table; clear: both; }
+h1 { font-family: "Noto Serif TC", "PMingLiU", Georgia, serif; font-weight: 500; font-size: 30px; margin: 4px 0 10px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+h2 { font-family: "Noto Serif TC", "PMingLiU", Georgia, serif; font-weight: 500; font-size: 22px; margin: 22px 0 6px; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+h3 { font-size: 17px; margin: 16px 0 4px; }
+.crumb { font-size: 13px; color: var(--muted); margin: 0; }
+ul, ol { padding-left: 1.5em; }
+code { background: var(--code); border-radius: 3px; padding: 0 4px; font-family: Consolas, monospace; font-size: 0.92em; }
+.formula { background: var(--code); border-left: 3px solid var(--line); padding: 6px 12px; margin: 8px 0; font-family: "Cambria Math", "Times New Roman", serif; font-size: 17px; overflow-x: auto; }
+.note { background: var(--warnbg); border: 1px solid var(--line); border-left: 4px solid var(--warn); padding: 6px 12px; margin: 10px 0; }
+table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
+.mech table th, .mech table td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; vertical-align: top; }
+.mech table th { background: var(--head); }
+.ibox { float: right; width: 300px; margin: 0 0 14px 20px; border: 1px solid var(--line); background: var(--head); padding: 6px; font-size: 14.5px; }
+.ibox-title { text-align: center; font-weight: 700; font-size: 17px; background: var(--soft); padding: 4px; margin-bottom: 6px; }
+.ibox-shot { width: 100%; display: block; border: 1px solid var(--line); }
+.ibox-icon { width: 96px; height: 96px; display: block; margin: 8px auto 0; image-rendering: pixelated; object-fit: contain; }
+.ibox .cap { text-align: center; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+.ibox table { width: 100%; margin: 6px 0 0; }
+.ibox th { text-align: left; width: 3.5em; color: var(--muted); vertical-align: top; padding: 3px 6px 3px 0; border-top: 1px solid var(--line); }
+.ibox td { padding: 3px 0; border-top: 1px solid var(--line); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--head); color: var(--text); text-align: center; font-size: 14px; }
+.tile:hover { border-color: var(--accent); text-decoration: none; }
+.tile img { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; }
+.noimg { width: 64px; height: 64px; background: var(--soft); border-radius: 4px; }
+.grp { display: inline-block; min-width: 7.5em; color: var(--muted); font-size: 14px; }
+.mlink { display: inline-block; margin: 0 10px 4px 0; }
+@media (max-width: 860px) {
+	.layout { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
+	nav { position: static; max-height: none; display: flex; flex-wrap: wrap; gap: 2px 4px; }
+	nav a { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; }
+	.navh { width: 100%; border: 0; margin: 6px 0 0; }
+	main { padding: 10px 14px 24px; }
+	.ibox { float: none; width: 100%; margin: 6px 0 12px; }
+	h1 { font-size: 25px; }
+}
+</style>
+</head>
+<body>
+<div class="top"><div class="wrap">
+	<a class="brand" href="#home">GeoRocker<small>遊戲說明</small></a>
+	<div class="search"><input id="q" type="search" placeholder="搜尋，例如：岩栓、卡車、穩定性" autocomplete="off"><div id="res"></div></div>
+	<button class="theme" id="theme" type="button">深色／淺色</button>
+</div></div>
+<div class="layout">
+<nav>
+{{NAV}}
+</nav>
+<main>
+{{BODY}}
+</main>
+</div>
+<script>
+(function () {
+	var root = document.documentElement;
+	try { var t = localStorage.getItem("georocker-theme"); if (t) root.setAttribute("data-theme", t); } catch (e) {}
+	document.getElementById("theme").addEventListener("click", function () {
+		var cur = root.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+		var next = cur === "dark" ? "light" : "dark";
+		root.setAttribute("data-theme", next);
+		try { localStorage.setItem("georocker-theme", next); } catch (e) {}
+	});
+	// 一次只顯示一頁（像 wiki 的一個條目），用網址的 # 切換
+	var pages = document.querySelectorAll(".page");
+	function show() {
+		var id = (location.hash || "#home").slice(1), hit = document.getElementById(id);
+		if (!hit || !hit.classList.contains("page")) { hit = document.getElementById("home"); }
+		pages.forEach(function (p) { p.classList.toggle("show", p === hit); });
+		var h = hit.querySelector("h1");
+		document.title = (h && hit.id !== "home" ? h.textContent + " - " : "") + "GeoRocker 遊戲說明";
+		window.scrollTo(0, 0);
+	}
+	window.addEventListener("hashchange", show);
+	show();
+	// 搜尋：比對條目標題和內容，列出結果
+	var q = document.getElementById("q"), res = document.getElementById("res");
+	var all = [];
+	pages.forEach(function (p) {
+		if (p.id === "home") return;
+		var h = p.querySelector("h1"), img = p.querySelector(".ibox-icon") || p.querySelector(".ibox-shot");
+		all.push({id: p.id, title: h ? h.textContent : p.id, text: (p.getAttribute("data-text") || p.textContent).toLowerCase(), img: img ? img.getAttribute("src") : null});
+	});
+	function search() {
+		var s = q.value.trim().toLowerCase();
+		res.innerHTML = "";
+		if (!s) { res.style.display = "none"; return; }
+		var hits = all.filter(function (a) { return a.title.toLowerCase().indexOf(s) >= 0; })
+			.concat(all.filter(function (a) { return a.title.toLowerCase().indexOf(s) < 0 && a.text.indexOf(s) >= 0; })).slice(0, 14);
+		hits.forEach(function (a) {
+			var el = document.createElement("a");
+			el.href = "#" + a.id;
+			if (a.img) { var im = document.createElement("img"); im.src = a.img; el.appendChild(im); }
+			el.appendChild(document.createTextNode(a.title));
+			el.addEventListener("click", function () { res.style.display = "none"; q.value = ""; });
+			res.appendChild(el);
+		});
+		res.style.display = hits.length ? "block" : "none";
+	}
+	q.addEventListener("input", search);
+	q.addEventListener("keydown", function (e) {
+		if (e.key === "Enter") { var f = res.querySelector("a"); if (f) { location.hash = f.getAttribute("href"); res.style.display = "none"; q.value = ""; } }
+		if (e.key === "Escape") { res.style.display = "none"; }
+	});
+	document.addEventListener("click", function (e) { if (!e.target.closest(".search")) res.style.display = "none"; });
+})();
+</script>
+</body>
+</html>

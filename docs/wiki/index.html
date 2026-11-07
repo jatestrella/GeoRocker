@@ -4,343 +4,394 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GeoRocker 遊戲說明</title>
+<!-- 這個檔案由 build.py 產生：條目改 build.py，版面改 template.html，圖示 tex.py，遊戲內截圖放 shots/ -->
 <style>
 :root {
-	--bg: #f7f6f2; --panel: #ffffff; --text: #24262b; --muted: #5f646d; --line: #dedbd2;
-	--accent: #b5562a; --accent2: #2f6f8f; --code: #f0ede6; --warn: #8a5a00; --warnbg: #fff4dc;
+	--bg: #f6f6f6; --panel: #ffffff; --text: #202122; --muted: #54595d; --line: #c8ccd1; --soft: #eaecf0;
+	--link: #3366cc; --accent: #a5481e; --code: #f1f1ee; --warn: #ac6600; --warnbg: #fef6e7; --head: #f8f9fa;
 }
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme="light"]) {
-		--bg: #17181b; --panel: #1f2125; --text: #e6e6e3; --muted: #a2a6ad; --line: #34373d;
-		--accent: #e08a5c; --accent2: #6fb2d4; --code: #2a2d32; --warn: #f0c060; --warnbg: #3a3020;
+		--bg: #101418; --panel: #1b1f24; --text: #e6e7e8; --muted: #a2a9b1; --line: #3a4048; --soft: #262b31;
+		--link: #88a3e8; --accent: #e0905f; --code: #262b31; --warn: #f0c060; --warnbg: #352c1c; --head: #22272d;
 	}
 }
 :root[data-theme="dark"] {
-	--bg: #17181b; --panel: #1f2125; --text: #e6e6e3; --muted: #a2a6ad; --line: #34373d;
-	--accent: #e08a5c; --accent2: #6fb2d4; --code: #2a2d32; --warn: #f0c060; --warnbg: #3a3020;
+	--bg: #101418; --panel: #1b1f24; --text: #e6e7e8; --muted: #a2a9b1; --line: #3a4048; --soft: #262b31;
+	--link: #88a3e8; --accent: #e0905f; --code: #262b31; --warn: #f0c060; --warnbg: #352c1c; --head: #22272d;
 }
 * { box-sizing: border-box; }
-body {
-	margin: 0; background: var(--bg); color: var(--text);
-	font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
-	line-height: 1.75; font-size: 16px;
-}
-header {
-	background: var(--panel); border-bottom: 1px solid var(--line); padding: 20px 16px 16px;
-}
-header .wrap { max-width: 1180px; margin: 0 auto; }
-header h1 { margin: 0; font-size: 28px; letter-spacing: 0.02em; }
-header p { margin: 4px 0 0; color: var(--muted); }
-.layout { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: 240px 1fr; gap: 28px; padding: 24px 16px 60px; }
-nav { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 32px); overflow: auto; }
-nav a { display: block; color: var(--muted); text-decoration: none; padding: 3px 10px; border-left: 2px solid transparent; font-size: 15px; }
-nav a:hover { color: var(--accent); border-left-color: var(--accent); }
-main section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 24px 20px; margin-bottom: 22px; }
-h2 { color: var(--accent); font-size: 22px; margin: 18px 0 8px; }
-h3 { font-size: 17px; margin: 18px 0 4px; color: var(--accent2); }
-p { margin: 8px 0; }
-ul, ol { padding-left: 1.4em; margin: 6px 0; }
-li { margin: 3px 0; }
-code, kbd { background: var(--code); border-radius: 4px; padding: 0 5px; font-family: Consolas, "Courier New", monospace; font-size: 0.92em; }
-kbd { border: 1px solid var(--line); }
-table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 15px; }
-th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
-th { color: var(--muted); font-weight: 600; }
-.formula { background: var(--code); border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-family: "Cambria Math", "Times New Roman", serif; font-size: 17px; overflow-x: auto; }
-.note { background: var(--warnbg); color: var(--text); border-left: 4px solid var(--warn); border-radius: 6px; padding: 8px 12px; margin: 10px 0; }
-.tag { display: inline-block; font-size: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; color: var(--muted); margin-left: 6px; vertical-align: middle; }
-.theme { float: right; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 14px; }
-.table-wrap { overflow-x: auto; }
+body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.7; font-size: 16px;
+	font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.top { background: var(--panel); border-bottom: 1px solid var(--line); }
+.top .wrap { max-width: 1240px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.brand { font-size: 22px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.brand small { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+.search { position: relative; flex: 1; min-width: 200px; max-width: 520px; }
+#q { width: 100%; padding: 7px 12px; font: inherit; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); }
+#res { position: absolute; left: 0; right: 0; top: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 0 0 4px 4px; z-index: 5; max-height: 60vh; overflow: auto; display: none; }
+#res a { display: flex; gap: 8px; align-items: center; padding: 5px 10px; color: var(--text); }
+#res a:hover, #res a.on { background: var(--soft); text-decoration: none; }
+#res img { width: 24px; height: 24px; object-fit: contain; image-rendering: pixelated; }
+.theme { margin-left: auto; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 4px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 14px; }
+.layout { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 200px 1fr; gap: 20px; padding: 16px; }
+nav { position: sticky; top: 12px; align-self: start; max-height: calc(100vh - 24px); overflow: auto; font-size: 14.5px; }
+nav a { display: block; padding: 1px 8px; color: var(--link); }
+.navh { font-size: 12.5px; color: var(--muted); font-weight: 700; margin: 12px 0 2px 8px; border-bottom: 1px solid var(--line); }
+main { background: var(--panel); border: 1px solid var(--line); padding: 14px 26px 30px; min-height: 70vh; }
+.page { display: none; }
+.page.show { display: block; }
+.page::after { content: ""; display: table; clear: both; }
+h1 { font-family: "Noto Serif TC", "PMingLiU", Georgia, serif; font-weight: 500; font-size: 30px; margin: 4px 0 10px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+h2 { font-family: "Noto Serif TC", "PMingLiU", Georgia, serif; font-weight: 500; font-size: 22px; margin: 22px 0 6px; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+h3 { font-size: 17px; margin: 16px 0 4px; }
+.crumb { font-size: 13px; color: var(--muted); margin: 0; }
+ul, ol { padding-left: 1.5em; }
+code { background: var(--code); border-radius: 3px; padding: 0 4px; font-family: Consolas, monospace; font-size: 0.92em; }
+.formula { background: var(--code); border-left: 3px solid var(--line); padding: 6px 12px; margin: 8px 0; font-family: "Cambria Math", "Times New Roman", serif; font-size: 17px; overflow-x: auto; }
+.note { background: var(--warnbg); border: 1px solid var(--line); border-left: 4px solid var(--warn); padding: 6px 12px; margin: 10px 0; }
+table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
+.mech table th, .mech table td { border: 1px solid var(--line); padding: 4px 10px; text-align: left; vertical-align: top; }
+.mech table th { background: var(--head); }
+.ibox { float: right; width: 300px; margin: 0 0 14px 20px; border: 1px solid var(--line); background: var(--head); padding: 6px; font-size: 14.5px; }
+.ibox-title { text-align: center; font-weight: 700; font-size: 17px; background: var(--soft); padding: 4px; margin-bottom: 6px; }
+.ibox-shot { width: 100%; display: block; border: 1px solid var(--line); }
+.ibox-icon { width: 96px; height: 96px; display: block; margin: 8px auto 0; image-rendering: pixelated; object-fit: contain; }
+.ibox .cap { text-align: center; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+.ibox table { width: 100%; margin: 6px 0 0; }
+.ibox th { text-align: left; width: 3.5em; color: var(--muted); vertical-align: top; padding: 3px 6px 3px 0; border-top: 1px solid var(--line); }
+.ibox td { padding: 3px 0; border-top: 1px solid var(--line); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--head); color: var(--text); text-align: center; font-size: 14px; }
+.tile:hover { border-color: var(--accent); text-decoration: none; }
+.tile img { width: 64px; height: 64px; object-fit: contain; image-rendering: pixelated; }
+.noimg { width: 64px; height: 64px; background: var(--soft); border-radius: 4px; }
+.grp { display: inline-block; min-width: 7.5em; color: var(--muted); font-size: 14px; }
+.mlink { display: inline-block; margin: 0 10px 4px 0; }
 @media (max-width: 860px) {
-	.layout { grid-template-columns: 1fr; gap: 12px; }
-	nav { position: static; max-height: none; display: flex; flex-wrap: wrap; gap: 4px; }
-	nav a { border: 1px solid var(--line); border-radius: 14px; padding: 2px 10px; font-size: 14px; }
-	main section { padding: 6px 14px 16px; }
+	.layout { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
+	nav { position: static; max-height: none; display: flex; flex-wrap: wrap; gap: 2px 4px; }
+	nav a { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; }
+	.navh { width: 100%; border: 0; margin: 6px 0 0; }
+	main { padding: 10px 14px 24px; }
+	.ibox { float: none; width: 100%; margin: 6px 0 12px; }
+	h1 { font-size: 25px; }
 }
 </style>
 </head>
 <body>
-<header><div class="wrap">
+<div class="top"><div class="wrap">
+	<a class="brand" href="#home">GeoRocker<small>遊戲說明</small></a>
+	<div class="search"><input id="q" type="search" placeholder="搜尋，例如：岩栓、卡車、穩定性" autocomplete="off"><div id="res"></div></div>
 	<button class="theme" id="theme" type="button">深色／淺色</button>
-	<h1>GeoRocker 遊戲說明</h1>
-	<p>岩石力學、隧道、大地工程的採礦模擬（Luanti）。這份說明遊戲怎麼玩，以及每個機制背後的岩力概念。</p>
-</div></header>
-
+</div></div>
 <div class="layout">
-<nav id="toc">
-	<a href="#start">開始玩</a>
-	<a href="#hands">手上搬東西</a>
-	<a href="#rock">岩石與地質</a>
-	<a href="#stress">開挖與崩塌</a>
-	<a href="#support">支撐</a>
-	<a href="#blast">爆破</a>
-	<a href="#soil">碎石、土、降雨</a>
-	<a href="#survey">調查與監測儀器</a>
-	<a href="#knowledge">知識能力</a>
-	<a href="#machines">機具</a>
-	<a href="#money">賣礦與經營</a>
-	<a href="#wood">樹與木工</a>
-	<a href="#shop">商店價目</a>
+<nav>
+<a href="#home"><b>首頁</b></a>
+<div class="navh">機制</div>
+<a href="#m-start">新手入門</a>
+<a href="#m-carry">搬運與放置</a>
+<a href="#m-stability">穩定性</a>
+<a href="#m-rockmass">岩體強度</a>
+<a href="#m-blast">爆破</a>
+<a href="#m-support">支撐</a>
+<a href="#m-soil">碎石與土</a>
+<a href="#m-rain">降雨</a>
+<a href="#m-knowledge">知識能力</a>
+<a href="#m-money">賣礦與經營</a>
+<div class="navh">元件</div>
+<a href="#c-tools">手工具</a>
+<a href="#c-survey">調查與監測儀器</a>
+<a href="#c-blast">爆破器材</a>
+<a href="#c-support">支撐與建材</a>
+<a href="#c-vehicle">車輛</a>
+<a href="#c-addon">車輛改裝與人員</a>
+<a href="#c-building">建築物</a>
+<a href="#c-material">地形與材料</a>
+<a href="#c-camp">營地人物</a>
 </nav>
-
 <main>
-
-<section id="start">
-<h2>開始玩</h2>
-<ul>
-	<li><b>礦帶</b>：你有一條礦帶，煤層從山丘中間切過，有的地方從山坡露頭、有的在平地上。<b>資金</b>在畫面右上角。</li>
-	<li><b>營地</b>（出生點旁邊）：帳篷裡有三位供應商：<b>機械設備課長</b>（車輛、破碎站、輸送帶）、<b>爆破主任</b>（鑽孔、炸藥）、<b>工具室管理員</b>（手工具、支撐、儀器）。旁邊有破碎站、研究帳篷、大學教授、操作員休息的長椅。</li>
-	<li><b>回營地</b>：拿著「回營地」旗子按左鍵就回到營地。</li>
-	<li><b>賺錢</b>：把煤挖下來、送到破碎站倒進受料倉，過磅就入帳（見<a href="#money">賣礦與經營</a>）。</li>
-	<li>地圖上：山坡、平地都鋪著表土；山坡上有兩成左右露出岩面（可以直接看岩性和節理），煤層的露頭是裸露的。</li>
-</ul>
-</section>
-
-<section id="hands">
-<h2>手上搬東西</h2>
-<p>背包只放小東西（工具、木柱、木板、炸藥……）。<b>大東西在世界裡</b>，人一次只捧得動一份：</p>
-<ul>
-	<li><b>碎石、土</b>：用鎬或鏟子挖起來就是捧在手上（最多一格 1 m³）。</li>
-	<li><b>岩芯箱</b>：左鍵捧起來，一次一箱。</li>
-	<li><b>原木</b>：左鍵扛起地上躺著的原木，一次一根。</li>
-	<li>捧著東西時，<b>不管手上拿什麼，右鍵都是先放下</b>：對著地面就放在那裡，對著卡車車斗就裝上車，原木對著鋸木台就鋸。</li>
-</ul>
-<h3>挖</h3>
-<ul>
-	<li>徒手只敲得動礦石；<b>鎬</b>什麼岩石都能挖但很慢，挖開的岩石原地變成碎石；<b>鏟子</b>只鏟碎石和土，最快。</li>
-	<li>世界不會掉落岩石和碎石：礦都要實際搬到破碎站才換得到錢。</li>
-</ul>
-<h3>放東西</h3>
-<ul>
-	<li><b>建築物</b>（破碎站、選礦場、裝車料斗）：範圍裡不滿一格的土石會先清掉，蓋在下面的岩盤上。</li>
-	<li><b>設施</b>（置物箱、鋸木台、木柱、方塊……）：放在不滿一格的薄土上時，薄土會被推到旁邊，設施放進那一格。</li>
-</ul>
-</section>
-
-<section id="rock">
-<h2>岩石與地質</h2>
-<p>遊戲裡的岩體 = <b>完整岩石 ＋ 明確的節理</b>。不用 RMR、Q 這類岩體分類，岩體強度直接用 Hoek–Brown 準則。</p>
-<h3>岩性</h3>
-<div class="table-wrap"><table>
-	<tr><th>岩性</th><th>單軸抗壓強度 σci</th><th>張力強度</th><th>mi</th><th>單位重</th></tr>
-	<tr><td>頁岩</td><td>30 MPa</td><td>2 MPa</td><td>6</td><td>25 kN/m³</td></tr>
-	<tr><td>砂岩</td><td>60 MPa</td><td>4 MPa</td><td>17</td><td>25 kN/m³</td></tr>
-	<tr><td>花崗岩</td><td>180 MPa</td><td>10 MPa</td><td>32</td><td>25 kN/m³</td></tr>
-	<tr><td>煤</td><td>15 MPa</td><td>1 MPa</td><td>8</td><td>14 kN/m³</td></tr>
-</table></div>
-<p class="note">不同地圖的設定可能不同；實際的數字用 GSI 圖卡、地質羅盤或 <code>/rockmech</code> 資訊頁看。</p>
-<h3>Hoek–Brown 岩體強度</h3>
-<div class="formula">σ₁ = σ₃ + σci · (mb·σ₃/σci + s)<sup>a</sup></div>
-<p>mb、s、a 由 <b>GSI</b>（地質強度指標）和 <b>D</b>（擾動係數，爆破造成）算出來：</p>
-<div class="formula">mb = mi·exp((GSI − 100)/(28 − 14D))　　s = exp((GSI − 100)/(9 − 3D))</div>
-<h3>節理</h3>
-<ul>
-	<li>岩體裡有幾組節理（例如 10°/135°、60°/000°、60°/090°，傾角/傾向）。岩面上看得到節理的跡線。</li>
-	<li>節理不會降低完整岩石的強度；破壞是沿著節理滑動（剪力強度 τ = cj + σn·tan φj）。</li>
-	<li>節理切出來的岩塊，如果能從開挖面滑出來（關鍵塊體、楔形塊），就會掉下來。</li>
-</ul>
-<h3>地應力</h3>
-<ul>
-	<li>垂直應力 σv = Σγ·h（上覆岩層和表土的重量）。</li>
-	<li>水平應力 σH = K_H·σv、σh = K_h·σv，σH 有一個方位。</li>
-</ul>
-</section>
-
-<section id="stress">
-<h2>開挖與崩塌</h2>
-<ul>
-	<li>每次開挖，伺服器在背景用<b>有限元素法</b>（每格岩石一個 1 m 的六面體元素）重新算開挖附近的應力。</li>
-	<li>每個臨空面算 <b>安全係數 FS</b>（強度 ÷ 應力），FS &lt; 1 就破壞、剝落成碎石，再重新算，可能連鎖。</li>
-	<li><b>天然地形視為平衡</b>：只有開挖造成的「穩定 → 不穩定」才會破壞。砍樹、鏟土不會讓天然山坡平白垮掉。</li>
-	<li>開挖面上方懸空的岩塊、節理切出的楔形塊會掉下來；落石會翻滾，打到人或車會受傷。</li>
-	<li><b>碎石和土的重量也算</b>：疊在岩面上是頂面荷重 q = γ·h；靠在岩壁上是側向土壓 K₀·γ·z（K₀ = 1 − sin φ）。坡頂堆太多碎石會讓下面的岩面 FS 變低；坡腳堆碎石反而有扶壁效果。卡車倒料時會在倒的地方重算一次。</li>
-	<li>地表上方淺的開挖會出現拉裂環（沉陷）。</li>
-</ul>
-<p class="note">拿著<b>地質羅盤</b>右鍵岩面看應力和 FS（要有岩石力學能力）。</p>
-</section>
-
-<section id="support">
-<h2>支撐</h2>
-<ul>
-	<li><b>岩栓</b>、<b>噴凝土</b>：在應力計算裡等於在開挖面加上一個圍壓 pᵢ，提高 FS。</li>
-	<li><b>木柱</b>：在應力計算裡是有勁度的元素。先撐好再往前挖，荷重會往木柱集中；超過承載力就壓斷（名牌顯示軸力和承載力）。木柱只有 20 cm 粗，碎石不能疊在木條上。</li>
-	<li>用<b>監測稜鏡</b>看支撐有沒有效：加了支撐之後，位移應該趨於穩定。</li>
-</ul>
-</section>
-
-<section id="blast">
-<h2>爆破</h2>
+<article class="page" id="home"><h1>GeoRocker 遊戲說明</h1><p>岩石力學、隧道、大地工程的採礦模擬。左邊選機制或元件分類，或用上方的搜尋。</p><h2>機制</h2><p><span class="grp">入門</span><a class="mlink" href="#m-start">新手入門</a> <a class="mlink" href="#m-carry">搬運與放置</a></p><p><span class="grp">岩體與開挖</span><a class="mlink" href="#m-stability">穩定性</a> <a class="mlink" href="#m-rockmass">岩體強度</a> <a class="mlink" href="#m-blast">爆破</a> <a class="mlink" href="#m-support">支撐</a></p><p><span class="grp">碎石、土、天氣</span><a class="mlink" href="#m-soil">碎石與土</a> <a class="mlink" href="#m-rain">降雨</a></p><p><span class="grp">能力與經營</span><a class="mlink" href="#m-knowledge">知識能力</a> <a class="mlink" href="#m-money">賣礦與經營</a></p><h2 id="h-tools">手工具</h2><div class="tiles"><a class="tile" href="#i-pick"><img src="img/pick.png" alt="" loading="lazy"><span>挖礦鎬</span></a><a class="tile" href="#i-shovel"><img src="img/shovel.png" alt="" loading="lazy"><span>鏟子</span></a><a class="tile" href="#i-axe"><img src="img/axe.png" alt="" loading="lazy"><span>斧頭</span></a><a class="tile" href="#i-camp_flag"><img src="img/camp_flag.png" alt="" loading="lazy"><span>回營地旗子</span></a><a class="tile" href="#i-radio"><img src="img/radio.png" alt="" loading="lazy"><span>對講機</span></a></div><h2 id="h-survey">調查與監測儀器</h2><div class="tiles"><a class="tile" href="#i-compass"><img src="img/compass.png" alt="" loading="lazy"><span>地質羅盤</span></a><a class="tile" href="#i-gsi_card"><img src="img/gsi_card.png" alt="" loading="lazy"><span>GSI 評估圖卡</span></a><a class="tile" href="#i-xrf"><img src="img/xrf.png" alt="" loading="lazy"><span>手持式 XRF 分析儀</span></a><a class="tile" href="#i-schmidt_hammer"><img src="img/schmidt_hammer.png" alt="" loading="lazy"><span>施密特錘</span></a><a class="tile" href="#i-point_load"><img src="img/point_load.png" alt="" loading="lazy"><span>點荷重試驗機</span></a><a class="tile" href="#i-core_drill"><img src="img/core_drill.png" alt="" loading="lazy"><span>手持岩芯鑽機</span></a><a class="tile" href="#i-corebox"><img src="img/corebox.png" alt="" loading="lazy"><span>岩芯箱</span></a><a class="tile" href="#i-fieldbook"><img src="img/fieldbook.png" alt="" loading="lazy"><span>野帳本</span></a><a class="tile" href="#i-survey_prism"><img src="img/survey_prism.png" alt="" loading="lazy"><span>監測稜鏡</span></a><a class="tile" href="#i-rain_gauge"><img src="img/rain_gauge.png" alt="" loading="lazy"><span>氣象站（百葉箱）</span></a><a class="tile" href="#i-drone_remote"><img src="img/drone_remote.png" alt="" loading="lazy"><span>無人機</span></a><a class="tile" href="#i-drone_cmd"><img src="img/drone_cmd.png" alt="" loading="lazy"><span>指揮無人機</span></a></div><h2 id="h-blast">爆破器材</h2><div class="tiles"><a class="tile" href="#i-rock_drill"><img src="img/rock_drill.png" alt="" loading="lazy"><span>鑿岩機</span></a><a class="tile" href="#i-emulsion"><img src="img/emulsion.png" alt="" loading="lazy"><span>乳膠炸藥</span></a><a class="tile" href="#i-anfo"><img src="img/anfo.png" alt="" loading="lazy"><span>ANFO（銨油炸藥）</span></a><a class="tile" href="#i-detonator"><img src="img/detonator.png" alt="" loading="lazy"><span>起爆器</span></a></div><h2 id="h-support">支撐與建材</h2><div class="tiles"><a class="tile" href="#i-rock_bolt"><img src="img/rock_bolt.png" alt="" loading="lazy"><span>岩栓</span></a><a class="tile" href="#i-shotcrete"><img src="img/shotcrete.png" alt="" loading="lazy"><span>噴凝土</span></a><a class="tile" href="#i-timber_post"><img src="img/timber_post.png" alt="" loading="lazy"><span>木柱</span></a><a class="tile" href="#i-timber_plank"><img src="img/timber_plank.png" alt="" loading="lazy"><span>木板</span></a><a class="tile" href="#i-timber_slab"><img src="img/timber_slab.png" alt="" loading="lazy"><span>木板半格</span></a><a class="tile" href="#i-timber_wall"><img src="img/timber_wall.png" alt="" loading="lazy"><span>木牆板</span></a><a class="tile" href="#i-sawbench"><img src="img/sawbench.png" alt="" loading="lazy"><span>鋸木台</span></a><a class="tile" href="#i-workbench"><img src="img/workbench.png" alt="" loading="lazy"><span>木工桌</span></a><a class="tile" href="#i-locker"><img src="img/locker.png" alt="" loading="lazy"><span>置物箱</span></a></div><h2 id="h-vehicle">車輛</h2><div class="tiles"><a class="tile" href="#i-cart"><img src="img/cart.png" alt="" loading="lazy"><span>手推車</span></a><a class="tile" href="#i-suv"><img src="img/suv.png" alt="" loading="lazy"><span>四輪驅動休旅車</span></a><a class="tile" href="#i-truck"><img src="img/truck.png" alt="" loading="lazy"><span>卡車</span></a><a class="tile" href="#i-haul"><img src="img/haul.png" alt="" loading="lazy"><span>礦卡</span></a><a class="tile" href="#i-excavator"><img src="img/excavator.png" alt="" loading="lazy"><span>挖土機（怪手）</span></a><a class="tile" href="#i-excavator_big"><img src="img/excavator_big.png" alt="" loading="lazy"><span>礦用挖土機</span></a><a class="tile" href="#i-dozer"><img src="img/dozer.png" alt="" loading="lazy"><span>推土機</span></a><a class="tile" href="#i-lowboy"><img src="img/lowboy.png" alt="" loading="lazy"><span>平板拖車</span></a><a class="tile" href="#i-miner"><img src="img/miner.png" alt="" loading="lazy"><span>連續採礦機</span></a><a class="tile" href="#i-drillrig"><img src="img/drillrig.png" alt="" loading="lazy"><span>露天鑽機</span></a><a class="tile" href="#i-jumbo"><img src="img/jumbo.png" alt="" loading="lazy"><span>鑽堡</span></a><a class="tile" href="#i-charger"><img src="img/charger.png" alt="" loading="lazy"><span>裝藥台車</span></a><a class="tile" href="#i-bulktruck"><img src="img/bulktruck.png" alt="" loading="lazy"><span>ANFO 裝藥車</span></a><a class="tile" href="#i-corerig"><img src="img/corerig.png" alt="" loading="lazy"><span>岩芯鑽探車</span></a></div><h2 id="h-addon">車輛改裝與人員</h2><div class="tiles"><a class="tile" href="#i-operator"><img src="img/operator.png" alt="" loading="lazy"><span>怪手操作員</span></a><a class="tile" href="#i-breaker_kit"><img src="img/breaker_kit.png" alt="" loading="lazy"><span>油壓破碎錘</span></a><a class="tile" href="#i-ahs_module"><img src="img/ahs_module.png" alt="" loading="lazy"><span>自動駕駛模組</span></a></div><h2 id="h-building">建築物</h2><div class="tiles"><a class="tile" href="#i-crusher"><img src="img/crusher.png" alt="" loading="lazy"><span>破碎站</span></a><a class="tile" href="#i-crusher_big"><img src="img/crusher_big.png" alt="" loading="lazy"><span>大型破碎站</span></a><a class="tile" href="#i-plant"><img src="img/plant.png" alt="" loading="lazy"><span>選礦場</span></a><a class="tile" href="#i-belt"><img src="img/belt.png" alt="" loading="lazy"><span>輸送帶</span></a><a class="tile" href="#i-loadout"><img src="img/loadout.png" alt="" loading="lazy"><span>裝車料斗</span></a></div><h2 id="h-material">地形與材料</h2><div class="tiles"><a class="tile" href="#i-rock"><img src="img/rock.png" alt="" loading="lazy"><span>岩石</span></a><a class="tile" href="#i-rubble"><img src="img/rubble.png" alt="" loading="lazy"><span>碎石</span></a><a class="tile" href="#i-topsoil"><img src="img/topsoil.png" alt="" loading="lazy"><span>表土</span></a><a class="tile" href="#i-rubble_soil"><img src="img/rubble_soil.png" alt="" loading="lazy"><span>鬆土</span></a><a class="tile" href="#i-colluvium"><img src="img/colluvium.png" alt="" loading="lazy"><span>崩積土、混合碎石</span></a><a class="tile" href="#i-log"><img src="img/log.png" alt="" loading="lazy"><span>樹、原木</span></a></div><h2 id="h-camp">營地人物</h2><div class="tiles"><a class="tile" href="#i-vendor_vehicle"><span class="noimg"></span><span>機械設備課長</span></a><a class="tile" href="#i-vendor_blast"><span class="noimg"></span><span>爆破主任</span></a><a class="tile" href="#i-vendor_tools"><span class="noimg"></span><span>工具室管理員</span></a><a class="tile" href="#i-research"><span class="noimg"></span><span>研究帳篷</span></a><a class="tile" href="#i-professor"><span class="noimg"></span><span>大學教授</span></a><a class="tile" href="#i-camp_bench"><img src="img/camp_bench.png" alt="" loading="lazy"><span>長椅</span></a></div></article>
+<article class="page" id="c-tools"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>手工具</h1><div class="tiles"><a class="tile" href="#i-pick"><img src="img/pick.png" alt="" loading="lazy"><span>挖礦鎬</span></a><a class="tile" href="#i-shovel"><img src="img/shovel.png" alt="" loading="lazy"><span>鏟子</span></a><a class="tile" href="#i-axe"><img src="img/axe.png" alt="" loading="lazy"><span>斧頭</span></a><a class="tile" href="#i-camp_flag"><img src="img/camp_flag.png" alt="" loading="lazy"><span>回營地旗子</span></a><a class="tile" href="#i-radio"><img src="img/radio.png" alt="" loading="lazy"><span>對講機</span></a></div></article>
+<article class="page" id="c-survey"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>調查與監測儀器</h1><div class="tiles"><a class="tile" href="#i-compass"><img src="img/compass.png" alt="" loading="lazy"><span>地質羅盤</span></a><a class="tile" href="#i-gsi_card"><img src="img/gsi_card.png" alt="" loading="lazy"><span>GSI 評估圖卡</span></a><a class="tile" href="#i-xrf"><img src="img/xrf.png" alt="" loading="lazy"><span>手持式 XRF 分析儀</span></a><a class="tile" href="#i-schmidt_hammer"><img src="img/schmidt_hammer.png" alt="" loading="lazy"><span>施密特錘</span></a><a class="tile" href="#i-point_load"><img src="img/point_load.png" alt="" loading="lazy"><span>點荷重試驗機</span></a><a class="tile" href="#i-core_drill"><img src="img/core_drill.png" alt="" loading="lazy"><span>手持岩芯鑽機</span></a><a class="tile" href="#i-corebox"><img src="img/corebox.png" alt="" loading="lazy"><span>岩芯箱</span></a><a class="tile" href="#i-fieldbook"><img src="img/fieldbook.png" alt="" loading="lazy"><span>野帳本</span></a><a class="tile" href="#i-survey_prism"><img src="img/survey_prism.png" alt="" loading="lazy"><span>監測稜鏡</span></a><a class="tile" href="#i-rain_gauge"><img src="img/rain_gauge.png" alt="" loading="lazy"><span>氣象站（百葉箱）</span></a><a class="tile" href="#i-drone_remote"><img src="img/drone_remote.png" alt="" loading="lazy"><span>無人機</span></a><a class="tile" href="#i-drone_cmd"><img src="img/drone_cmd.png" alt="" loading="lazy"><span>指揮無人機</span></a></div></article>
+<article class="page" id="c-blast"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>爆破器材</h1><div class="tiles"><a class="tile" href="#i-rock_drill"><img src="img/rock_drill.png" alt="" loading="lazy"><span>鑿岩機</span></a><a class="tile" href="#i-emulsion"><img src="img/emulsion.png" alt="" loading="lazy"><span>乳膠炸藥</span></a><a class="tile" href="#i-anfo"><img src="img/anfo.png" alt="" loading="lazy"><span>ANFO（銨油炸藥）</span></a><a class="tile" href="#i-detonator"><img src="img/detonator.png" alt="" loading="lazy"><span>起爆器</span></a></div></article>
+<article class="page" id="c-support"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>支撐與建材</h1><div class="tiles"><a class="tile" href="#i-rock_bolt"><img src="img/rock_bolt.png" alt="" loading="lazy"><span>岩栓</span></a><a class="tile" href="#i-shotcrete"><img src="img/shotcrete.png" alt="" loading="lazy"><span>噴凝土</span></a><a class="tile" href="#i-timber_post"><img src="img/timber_post.png" alt="" loading="lazy"><span>木柱</span></a><a class="tile" href="#i-timber_plank"><img src="img/timber_plank.png" alt="" loading="lazy"><span>木板</span></a><a class="tile" href="#i-timber_slab"><img src="img/timber_slab.png" alt="" loading="lazy"><span>木板半格</span></a><a class="tile" href="#i-timber_wall"><img src="img/timber_wall.png" alt="" loading="lazy"><span>木牆板</span></a><a class="tile" href="#i-sawbench"><img src="img/sawbench.png" alt="" loading="lazy"><span>鋸木台</span></a><a class="tile" href="#i-workbench"><img src="img/workbench.png" alt="" loading="lazy"><span>木工桌</span></a><a class="tile" href="#i-locker"><img src="img/locker.png" alt="" loading="lazy"><span>置物箱</span></a></div></article>
+<article class="page" id="c-vehicle"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>車輛</h1><div class="tiles"><a class="tile" href="#i-cart"><img src="img/cart.png" alt="" loading="lazy"><span>手推車</span></a><a class="tile" href="#i-suv"><img src="img/suv.png" alt="" loading="lazy"><span>四輪驅動休旅車</span></a><a class="tile" href="#i-truck"><img src="img/truck.png" alt="" loading="lazy"><span>卡車</span></a><a class="tile" href="#i-haul"><img src="img/haul.png" alt="" loading="lazy"><span>礦卡</span></a><a class="tile" href="#i-excavator"><img src="img/excavator.png" alt="" loading="lazy"><span>挖土機（怪手）</span></a><a class="tile" href="#i-excavator_big"><img src="img/excavator_big.png" alt="" loading="lazy"><span>礦用挖土機</span></a><a class="tile" href="#i-dozer"><img src="img/dozer.png" alt="" loading="lazy"><span>推土機</span></a><a class="tile" href="#i-lowboy"><img src="img/lowboy.png" alt="" loading="lazy"><span>平板拖車</span></a><a class="tile" href="#i-miner"><img src="img/miner.png" alt="" loading="lazy"><span>連續採礦機</span></a><a class="tile" href="#i-drillrig"><img src="img/drillrig.png" alt="" loading="lazy"><span>露天鑽機</span></a><a class="tile" href="#i-jumbo"><img src="img/jumbo.png" alt="" loading="lazy"><span>鑽堡</span></a><a class="tile" href="#i-charger"><img src="img/charger.png" alt="" loading="lazy"><span>裝藥台車</span></a><a class="tile" href="#i-bulktruck"><img src="img/bulktruck.png" alt="" loading="lazy"><span>ANFO 裝藥車</span></a><a class="tile" href="#i-corerig"><img src="img/corerig.png" alt="" loading="lazy"><span>岩芯鑽探車</span></a></div></article>
+<article class="page" id="c-addon"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>車輛改裝與人員</h1><div class="tiles"><a class="tile" href="#i-operator"><img src="img/operator.png" alt="" loading="lazy"><span>怪手操作員</span></a><a class="tile" href="#i-breaker_kit"><img src="img/breaker_kit.png" alt="" loading="lazy"><span>油壓破碎錘</span></a><a class="tile" href="#i-ahs_module"><img src="img/ahs_module.png" alt="" loading="lazy"><span>自動駕駛模組</span></a></div></article>
+<article class="page" id="c-building"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>建築物</h1><div class="tiles"><a class="tile" href="#i-crusher"><img src="img/crusher.png" alt="" loading="lazy"><span>破碎站</span></a><a class="tile" href="#i-crusher_big"><img src="img/crusher_big.png" alt="" loading="lazy"><span>大型破碎站</span></a><a class="tile" href="#i-plant"><img src="img/plant.png" alt="" loading="lazy"><span>選礦場</span></a><a class="tile" href="#i-belt"><img src="img/belt.png" alt="" loading="lazy"><span>輸送帶</span></a><a class="tile" href="#i-loadout"><img src="img/loadout.png" alt="" loading="lazy"><span>裝車料斗</span></a></div></article>
+<article class="page" id="c-material"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>地形與材料</h1><div class="tiles"><a class="tile" href="#i-rock"><img src="img/rock.png" alt="" loading="lazy"><span>岩石</span></a><a class="tile" href="#i-rubble"><img src="img/rubble.png" alt="" loading="lazy"><span>碎石</span></a><a class="tile" href="#i-topsoil"><img src="img/topsoil.png" alt="" loading="lazy"><span>表土</span></a><a class="tile" href="#i-rubble_soil"><img src="img/rubble_soil.png" alt="" loading="lazy"><span>鬆土</span></a><a class="tile" href="#i-colluvium"><img src="img/colluvium.png" alt="" loading="lazy"><span>崩積土、混合碎石</span></a><a class="tile" href="#i-log"><img src="img/log.png" alt="" loading="lazy"><span>樹、原木</span></a></div></article>
+<article class="page" id="c-camp"><p class="crumb"><a href="#home">首頁</a> › 元件</p><h1>營地人物</h1><div class="tiles"><a class="tile" href="#i-vendor_vehicle"><span class="noimg"></span><span>機械設備課長</span></a><a class="tile" href="#i-vendor_blast"><span class="noimg"></span><span>爆破主任</span></a><a class="tile" href="#i-vendor_tools"><span class="noimg"></span><span>工具室管理員</span></a><a class="tile" href="#i-research"><span class="noimg"></span><span>研究帳篷</span></a><a class="tile" href="#i-professor"><span class="noimg"></span><span>大學教授</span></a><a class="tile" href="#i-camp_bench"><img src="img/camp_bench.png" alt="" loading="lazy"><span>長椅</span></a></div></article>
+<article class="page mech" id="m-start"><p class="crumb"><a href="#home">首頁</a> › 機制 › 入門</p><h1>新手入門</h1>
+<p><b>GeoRocker</b> 是一款以岩石力學為核心的採礦模擬。你從營地出發，挖煤、運到破碎站賣錢，再用賺來的錢買更大的機具。
+挖得越深、越快，岩體越可能崩塌：這時就要靠調查、支撐和監測。</p>
+<h3>第一步</h3>
 <ol>
-	<li>用<b>鑿岩機</b>在岩面鑽孔（按住左鍵）。</li>
-	<li><b>乳膠炸藥</b>裝進孔裡（一孔最多 4 條），或貼在岩面上（威力小很多）。</li>
-	<li>用<b>起爆器</b>起爆範圍內的裝藥（或打火石只點一孔）。</li>
+<li>出生點旁是<b>營地</b>：帳篷裡有三位供應商（<a href="#i-vendor_vehicle">機械設備課長</a>、<a href="#i-vendor_blast">爆破主任</a>、<a href="#i-vendor_tools">工具室管理員</a>），旁邊有一座<a href="#i-crusher">破碎站</a>、<a href="#i-research">研究帳篷</a>和<a href="#i-professor">大學教授</a>。</li>
+<li>拿免費的<a href="#i-pick">挖礦鎬</a>去敲煤層（黑色的岩石），敲下來的煤碎石捧在手上，搬到破碎站的受料倉倒進去就入帳。</li>
+<li>有錢之後買<a href="#i-shovel">鏟子</a>、<a href="#i-cart">手推車</a>，再來是<a href="#i-truck">卡車</a>和<a href="#i-excavator">挖土機</a>。</li>
+<li>開挖面越來越大時，學會看<a href="#m-stability">穩定性</a>，必要時打<a href="#i-rock_bolt">岩栓</a>、立<a href="#i-timber_post">木柱</a>。</li>
 </ol>
+<h3>地圖</h3>
+<p>礦帶裡煤層從山丘中間切過，一半從山坡露頭、一半在平地上。山坡和平地鋪著表土，山坡上約兩成是露出的岩面，煤層露頭是裸露的；山坡上稀疏長著蘋果樹。</p>
+<h3>要記得的規則</h3>
 <ul>
-	<li>破碎半徑 R = R₀·n<sup>1/3</sup>（n 條炸藥），岩石越硬破碎越小。中間炸飛、外圍原地變碎石。</li>
-	<li><b>自由面</b>：孔旁邊有空的地方（抵抗線 B &lt; R），炸得比較好；先炸中間的孔（掏槽），外圈的孔就有自由面。</li>
-	<li><b>ANFO</b>：露天台階的垂直孔（鑽機鑽），倒 ANFO 成柱狀裝藥，孔裡要放一條乳膠炸藥當起爆藥包，不然會拒爆。</li>
+<li><b>大東西不進背包</b>：碎石、土、岩芯箱、原木一次只捧一份，見<a href="#m-carry">搬運與放置</a>。</li>
+<li><b>數字要學才看得到</b>：品位、岩性、應力、FS 一開始都看不到，見<a href="#m-knowledge">知識能力</a>。</li>
+</ul></article>
+<article class="page mech" id="m-carry"><p class="crumb"><a href="#home">首頁</a> › 機制 › 入門</p><h1>搬運與放置</h1>
+<ul>
+<li>背包只放小東西（工具、儀器、木柱、炸藥……）。<b>大東西在世界裡</b>：碎石和土（一次最多 1 m³）、岩芯箱（一次一箱）、原木（一次一根）。</li>
+<li>捧著東西時，<b>不管手上拿著什麼，右鍵都是先放下</b>：對著地面放下、對著車斗裝車、原木對著鋸木台就鋸。手上有東西時撿不了別的。</li>
+<li>世界不會掉落岩石和碎石：礦都要實際搬到破碎站才換得到錢。</li>
+<li><b>建築物</b>（破碎站、選礦場、裝車料斗）：範圍裡不滿一格的土石會清掉，蓋在岩盤上。</li>
+<li><b>設施</b>（置物箱、鋸木台、木柱、方塊）：放在不滿一格的薄土上時，薄土推到旁邊，設施放進那一格。</li>
+</ul></article>
+<article class="page mech" id="m-stability"><p class="crumb"><a href="#home">首頁</a> › 機制 › 岩體與開挖</p><h1>穩定性</h1>
+<p>遊戲裡的崩塌不是隨機事件，而是每次開挖後用<b>應力分析</b>判斷的。這一頁說明判斷的流程。</p>
+<h3>1. 應力解（有限元素法）</h3>
+<ul>
+<li>每次挖掉岩石（鎬、破碎錘、爆破、採礦機），伺服器在背景把開挖附近約 30 m 見方的岩體切成 1 m 的六面體元素，解彈性力學方程式，得到每一格的應力 σ₁、σ₃。外圍再用一層較粗的網格接到遠方。</li>
+<li>解的是「開挖造成的變化」：開挖前的現地應力（σv = Σγh，水平 = K·σv）跟重力平衡，挖開之後臨空面上不平衡，應力重新分配——拱頂、角隅的應力集中，頂板中間可能受拉。</li>
+</ul>
+<h3>2. 安全係數 FS</h3>
+<div class="formula">FS = 岩體強度 q_f(σ₃) ÷ 軸差應力 (σ₁ − σ₃)；受拉時 FS = σt ÷ |σ₃|</div>
+<ul>
+<li>強度用 Hoek–Brown（見<a href="#m-rockmass">岩體強度</a>），只判斷<b>臨空面</b>上的點。FS &lt; 1 的那一格破壞，原地剝落成碎石。</li>
+<li>拿<a href="#i-compass">地質羅盤</a>右鍵岩面看那一格的 σ₁、σ₃、FS（要有岩石力學能力）。FS 越接近 1 越危險；FS 低的岩面上會出現裂紋。</li>
+</ul>
+<h3>3. 連鎖崩落</h3>
+<p>一格破壞後幾何改變，應力再重新分配，旁邊的格子可能跟著破壞。系統會再算一輪（最多 5 輪）——所以一個小開挖可能引發一整片頂板崩落。</p>
+<h3>4. 天然地形視為平衡</h3>
+<p>還沒開挖的山坡、崖壁被當成已經平衡的狀態：只有<b>開挖造成的</b>「穩定 → 不穩定」才會破壞。砍樹、鏟土、放東西不會讓天然山坡平白垮掉；但在它旁邊挖岩石就會開始判定。</p>
+<h3>5. 節理與塊體</h3>
+<ul>
+<li>節理面上的剪力強度 τ = cj + σn·tan φj。節理位態對著開挖面「露出來」（daylight）時，沿節理的滑動就可能發生。</li>
+<li><b>關鍵塊體</b>：幾組節理和開挖面切出一個能滑出來的岩塊（楔形塊），沒有足夠的夾持力就整塊掉下來。用<a href="#i-compass">赤平投影</a>判斷哪些節理組危險。</li>
+</ul>
+<h3>6. 懸空與落石</h3>
+<ul>
+<li>完全懸空、跟其他岩體連不起來的岩塊一定掉。整塊落下或沿節理滑出的岩塊會翻滾，撞到地面依落差碎成碎石。</li>
+<li>落石打到人或車會受傷、損壞：動能越大傷害越大。</li>
+</ul>
+<h3>7. 荷重：碎石、土、木柱、支撐</h3>
+<ul>
+<li>疊在岩面上的碎石、土是頂面荷重 q = γ·h；靠在岩壁上的是側向土壓 K₀·γ·z（K₀ = 1 − sin φ）。坡頂堆太多會讓下面的岩面 FS 變低；坡腳堆碎石有扶壁效果。卡車倒料時會在倒的地方重算。</li>
+<li><a href="#i-rock_bolt">岩栓</a>、<a href="#i-shotcrete">噴凝土</a>在開挖面加上圍壓 pᵢ；<a href="#i-timber_post">木柱</a>是有勁度的元素，會分擔頂板荷重，超載就壓斷。見<a href="#m-support">支撐</a>。</li>
+</ul>
+<h3>8. 怎麼挖比較安全</h3>
+<ul>
+<li>跨度越大，頂板中間越容易受拉破壞；先挖小、撐好再擴大。</li>
+<li>控制爆破（每孔 1 條炸藥）傷害岩體比較少，見<a href="#m-blast">爆破</a>。</li>
+<li>貼<a href="#i-survey_prism">監測稜鏡</a>看變形：讀數一直變大是警訊，加了支撐後應該趨於穩定。</li>
+</ul></article>
+<article class="page mech" id="m-rockmass"><p class="crumb"><a href="#home">首頁</a> › 機制 › 岩體與開挖</p><h1>岩體強度</h1>
+<p>岩體 = <b>完整岩石＋明確的節理</b>。節理以外的岩石強度用 Hoek–Brown 準則：</p>
+<div class="formula">σ₁ = σ₃ + σci·(mb·σ₃/σci + s)<sup>a</sup></div>
+<div class="formula">mb = mi·e<sup>(GSI−100)/(28−14D)</sup>　s = e<sup>(GSI−100)/(9−3D)</sup>　a = ½ + (e<sup>−GSI/15</sup> − e<sup>−20/3</sup>)/6</div>
+<ul>
+<li><b>σci</b>：完整岩石的單軸抗壓強度（實驗室值）；可以用<a href="#i-schmidt_hammer">施密特錘</a>、<a href="#i-point_load">點荷重試驗</a>估。</li>
+<li><b>GSI</b>（地質強度指標）：代表節理以下尺度的破碎程度，越低越弱；用 <a href="#i-gsi_card">GSI 圖卡</a>看。</li>
+<li><b>D</b>（擾動係數）：爆破把岩石炸鬆，0（完整）到 1（嚴重）；見<a href="#m-blast">爆破</a>。</li>
+<li><b>張力強度</b>很低：頂板中間、懸臂受拉時最容易壞。</li>
+</ul>
+<h3>岩性</h3>
+<table><tr><th>岩性</th><th>σci</th><th>張力強度</th><th>mi</th><th>單位重</th><th>模數比 MR</th></tr>
+<tr><td>頁岩</td><td>30 MPa</td><td>2 MPa</td><td>6</td><td>25 kN/m³</td><td>150</td></tr>
+<tr><td>砂岩</td><td>60 MPa</td><td>4 MPa</td><td>17</td><td>25 kN/m³</td><td>275</td></tr>
+<tr><td>花崗岩</td><td>180 MPa</td><td>10 MPa</td><td>32</td><td>25 kN/m³</td><td>425</td></tr>
+<tr><td>煤</td><td>15 MPa</td><td>1 MPa</td><td>8</td><td>14 kN/m³</td><td>200</td></tr></table>
+<h3>節理</h3>
+<p>岩體裡有幾組平行的節理面，各有傾角/傾向、間距和延續性；岩面上看得到跡線。節理不降低完整岩石的強度，破壞沿節理滑動（τ = cj + σn·tan φj），見<a href="#m-stability">穩定性</a>。</p>
+<h3>地應力</h3>
+<p>垂直應力 σv = Σγ·h（上覆岩層和表土的重量）；水平主應力 σH = K_H·σv、σh = K_h·σv，σH 有固定方位。</p>
+<p class="note">不同地圖的設定可能不同；用 <code>/rockmech</code> 資訊頁看實際的數字。</p></article>
+<article class="page mech" id="m-blast"><p class="crumb"><a href="#home">首頁</a> › 機制 › 岩體與開挖</p><h1>爆破</h1>
+<ol><li><a href="#i-rock_drill">鑿岩機</a>鑽孔（或用<a href="#i-jumbo">鑽堡</a>依設計圖鑽一整個工作面）→ <a href="#i-emulsion">乳膠炸藥</a>裝進孔裡（或<a href="#i-charger">裝藥台車</a>）→ <a href="#i-detonator">起爆器</a>起爆。</li>
+<li>露天台階：<a href="#i-drillrig">露天鑽機</a>鑽垂直孔、倒 <a href="#i-anfo">ANFO</a>（或<a href="#i-bulktruck">ANFO 裝藥車</a>），放一條乳膠炸藥當起爆藥包。</li></ol>
+<h3>破碎範圍</h3>
+<div class="formula">R = R₀·n<sup>1/3</sup>（n 條炸藥），岩石越硬破碎半徑越小</div>
+<ul>
+<li>中間炸飛、外圍原地變碎石。孔只有孔口一個自由面時岩石夾住炸藥，效果打折。</li>
+<li><b>自由面</b>：孔旁邊有空的地方（抵抗線 B &lt; R）炸得比較好。先炸中間的孔（掏槽），外圈的孔就有自由面；沒裝藥的空孔也算自由面。</li>
+<li>裝藥被別的爆炸波及會殉爆。</li>
 </ul>
 <h3>爆破擾動 D</h3>
-<p>破碎區外面 1 m 的岩石雖然還在，但被炸鬆了：Hoek–Brown 的 D 打折強度和變形模數。</p>
-<div class="table-wrap"><table>
-	<tr><th>裝藥方式</th><th>D</th><th>效果</th></tr>
-	<tr><td>每孔 1 條乳膠炸藥（控制爆破、平滑爆破）</td><td>0.5</td><td>傷害小</td></tr>
-	<tr><td>每孔 2 條以上、貼面裝藥</td><td>0.8</td><td>頁岩 GSI 50 的強度約剩一半</td></tr>
-	<tr><td>ANFO 台階生產爆破</td><td>1.0</td><td>傷害最大</td></tr>
-	<tr><td>機械開挖（鎬、破碎錘、怪手）</td><td>0</td><td>沒有擾動</td></tr>
-</table></div>
-<p>指著岩石，HUD 會顯示「爆破擾動 D = …」（要有岩體分類能力）。</p>
-</section>
-
-<section id="soil">
-<h2>碎石、土、降雨</h2>
-<h3>碎石和鬆土</h3>
+<p>破碎區外 1 m 的岩石雖然還在，但被炸鬆了：Hoek–Brown 的 D 打折強度和變形模數（Hoek 2002）。</p>
+<table><tr><th>開挖方式</th><th>D</th></tr>
+<tr><td>每孔 1 條乳膠炸藥（控制爆破、平滑爆破）</td><td>0.5</td></tr>
+<tr><td>每孔 2 條以上、貼面裝藥</td><td>0.8</td></tr>
+<tr><td>ANFO 台階生產爆破</td><td>1.0</td></tr>
+<tr><td>機械開挖（鎬、破碎錘、挖土機、採礦機）</td><td>0</td></tr></table>
+<p>頁岩 GSI 50 在 D = 0.8 時強度約剩一半、變形模數剩三成。指著岩石，HUD 會顯示「爆破擾動 D」（要有岩體分類能力）。</p></article>
+<article class="page mech" id="m-support"><p class="crumb"><a href="#home">首頁</a> › 機制 › 岩體與開挖</p><h1>支撐</h1>
 <ul>
-	<li>每格分 8 級高度（1/8 m 一級），照<b>安息角 35°</b> 往低處流。</li>
-	<li>車子一直壓會壓實：壓實的碎石不流動。</li>
-	<li><b>混合碎石</b>：一格最多記兩種成分（礦石、碎石、花崗岩碎石、土），外觀是兩種貼圖交錯。碎石＋土＝<b>崩積土</b>。再混進第三種，留最多的兩種，其餘併進比較不值錢的那種（品位只會被稀釋）。</li>
+<li><a href="#i-rock_bolt">岩栓</a>：裝進鑽孔，錨定力 = 握裹力 × 長度，在應力計算裡等於開挖面上的圍壓 pᵢ。</li>
+<li><a href="#i-shotcrete">噴凝土</a>：每層 0.01 MPa 的支護壓力，最多 3 層；也能把碎石表層壓實。</li>
+<li><a href="#i-timber_post">木柱</a>：在應力計算裡是有勁度的元素。<b>先撐好再往前挖</b>，頂板的荷重會往木柱集中；承載力 P = min(壓碎, 挫屈)，柱越長越容易挫屈，超過就壓斷。</li>
+<li>支撐的效果用<a href="#i-survey_prism">監測稜鏡</a>驗證：位移應該趨於穩定。</li>
+</ul></article>
+<article class="page mech" id="m-soil"><p class="crumb"><a href="#home">首頁</a> › 機制 › 碎石、土、天氣</p><h1>碎石與土</h1>
+<h3>碎石、鬆土</h3>
+<ul>
+<li>每格 8 級高度（1/8 m 一級），照<b>安息角 35°</b> 往低處流；車子一直壓會壓實，壓實的不流動。</li>
+<li><b>混合</b>：一格最多記兩種成分（礦石、碎石、花崗岩碎石、土），外觀是兩種貼圖交錯。碎石＋土 = <a href="#i-colluvium">崩積土</a>。混進第三種，留最多的兩種，其餘併進比較不值錢的那種——品位只會被稀釋。</li>
+<li>碎石和土都有重量，會壓在下面的岩面上（見<a href="#m-stability">穩定性</a>）。</li>
 </ul>
 <h3>表土</h3>
+<p>表土有根系的凝聚力 c = 5 kPa，旁邊挖開的陡壁不超過<b>自立高度</b>就站得住：</p>
+<div class="formula">H_c = 4c/γ · tan(45° + φ/2) ≈ 1.9 m</div>
 <ul>
-	<li>表土有根系的<b>凝聚力 c</b>（5 kPa），陡坡上也站得住。</li>
-	<li><b>自立高度</b>：旁邊挖開的陡壁不超過 H_c 就不會垮。</li>
-</ul>
-<div class="formula">H_c = 4c / γ · tan(45° + φ/2) ≈ 1.9 m</div>
-<ul>
-	<li>表土被挖、底下被掏空、或旁邊陡壁超過 H_c，就變成鬆土照安息角流，流走又讓上面的表土臨空，可能連成整片邊坡滑動。</li>
-	<li>滿格的鬆土放久了會長回表土。</li>
-</ul>
-<h3>降雨</h3>
+<li>表土被挖、底下被掏空、或旁邊陡壁超過 H_c，就變成鬆土照安息角流；流走又讓上面的表土臨空，可能連成整片邊坡滑動。</li>
+<li>懸空的表土會掉下來；滿格的鬆土放久了長回表土。</li>
+</ul></article>
+<article class="page mech" id="m-rain"><p class="crumb"><a href="#home">首頁</a> › 機制 › 碎石、土、天氣</p><h1>降雨</h1>
 <p>降雨弱化跟<b>時雨量</b>成正比（上限 100 mm/h，颱風級）：</p>
-<div class="table-wrap"><table>
-	<tr><th>時雨量</th><th>鬆土安息角</th><th>表土凝聚力</th><th>表土自立高度</th></tr>
-	<tr><td>晴天</td><td>35°</td><td>× 1.00</td><td>1.92 m</td></tr>
-	<tr><td>30 mm/h</td><td>32°</td><td>× 0.90</td><td>1.72 m</td></tr>
-	<tr><td>100 mm/h</td><td>25°</td><td>× 0.65</td><td>1.25 m</td></tr>
-</table></div>
-<p>岩石碎石透水，不受雨影響；崩積土照土的比例弱化。用<b>氣象站</b>（百葉箱）看目前的時雨量和這場雨的累積雨量。</p>
-</section>
-
-<section id="survey">
-<h2>調查與監測儀器</h2>
-<h3>地質羅盤</h3>
+<table><tr><th>時雨量</th><th>鬆土安息角</th><th>表土凝聚力</th><th>表土自立高度</th></tr>
+<tr><td>晴天</td><td>35°</td><td>× 1.00</td><td>1.92 m</td></tr>
+<tr><td>30 mm/h</td><td>32°</td><td>× 0.90</td><td>1.72 m</td></tr>
+<tr><td>100 mm/h</td><td>25°</td><td>× 0.65</td><td>1.25 m</td></tr></table>
 <ul>
-	<li>右鍵岩面：應力與安全係數；蹲下＋右鍵：完整資料（岩性、初始應力、六面節理）。</li>
-	<li><b>赤平投影</b>：左鍵岩面量節理位態（每組一筆，有量測誤差）；蹲下＋左鍵量坡面；對空中右鍵打開赤平投影圖（下半球、等角投影）。</li>
-	<li>圖上：節理極點（依組上色）、各組平均的大圓、坡面（黑色粗線，方塊是極點）、紅色摩擦圓（φj）。</li>
-	<li><b>Markland 平面滑動</b>：節理極點在摩擦圓外、跟坡面極點同一側、而且比坡面緩 → 可能滑動。</li>
-</ul>
-<h3>強度試驗</h3>
-<ul>
-	<li><b>施密特錘</b>：左鍵敲岩面 10 次，讀回彈值 R 的中位數，換算 UCS（Katz 2000）：</li>
-</ul>
-<div class="formula">UCS ≈ 2.21 · e<sup>0.067R</sup>　(MPa)</div>
-<ul>
-	<li><b>點荷重試驗機</b>：對地上的岩芯箱右鍵，每段岩芯做 3 次，讀點荷重強度指數 Is(50)：</li>
-</ul>
-<div class="formula">UCS ≈ 22 · Is(50)</div>
-<h3>岩芯鑽探</h3>
-<ul>
-	<li>手持岩芯鑽機（10 m）或岩芯鑽探車（60 m）往下鑽，岩芯裝進岩芯箱。鑽孔可以命名。</li>
-	<li>拿<b>野帳本</b>對岩芯箱右鍵判讀，記下柱狀圖（岩性、品位、節理頻率、RQD）。</li>
-</ul>
-<h3>監測稜鏡</h3>
-<ul>
-	<li>貼在岩面上。每次附近開挖算應力時記一筆：<b>從安裝算起的位移（mm）</b>。右鍵看歷史曲線。</li>
-	<li>隧道兩壁各貼一個，看收斂。讀數一直變大要小心；加了支撐應該趨於穩定。</li>
-	<li>位移用岩體變形模數換算（Hoek &amp; Diederichs 2006）：</li>
-</ul>
-<div class="formula">E_rm = E_i · (0.02 + (1 − D/2) / (1 + e<sup>(60 + 15D − GSI)/11</sup>))，E_i = MR · UCS</div>
-<p>MR：頁岩 150、砂岩 275、花崗岩 425、煤 200。</p>
-</section>
-
-<section id="knowledge">
-<h2>知識能力</h2>
+<li>下雨時，剛好穩住的鬆土坡開始流；表土陡壁超過當下的自立高度就鬆掉，可能連成邊坡滑動。</li>
+<li>岩石碎石透水、不受影響；崩積土照土的比例弱化。</li>
+<li>用<a href="#i-rain_gauge">氣象站</a>看目前的時雨量和這場雨的累積雨量。</li>
+</ul></article>
+<article class="page mech" id="m-knowledge"><p class="crumb"><a href="#home">首頁</a> › 機制 › 能力與經營</p><h1>知識能力</h1>
 <p>一開始看不到品位、岩性、GSI、應力、FS 這些數字，要學會才看得到：</p>
-<div class="table-wrap"><table>
-	<tr><th>能力</th><th>看得到</th><th>怎麼取得</th></tr>
-	<tr><td>品位判讀</td><td>品位</td><td>背包裡有 XRF 分析儀、雇用地質學家、教授考試</td></tr>
-	<tr><td>岩體分類</td><td>岩性、GSI、上覆厚度、爆破擾動</td><td>背包裡有 GSI 圖卡、雇用地質學家、教授考試</td></tr>
-	<tr><td>岩石力學</td><td>應力、FS、節理、裂紋</td><td>背包裡有地質羅盤、雇用地質學家、教授考試</td></tr>
-	<tr><td>採礦規劃</td><td>剝採比</td><td>教授考試，或研究帳篷研發</td></tr>
-</table></div>
-<ul>
-	<li><b>教授考試</b>：每科抽 5 題，答對 4 題就永久學會；沒過要等 3 分鐘才能重考。</li>
-	<li><b>雇用地質學家</b>：研究帳篷的駐點地質師，雇用期間你有前三種能力。</li>
-	<li>背包（I）的「個人資料」分頁列出自己掌握的能力和來源。</li>
-</ul>
-</section>
-
-<section id="machines">
-<h2>機具</h2>
-<ul>
-	<li><b>卡車</b>：右鍵上車開，車斗裝碎石（手捧的碎石對著車斗右鍵就裝上去），倒在車尾。</li>
-	<li><b>怪手</b>：挖碎石裝卡車。可以雇<b>操作員</b>（另付日薪）自動挖裝、用截止品位分選；操作員可以叫回營地休息。改裝<b>油壓破碎錘</b>後可以敲碎單塊岩石。</li>
-	<li><b>推土機</b>：推碎石、整地。</li>
-	<li><b>自動卡車</b>：裝自動駕駛模組，錄一條「裝載點 → 傾倒點」的路線就會自己跑；地上的格子標出破碎站受料倉的容許範圍。</li>
-	<li><b>平板拖車</b>：載運其他車輛。</li>
-	<li><b>鑽機、鑽孔台車、裝藥車</b>：鑽孔、裝藥。<b>岩芯鑽探車</b>：鑽深孔取岩芯。</li>
-	<li><b>無人機</b>：從空中看礦場。</li>
-	<li>車子發動時吃柴油，油錢從所屬帳戶扣。</li>
-</ul>
-</section>
-
-<section id="money">
-<h2>賣礦與經營</h2>
-<h3>破碎站</h3>
+<table><tr><th>能力</th><th>看得到</th><th>怎麼取得</th></tr>
+<tr><td>品位判讀</td><td>品位</td><td>背包裡有 <a href="#i-xrf">XRF</a>、雇用地質學家、教授考試</td></tr>
+<tr><td>岩體分類</td><td>岩性、GSI、上覆厚度、爆破擾動</td><td>背包裡有 <a href="#i-gsi_card">GSI 圖卡</a>、雇用地質學家、教授考試</td></tr>
+<tr><td>岩石力學</td><td>應力、FS、節理、裂紋</td><td>背包裡有<a href="#i-compass">地質羅盤</a>、雇用地質學家、教授考試</td></tr>
+<tr><td>採礦規劃</td><td>剝採比</td><td>教授考試，或<a href="#i-research">研究帳篷</a>研發</td></tr></table>
+<p><a href="#i-professor">大學教授</a>每科抽 5 題、答對 4 題就永久學會；沒過 3 分鐘後才能重考。背包（I）的「個人資料」列出你會的能力和來源。</p></article>
+<article class="page mech" id="m-money"><p class="crumb"><a href="#home">首頁</a> › 機制 › 能力與經營</p><h1>賣礦與經營</h1>
 <div class="formula">收入 = 噸數 × (品位 × 回收率 × 礦價 − 處理費)</div>
 <ul>
-	<li>處理費每噸 $30；廢石的品位是 0，送來只會賠處理費：這就是<b>貧化</b>和<b>截止品位</b>。</li>
-	<li>礦價每個交易日變動一次，每天結算一次。</li>
-	<li>破碎站可以切換成<b>廢石場</b>：倒進來直接棄置。</li>
-	<li><b>剝採比</b> = 累計送來的廢石噸數 ÷ 礦石噸數（要有採礦規劃能力才看得到）。</li>
-</ul>
-<h3>其他設施</h3>
-<ul>
-	<li><b>選礦場</b>：把煤選成精煤和矸石，兩座儲料塔，放料臂裝卡車或放到皮帶上。</li>
-	<li><b>輸送帶</b>：一格一格接，最大傾角 16°，碎石落在皮帶上就被帶走。</li>
-	<li><b>裝車料斗</b>：皮帶接進料斗，放料臂裝卡車；自動卡車可以在臂下等。</li>
-	<li><b>研究帳篷</b>：花錢研發（選礦回收率、破碎機改良、輸送帶改良、品位控制、採礦規劃……），要一段時間才完成。</li>
-</ul>
-</section>
-
-<section id="wood">
-<h2>樹與木工</h2>
-<ul>
-	<li>用<b>斧頭</b>砍樹幹任何一格，整棵倒下：原木一根根橫躺在地上，樹苗和蘋果進背包。</li>
-	<li>只有砍的才有原木：被土石流沖倒、樹根的土流失、被埋超過 1 m 的樹會整棵毀掉。</li>
-	<li>原木扛到<b>鋸木台</b>鋸成木柱（2 根）、木板（4 片）或木板半格（8 片）；<b>木工桌</b>用木板做牆板、樓梯、門、柵欄、梯子。</li>
-	<li>原木可以裝卡車（1 根佔 1 m³）；倒進破碎站會被當廢石。</li>
-	<li>木頭是建材，在岩石力學裡不算支撐（木柱例外）。</li>
-</ul>
-</section>
-
-<section id="shop">
-<h2>商店價目</h2>
-<p class="note">以遊戲裡供應商的清單為準。</p>
-<div class="table-wrap"><table>
-	<tr><th>攤位</th><th>品項與價格</th></tr>
-	<tr><td>機械設備課長</td><td>手推車 $500、休旅車 $3,000、卡車 $10,000、怪手 $15,000、推土機 $35,000、平板拖車 $40,000、礦卡 $150,000、礦用怪手 $200,000、連續採礦機 $1,500,000</td></tr>
-	<tr><td></td><td>破碎站 $20,000、大型破碎站 $300,000、選礦場 $30,000、輸送帶 $1,000（10 格）、裝車料斗 $25,000</td></tr>
-	<tr><td></td><td>怪手操作員（另付日薪）、油壓破碎錘 $20,000、自動駕駛模組 $8,000、對講機（免費）</td></tr>
-	<tr><td>爆破主任</td><td>鑿岩機 $500、起爆器 $500、乳膠炸藥 $500（10 條）、ANFO $1,000（10 包）、裝藥車 $40,000、裝藥台車 $40,000、鑽機 $50,000、鑽孔台車 $60,000、岩芯鑽探車 $45,000</td></tr>
-	<tr><td>工具室管理員</td><td>挖礦鎬（免費）、鏟子 $100、斧頭 $100、岩栓 $300（10 支）、噴凝土 $800（10 份）、木柱 $200（10 根）、木板 $100（10 片）、木板半格 $100（10 片）、鋸木台 $800、木工桌 $300</td></tr>
-	<tr><td></td><td>地質羅盤 $200、GSI 圖卡 $1,000、XRF 分析儀 $5,000、手持岩芯鑽機 $3,000、野帳本 $10、施密特錘 $1,500、點荷重試驗機 $3,000、監測稜鏡 $500（5 個）、氣象站 $500、無人機 $2,000、指揮無人機 $5,000、置物箱 $200</td></tr>
-</table></div>
-</section>
-
+<li>處理費每噸 $30；廢石的品位是 0，送去只會賠錢：這就是<b>貧化</b>和<b>截止品位</b>——品位太低的料當廢石處理比較划算。</li>
+<li>礦價每個交易日變動，每天結算一次，結算表顯示在畫面右上角。</li>
+<li><b>剝採比</b> = 累計送來的廢石 ÷ 礦石（噸）：每挖一噸礦要搬多少廢石，越高成本越高（要有採礦規劃能力才看得到）。</li>
+<li>車子發動時吃柴油；雇用的操作員要付日薪。</li>
+<li><a href="#i-research">研究帳篷</a>可以花錢研發改良：選礦回收率、降低精煤混入、破碎機、輸送帶、品位控制、採礦規劃。</li>
+</ul></article>
+<article class="page item" id="i-pick" data-text="挖礦鎬 工具室管理員，免費 挖岩石很慢，岩石會變成碎石；挖碎石就是拿起來，一次一塊；右鍵放下手上的碎石 什麼岩石都挖得動，但很慢。挖開的岩石原地變成碎石（品位留著）。開挖會觸發應力重算。" data-title="挖礦鎬"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-tools">手工具</a></p><h1>挖礦鎬</h1><aside class="ibox"><div class="ibox-title">挖礦鎬</div><img class="ibox-icon" src="img/pick.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-tools">手工具</a></td></tr><tr><th>取得</th><td>工具室管理員，免費</td></tr></table></aside><h2>操作</h2><p>挖岩石很慢，岩石會變成碎石；挖碎石就是拿起來，一次一塊；右鍵放下手上的碎石</p><h2>說明</h2><div>什麼岩石都挖得動，但很慢。挖開的岩石原地變成碎石（品位留著）。開挖會觸發應力重算。</div></article>
+<article class="page item" id="i-shovel" data-text="鏟子 工具室管理員，$100 很快把碎石鏟起來，一次一塊；挖不動岩石；右鍵放下手上的碎石 搬碎石和土最快的手工具。" data-title="鏟子"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-tools">手工具</a></p><h1>鏟子</h1><aside class="ibox"><div class="ibox-title">鏟子</div><img class="ibox-icon" src="img/shovel.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-tools">手工具</a></td></tr><tr><th>取得</th><td>工具室管理員，$100</td></tr></table></aside><h2>操作</h2><p>很快把碎石鏟起來，一次一塊；挖不動岩石；右鍵放下手上的碎石</p><h2>說明</h2><div>搬碎石和土最快的手工具。</div></article>
+<article class="page item" id="i-axe" data-text="斧頭 工具室管理員，$100 砍樹幹任何一格，整棵樹倒下變成原木 樹倒下時原木一根根橫躺在地上（倒向離你遠的那邊），樹苗和蘋果進背包。只有砍的才有原木。見 原木 。" data-title="斧頭"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-tools">手工具</a></p><h1>斧頭</h1><aside class="ibox"><div class="ibox-title">斧頭</div><img class="ibox-icon" src="img/axe.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-tools">手工具</a></td></tr><tr><th>取得</th><td>工具室管理員，$100</td></tr></table></aside><h2>操作</h2><p>砍樹幹任何一格，整棵樹倒下變成原木</p><h2>說明</h2><div>樹倒下時原木一根根橫躺在地上（倒向離你遠的那邊），樹苗和蘋果進背包。只有砍的才有原木。見<a href="#i-log">原木</a>。</div></article>
+<article class="page item" id="i-camp_flag" data-text="回營地旗子 一開始就有 拿在手上按左鍵或右鍵，回到營地 " data-title="回營地旗子"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-tools">手工具</a></p><h1>回營地旗子</h1><aside class="ibox"><div class="ibox-title">回營地旗子</div><img class="ibox-icon" src="img/camp_flag.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-tools">手工具</a></td></tr><tr><th>取得</th><td>一開始就有</td></tr></table></aside><h2>操作</h2><p>拿在手上按左鍵或右鍵，回到營地</p></article>
+<article class="page item" id="i-radio" data-text="對講機 機械設備課長，免費 點怪手選定，再點地面：叫怪手的操作員開過去；點正在移動的那台叫它停下；點卡車、礦卡：打開無人駕駛設定 要先雇 怪手操作員 、裝 自動駕駛模組 才有用。" data-title="對講機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-tools">手工具</a></p><h1>對講機</h1><aside class="ibox"><div class="ibox-title">對講機</div><img class="ibox-icon" src="img/radio.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-tools">手工具</a></td></tr><tr><th>取得</th><td>機械設備課長，免費</td></tr></table></aside><h2>操作</h2><p>點怪手選定，再點地面：叫怪手的操作員開過去；點正在移動的那台叫它停下；點卡車、礦卡：打開無人駕駛設定</p><h2>說明</h2><div>要先雇<a href="#i-operator">怪手操作員</a>、裝<a href="#i-ahs_module">自動駕駛模組</a>才有用。</div></article>
+<article class="page item" id="i-compass" data-text="地質羅盤 工具室管理員，$200 右鍵岩面：應力與安全係數；蹲下＋右鍵：完整資料；左鍵岩面：量節理位態；蹲下＋左鍵：量坡面；對空中右鍵：打開赤平投影 放在背包裡就有 岩石力學 能力。 赤平投影 ：下半球等角投影，畫出量到的節理極點（依組上色）、各組平均的大圓、坡面（黑色粗線，方塊是極點）、紅色摩擦圓（φj）。 Markland 平面滑動 ：節理極點在摩擦圓外、跟坡面極點同一側、而且比坡面緩 → 可能滑動。量測記在羅盤上，按「清除量測」重來。" data-title="地質羅盤"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>地質羅盤</h1><aside class="ibox"><div class="ibox-title">地質羅盤</div><img class="ibox-icon" src="img/compass.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$200</td></tr></table></aside><h2>操作</h2><p>右鍵岩面：應力與安全係數；蹲下＋右鍵：完整資料；左鍵岩面：量節理位態；蹲下＋左鍵：量坡面；對空中右鍵：打開赤平投影</p><h2>說明</h2><div>放在背包裡就有<b>岩石力學</b>能力。<b>赤平投影</b>：下半球等角投影，畫出量到的節理極點（依組上色）、各組平均的大圓、坡面（黑色粗線，方塊是極點）、紅色摩擦圓（φj）。<b>Markland 平面滑動</b>：節理極點在摩擦圓外、跟坡面極點同一側、而且比坡面緩 → 可能滑動。量測記在羅盤上，按「清除量測」重來。</div></article>
+<article class="page item" id="i-gsi_card" data-text="GSI 評估圖卡 工具室管理員，$1,000 放在背包裡：看得到岩性、GSI、上覆厚度 給你 岩體分類 能力（Hoek &amp;amp; Marinos 的 GSI 表）。" data-title="GSI 評估圖卡"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>GSI 評估圖卡</h1><aside class="ibox"><div class="ibox-title">GSI 評估圖卡</div><img class="ibox-icon" src="img/gsi_card.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$1,000</td></tr></table></aside><h2>操作</h2><p>放在背包裡：看得到岩性、GSI、上覆厚度</p><h2>說明</h2><div>給你<b>岩體分類</b>能力（Hoek &amp; Marinos 的 GSI 表）。</div></article>
+<article class="page item" id="i-xrf" data-text="手持式 XRF 分析儀 工具室管理員，$5,000 放在背包裡：看得到岩石、碎石、車斗裡的料的品位 給你 品位判讀 能力。" data-title="手持式 XRF 分析儀"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>手持式 XRF 分析儀</h1><aside class="ibox"><div class="ibox-title">手持式 XRF 分析儀</div><img class="ibox-icon" src="img/xrf.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$5,000</td></tr></table></aside><h2>操作</h2><p>放在背包裡：看得到岩石、碎石、車斗裡的料的品位</p><h2>說明</h2><div>給你<b>品位判讀</b>能力。</div></article>
+<article class="page item" id="i-schmidt_hammer" data-text="施密特錘 工具室管理員，$1,500 對岩面左鍵：敲 10 次讀回彈值 R，換算單軸抗壓強度 取 10 次的中位數，用 Katz 等人（2000）的經驗式換算： UCS ≈ 2.21 · e 0.067R （MPa） 只能敲完整的岩面，碎石、土敲不出讀數。" data-title="施密特錘"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>施密特錘</h1><aside class="ibox"><div class="ibox-title">施密特錘</div><img class="ibox-icon" src="img/schmidt_hammer.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$1,500</td></tr></table></aside><h2>操作</h2><p>對岩面左鍵：敲 10 次讀回彈值 R，換算單軸抗壓強度</p><h2>說明</h2><div>取 10 次的中位數，用 Katz 等人（2000）的經驗式換算：<div class="formula">UCS ≈ 2.21 · e<sup>0.067R</sup>（MPa）</div>只能敲完整的岩面，碎石、土敲不出讀數。</div></article>
+<article class="page item" id="i-point_load" data-text="點荷重試驗機 工具室管理員，$3,000 對地上的岩芯箱右鍵：每段岩芯做 3 次試驗，讀 Is(50) Is(50) 是直徑 50 mm 岩芯的點荷重強度指數，換算： UCS ≈ 22 · Is(50) 每次重做是新的一組試體，讀數會散布（約 ±10%）。碎石段取不到岩樣。" data-title="點荷重試驗機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>點荷重試驗機</h1><aside class="ibox"><div class="ibox-title">點荷重試驗機</div><img class="ibox-icon" src="img/point_load.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$3,000</td></tr></table></aside><h2>操作</h2><p>對地上的岩芯箱右鍵：每段岩芯做 3 次試驗，讀 Is(50)</p><h2>說明</h2><div>Is(50) 是直徑 50 mm 岩芯的點荷重強度指數，換算：<div class="formula">UCS ≈ 22 · Is(50)</div>每次重做是新的一組試體，讀數會散布（約 ±10%）。碎石段取不到岩樣。</div></article>
+<article class="page item" id="i-core_drill" data-text="手持岩芯鑽機 工具室管理員，$3,000 對著地面右鍵：往下鑽一個垂直孔取岩芯（每公尺 1 秒、最深 10 m），鑽的時候不能走開 岩芯裝在 岩芯箱 放在孔口旁。更深用 岩芯鑽探車 。對孔口的套管右鍵可以替鑽孔命名。" data-title="手持岩芯鑽機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>手持岩芯鑽機</h1><aside class="ibox"><div class="ibox-title">手持岩芯鑽機</div><img class="ibox-icon" src="img/core_drill.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$3,000</td></tr></table></aside><h2>操作</h2><p>對著地面右鍵：往下鑽一個垂直孔取岩芯（每公尺 1 秒、最深 10 m），鑽的時候不能走開</p><h2>說明</h2><div>岩芯裝在<a href="#i-corebox">岩芯箱</a>放在孔口旁。更深用<a href="#i-corerig">岩芯鑽探車</a>。對孔口的套管右鍵可以替鑽孔命名。</div></article>
+<article class="page item" id="i-corebox" data-text="岩芯箱 鑽岩芯時產生 左鍵捧起來（一次一箱）、右鍵放下；拿野帳本右鍵判讀；拿點荷重試驗機右鍵做試驗 裝著一個鑽孔每公尺的岩芯。" data-title="岩芯箱"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>岩芯箱</h1><aside class="ibox"><div class="ibox-title">岩芯箱</div><img class="ibox-icon" src="img/corebox.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>鑽岩芯時產生</td></tr></table></aside><h2>操作</h2><p>左鍵捧起來（一次一箱）、右鍵放下；拿野帳本右鍵判讀；拿點荷重試驗機右鍵做試驗</p><h2>說明</h2><div>裝著一個鑽孔每公尺的岩芯。</div></article>
+<article class="page item" id="i-fieldbook" data-text="野帳本 工具室管理員，$10 右鍵對岩芯箱判讀（每公尺 0.5 秒，要待在旁邊）；左鍵看記過的孔（最多 20 孔） 記成柱狀圖：岩性、品位、節理頻率、RQD。記下來的內容照你判讀時的能力，不會的欄位記成「?」。" data-title="野帳本"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>野帳本</h1><aside class="ibox"><div class="ibox-title">野帳本</div><img class="ibox-icon" src="img/fieldbook.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$10</td></tr></table></aside><h2>操作</h2><p>右鍵對岩芯箱判讀（每公尺 0.5 秒，要待在旁邊）；左鍵看記過的孔（最多 20 孔）</p><h2>說明</h2><div>記成柱狀圖：岩性、品位、節理頻率、RQD。記下來的內容照你判讀時的能力，不會的欄位記成「?」。</div></article>
+<article class="page item" id="i-survey_prism" data-text="監測稜鏡 工具室管理員，$500（5 個） 貼在岩面上；右鍵看歷史曲線 每次附近開挖算應力時，記錄那裡的岩石 從安裝算起的位移 （mm）。隧道兩壁各貼一個看收斂；讀數一直變大要小心，加了支撐應該趨於穩定。位移用岩體變形模數換算（Hoek &amp;amp; Diederichs 2006）： E_rm = E_i·(0.02 + (1 − D/2)/(1 + e (60+15D−GSI)/11 ))，E_i = MR·UCS MR：頁岩 150、砂岩 275、花崗岩 425、煤 200。" data-title="監測稜鏡"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>監測稜鏡</h1><aside class="ibox"><div class="ibox-title">監測稜鏡</div><img class="ibox-icon" src="img/survey_prism.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$500（5 個）</td></tr></table></aside><h2>操作</h2><p>貼在岩面上；右鍵看歷史曲線</p><h2>說明</h2><div>每次附近開挖算應力時，記錄那裡的岩石<b>從安裝算起的位移</b>（mm）。隧道兩壁各貼一個看收斂；讀數一直變大要小心，加了支撐應該趨於穩定。位移用岩體變形模數換算（Hoek &amp; Diederichs 2006）：<div class="formula">E_rm = E_i·(0.02 + (1 − D/2)/(1 + e<sup>(60+15D−GSI)/11</sup>))，E_i = MR·UCS</div>MR：頁岩 150、砂岩 275、花崗岩 425、煤 200。</div></article>
+<article class="page item" id="i-rain_gauge" data-text="氣象站（百葉箱） 工具室管理員，$500 指著它看目前的時雨量、這場雨的累積雨量 見 降雨 。" data-title="氣象站（百葉箱）"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>氣象站（百葉箱）</h1><aside class="ibox"><div class="ibox-title">氣象站（百葉箱）</div><img class="ibox-icon" src="img/rain_gauge.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$500</td></tr></table></aside><h2>操作</h2><p>指著它看目前的時雨量、這場雨的累積雨量</p><h2>說明</h2><div>見<a href="#m-rain">降雨</a>。</div></article>
+<article class="page item" id="i-drone_remote" data-text="無人機 工具室管理員，$2,000 右鍵起飛（第一人稱）；WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點 從空中看礦場。高度上限：起飛點上方 80 m。" data-title="無人機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>無人機</h1><aside class="ibox"><div class="ibox-title">無人機</div><img class="ibox-icon" src="img/drone_remote.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$2,000</td></tr></table></aside><h2>操作</h2><p>右鍵起飛（第一人稱）；WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點</p><h2>說明</h2><div>從空中看礦場。高度上限：起飛點上方 80 m。</div></article>
+<article class="page item" id="i-drone_cmd" data-text="指揮無人機 工具室管理員，$5,000 同無人機；左鍵點怪手選定、點地面叫它開過去；點卡車、礦卡打開無人駕駛設定 無人機加對講機，指揮距離 128 m。" data-title="指揮無人機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-survey">調查與監測儀器</a></p><h1>指揮無人機</h1><aside class="ibox"><div class="ibox-title">指揮無人機</div><img class="ibox-icon" src="img/drone_cmd.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-survey">調查與監測儀器</a></td></tr><tr><th>取得</th><td>工具室管理員，$5,000</td></tr></table></aside><h2>操作</h2><p>同無人機；左鍵點怪手選定、點地面叫它開過去；點卡車、礦卡打開無人駕駛設定</p><h2>說明</h2><div>無人機加對講機，指揮距離 128 m。</div></article>
+<article class="page item" id="i-rock_drill" data-text="鑿岩機 爆破主任，$500 對岩面按住左鍵鑽孔（1.5 秒、2 m）；對鑽孔繼續按住每 1.5 秒加深 1 m（最深 4 m） 鑽孔用來裝炸藥或岩栓。沒裝藥的空孔也算自由面（空孔掏槽）。" data-title="鑿岩機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-blast">爆破器材</a></p><h1>鑿岩機</h1><aside class="ibox"><div class="ibox-title">鑿岩機</div><img class="ibox-icon" src="img/rock_drill.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-blast">爆破器材</a></td></tr><tr><th>取得</th><td>爆破主任，$500</td></tr></table></aside><h2>操作</h2><p>對岩面按住左鍵鑽孔（1.5 秒、2 m）；對鑽孔繼續按住每 1.5 秒加深 1 m（最深 4 m）</p><h2>說明</h2><div>鑽孔用來裝炸藥或岩栓。沒裝藥的空孔也算自由面（空孔掏槽）。</div></article>
+<article class="page item" id="i-emulsion" data-text="乳膠炸藥 爆破主任，$500（10 條） 對鑽孔按右鍵裝藥（一孔最多 4 條）；沒有鑽孔只能貼面，威力很小 一孔 1 條是控制爆破（擾動 D = 0.5），2 條以上 D = 0.8。也是 ANFO 的起爆藥包。見 爆破 。" data-title="乳膠炸藥"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-blast">爆破器材</a></p><h1>乳膠炸藥</h1><aside class="ibox"><div class="ibox-title">乳膠炸藥</div><img class="ibox-icon" src="img/emulsion.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-blast">爆破器材</a></td></tr><tr><th>取得</th><td>爆破主任，$500（10 條）</td></tr></table></aside><h2>操作</h2><p>對鑽孔按右鍵裝藥（一孔最多 4 條）；沒有鑽孔只能貼面，威力很小</p><h2>說明</h2><div>一孔 1 條是控制爆破（擾動 D = 0.5），2 條以上 D = 0.8。也是 ANFO 的起爆藥包。見<a href="#m-blast">爆破</a>。</div></article>
+<article class="page item" id="i-anfo" data-text="ANFO（銨油炸藥） 爆破主任，$1,000（10 袋） 對往下的鑽孔按右鍵倒進去成柱狀裝藥；要有一條乳膠炸藥當起爆藥包 露天台階爆破用。沒有起爆藥包會拒爆。擾動 D = 1.0。" data-title="ANFO（銨油炸藥）"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-blast">爆破器材</a></p><h1>ANFO（銨油炸藥）</h1><aside class="ibox"><div class="ibox-title">ANFO（銨油炸藥）</div><img class="ibox-icon" src="img/anfo.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-blast">爆破器材</a></td></tr><tr><th>取得</th><td>爆破主任，$1,000（10 袋）</td></tr></table></aside><h2>操作</h2><p>對往下的鑽孔按右鍵倒進去成柱狀裝藥；要有一條乳膠炸藥當起爆藥包</p><h2>說明</h2><div>露天台階爆破用。沒有起爆藥包會拒爆。擾動 D = 1.0。</div></article>
+<article class="page item" id="i-detonator" data-text="起爆器 爆破主任，$500 按右鍵：30 m 內的裝藥倒數 5 秒後依序起爆 裝藥被別的爆炸波及會殉爆。" data-title="起爆器"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-blast">爆破器材</a></p><h1>起爆器</h1><aside class="ibox"><div class="ibox-title">起爆器</div><img class="ibox-icon" src="img/detonator.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-blast">爆破器材</a></td></tr><tr><th>取得</th><td>爆破主任，$500</td></tr></table></aside><h2>操作</h2><p>按右鍵：30 m 內的裝藥倒數 5 秒後依序起爆</p><h2>說明</h2><div>裝藥被別的爆炸波及會殉爆。</div></article>
+<article class="page item" id="i-rock_bolt" data-text="岩栓 工具室管理員，$300（10 支） 對鑽孔按右鍵裝進去（長度 = 孔深） 錨定力 = 握裹力 200 kN/m × 長度（上限 360 kN），在應力計算裡等於在開挖面加上圍壓 pᵢ。" data-title="岩栓"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>岩栓</h1><aside class="ibox"><div class="ibox-title">岩栓</div><img class="ibox-icon" src="img/rock_bolt.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>工具室管理員，$300（10 支）</td></tr></table></aside><h2>操作</h2><p>對鑽孔按右鍵裝進去（長度 = 孔深）</p><h2>說明</h2><div>錨定力 = 握裹力 200 kN/m × 長度（上限 360 kN），在應力計算裡等於在開挖面加上圍壓 pᵢ。</div></article>
+<article class="page item" id="i-shotcrete" data-text="噴凝土 工具室管理員，$800（10 袋） 對岩面按右鍵噴這一面 3×3 格（最多 3 層）；對碎石按右鍵把表層壓實 支護壓力每層 0.01 MPa。壓實的碎石不流動、沒有車轍。" data-title="噴凝土"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>噴凝土</h1><aside class="ibox"><div class="ibox-title">噴凝土</div><img class="ibox-icon" src="img/shotcrete.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>工具室管理員，$800（10 袋）</td></tr></table></aside><h2>操作</h2><p>對岩面按右鍵噴這一面 3×3 格（最多 3 層）；對碎石按右鍵把表層壓實</p><h2>說明</h2><div>支護壓力每層 0.01 MPa。壓實的碎石不流動、沒有車轍。</div></article>
+<article class="page item" id="i-timber_post" data-text="木柱 工具室管理員，$200（10 根）或鋸木台 對地板按右鍵：往上長到碰到頂板（最長 6 m）；對牆面按右鍵：橫放當樑 直徑 20 cm。頂到岩石頂板就是支撐：承載力 P = min(壓碎, 挫屈)，2 m 約 628 kN、4 m 約 484 kN、6 m 約 215 kN。在應力計算裡是有勁度的元素：先撐好再往前挖，荷重會往木柱集中，超過承載力就壓斷。碎石不能疊在木條上。" data-title="木柱"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>木柱</h1><aside class="ibox"><div class="ibox-title">木柱</div><img class="ibox-icon" src="img/timber_post.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>工具室管理員，$200（10 根）或鋸木台</td></tr></table></aside><h2>操作</h2><p>對地板按右鍵：往上長到碰到頂板（最長 6 m）；對牆面按右鍵：橫放當樑</p><h2>說明</h2><div>直徑 20 cm。頂到岩石頂板就是支撐：承載力 P = min(壓碎, 挫屈)，2 m 約 628 kN、4 m 約 484 kN、6 m 約 215 kN。在應力計算裡是有勁度的元素：先撐好再往前挖，荷重會往木柱集中，超過承載力就壓斷。碎石不能疊在木條上。</div></article>
+<article class="page item" id="i-timber_plank" data-text="木板 工具室管理員，$100（10 片）或鋸木台 對地面放是地板，對頂面放貼在天花板下 建材，不算支撐。" data-title="木板"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>木板</h1><aside class="ibox"><div class="ibox-title">木板</div><img class="ibox-icon" src="img/timber_plank.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>工具室管理員，$100（10 片）或鋸木台</td></tr></table></aside><h2>操作</h2><p>對地面放是地板，對頂面放貼在天花板下</p><h2>說明</h2><div>建材，不算支撐。</div></article>
+<article class="page item" id="i-timber_slab" data-text="木板半格 工具室管理員，$100（10 片）或鋸木台 對頂面放是下半格、對底面放是上半格 建材，不算支撐。" data-title="木板半格"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>木板半格</h1><aside class="ibox"><div class="ibox-title">木板半格</div><img class="ibox-icon" src="img/timber_slab.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>工具室管理員，$100（10 片）或鋸木台</td></tr></table></aside><h2>操作</h2><p>對頂面放是下半格、對底面放是上半格</p><h2>說明</h2><div>建材，不算支撐。</div></article>
+<article class="page item" id="i-timber_wall" data-text="木牆板 木工桌製作 直立的薄板，做牆壁用 建材，不算支撐。" data-title="木牆板"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>木牆板</h1><aside class="ibox"><div class="ibox-title">木牆板</div><img class="ibox-icon" src="img/timber_wall.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>木工桌製作</td></tr></table></aside><h2>操作</h2><p>直立的薄板，做牆壁用</p><h2>說明</h2><div>建材，不算支撐。</div></article>
+<article class="page item" id="i-sawbench" data-text="鋸木台 工具室管理員，$800 扛著原木對它右鍵：鋸成木柱（2 根）、木板（4 片）或木板半格（8 片） 成品進背包。" data-title="鋸木台"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>鋸木台</h1><aside class="ibox"><div class="ibox-title">鋸木台</div><img class="ibox-icon" src="img/sawbench.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>工具室管理員，$800</td></tr></table></aside><h2>操作</h2><p>扛著原木對它右鍵：鋸成木柱（2 根）、木板（4 片）或木板半格（8 片）</p><h2>說明</h2><div>成品進背包。</div></article>
+<article class="page item" id="i-workbench" data-text="木工桌 工具室管理員，$300 右鍵：用木板做木牆板、樓梯、門、柵欄、梯子、活板門 " data-title="木工桌"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>木工桌</h1><aside class="ibox"><div class="ibox-title">木工桌</div><img class="ibox-icon" src="img/workbench.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>工具室管理員，$300</td></tr></table></aside><h2>操作</h2><p>右鍵：用木板做木牆板、樓梯、門、柵欄、梯子、活板門</p></article>
+<article class="page item" id="i-locker" data-text="置物箱 工具室管理員，$200 右鍵打開，放小東西（32 格）；拆掉要先清空 " data-title="置物箱"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-support">支撐與建材</a></p><h1>置物箱</h1><aside class="ibox"><div class="ibox-title">置物箱</div><img class="ibox-icon" src="img/locker.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-support">支撐與建材</a></td></tr><tr><th>取得</th><td>工具室管理員，$200</td></tr></table></aside><h2>操作</h2><p>右鍵打開，放小東西（32 格）；拆掉要先清空</p></article>
+<article class="page item" id="i-cart" data-text="手推車 機械設備課長，$500 右鍵推車；空白鍵把車斗往前倒（載量 3 塊）；手上拿著碎石時右鍵是裝上去 " data-title="手推車"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>手推車</h1><aside class="ibox"><div class="ibox-title">手推車</div><img class="ibox-icon" src="img/cart.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$500</td></tr></table></aside><h2>操作</h2><p>右鍵推車；空白鍵把車斗往前倒（載量 3 塊）；手上拿著碎石時右鍵是裝上去</p></article>
+<article class="page item" id="i-suv" data-text="四輪驅動休旅車 機械設備課長，$3,000 右鍵上車（代步用，爬坡可到 30°） " data-title="四輪驅動休旅車"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>四輪驅動休旅車</h1><aside class="ibox"><div class="ibox-title">四輪驅動休旅車</div><img class="ibox-icon" src="img/suv.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$3,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車（代步用，爬坡可到 30°）</p></article>
+<article class="page item" id="i-truck" data-text="卡車 機械設備課長，$10,000 右鍵上車；空白鍵把車斗倒在車尾（載量 12 m³） 可以裝碎石、土、原木（1 根 1 m³）。裝 自動駕駛模組 可以無人駕駛。倒料時會在倒的地方重算應力（碎石的重量）。" data-title="卡車"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>卡車</h1><aside class="ibox"><div class="ibox-title">卡車</div><img class="ibox-icon" src="img/truck.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$10,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；空白鍵把車斗倒在車尾（載量 12 m³）</p><h2>說明</h2><div>可以裝碎石、土、原木（1 根 1 m³）。裝<a href="#i-ahs_module">自動駕駛模組</a>可以無人駕駛。倒料時會在倒的地方重算應力（碎石的重量）。</div></article>
+<article class="page item" id="i-haul" data-text="礦卡 機械設備課長，$150,000 右鍵上車；空白鍵把車斗倒在車尾（載量 36 m³） 大型礦場用，可以無人駕駛。" data-title="礦卡"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>礦卡</h1><aside class="ibox"><div class="ibox-title">礦卡</div><img class="ibox-icon" src="img/haul.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$150,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；空白鍵把車斗倒在車尾（載量 36 m³）</p><h2>說明</h2><div>大型礦場用，可以無人駕駛。</div></article>
+<article class="page item" id="i-excavator" data-text="挖土機（怪手） 機械設備課長，$15,000 右鍵上車；E 挖滑鼠指的位置（鏟斗 4 m³）、空白鍵倒在滑鼠指的位置（指著卡車就倒進卡車） 可以雇 操作員 自動挖裝、裝 油壓破碎錘 敲碎岩石。" data-title="挖土機（怪手）"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>挖土機（怪手）</h1><aside class="ibox"><div class="ibox-title">挖土機（怪手）</div><img class="ibox-icon" src="img/excavator.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$15,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；E 挖滑鼠指的位置（鏟斗 4 m³）、空白鍵倒在滑鼠指的位置（指著卡車就倒進卡車）</p><h2>說明</h2><div>可以雇<a href="#i-operator">操作員</a>自動挖裝、裝<a href="#i-breaker_kit">油壓破碎錘</a>敲碎岩石。</div></article>
+<article class="page item" id="i-excavator_big" data-text="礦用挖土機 機械設備課長，$200,000 同挖土機（鏟斗 12 m³，手臂約 15 m）；指著礦卡就倒進車斗 " data-title="礦用挖土機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>礦用挖土機</h1><aside class="ibox"><div class="ibox-title">礦用挖土機</div><img class="ibox-icon" src="img/excavator_big.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$200,000</td></tr></table></aside><h2>操作</h2><p>同挖土機（鏟斗 12 m³，手臂約 15 m）；指著礦卡就倒進車斗</p></article>
+<article class="page item" id="i-dozer" data-text="推土機 機械設備課長，$35,000 右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走 推碎石、整地。" data-title="推土機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>推土機</h1><aside class="ibox"><div class="ibox-title">推土機</div><img class="ibox-icon" src="img/dozer.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$35,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；E 放鏟／收鏟，放鏟時往前開把碎石推走</p><h2>說明</h2><div>推碎石、整地。</div></article>
+<article class="page item" id="i-lowboy" data-text="平板拖車 機械設備課長，$40,000 右鍵上車；E 把平板旁邊的車拉上平板（自重 ≤ 60 t），再按 E 卸在車尾 載運怪手、推土機、鑽機這類慢車，報廢的車也能載。" data-title="平板拖車"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>平板拖車</h1><aside class="ibox"><div class="ibox-title">平板拖車</div><img class="ibox-icon" src="img/lowboy.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$40,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；E 把平板旁邊的車拉上平板（自重 ≤ 60 t），再按 E 卸在車尾</p><h2>說明</h2><div>載運怪手、推土機、鑽機這類慢車，報廢的車也能載。</div></article>
+<article class="page item" id="i-miner" data-text="連續採礦機 機械設備課長，$1,500,000 右鍵上車；E 滾筒開／關（開著往前開就把岩石直接切下來）、空白鍵 切深 下切 1 m／平切 不用爆破，機械開挖（沒有爆破擾動）。車上料倉 60 m³，自動卸到旁邊的卡車、輸送帶或破碎站。" data-title="連續採礦機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>連續採礦機</h1><aside class="ibox"><div class="ibox-title">連續採礦機</div><img class="ibox-icon" src="img/miner.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>機械設備課長，$1,500,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；E 滾筒開／關（開著往前開就把岩石直接切下來）、空白鍵 切深 下切 1 m／平切</p><h2>說明</h2><div>不用爆破，機械開挖（沒有爆破擾動）。車上料倉 60 m³，自動卸到旁邊的卡車、輸送帶或破碎站。</div></article>
+<article class="page item" id="i-drillrig" data-text="露天鑽機 爆破主任，$50,000 右鍵上車；E 在桅桿下方往下鑽一個垂直孔、空白鍵 設定孔深 露天台階爆破，孔裡倒 ANFO。" data-title="露天鑽機"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>露天鑽機</h1><aside class="ibox"><div class="ibox-title">露天鑽機</div><img class="ibox-icon" src="img/drillrig.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>爆破主任，$50,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；E 在桅桿下方往下鑽一個垂直孔、空白鍵 設定孔深</p><h2>說明</h2><div>露天台階爆破，孔裡倒 ANFO。</div></article>
+<article class="page item" id="i-jumbo" data-text="鑽堡 爆破主任，$60,000 右鍵上車；E 依爆破孔設計圖在前方工作面鑽孔、空白鍵 編輯設計圖 隧道開挖用。" data-title="鑽堡"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>鑽堡</h1><aside class="ibox"><div class="ibox-title">鑽堡</div><img class="ibox-icon" src="img/jumbo.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>爆破主任，$60,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；E 依爆破孔設計圖在前方工作面鑽孔、空白鍵 編輯設計圖</p><h2>說明</h2><div>隧道開挖用。</div></article>
+<article class="page item" id="i-charger" data-text="裝藥台車 爆破主任，$40,000 右鍵上車；E 把前方工作面的鑽孔裝藥（空孔跳過）、空白鍵 設定每孔幾條 每孔 1 條就是控制爆破（D = 0.5）。" data-title="裝藥台車"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>裝藥台車</h1><aside class="ibox"><div class="ibox-title">裝藥台車</div><img class="ibox-icon" src="img/charger.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>爆破主任，$40,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；E 把前方工作面的鑽孔裝藥（空孔跳過）、空白鍵 設定每孔幾條</p><h2>說明</h2><div>每孔 1 條就是控制爆破（D = 0.5）。</div></article>
+<article class="page item" id="i-bulktruck" data-text="ANFO 裝藥車 爆破主任，$40,000 右鍵上車；空白鍵 儲槽裝 ANFO 與乳膠炸藥、E 把吊臂範圍內往下的鑽孔灌 ANFO＋起爆藥包 " data-title="ANFO 裝藥車"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>ANFO 裝藥車</h1><aside class="ibox"><div class="ibox-title">ANFO 裝藥車</div><img class="ibox-icon" src="img/bulktruck.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>爆破主任，$40,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；空白鍵 儲槽裝 ANFO 與乳膠炸藥、E 把吊臂範圍內往下的鑽孔灌 ANFO＋起爆藥包</p></article>
+<article class="page item" id="i-corerig" data-text="岩芯鑽探車 爆破主任，$45,000 右鍵上車；E 在桅桿下方往下鑽岩芯孔（最深 60 m） 得到 岩芯箱 與鑽孔柱狀圖。" data-title="岩芯鑽探車"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-vehicle">車輛</a></p><h1>岩芯鑽探車</h1><aside class="ibox"><div class="ibox-title">岩芯鑽探車</div><img class="ibox-icon" src="img/corerig.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-vehicle">車輛</a></td></tr><tr><th>取得</th><td>爆破主任，$45,000</td></tr></table></aside><h2>操作</h2><p>右鍵上車；E 在桅桿下方往下鑽岩芯孔（最深 60 m）</p><h2>說明</h2><div>得到<a href="#i-corebox">岩芯箱</a>與鑽孔柱狀圖。</div></article>
+<article class="page item" id="i-operator" data-text="怪手操作員 機械設備課長，雇用另付日薪 拿著對沒人的怪手按右鍵：派他上車作業；對營地長椅按右鍵：讓他回去休息 操作員會自動挖裝、照截止品位分選。右鍵有操作員的怪手會打開操作員頁面，把他叫下車你才能自己開。用 對講機 指揮他開到別處。" data-title="怪手操作員"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-addon">車輛改裝與人員</a></p><h1>怪手操作員</h1><aside class="ibox"><div class="ibox-title">怪手操作員</div><img class="ibox-icon" src="img/operator.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-addon">車輛改裝與人員</a></td></tr><tr><th>取得</th><td>機械設備課長，雇用另付日薪</td></tr></table></aside><h2>操作</h2><p>拿著對沒人的怪手按右鍵：派他上車作業；對營地長椅按右鍵：讓他回去休息</p><h2>說明</h2><div>操作員會自動挖裝、照截止品位分選。右鍵有操作員的怪手會打開操作員頁面，把他叫下車你才能自己開。用<a href="#i-radio">對講機</a>指揮他開到別處。</div></article>
+<article class="page item" id="i-breaker_kit" data-text="油壓破碎錘 機械設備課長，$20,000 拿著對怪手按右鍵裝上；鏟斗空的時候空白鍵切換鏟斗／破碎錘；破碎錘對著岩石按 E 敲碎 敲碎的時間跟岩石強度（UCS）成正比。機械開挖，沒有爆破擾動。" data-title="油壓破碎錘"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-addon">車輛改裝與人員</a></p><h1>油壓破碎錘</h1><aside class="ibox"><div class="ibox-title">油壓破碎錘</div><img class="ibox-icon" src="img/breaker_kit.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-addon">車輛改裝與人員</a></td></tr><tr><th>取得</th><td>機械設備課長，$20,000</td></tr></table></aside><h2>操作</h2><p>拿著對怪手按右鍵裝上；鏟斗空的時候空白鍵切換鏟斗／破碎錘；破碎錘對著岩石按 E 敲碎</p><h2>說明</h2><div>敲碎的時間跟岩石強度（UCS）成正比。機械開挖，沒有爆破擾動。</div></article>
+<article class="page item" id="i-ahs_module" data-text="自動駕駛模組 機械設備課長，$8,000 拿著對卡車或礦卡按右鍵安裝（一個模組裝一台） 錄一條「裝載點 → 傾倒點」的路線，卡車就會自己跑。傾倒點在破碎站附近就倒進受料倉（地上的格子標出容許範圍），裝載點在放料臂附近就在臂下等著裝。" data-title="自動駕駛模組"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-addon">車輛改裝與人員</a></p><h1>自動駕駛模組</h1><aside class="ibox"><div class="ibox-title">自動駕駛模組</div><img class="ibox-icon" src="img/ahs_module.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-addon">車輛改裝與人員</a></td></tr><tr><th>取得</th><td>機械設備課長，$8,000</td></tr></table></aside><h2>操作</h2><p>拿著對卡車或礦卡按右鍵安裝（一個模組裝一台）</p><h2>說明</h2><div>錄一條「裝載點 → 傾倒點」的路線，卡車就會自己跑。傾倒點在破碎站附近就倒進受料倉（地上的格子標出容許範圍），裝載點在放料臂附近就在臂下等著裝。</div></article>
+<article class="page item" id="i-crusher" data-text="破碎站 機械設備課長，$20,000（營地內有一座） 對著平地按右鍵放置，朝自己的方向挖 9×9 m 受料倉；右鍵看帳目 碎石倒進受料倉就過磅入帳（處理能力 2 t/s），見 賣礦與經營 。可以切換成廢石場（直接棄置）。原木倒進來當廢石。" data-title="破碎站"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-building">建築物</a></p><h1>破碎站</h1><aside class="ibox"><div class="ibox-title">破碎站</div><img class="ibox-icon" src="img/crusher.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-building">建築物</a></td></tr><tr><th>取得</th><td>機械設備課長，$20,000（營地內有一座）</td></tr></table></aside><h2>操作</h2><p>對著平地按右鍵放置，朝自己的方向挖 9×9 m 受料倉；右鍵看帳目</p><h2>說明</h2><div>碎石倒進受料倉就過磅入帳（處理能力 2 t/s），見<a href="#m-money">賣礦與經營</a>。可以切換成廢石場（直接棄置）。原木倒進來當廢石。</div></article>
+<article class="page item" id="i-crusher_big" data-text="大型破碎站 機械設備課長，$300,000 同破碎站 處理能力 10 t/s。" data-title="大型破碎站"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-building">建築物</a></p><h1>大型破碎站</h1><aside class="ibox"><div class="ibox-title">大型破碎站</div><img class="ibox-icon" src="img/crusher_big.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-building">建築物</a></td></tr><tr><th>取得</th><td>機械設備課長，$300,000</td></tr></table></aside><h2>操作</h2><p>同破碎站</p><h2>說明</h2><div>處理能力 10 t/s。</div></article>
+<article class="page item" id="i-plant" data-text="選礦場 機械設備課長，$30,000 對著平地按右鍵放置：朝自己的方向挖受料倉，機身左右各一座儲料塔 把煤分選成精煤和矸石；放料臂裝停在範圍內的卡車、礦卡，沒車就放到附近的輸送帶上。" data-title="選礦場"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-building">建築物</a></p><h1>選礦場</h1><aside class="ibox"><div class="ibox-title">選礦場</div><img class="ibox-icon" src="img/plant.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-building">建築物</a></td></tr><tr><th>取得</th><td>機械設備課長，$30,000</td></tr></table></aside><h2>操作</h2><p>對著平地按右鍵放置：朝自己的方向挖受料倉，機身左右各一座儲料塔</p><h2>說明</h2><div>把煤分選成精煤和矸石；放料臂裝停在範圍內的卡車、礦卡，沒車就放到附近的輸送帶上。</div></article>
+<article class="page item" id="i-belt" data-text="輸送帶 機械設備課長，$1,000（10 格） 右鍵放：點輸送帶從那格往前接，點地面從地上開始；左鍵點輸送帶收回那一格，點別的地方切換坡度 最大傾角 16°。碎石落在皮帶上就被帶走，頭端往前倒出去。" data-title="輸送帶"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-building">建築物</a></p><h1>輸送帶</h1><aside class="ibox"><div class="ibox-title">輸送帶</div><img class="ibox-icon" src="img/belt.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-building">建築物</a></td></tr><tr><th>取得</th><td>機械設備課長，$1,000（10 格）</td></tr></table></aside><h2>操作</h2><p>右鍵放：點輸送帶從那格往前接，點地面從地上開始；左鍵點輸送帶收回那一格，點別的地方切換坡度</p><h2>說明</h2><div>最大傾角 16°。碎石落在皮帶上就被帶走，頭端往前倒出去。</div></article>
+<article class="page item" id="i-loadout" data-text="裝車料斗 機械設備課長，$25,000 對著平地按右鍵蓋（3×3 m、高 5 m，放料臂朝自己這邊） 36 m³ 的料倉，頂上格柵接輸送帶（或卡車、怪手倒上去），放料臂裝 10 m 內停著的卡車、礦卡。" data-title="裝車料斗"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-building">建築物</a></p><h1>裝車料斗</h1><aside class="ibox"><div class="ibox-title">裝車料斗</div><img class="ibox-icon" src="img/loadout.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-building">建築物</a></td></tr><tr><th>取得</th><td>機械設備課長，$25,000</td></tr></table></aside><h2>操作</h2><p>對著平地按右鍵蓋（3×3 m、高 5 m，放料臂朝自己這邊）</p><h2>說明</h2><div>36 m³ 的料倉，頂上格柵接輸送帶（或卡車、怪手倒上去），放料臂裝 10 m 內停著的卡車、礦卡。</div></article>
+<article class="page item" id="i-rock" data-text="岩石 地形 用鎬、破碎錘、爆破、連續採礦機開挖 頁岩、砂岩、花崗岩、煤（礦石）。強度、節理、應力見 岩體強度 。煤的品位在礦層中央最好，往頂底板變差。" data-title="岩石"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>岩石</h1><aside class="ibox"><div class="ibox-title">岩石</div><img class="ibox-icon" src="img/rock.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>地形</td></tr></table></aside><h2>操作</h2><p>用鎬、破碎錘、爆破、連續採礦機開挖</p><h2>說明</h2><div>頁岩、砂岩、花崗岩、煤（礦石）。強度、節理、應力見<a href="#m-rockmass">岩體強度</a>。煤的品位在礦層中央最好，往頂底板變差。</div></article>
+<article class="page item" id="i-rubble" data-text="碎石 開挖、爆破、崩塌產生 用鎬或鏟子拿起來；卡車、怪手、推土機搬運 8 級高度，照安息角 35° 流動；車壓會壓實。礦石碎石帶著品位。" data-title="碎石"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>碎石</h1><aside class="ibox"><div class="ibox-title">碎石</div><img class="ibox-icon" src="img/rubble.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>開挖、爆破、崩塌產生</td></tr></table></aside><h2>操作</h2><p>用鎬或鏟子拿起來；卡車、怪手、推土機搬運</p><h2>說明</h2><div>8 級高度，照安息角 35° 流動；車壓會壓實。礦石碎石帶著品位。</div></article>
+<article class="page item" id="i-topsoil" data-text="表土 地形 鏟起來變成鬆土 長著草和樹根，有凝聚力（5 kPa），陡坡上也站得住。被挖、底下被掏空、或旁邊陡壁超過自立高度就變成鬆土流走；下大雨時凝聚力降低。見 碎石與土 、 降雨 。" data-title="表土"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>表土</h1><aside class="ibox"><div class="ibox-title">表土</div><img class="ibox-icon" src="img/topsoil.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>地形</td></tr></table></aside><h2>操作</h2><p>鏟起來變成鬆土</p><h2>說明</h2><div>長著草和樹根，有凝聚力（5 kPa），陡坡上也站得住。被挖、底下被掏空、或旁邊陡壁超過自立高度就變成鬆土流走；下大雨時凝聚力降低。見<a href="#m-soil">碎石與土</a>、<a href="#m-rain">降雨</a>。</div></article>
+<article class="page item" id="i-rubble_soil" data-text="鬆土 表土被擾動產生 用鏟子拿起來 跟碎石一樣照安息角流動、有重量；下雨時安息角降低。滿格放久了長回表土。" data-title="鬆土"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>鬆土</h1><aside class="ibox"><div class="ibox-title">鬆土</div><img class="ibox-icon" src="img/rubble_soil.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>表土被擾動產生</td></tr></table></aside><h2>操作</h2><p>用鏟子拿起來</p><h2>說明</h2><div>跟碎石一樣照安息角流動、有重量；下雨時安息角降低。滿格放久了長回表土。</div></article>
+<article class="page item" id="i-colluvium" data-text="崩積土、混合碎石 碎石和土混在一起產生 跟碎石一樣搬運 一格最多兩種成分，外觀是兩種貼圖交錯，指著看得到比例。碎石＋土 = 崩積土；礦石混進土或廢石，品位被稀釋。" data-title="崩積土、混合碎石"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>崩積土、混合碎石</h1><aside class="ibox"><div class="ibox-title">崩積土、混合碎石</div><img class="ibox-icon" src="img/colluvium.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>碎石和土混在一起產生</td></tr></table></aside><h2>操作</h2><p>跟碎石一樣搬運</p><h2>說明</h2><div>一格最多兩種成分，外觀是兩種貼圖交錯，指著看得到比例。碎石＋土 = 崩積土；礦石混進土或廢石，品位被稀釋。</div></article>
+<article class="page item" id="i-log" data-text="樹、原木 用斧頭砍樹 左鍵扛起地上的原木（一次一根）；右鍵放下、裝車斗、對著鋸木台鋸 只有砍的才有原木；被土石流沖倒、樹根的土流失、被埋超過 1 m 的樹整棵毀掉。地上的原木底下空了也會毀掉。" data-title="樹、原木"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>樹、原木</h1><aside class="ibox"><div class="ibox-title">樹、原木</div><img class="ibox-icon" src="img/log.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>用斧頭砍樹</td></tr></table></aside><h2>操作</h2><p>左鍵扛起地上的原木（一次一根）；右鍵放下、裝車斗、對著鋸木台鋸</p><h2>說明</h2><div>只有砍的才有原木；被土石流沖倒、樹根的土流失、被埋超過 1 m 的樹整棵毀掉。地上的原木底下空了也會毀掉。</div></article>
+<article class="page item" id="i-vendor_vehicle" data-text="機械設備課長 營地帳篷 右鍵打開商店 賣車輛、破碎站、選礦場、輸送帶、裝車料斗、改裝套件、操作員。" data-title="機械設備課長"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-camp">營地人物</a></p><h1>機械設備課長</h1><aside class="ibox"><div class="ibox-title">機械設備課長</div><table><tr><th>分類</th><td><a href="#c-camp">營地人物</a></td></tr><tr><th>取得</th><td>營地帳篷</td></tr></table></aside><h2>操作</h2><p>右鍵打開商店</p><h2>說明</h2><div>賣車輛、破碎站、選礦場、輸送帶、裝車料斗、改裝套件、操作員。</div></article>
+<article class="page item" id="i-vendor_blast" data-text="爆破主任 營地帳篷 右鍵打開商店 賣鑽孔和爆破的器材、鑽探車輛。" data-title="爆破主任"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-camp">營地人物</a></p><h1>爆破主任</h1><aside class="ibox"><div class="ibox-title">爆破主任</div><table><tr><th>分類</th><td><a href="#c-camp">營地人物</a></td></tr><tr><th>取得</th><td>營地帳篷</td></tr></table></aside><h2>操作</h2><p>右鍵打開商店</p><h2>說明</h2><div>賣鑽孔和爆破的器材、鑽探車輛。</div></article>
+<article class="page item" id="i-vendor_tools" data-text="工具室管理員 營地帳篷 右鍵打開商店 賣手工具、支撐、建材、儀器。" data-title="工具室管理員"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-camp">營地人物</a></p><h1>工具室管理員</h1><aside class="ibox"><div class="ibox-title">工具室管理員</div><table><tr><th>分類</th><td><a href="#c-camp">營地人物</a></td></tr><tr><th>取得</th><td>營地帳篷</td></tr></table></aside><h2>操作</h2><p>右鍵打開商店</p><h2>說明</h2><div>賣手工具、支撐、建材、儀器。</div></article>
+<article class="page item" id="i-research" data-text="研究帳篷 營地 右鍵機械技工或駐點地質師 花錢研發（選礦回收率、降低精煤混入、破碎機改良、輸送帶改良、品位控制、採礦規劃），要一段時間才完成；機械技工也修報廢的車。駐點地質師可以雇用，雇用期間你有品位判讀、岩體分類、岩石力學三種能力。" data-title="研究帳篷"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-camp">營地人物</a></p><h1>研究帳篷</h1><aside class="ibox"><div class="ibox-title">研究帳篷</div><table><tr><th>分類</th><td><a href="#c-camp">營地人物</a></td></tr><tr><th>取得</th><td>營地</td></tr></table></aside><h2>操作</h2><p>右鍵機械技工或駐點地質師</p><h2>說明</h2><div>花錢研發（選礦回收率、降低精煤混入、破碎機改良、輸送帶改良、品位控制、採礦規劃），要一段時間才完成；機械技工也修報廢的車。駐點地質師可以雇用，雇用期間你有品位判讀、岩體分類、岩石力學三種能力。</div></article>
+<article class="page item" id="i-professor" data-text="大學教授 營地 右鍵：選科目考試 每科抽 5 題、答對 4 題就永久學會那一科的能力。見 知識能力 。" data-title="大學教授"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-camp">營地人物</a></p><h1>大學教授</h1><aside class="ibox"><div class="ibox-title">大學教授</div><table><tr><th>分類</th><td><a href="#c-camp">營地人物</a></td></tr><tr><th>取得</th><td>營地</td></tr></table></aside><h2>操作</h2><p>右鍵：選科目考試</p><h2>說明</h2><div>每科抽 5 題、答對 4 題就永久學會那一科的能力。見<a href="#m-knowledge">知識能力</a>。</div></article>
+<article class="page item" id="i-camp_bench" data-text="長椅 營地 拿著操作員對長椅右鍵：讓他休息 休息的操作員坐在長椅上。" data-title="長椅"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-camp">營地人物</a></p><h1>長椅</h1><aside class="ibox"><div class="ibox-title">長椅</div><img class="ibox-icon" src="img/camp_bench.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-camp">營地人物</a></td></tr><tr><th>取得</th><td>營地</td></tr></table></aside><h2>操作</h2><p>拿著操作員對長椅右鍵：讓他休息</p><h2>說明</h2><div>休息的操作員坐在長椅上。</div></article>
 </main>
 </div>
 <script>
 (function () {
-	var root = document.documentElement, btn = document.getElementById("theme");
+	var root = document.documentElement;
 	try { var t = localStorage.getItem("georocker-theme"); if (t) root.setAttribute("data-theme", t); } catch (e) {}
-	btn.addEventListener("click", function () {
+	document.getElementById("theme").addEventListener("click", function () {
 		var cur = root.getAttribute("data-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 		var next = cur === "dark" ? "light" : "dark";
 		root.setAttribute("data-theme", next);
 		try { localStorage.setItem("georocker-theme", next); } catch (e) {}
 	});
+	// 一次只顯示一頁（像 wiki 的一個條目），用網址的 # 切換
+	var pages = document.querySelectorAll(".page");
+	function show() {
+		var id = (location.hash || "#home").slice(1), hit = document.getElementById(id);
+		if (!hit || !hit.classList.contains("page")) { hit = document.getElementById("home"); }
+		pages.forEach(function (p) { p.classList.toggle("show", p === hit); });
+		var h = hit.querySelector("h1");
+		document.title = (h && hit.id !== "home" ? h.textContent + " - " : "") + "GeoRocker 遊戲說明";
+		window.scrollTo(0, 0);
+	}
+	window.addEventListener("hashchange", show);
+	show();
+	// 搜尋：比對條目標題和內容，列出結果
+	var q = document.getElementById("q"), res = document.getElementById("res");
+	var all = [];
+	pages.forEach(function (p) {
+		if (p.id === "home") return;
+		var h = p.querySelector("h1"), img = p.querySelector(".ibox-icon") || p.querySelector(".ibox-shot");
+		all.push({id: p.id, title: h ? h.textContent : p.id, text: (p.getAttribute("data-text") || p.textContent).toLowerCase(), img: img ? img.getAttribute("src") : null});
+	});
+	function search() {
+		var s = q.value.trim().toLowerCase();
+		res.innerHTML = "";
+		if (!s) { res.style.display = "none"; return; }
+		var hits = all.filter(function (a) { return a.title.toLowerCase().indexOf(s) >= 0; })
+			.concat(all.filter(function (a) { return a.title.toLowerCase().indexOf(s) < 0 && a.text.indexOf(s) >= 0; })).slice(0, 14);
+		hits.forEach(function (a) {
+			var el = document.createElement("a");
+			el.href = "#" + a.id;
+			if (a.img) { var im = document.createElement("img"); im.src = a.img; el.appendChild(im); }
+			el.appendChild(document.createTextNode(a.title));
+			el.addEventListener("click", function () { res.style.display = "none"; q.value = ""; });
+			res.appendChild(el);
+		});
+		res.style.display = hits.length ? "block" : "none";
+	}
+	q.addEventListener("input", search);
+	q.addEventListener("keydown", function (e) {
+		if (e.key === "Enter") { var f = res.querySelector("a"); if (f) { location.hash = f.getAttribute("href"); res.style.display = "none"; q.value = ""; } }
+		if (e.key === "Escape") { res.style.display = "none"; }
+	});
+	document.addEventListener("click", function (e) { if (!e.target.closest(".search")) res.style.display = "none"; });
 })();
 </script>
 </body>
