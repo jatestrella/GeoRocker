@@ -938,6 +938,17 @@ end
 function V.dump_to_ground(self, cells, ytop)
 	for base, lv in pairs(self.load) do
 		local rest = 0
+		if base == "default:tree" and rockmech.lay_log then
+			-- 原木（career.lua 裝上來的，1 根 = NLEV 級）：一根一根橫放在倒的那幾欄，放不下的留在車上
+			local n, placed = math.floor(lv / NLEV), 0
+			for i = 1, n do
+				local c = cells[(i - 1) % #cells + 1]
+				if rockmech.lay_log(c.x, c.z, ytop, "x") then placed = placed + 1 end
+			end
+			rest = lv - placed * NLEV
+			V.load_keep(self, base, rest)
+			goto continue
+		end
 		local g = V.load_grade(self, base)
 		for i, c in ipairs(cells) do
 			local share = math.ceil(lv / (#cells - i + 1))
@@ -945,6 +956,7 @@ function V.dump_to_ground(self, cells, ytop)
 			rest = rest + deposit_column(c.x, c.z, ytop, base, share, nil, nil, g)
 		end
 		V.load_keep(self, base, rest)
+		::continue::
 	end
 end
 
@@ -1062,6 +1074,7 @@ function V.load_ore(self)
 end
 -- 碎石種類的貼圖（給碎石塊零件）
 function V.rubble_tex(base)
+	if base == "default:tree" then return "default_tree.png^[transformR90" end    -- 車斗裡的原木：橫放的樹皮
 	local nd = core.registered_nodes[base]
 	local t = nd and nd.tiles and nd.tiles[1]
 	return type(t) == "table" and t.name or t or "[fill:16x16:#6a6058"

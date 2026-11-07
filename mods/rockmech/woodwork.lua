@@ -1,9 +1,11 @@
 -- rockmech/woodwork.lua
 -- 木工：樹木、砍樹、鋸木台、木工桌、木製建材。
 --   表土和樹林：每條礦帶交界的山脊整片鋪表土（根系抓住，被擾動才變鬆土），上面稀疏種蘋果樹。樹苗種在滿格的土上會自己長。
---   砍樹：斧頭（工具室管理員）砍樹幹任何一格，整棵倒下：樹幹全部變成原木給砍的人，樹葉拿掉，掉 1–2 棵樹苗和蘋果。
---   鋸木台（營地中心東南邊的一張台子）：手上有原木，右鍵選要鋸成什麼：2 根木柱、4 塊木板、8 塊木板半格。
---   木工桌（營地裡一張單純的木桌）：用木板做：木牆板、樓梯、門、活板門、柵欄、柵欄橫桿、梯子、木板半格。
+--   砍樹：斧頭（工具室管理員）砍樹幹任何一格，整棵倒下：樹幹變成橫躺在地上的原木（倒向離砍的人遠的那邊），
+--   樹葉拿掉，1–2 棵樹苗和蘋果進物品欄。經營模式的原木是大東西：不進背包，跟碎石一樣一次扛一根（career.lua），
+--   左鍵地上的原木扛起來，右鍵放下、裝上車斗（1 根佔 1 m³）。
+--   鋸木台（跟工具室管理員買）：扛著原木對它右鍵，選要鋸成什麼：2 根木柱、4 塊木板、8 塊木板半格。
+--   木工桌（跟工具室管理員買，一張單純的木桌）：用木板做：木牆板、樓梯、門、活板門、柵欄、柵欄橫桿、梯子、木板半格。
 --   這些都是建材，在岩石力學裡算空格（group rockmech_timber，見 collapse.lua、timber.lua），不能當剛性的墊支撐；
 --   空手就挖得起來（樹幹要斧頭）。
 
@@ -44,7 +46,39 @@ for _, name in ipairs({LOG, "default:leaves", "default:apple"}) do
 		core.override_item(name, {groups = g})
 	end
 end
-core.override_item(LOG, {description = "原木 Log\n拿到營地的鋸木台鋸成木柱或木板"})
+-- 原木：站著的是樹幹（param2 0–3，直立），橫躺的（param2 ≥ 4）是砍下來的原木
+local CARRY = cfg.career and rockmech.carry_get ~= nil
+local function lying(node) return node.name == LOG and node.param2 >= 4 end
+core.override_item(LOG, {
+	description = "原木 Log\n扛到鋸木台鋸成木柱或木板",
+	-- 經營模式：砍下來的原木不進背包（倒在地上，fell）；左鍵橫躺的原木就扛起來（不用斧頭）
+	drop = CARRY and "" or nil,
+	on_punch = CARRY and function(pos, node, puncher)
+		if not (lying(node) and puncher and puncher:is_player()) then return end
+		if rockmech.carry_get(puncher) then tell(puncher:get_player_name(), "手上有東西：先右鍵放下，才搬得動原木"); return end
+		core.remove_node(pos)
+		rockmech.carry_set(puncher, {log = true})
+	end or nil,
+})
+-- 在 (x, z) 這一欄放一根橫躺的原木（axis "x"／"z"：順著哪個方向躺），從 y 往上找空位、再往下找落地處。成功回傳 true
+local LAY_P2 = {x = 12, z = 4}     -- facedir：木頭軸朝 +X／+Z
+local function free(n)
+	local d = core.registered_nodes[n]
+	return n == "air" or (d and d.buildable_to)
+end
+function rockmech.lay_log(x, z, y, axis)
+	local yy = y
+	while not free(core.get_node({x = x, y = yy, z = z}).name) do
+		yy = yy + 1
+		if yy > y + 4 then return false end
+	end
+	for _ = 1, 16 do
+		if not free(core.get_node({x = x, y = yy - 1, z = z}).name) then break end
+		yy = yy - 1
+	end
+	core.set_node({x = x, y = yy, z = z}, {name = LOG, param2 = LAY_P2[axis] or 4})
+	return true
+end
 -- 樹苗只能種在滿格的土上：土壤有 8 級高度，種在不滿格的土上，長出來的樹會浮在空中
 do
 	local sdef = core.registered_items["default:sapling"]
@@ -102,10 +136,14 @@ local NLEV = rockmech.RUBBLE_LEVELS
 for k = 1, NLEV do core.register_alias("rockmech:tree_soil_" .. k, LOG) end
 
 -- 樹根那一格：是樹幹，正下方和斜下方 8 格都沒有樹幹（樹枝是斜著接在樹幹上的，下面有樹幹）
+local function standing(p)
+	local n = core.get_node(p)
+	return n.name == LOG and n.param2 < 4
+end
 local function root_cell(pos)
-	if core.get_node(pos).name ~= LOG then return false end
+	if not standing(pos) then return false end
 	for dx = -1, 1 do for dz = -1, 1 do
-		if core.get_node({x = pos.x + dx, y = pos.y - 1, z = pos.z + dz}).name == LOG then return false end
+		if standing({x = pos.x + dx, y = pos.y - 1, z = pos.z + dz}) then return false end
 	end end
 	return true
 end
@@ -123,12 +161,12 @@ local function fell(pos, digger, whole)
 		for _, d in ipairs(NB) do
 			local n = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
 			local h = core.hash_node_position(n)
-			if not seen[h] and n.y >= pos.y and core.get_node(n).name == LOG then seen[h] = true; q[#q + 1] = n end
+			if not seen[h] and n.y >= pos.y and standing(n) then seen[h] = true; q[#q + 1] = n end
 		end
 	end
 	local logs, apples = 0, 0
 	for i, p in ipairs(trunk) do
-		if i > 1 or whole then core.remove_node(p); logs = logs + 1 end   -- 砍的那一格由引擎挖掉（照常掉一根原木）
+		if i > 1 or whole then core.remove_node(p); logs = logs + 1 end   -- 砍的那一格由引擎挖掉
 		-- 這段樹幹周圍 2 格的樹葉、蘋果拿掉（樹距 3 m，不碰隔壁那棵）
 		for _, l in ipairs(core.find_nodes_in_area(vector.subtract(p, 2), vector.add(p, 2), {"default:leaves", "default:apple"})) do
 			if core.get_node(l).name == "default:apple" then apples = apples + 1 end
@@ -136,7 +174,29 @@ local function fell(pos, digger, whole)
 		end
 	end
 	felling = false
-	local give = {ItemStack(LOG .. " " .. logs), ItemStack("default:sapling " .. math.random(1, 2))}
+	local give = {ItemStack("default:sapling " .. math.random(1, 2))}
+	if CARRY then
+		-- 經營模式：整棵樹的原木（含砍的那一格）一根接一根橫躺在地上，倒向離砍的人遠的那邊
+		local n = logs + (whole and 0 or 1)
+		local dx, dz = 0, 0
+		local who = digger and digger:is_player() and digger:get_pos()
+		if who then
+			local vx, vz = pos.x - who.x, pos.z - who.z
+			if math.abs(vx) > math.abs(vz) then dx = vx > 0 and 1 or -1 else dz = vz > 0 and 1 or -1 end
+		else
+			local r = math.random(4)
+			dx, dz = ({1, -1, 0, 0})[r], ({0, 0, 1, -1})[r]
+		end
+		local axis = dx ~= 0 and "x" or "z"
+		local placed = 0
+		for i = 1, n + 4 do
+			if placed >= n then break end
+			if rockmech.lay_log(pos.x + dx * i, pos.z + dz * i, pos.y + 1, axis) then placed = placed + 1 end
+		end
+		for _ = placed + 1, n do rockmech.lay_log(pos.x, pos.z, pos.y, axis) end      -- 倒的方向擋住：堆在樹樁上
+	else
+		give[#give + 1] = ItemStack(LOG .. " " .. logs)   -- 砍的那一格引擎照常掉一根
+	end
 	if apples > 0 then give[#give + 1] = ItemStack("default:apple " .. apples) end
 	local inv = digger and digger:is_player() and digger:get_inventory()
 	for _, s in ipairs(give) do
@@ -149,10 +209,12 @@ local function fell(pos, digger, whole)
 		maxpos = vector.add(pos, {x = 2, y = 6, z = 2}), minvel = {x = -1, y = -2, z = -1}, maxvel = {x = 1, y = 0, z = 1},
 		minexptime = 1, maxexptime = 2, minsize = 1, maxsize = 2, texture = "[fill:4x4:#3a7a2a"})
 	core.sound_play("default_dig_choppy", {pos = pos, gain = 1.0, max_hear_distance = 32}, true)
-	if digger and digger:is_player() then tell(digger:get_player_name(), ("樹倒了：原木 %d 根"):format(logs + (whole and 0 or 1))) end
+	if digger and digger:is_player() then
+		tell(digger:get_player_name(), ("樹倒了：原木 %d 根%s"):format(logs + (whole and 0 or 1), CARRY and "倒在地上（左鍵扛起來，一次一根）" or ""))
+	end
 end
 core.register_on_dignode(function(pos, oldnode, digger)
-	if oldnode.name == LOG and digger and digger:is_player() then fell(pos, digger) end
+	if oldnode.name == LOG and oldnode.param2 < 4 and digger and digger:is_player() then fell(pos, digger) end
 end)
 
 local function topple(base, why)
@@ -223,11 +285,17 @@ local function count(inv, item)
 end
 
 local using = {}            -- 玩家名稱 → 台子位置
+local function carried_log(player)
+	local c = rockmech.carry_get and rockmech.carry_get(player)
+	return c and c.log
+end
 local function saw_form(player)
-	local n = count(player:get_inventory(), LOG)
+	local text
+	if CARRY then text = carried_log(player) and "手上扛著一根原木" or "手上沒有原木：去把地上的原木扛過來（左鍵）"
+	else text = ("物品欄裡的原木：%d 根（一次鋸一根）"):format(count(player:get_inventory(), LOG)) end
 	local out = {"formspec_version[6]size[10,5.6]",
 		"label[0.5,0.6;鋸木台]",
-		("label[0.5,1.2;%s]"):format(core.formspec_escape(("物品欄裡的原木：%d 根（一次鋸一根）"):format(n)))}
+		("label[0.5,1.2;%s]"):format(core.formspec_escape(text))}
 	for i, r in ipairs(SAW_RECIPES) do
 		out[#out + 1] = ("item_image[0.5,%g;0.8,0.8;%s]"):format(1.7 + (i - 1) * 1.0, r.give)
 		out[#out + 1] = ("button[1.5,%g;5,0.8;r_%d;%s]"):format(1.7 + (i - 1) * 1.0, i,
@@ -276,7 +344,18 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		if i then
 			if formname == SAW_FORM then
 				local r = SAW_RECIPES[i]
-				if r then make(player, LOG, 1, r.give, r.n) end
+				if r and CARRY then
+					-- 用手上扛的那根原木
+					local stack = ItemStack(r.give .. " " .. r.n)
+					local inv = player:get_inventory()
+					if not carried_log(player) then tell(name, "手上沒有原木")
+					elseif not inv:room_for_item("main", stack) then tell(name, "物品欄滿了")
+					else
+						rockmech.carry_set(player, nil)
+						inv:add_item("main", stack)
+						core.sound_play("default_dig_choppy", {pos = player:get_pos(), gain = 0.6, max_hear_distance = 16}, true)
+					end
+				elseif r then make(player, LOG, 1, r.give, r.n) end
 				core.show_formspec(name, SAW_FORM, saw_form(player))
 			else
 				local r = BENCH_RECIPES[i]

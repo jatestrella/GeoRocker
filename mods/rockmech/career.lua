@@ -67,7 +67,9 @@ local carry_hud = {}        -- 玩家名稱 → HUD id
 local carry_img = {}        -- 玩家名稱 → 手上那塊碎石的 HUD id
 
 -- 手上的碎石畫成畫面右下方的方塊，貼圖跟著種類與品位
+local LOG = "default:tree"
 local function cube(c)
+	if c.log then return "[inventorycube{default_tree_top.png{default_tree.png{default_tree.png" end
 	local t = V.rubble_tex(rockmech.rubble_with_level(c.base, NLEV, c.p2)):gsub("%^", "&")
 	return ("[inventorycube{%s{%s{%s"):format(t, t, t)
 end
@@ -118,6 +120,8 @@ local function show_carry(player, c)
 	if c and c.box then
 		local label = rockmech.borehole_label and rockmech.borehole_label(c.box.acc, c.box.n) or ("BH-" .. c.box.n)
 		text = ("手上：岩芯箱 %s（深 %d m）　右鍵放下"):format(label, c.box.depth)
+	elseif c and c.log then
+		text = "手上：原木　右鍵放下；對著鋸木台右鍵鋸開，對著車斗右鍵裝車"
 	elseif c then
 		local ore = rockmech.ore_of_rubble[c.base]
 		local see = rockmech.can_see or function() return true end      -- 知識能力（knowledge.lua）
@@ -148,6 +152,8 @@ local function set_carried(player, c)
 	player:get_meta():set_string(CARRY_KEY, c and core.serialize(c) or "")
 	show_carry(player, c)
 end
+-- 給木工（woodwork.lua，鋸木台用手上的原木）：手上捧的東西 {base, lv, p2}／{box}／{log = true}
+rockmech.carry_get, rockmech.carry_set = carried, set_carried
 
 -- 雙手：拿碎石時從下方捧著，推車時伸向握把。引擎只畫右手，自己畫一對方塊手臂（畫面最下方往上、往中間斜），
 -- 這時收起原本手上的東西。mode：nil、"carry"、"cart"
@@ -225,6 +231,17 @@ function rockmech.career_load(player, self, def)
 	if not c and now - (loaded_at[name] or -LOAD_HOLD) < LOAD_HOLD then return true end
 	if not c or (def.cap or 0) <= 0 then return false end
 	loaded_at[name] = now
+	if c.log then
+		-- 一根原木佔車斗 1 m³（跟一格碎石一樣）
+		if def.cap - V.load_total(self) < NLEV then
+			core.chat_send_player(name, "車斗放不下一根原木了")
+			return true
+		end
+		V.load_put(self, LOG, NLEV, 0)
+		V.refresh(self)
+		set_carried(player, nil)
+		return true
+	end
 	local put = math.min(c.lv, def.cap - V.load_total(self))
 	if put <= 0 then
 		core.chat_send_player(player:get_player_name(), "車斗滿了")
@@ -246,6 +263,14 @@ local function put_down(player, pos)
 		else core.chat_send_player(player:get_player_name(), "這裡放不下岩芯箱：對著空的地面（或另一箱的上面）按右鍵") end
 		return
 	end
+	if c.log then
+		-- 橫放在地上，順著你面對的方向
+		local d = core.yaw_to_dir(player:get_look_horizontal())
+		if rockmech.lay_log and rockmech.lay_log(pos.x, pos.z, pos.y, math.abs(d.x) > math.abs(d.z) and "x" or "z") then
+			set_carried(player, nil)
+		else core.chat_send_player(player:get_player_name(), "這裡放不下原木") end
+		return
+	end
 	local rest = V.deposit_column(pos.x, pos.z, pos.y, c.base, c.lv, nil, nil, c.p2)
 	c.lv = rest
 	set_carried(player, rest > 0 and c or nil)
@@ -254,6 +279,17 @@ end
 local node_dig = core.node_dig
 function core.node_dig(pos, node, digger)
 	if not digger or not digger:is_player() then return node_dig(pos, node, digger) end
+	if node.name == LOG and node.param2 >= 4 then
+		-- 橫躺在地上的原木：捧起來，一次一根（站著的樹幹照常砍倒，woodwork.lua）
+		local name = digger:get_player_name()
+		if carried(digger) then
+			core.chat_send_player(name, "手上有東西：先右鍵放下，才搬得動原木")
+			return false
+		end
+		core.remove_node(pos)
+		set_carried(digger, {log = true})
+		return true
+	end
 	if node.name == rockmech.COREBOX then
 		-- 岩芯箱：捧起來，一次一個
 		local name = digger:get_player_name()
@@ -271,8 +307,8 @@ function core.node_dig(pos, node, digger)
 		local c = carried(digger)
 		local name = digger:get_player_name()
 		local base = rockmech.rubble_base[node.name]
-		if c and c.box then
-			core.chat_send_player(name, "手上捧著岩芯箱：先右鍵放下")
+		if c and (c.box or c.log) then
+			core.chat_send_player(name, c.box and "手上捧著岩芯箱：先右鍵放下" or "手上扛著原木：先右鍵放下")
 			return false
 		end
 		if c and c.lv >= NLEV then
