@@ -158,11 +158,20 @@ Core box @1 (@2, depth @3 m)@nLeft-click to pick it up; right-click with a field
 [Borehole] @1 renamed @2 to @3=[鑽孔] @1 把 @2 改名為 @3
 Core box=岩芯箱
 [Core box] No record found for this hole=[岩芯箱] 找不到這一孔的紀錄
+Field notebook: Schmidt hammer readings (@1)=野帳本：施密特錘讀數（@1 筆）
+No readings yet: right-click a rock face with the Schmidt hammer=還沒有讀數：拿施密特錘對岩面右鍵
+No.=編號
+Position=位置
+Rebound R=回彈值 R
+Take about 10 readings at the same spot, sort them and take the median R. Uniaxial compressive strength (Katz 2000): UCS ≈ 2.21·e^(0.067R) MPa.=同一處敲 10 次左右，排序後取中位數 R。單軸抗壓強度（Katz 2000）：UCS ≈ 2.21·e^(0.067R) MPa。
+Back=返回
+Clear readings=清除讀數
 Field notebook (@1 / @2 holes)=野帳本（@1 / @2 孔）
 @1 (@2)=@1（@2）
 rock mass?=岩體?
 grade?=品位?
 No holes logged yet: hold the field notebook and right-click a core box to log it=還沒記任何孔：拿著野帳本對岩芯箱按右鍵判讀
+Schmidt hammer readings (@1)=施密特錘讀數（@1 筆）
 [Field notebook]=[野帳本]
 [Field notebook] No borehole record found for this box=[野帳本] 找不到這一箱的鑽孔紀錄
 [Field notebook] Full (@1 holes): buy a new one=[野帳本] 寫滿了（@1 孔）：買一本新的
@@ -636,7 +645,6 @@ Slope: not measured yet (sneak + left-click to measure the slope)=坡面：還�
 Red circle: friction circle φj @= @1°=紅圈：摩擦圓 φj @= @1°
 Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up=赤平投影（下半球、等角投影）　傾角/傾向　上方是北
 Left-click a rock face: measure joints (one reading per set)@nSneak + left-click: measure the slope@n@nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible=左鍵岩面：量節理（每組一筆）@n蹲下＋左鍵：量坡面@n@nMarkland 平面滑動：節理的極點在摩擦圓外、跟坡面極點在同一側、而且比坡面緩（大圓在坡面大圓裡面）→ 可能滑動
-Clear readings=清除量測
 Geological compass@nRight-click a rock face: stress and factor of safety; sneak + right-click: full data@nLeft-click a rock face: measure joint orientation (stereonet); sneak + left-click: measure the slope; right-click the air: open the stereonet=地質羅盤@n右鍵岩面：應力與安全係數；蹲下＋右鍵：完整資料@n左鍵岩面：量節理位態（赤平投影）；蹲下＋左鍵：量坡面；對空中右鍵：打開赤平投影
 Geological compass=地質羅盤
 Cannot measure a slope here=這裡量不到坡面
@@ -702,10 +710,11 @@ Back to camp@nHold it and left-click or right-click to return to your team's cam
 Back to camp=回營地
 
 ### testing.lua
-Schmidt hammer@nLeft-click a rock face: 10 impacts give the rebound number R, converted to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=施密特錘@n對岩面左鍵：敲 10 次讀回彈值 R，換算單軸抗壓強度（Katz 2000：UCS ≈ 2.21·e^(0.067R)）
+Schmidt hammer@nRight-click a rock face: one impact gives one rebound number R, recorded in your field notebook. Take about 10 readings at a spot; the median converts to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=施密特錘@n對岩面右鍵：敲一下得到一個回彈值 R，記進野帳本。同一處敲 10 次左右，取中位數換算單軸抗壓強度（Katz 2000：UCS ≈ 2.21·e^(0.067R)）
+Schmidt hammer=施密特錘
 [Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=[施密特錘] 要敲在完整的岩面上（碎石、土敲不出讀數）
-The rock here=這裡的岩石
-[Schmidt hammer] @1 @2: rebound @3 → median R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa=[施密特錘] @1 @2：回彈值 @3 → 中位數 R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa
+[Schmidt hammer] @1: R @= @2 (recorded in the field notebook, @3 readings; left-click the notebook to see them)=[施密特錘] @1：R @= @2（已記進野帳本，共 @3 筆；左鍵打開野帳本看）
+[Schmidt hammer] @1: R @= @2 (no field notebook in your inventory: not recorded)=[施密特錘] @1：R @= @2（背包裡沒有野帳本，沒有記下來）
 Point load test: cores of @1 (3 tests per run, UCS ≈ @2 · Is(50))=點荷重試驗：@1 的岩芯（每段 3 次，UCS ≈ @2 · Is(50)）
 This box has no core data=這箱沒有岩芯資料
 Depth (m)=深度 (m)
@@ -953,7 +962,6 @@ Texture levels=材質級數
 Coordinates: x @= east, y @= up, z @= north; dip direction is clockwise from north. Joint normals are aligned to the integer lattice so traces stay continuous across blocks.=座標：x @= 東、y @= 上、z @= 北；傾向由北順時針。節理法向對齊整數格點，使跡線跨方塊連續。
 Recalculate for the block you are pointing at=以目前指向的方塊重新計算
 (not pointing at any block)=（沒有指向任何方塊）
-Position=位置
 Node=方塊
 @1 (not rock; using the lithology at this location)=@1（非岩石，以該處岩性計）
 Overburden thickness h=上覆岩層厚度 h
@@ -1368,3 +1376,8 @@ Build a rock hill in front of you (its face toward you) that you can tunnel stra
 Rock hill built in front of you: height @1 m, width @2 m, depth @3 m, face angle @4°; dig toward @5 to go into the hill. @6=已在前方建好岩山：高 @1 m、寬 @2 m、深 @3 m、正面坡角 @4°，往 @5 挖就是進山。@6
 Warning: the face has daylighting joints @1, so the face may slide.=注意：正面有順向的節理 @1，正面可能會滑。
 The face has no daylighting joints.=正面沒有順向的節理。
+
+##### not used anymore #####
+Schmidt hammer@nLeft-click a rock face: 10 impacts give the rebound number R, converted to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=施密特錘@n對岩面左鍵：敲 10 次讀回彈值 R，換算單軸抗壓強度（Katz 2000：UCS ≈ 2.21·e^(0.067R)）
+The rock here=這裡的岩石
+[Schmidt hammer] @1 @2: rebound @3 → median R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa=[施密特錘] @1 @2：回彈值 @3 → 中位數 R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa

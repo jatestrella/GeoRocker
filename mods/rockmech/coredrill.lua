@@ -308,6 +308,47 @@ end
 ---------------------------------------------------------------------------
 
 local function book_entries(stack) return core.deserialize(stack:get_meta():get_string("logs")) or {} end
+-- 施密特錘的讀數（testing.lua）：記在野帳本的 meta schmidt = {{x, y, z, r, lith}, …}
+local SCHMIDT_MAX = 200
+local function schmidt_of(stack) return core.deserialize(stack:get_meta():get_string("schmidt")) or {} end
+-- 記一筆到玩家背包裡的第一本野帳本，回傳這本現在幾筆；沒有野帳本回傳 nil
+function rockmech.fieldbook_add_schmidt(player, rec)
+	local inv = player:get_inventory()
+	for i, st in ipairs(inv:get_list("main") or {}) do
+		if st:get_name() == BOOK then
+			local list = schmidt_of(st)
+			if #list >= SCHMIDT_MAX then table.remove(list, 1) end
+			list[#list + 1] = rec
+			st:get_meta():set_string("schmidt", core.serialize(list))
+			inv:set_stack("main", i, st)
+			return #list
+		end
+	end
+end
+local SCHMIDT_FORM = "rockmech:fieldbook_schmidt"
+local function schmidt_form(name, list)
+	local out = {"formspec_version[6]size[12,11]",
+		("label[0.5,0.6;%s]"):format(core.formspec_escape(S("Field notebook: Schmidt hammer readings (@1)", tostring(#list))))}
+	if #list == 0 then
+		out[#out + 1] = "label[0.5,1.4;" .. core.formspec_escape(S("No readings yet: right-click a rock face with the Schmidt hammer")) .. "]"
+	else
+		out[#out + 1] = "tablecolumns[text,align=right;text;text;text,align=right]"
+		local cells = {core.formspec_escape(S("No.")), core.formspec_escape(S("Position")), core.formspec_escape(S("Rock")),
+			core.formspec_escape(S("Rebound R"))}
+		for i, e in ipairs(list) do
+			cells[#cells + 1] = tostring(i)
+			cells[#cells + 1] = core.formspec_escape(("(%d,%d,%d)"):format(e.x, e.y, e.z))
+			cells[#cells + 1] = core.formspec_escape(e.lith and lith_label(e.lith) or "?")
+			cells[#cells + 1] = tostring(e.r)
+		end
+		out[#out + 1] = "table[0.5,1.0;11,7.6;sch;" .. table.concat(cells, ",") .. ";0]"
+	end
+	out[#out + 1] = "textarea[0.5,8.8;11,1.2;;;" .. core.formspec_escape(S("Take about 10 readings at the same spot, sort them and take the median R. Uniaxial compressive strength (Katz 2000): UCS ≈ 2.21·e^(0.067R) MPa.")) .. "]"
+	out[#out + 1] = "button[0.5,10.1;3,0.7;back;" .. core.formspec_escape(S("Back")) .. "]"
+	out[#out + 1] = "button[4.5,10.1;3,0.7;clear;" .. core.formspec_escape(S("Clear readings")) .. "]"
+	out[#out + 1] = "button_exit[8.5,10.1;3,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"
+	return table.concat(out)
+end
 local logging = {}          -- 玩家名稱 → {pos, acc, n, depth, t, need, hud}
 local book_view = {}        -- 玩家名稱 → 打開的那本的紀錄
 
@@ -323,12 +364,21 @@ local function book_form(name, entries)
 	if #entries == 0 then
 		out[#out + 1] = "label[0.5,1.6;" .. core.formspec_escape(S("No holes logged yet: hold the field notebook and right-click a core box to log it")) .. "]"
 	end
+	local player = core.get_player_by_name(name)
+	local st = player and player:get_wielded_item()
+	local nsch = st and st:get_name() == BOOK and #schmidt_of(st) or 0
+	out[#out + 1] = "button[0.5,10.1;6,0.7;schmidt;" .. core.formspec_escape(S("Schmidt hammer readings (@1)", tostring(nsch))) .. "]"
 	return table.concat(out)
 end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= BOOK_FORM then return end
 	local name = player:get_player_name()
+	if fields.schmidt then
+		local st = player:get_wielded_item()
+		core.show_formspec(name, SCHMIDT_FORM, schmidt_form(name, st:get_name() == BOOK and schmidt_of(st) or {}))
+		return true
+	end
 	for k in pairs(fields) do
 		local i = tonumber(k:match("^e_(%d+)$"))
 		local e = i and (book_view[name] or {})[i]
@@ -339,6 +389,22 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		end
 	end
 	if fields.quit then book_view[name] = nil end
+	return true
+end)
+
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= SCHMIDT_FORM then return end
+	local name = player:get_player_name()
+	local st = player:get_wielded_item()
+	if st:get_name() ~= BOOK then return true end
+	if fields.clear then
+		st:get_meta():set_string("schmidt", "")
+		player:set_wielded_item(st)
+		core.show_formspec(name, SCHMIDT_FORM, schmidt_form(name, {}))
+	elseif fields.back then
+		book_view[name] = book_entries(st)
+		core.show_formspec(name, BOOK_FORM, book_form(name, book_view[name]))
+	end
 	return true
 end)
 

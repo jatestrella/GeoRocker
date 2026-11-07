@@ -158,11 +158,20 @@ Core box @1 (@2, depth @3 m)@nLeft-click to pick it up; right-click with a field
 [Borehole] @1 renamed @2 to @3=
 Core box=
 [Core box] No record found for this hole=
+Field notebook: Schmidt hammer readings (@1)=
+No readings yet: right-click a rock face with the Schmidt hammer=
+No.=
+Position=
+Rebound R=
+Take about 10 readings at the same spot, sort them and take the median R. Uniaxial compressive strength (Katz 2000): UCS ≈ 2.21·e^(0.067R) MPa.=
+Back=
+Clear readings=
 Field notebook (@1 / @2 holes)=
 @1 (@2)=
 rock mass?=
 grade?=
 No holes logged yet: hold the field notebook and right-click a core box to log it=
+Schmidt hammer readings (@1)=
 [Field notebook]=
 [Field notebook] No borehole record found for this box=
 [Field notebook] Full (@1 holes): buy a new one=
@@ -636,7 +645,6 @@ Slope: not measured yet (sneak + left-click to measure the slope)=
 Red circle: friction circle φj @= @1°=
 Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up=
 Left-click a rock face: measure joints (one reading per set)@nSneak + left-click: measure the slope@n@nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible=
-Clear readings=
 Geological compass@nRight-click a rock face: stress and factor of safety; sneak + right-click: full data@nLeft-click a rock face: measure joint orientation (stereonet); sneak + left-click: measure the slope; right-click the air: open the stereonet=
 Geological compass=
 Cannot measure a slope here=
@@ -702,10 +710,11 @@ Back to camp@nHold it and left-click or right-click to return to your team's cam
 Back to camp=
 
 ### testing.lua
-Schmidt hammer@nLeft-click a rock face: 10 impacts give the rebound number R, converted to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=
+Schmidt hammer@nRight-click a rock face: one impact gives one rebound number R, recorded in your field notebook. Take about 10 readings at a spot; the median converts to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=
+Schmidt hammer=
 [Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=
-The rock here=
-[Schmidt hammer] @1 @2: rebound @3 → median R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa=
+[Schmidt hammer] @1: R @= @2 (recorded in the field notebook, @3 readings; left-click the notebook to see them)=
+[Schmidt hammer] @1: R @= @2 (no field notebook in your inventory: not recorded)=
 Point load test: cores of @1 (3 tests per run, UCS ≈ @2 · Is(50))=
 This box has no core data=
 Depth (m)=
@@ -953,7 +962,6 @@ Texture levels=
 Coordinates: x @= east, y @= up, z @= north; dip direction is clockwise from north. Joint normals are aligned to the integer lattice so traces stay continuous across blocks.=
 Recalculate for the block you are pointing at=
 (not pointing at any block)=
-Position=
 Node=
 @1 (not rock; using the lithology at this location)=
 Overburden thickness h=

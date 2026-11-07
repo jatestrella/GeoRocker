@@ -25,23 +25,27 @@ local function r_of_ucs(ucs) return math.log(math.max(2.3, ucs) / 2.208) / 0.067
 local function ucs_of_r(R) return 2.208 * math.exp(0.067 * R) end
 
 core.register_tool(HAMMER, {
-	description = S("Schmidt hammer\nLeft-click a rock face: 10 impacts give the rebound number R, converted to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))"),
+	description = S("Schmidt hammer\nRight-click a rock face: one impact gives one rebound number R, recorded in your field notebook. Take about 10 readings at a spot; the median converts to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))"),
+	short_description = S("Schmidt hammer"),
 	inventory_image = "[fill:16x16:#00000000^[fill:4x12:6,2:#c8c8c0^[fill:4x3:6,1:#303030^[fill:6x3:5,12:#2050a0",
-	on_use = function(itemstack, user, pointed)
+	-- 右鍵敲一下：一個回彈值 R（散布約 ±3），記進背包裡的野帳本（coredrill.lua）；要自己取中位數、換算 UCS
+	on_place = function(itemstack, user, pointed)
 		if not (user and user:is_player()) or pointed.type ~= "node" then return itemstack end
 		local name = user:get_player_name()
 		local node = core.get_node(pointed.under)
 		local lith = rockmech.lith_of_node[node.name]
 		if not lith then tell(name, S("[Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)")); return itemstack end
-		local R0 = r_of_ucs(ucs_of(lith.name))
-		local rs = {}
-		for i = 1, 10 do rs[i] = math.floor(R0 + (math.random() + math.random() + math.random() - 1.5) * 2.6 + 0.5) end
-		table.sort(rs)
-		local med = (rs[5] + rs[6]) / 2
-		local who = see(name, "rockmass") and (lith.description or ""):gsub("\n.*", "") or S("The rock here")
-		tell(name, S("[Schmidt hammer] @1 @2: rebound @3 → median R = @4 → UCS ≈ 2.21·e^(0.067R) = @5 MPa",
-			who, core.pos_to_string(pointed.under), table.concat(rs, " "), ("%.1f"):format(med), ("%.0f"):format(ucs_of_r(med))))
-		core.sound_play("default_dig_cracky", {pos = pointed.under, gain = 0.5, max_hear_distance = 12}, true)
+		local R = math.floor(r_of_ucs(ucs_of(lith.name)) + (math.random() + math.random() + math.random() - 1.5) * 2.6 + 0.5)
+		local p = pointed.under
+		local rec = {x = p.x, y = p.y, z = p.z, r = R, lith = see(name, "rockmass") and lith.name or nil}
+		local n = rockmech.fieldbook_add_schmidt and rockmech.fieldbook_add_schmidt(user, rec)
+		if n then
+			tell(name, S("[Schmidt hammer] @1: R = @2 (recorded in the field notebook, @3 readings; left-click the notebook to see them)",
+				core.pos_to_string(p), tostring(R), tostring(n)))
+		else
+			tell(name, S("[Schmidt hammer] @1: R = @2 (no field notebook in your inventory: not recorded)", core.pos_to_string(p), tostring(R)))
+		end
+		core.sound_play("default_dig_cracky", {pos = p, gain = 0.5, max_hear_distance = 12}, true)
 		return itemstack
 	end,
 })
