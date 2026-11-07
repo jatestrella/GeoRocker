@@ -593,7 +593,7 @@ end
 -- 車上的碎石：self.load[種類] = 級數；礦石碎石另外記 self.loadq[種類] = Σ 級數 × 品位
 function V.load_put(self, base, lv, g)
 	self.load[base] = (self.load[base] or 0) + lv
-	if rockmech.ore_of_rubble[base] then
+	if rockmech.mix_of[base] then      -- 混合碎石（礦石品位、崩積土的土比例）都記加權的 param2
 		self.loadq[base] = (self.loadq[base] or 0) + lv * (g or 0)
 	end
 end
@@ -1085,7 +1085,7 @@ function V.fill_tex(self)
 	local ore, grade = V.load_ore(self)
 	if not ore then
 		local _, best = V.load_mix(self)
-		return V.rubble_tex(best)
+		return V.rubble_tex(best and rockmech.rubble_with_level(best, NLEV, V.load_grade(self, best)) or best)
 	end
 	return V.rubble_tex(rockmech.rubble_with_level(ore.rubble, NLEV, grade * 255))
 end

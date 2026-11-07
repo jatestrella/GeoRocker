@@ -95,7 +95,7 @@ local function info(pos, meta, bin)
 			local ore = rockmech.ore_of_rubble[base]
 			local d = core.registered_nodes[base]
 			lines[#lines + 1] = ("・%s %.1f m³%s"):format(d and d.description:gsub("\n.*", "") or base, v.lv / NLEV,
-				ore and ("（%s）"):format(rockmech.ore_text(ore, v.q / v.lv / 255)) or "")
+				rockmech.mix_of[base] and ("（%s）"):format(rockmech.mix_text(base, v.q / v.lv)) or "")
 		end
 	end
 	lines[#lines + 1] = ("卡車或礦卡停在放料臂 %g m 內不動就裝；頂上的格柵接輸送帶"):format(cfg.plant_reach)
@@ -120,7 +120,7 @@ local function step(pos, dtime)
 					local t, base, p2 = V.take_rubble(p, math.floor(room))
 					if t > 0 then
 						local v = bin[base] or {lv = 0, q = 0}
-						v.lv, v.q = v.lv + t, v.q + t * (rockmech.ore_of_rubble[base] and p2 or 0)
+						v.lv, v.q = v.lv + t, v.q + t * (rockmech.mix_of[base] and p2 or 0)
 						bin[base] = v
 						room, inflow = room - t, inflow + t
 					end

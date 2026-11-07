@@ -123,10 +123,10 @@ local function show_carry(player, c)
 	elseif c and c.log then
 		text = "手上：原木　右鍵放下；對著鋸木台右鍵鋸開，對著車斗右鍵裝車"
 	elseif c then
-		local ore = rockmech.ore_of_rubble[c.base]
+		local m = rockmech.mix_of[c.base]
 		local see = rockmech.can_see or function() return true end      -- 知識能力（knowledge.lua）
 		text = ("手上：%s　%s%s"):format(see(name, "rockmass") and core.registered_nodes[c.base].description:gsub("\n.*", "") or "碎石",
-			V.volume_text(c.lv, NLEV), ore and see(name, "grade") and ("　" .. rockmech.ore_text(ore, c.p2 / 255)) or "")
+			V.volume_text(c.lv, NLEV), m and see(name, m.ore and "grade" or "rockmass") and ("　" .. rockmech.mix_text(c.base, c.p2)) or "")
 	end
 	local ipos, iscale, tpos = carry_layout(c)
 	if carry_hud[name] then

@@ -203,8 +203,9 @@ rockmech.hud_lines = fmt_report_lines   -- 測試用
 local function rubble_lines(node, pname)
 	local base = rockmech.rubble_base[node.name] or node.name
 	local lines = {see(pname, "rockmass") and (core.registered_nodes[base].description:gsub("\n.*", "")) or "碎石"}
-	local ore = rockmech.ore_of_rubble[base]
-	if ore and see(pname, "grade") then lines[#lines + 1] = rockmech.ore_text(ore, node.param2 / 255) end
+	-- 混合碎石：礦石的品位要有品位判讀；崩積土這類（土、碎石的比例）看岩體分類就看得出來
+	local m = rockmech.mix_of[base]
+	if m and see(pname, m.ore and "grade" or "rockmass") then lines[#lines + 1] = rockmech.mix_text(base, node.param2) end
 	return lines
 end
 

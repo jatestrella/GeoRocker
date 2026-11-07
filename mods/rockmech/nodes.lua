@@ -290,13 +290,20 @@ rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE, rockmech.RUBB
 -- 岩性 → 碎石（未列出的岩性用一般碎石）、碎石 → 岩性
 rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
 rockmech.lith_of_rubble = {[rockmech.RUBBLE_GRANITE] = "granite"}
--- 礦石碎石：一個 base，param2 存品位（礦石佔的比例），外觀依品位分 8 段（_g<段>，第 4 段就是 base 本身）。
--- 每段是廢石貼圖上透過遮罩疊礦石貼圖，遮罩的礦石像素隨段數一顆顆增加
+-- 混合碎石：一格碎石最多記兩種成分（礦石、一般碎石、花崗岩碎石、鬆土），param2 存第一種成分 a 的比例（0..255）。
+--   礦石＋X：param2 就是品位（礦石佔的比例），rockmech.ore_of_rubble[base] = 礦石。X 是礦石的廢石時沿用舊名 rubble_<礦>
+--   鬆土＋碎石＝崩積土（colluvium），花崗岩＋一般碎石＝混合碎石。外觀依比例分 8 段（_g<段>，第 4 段就是 base 本身）：
+--   b 的貼圖上透過遮罩疊 a 的貼圖，遮罩的像素隨段數一顆顆增加（兩種交錯）
+-- 混進第三種：留體積最大的兩種，其餘的體積併進兩者裡價值低的那種（礦石 > 碎石 > 土；品位只會被稀釋）。見 rubble_merge
 rockmech.RUBBLE_STEPS = 8
 rockmech.ore_of_rubble = {}           -- 碎石 base → 礦石
+rockmech.mix_of = {}                  -- 混合碎石 base → {a = 成分, b = 成分, ore = 礦石或 nil}；p2 = a 的比例
+local mix_pair = {}                   -- 成分 a → 成分 b → base
 local ore_root = {}                   -- 各段的滿格 node → base
+local COMP_LABEL = {[rockmech.RUBBLE] = "碎石", [rockmech.RUBBLE_GRANITE] = "花崗岩碎石", [rockmech.RUBBLE_SOIL] = "土"}
+local COMP_RANK = {[rockmech.RUBBLE] = 2, [rockmech.RUBBLE_GRANITE] = 2, [rockmech.RUBBLE_SOIL] = 1}   -- 礦石 3
 do
-	local order, seed = {}, 12345     -- 固定順序：品位變高時礦石像素只增不減
+	local order, seed = {}, 12345     -- 固定順序：比例變高時 a 的像素只增不減
 	for i = 1, 256 do order[i] = i end
 	for i = 256, 2, -1 do
 		seed = (seed * 1103515245 + 12345) % 2147483648
@@ -310,62 +317,141 @@ do
 		for i = 1, 256 do px[i] = string.char(255, 255, 255, on[i] and 255 or 0) end
 		masks[step] = add_png(("rockmech_ore_mask_%d.png"):format(step), 16, 16, table.concat(px))
 	end
-	for key, ore in pairs(cfg.ores) do
-		ore.key = key
-		local base = rockmech.modname .. ":rubble_" .. key
-		local waste = rockmech.rubble_of_lith[ore.waste] or rockmech.RUBBLE
-		local tw = core.registered_nodes[waste].tiles[1]
-		local to = "default_gravel.png^[colorize:" .. ore.pure .. ":235"
+	local function tile(name) return core.registered_nodes[name].tiles[1] end
+	-- 一種混合：base 名稱、成分 a（貼圖 ta）、成分 b
+	local function family(base, a, ta, b, desc, ore)
 		for step = 1, rockmech.RUBBLE_STEPS do
 			local name = step == 4 and base or base .. "_g" .. step
 			core.register_node(name, {
-				description = ("Crushed %s (%s碎石)"):format(key, ore.label),
-				tiles = {("%s^(%s^[mask:%s)"):format(tw, to, masks[step])},
+				description = desc,
+				tiles = {("%s^(%s^[mask:%s)"):format(tile(b), ta, masks[step])},
 				groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1, not_in_creative_inventory = step ~= 4 and 1 or nil},
 				sounds = gravel_sounds,
+				is_ground_content = false,
 			})
 			rockmech.rubble_nodes[#rockmech.rubble_nodes + 1] = name
 			ore_root[name] = base
 		end
-		ore.rubble, ore.waste_rubble = base, waste
-		rockmech.ore_of_rubble[base] = ore
-		rockmech.rubble_of_lith[ore.lith] = base
-		rockmech.lith_of_rubble[base] = ore.lith
+		rockmech.mix_of[base] = {a = a, b = b, ore = ore}
+		mix_pair[a] = mix_pair[a] or {}
+		mix_pair[a][b] = base
+		if ore then rockmech.ore_of_rubble[base] = ore end
 	end
+	local SHORT = {[rockmech.RUBBLE] = "", [rockmech.RUBBLE_GRANITE] = "_granite", [rockmech.RUBBLE_SOIL] = "_soil"}
+	for key, ore in pairs(cfg.ores) do
+		ore.key = key
+		local comp = "ore:" .. key
+		COMP_LABEL[comp], COMP_RANK[comp] = ore.label, 3
+		local waste = rockmech.rubble_of_lith[ore.waste] or rockmech.RUBBLE
+		local to = "default_gravel.png^[colorize:" .. ore.pure .. ":235"
+		for _, x in ipairs({rockmech.RUBBLE, rockmech.RUBBLE_GRANITE, rockmech.RUBBLE_SOIL}) do
+			local base = rockmech.modname .. ":rubble_" .. key .. (x == waste and "" or SHORT[x])
+			if x == waste and SHORT[x] ~= "" then base = rockmech.modname .. ":rubble_" .. key end
+			family(base, comp, to, x, ("Crushed %s (%s碎石%s)"):format(key, ore.label,
+				x == waste and "" or "，混" .. COMP_LABEL[x]), ore)
+		end
+		ore.rubble, ore.waste_rubble, ore.comp = mix_pair[comp][waste], waste, comp
+		rockmech.rubble_of_lith[ore.lith] = ore.rubble
+		rockmech.lith_of_rubble[ore.rubble] = ore.lith
+	end
+	family(rockmech.modname .. ":colluvium", rockmech.RUBBLE_SOIL, tile(rockmech.RUBBLE_SOIL), rockmech.RUBBLE,
+		"Colluvium (崩積土)\n碎石和土混在一起")
+	family(rockmech.modname .. ":colluvium_granite", rockmech.RUBBLE_SOIL, tile(rockmech.RUBBLE_SOIL), rockmech.RUBBLE_GRANITE,
+		"Granite colluvium (花崗岩崩積土)\n花崗岩碎石和土混在一起")
+	family(rockmech.modname .. ":rubble_mixed", rockmech.RUBBLE_GRANITE, tile(rockmech.RUBBLE_GRANITE), rockmech.RUBBLE,
+		"Mixed rubble (混合碎石)\n花崗岩碎石和一般碎石混在一起")
+end
+-- 兩種成分 → 混合碎石 base 和 a 是哪個
+local function pair_base(x, y)
+	if mix_pair[x] and mix_pair[x][y] then return mix_pair[x][y], x end
+	if mix_pair[y] and mix_pair[y][x] then return mix_pair[y][x], y end
+end
+-- 一份碎石拆成各成分的體積（級數）
+local function parts(base, k, p2, into)
+	local m = rockmech.mix_of[base]
+	if m then
+		local f = (p2 or 0) / 255
+		into[m.a] = (into[m.a] or 0) + k * f
+		into[m.b] = (into[m.b] or 0) + k * (1 - f)
+	else
+		into[base] = (into[base] or 0) + k
+	end
+	return into
+end
+-- 各成分的體積 → 一種碎石（base, p2）
+local function compose(v)
+	local list = {}
+	for c, x in pairs(v) do if x > 0 then list[#list + 1] = c end end
+	table.sort(list, function(p, q) return v[p] > v[q] or (v[p] == v[q] and (COMP_RANK[p] or 2) > (COMP_RANK[q] or 2)) end)
+	local c1, c2 = list[1], list[2]
+	if not c1 then return rockmech.RUBBLE, 0 end
+	local rest = 0
+	for i = 3, #list do rest = rest + v[list[i]] end
+	local v1, v2 = v[c1], c2 and v[c2] or 0
+	-- 其餘的併進價值低的那種（一樣低併進第二多的）
+	if c2 and (COMP_RANK[c1] or 2) < (COMP_RANK[c2] or 2) then v1 = v1 + rest else v2 = v2 + rest end
+	if not c2 then
+		if c1:sub(1, 4) == "ore:" then      -- 純礦石：礦石＋廢石那種，品位 255
+			local ore = cfg.ores[c1:sub(5)]
+			return ore.rubble, 255
+		end
+		return c1, 0
+	end
+	local base, a = pair_base(c1, c2)
+	if not base then       -- 沒有這種組合（兩種礦石）：第二種當第一種的廢石
+		local ore = cfg.ores[c1:sub(5)] or cfg.ores[c2:sub(5)]
+		return ore.rubble, math.floor(255 * v1 / (v1 + v2) + 0.5)
+	end
+	local fa = (a == c1 and v1 or v2) / (v1 + v2)
+	local p2 = math.floor(255 * fa + 0.5)
+	local m = rockmech.mix_of[base]
+	if not m.ore then
+		if p2 <= 0 then return m.b, 0 end
+		if p2 >= 255 then return m.a, 0 end
+	elseif p2 <= 0 then return m.b, 0 end
+	return base, p2
 end
 
--- 兩份碎石能不能放在同一格：同種，或礦石碎石和它的廢石
--- 碎石和鬆土（RUBBLE_SOIL）也可以合併：體積大的那種贏，一樣多變土（rubble_merge）
+-- 兩份碎石能不能放在同一格：都可以（混合碎石，最多記兩種成分）
 function rockmech.rubble_mixable(a, b)
-	if a == b then return true end
-	if a and b and (a == rockmech.RUBBLE_SOIL or b == rockmech.RUBBLE_SOIL) then return true end
-	local oa, ob = rockmech.ore_of_rubble[a], rockmech.ore_of_rubble[b]
-	return oa ~= nil and oa.waste_rubble == b or ob ~= nil and ob.waste_rubble == a
+	return a ~= nil and b ~= nil
 end
 -- 兩份碎石合併：依級數加權的品位。廢石的品位是 0
 function rockmech.mix_grade(k1, p1, k2, p2)
 	if k1 + k2 <= 0 then return 0 end
 	return math.floor((k1 * p1 + k2 * p2) / (k1 + k2) + 0.5)
 end
--- 合併一格的碎石（base 1 的 k1 級品位 p1，加 base 2 的 k2 級品位 p2）。回傳 種類, 品位
+-- 合併一格的碎石（base 1 的 k1 級、param2 p1，加 base 2 的 k2 級、param2 p2）。回傳 種類, param2
 function rockmech.rubble_merge(b1, k1, p1, b2, k2, p2)
-	local SOIL = rockmech.RUBBLE_SOIL
-	if b1 ~= b2 and (b1 == SOIL or b2 == SOIL) then
-		-- 碎石＋土：體積大的那種，一樣多變土。變成礦石碎石時土算廢石（品位 0）稀釋；變成土就沒有品位
-		local ks, ko, other, po = b1 == SOIL and k1 or k2, b1 == SOIL and k2 or k1, b1 == SOIL and b2 or b1, b1 == SOIL and p2 or p1
-		if ks >= ko then return SOIL, 0 end
-		if rockmech.ore_of_rubble[other] then return other, rockmech.mix_grade(ko, po, ks, 0) end
-		return other, other == b1 and p1 or p2
+	if b1 == b2 and not rockmech.mix_of[b1] then return b1, 0 end
+	return compose(parts(b2, k2, p2, parts(b1, k1, p1, {})))
+end
+-- 混合碎石的成分文字（HUD、資訊頁）：礦石顯示品位，其他顯示兩種成分的比例
+function rockmech.mix_text(base, p2)
+	local m = rockmech.mix_of[base]
+	if not m then return nil end
+	local f = (p2 or 0) / 255
+	if m.ore then
+		local t = rockmech.ore_text(m.ore, f)
+		return m.b == m.ore.waste_rubble and t or ("%s，混%s"):format(t, COMP_LABEL[m.b])
 	end
-	local ore = rockmech.ore_of_rubble[b1] and b1 or rockmech.ore_of_rubble[b2] and b2 or b1
-	return ore, rockmech.mix_grade(k1, b1 == ore and p1 or 0, k2, b2 == ore and p2 or 0)
+	return ("%s %.0f%%、%s %.0f%%"):format(COMP_LABEL[m.a], f * 100, COMP_LABEL[m.b], (1 - f) * 100)
+end
+-- 混合碎石裡土的比例（0..1）：下雨時安息角照比例降低（collapse.lua）
+function rockmech.soil_fraction(base, p2)
+	if base == rockmech.RUBBLE_SOIL then return 1 end
+	local m = rockmech.mix_of[base]
+	if not m then return 0 end
+	if m.a == rockmech.RUBBLE_SOIL then return (p2 or 0) / 255 end
+	if m.b == rockmech.RUBBLE_SOIL then return 1 - (p2 or 0) / 255 end
+	return 0
 end
 -- 岩石破碎或碎石本身的品位 param2：礦石沒指定品位時用 default；其他岩石的 param2 是 GSI，碎石用不到
 function rockmech.rubble_p2(node)
 	local lith = rockmech.lith_of_node[node.name]
 	local ore = lith and lith.ore and cfg.ores[lith.ore]
 	if ore then return node.param2 > 0 and node.param2 or ore.default end
-	return rockmech.ore_of_rubble[rockmech.rubble_base[node.name]] and node.param2 or 0
+	return rockmech.mix_of[rockmech.rubble_base[node.name]] and node.param2 or 0
 end
 
 -- 礦石品位的顯示文字（grade 0..1）：HUD、車輛載量共用
@@ -444,7 +530,7 @@ for _, name in ipairs(compacted_nodes) do rockmech.rubble_nodes[#rockmech.rubble
 -- 某種碎石（滿格名稱 base）的 k 級 node 名稱（k = 0 → nil，k ≥ 8 → 滿格）。p2：礦石碎石的品位，決定外觀的段
 function rockmech.rubble_with_level(base, k, p2)
 	if k <= 0 then return nil end
-	if rockmech.ore_of_rubble[base] and p2 then
+	if rockmech.mix_of[base] and p2 then
 		local step = math.max(1, math.min(rockmech.RUBBLE_STEPS, math.ceil(p2 / 255 * rockmech.RUBBLE_STEPS)))
 		if step ~= 4 then base = base .. "_g" .. step end
 	end

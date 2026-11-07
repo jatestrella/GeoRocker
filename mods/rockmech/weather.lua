@@ -15,6 +15,11 @@ local clouds = {}           -- 玩家名稱 → 下雨前的雲設定
 local function rain_end() return store:get_int("rain_end") end
 local function raining() return rain_end() > core.get_gametime() end
 function rockmech.raining() return raining() end
+-- 土佔 s（0..1）的碎石，下雨時的安息角 tan（沒下雨回傳 nil）：降低 rain_drop × s 度
+function rockmech.rain_tan_for(s)
+	if not rockmech.raining_now then return nil end
+	return math.tan(math.rad(math.max(1, cfg.angle - math.max(0, cfg.rain_drop) * s)))
+end
 
 local function start_fx(player)
 	local name = player:get_player_name()
@@ -42,6 +47,7 @@ local was
 local function sync()
 	local on = raining()
 	rockmech.rain_tan = on and RAIN_TAN or nil
+	rockmech.raining_now = on
 	for _, p in ipairs(core.get_connected_players()) do
 		if on then start_fx(p) else stop_fx(p) end
 	end
