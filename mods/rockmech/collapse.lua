@@ -979,6 +979,26 @@ function collapse.is_excavated_at(x, y, z) return excavated[ex_id(x, y, z)] == t
 function collapse.is_excavated(p) return excavated[ex_id(p.x, p.y, p.z)] == true end
 collapse.quiet = 0          -- > 0：受料倉內作業中，移除碎石不觸發岩石力學判定（見 on_destruct）
 
+-- 爆破擾動帶（blasting.lua）：這一格岩石的 Hoek-Brown 擾動係數 D（存在 mod storage，鍵為 "bd:x,y,z"）。
+-- 同一格被擾動多次取最大
+local BD_PREFIX = "bd:"
+local damage = {}
+for k, v in pairs(ex_storage:to_table().fields) do
+    local x, y, z = k:match("^" .. BD_PREFIX .. "(-?%d+),(-?%d+),(-?%d+)$")
+    if x then damage[ex_id(tonumber(x), tonumber(y), tonumber(z))] = tonumber(v) end
+end
+function collapse.damage_at_xyz(x, y, z) return damage[ex_id(x, y, z)] end
+function collapse.mark_damage(p, D)
+    local id = ex_id(p.x, p.y, p.z)
+    if (damage[id] or 0) >= D then return end
+    damage[id] = D
+    ex_storage:set_string(BD_PREFIX .. pos_key(p), tostring(D))
+end
+-- 這一格的 D：擾動帶的值，沒有就是整個世界的 rockmass.d
+function rockmech.damage_at(p)
+    return damage[ex_id(p.x, p.y, p.z)] or (rockmech.cfg.rockmass and rockmech.cfg.rockmass.d) or 0
+end
+
 function collapse.mark_excavated(p)
     p = vector.round(p)
     local id = ex_id(p.x, p.y, p.z)

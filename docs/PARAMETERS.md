@@ -170,6 +170,7 @@ rockmech 模組所有可調參數，依學科分類。設定名都加上前綴 `
 | `blast_ucs_ref` | 爆破參考 UCS (MPa) | 60 |  |
 | `blast_ucs_exp` | 爆破範圍隨強度的指數 | 0.167 |  |
 | `blast_inner` | 拋擲區比例 | 0.5 |  |
+| `blast_damage_t` | 爆破擾動帶厚度 (m)：破碎區外這一圈岩石用 Hoek-Brown 的 D 打折（每孔 1 條乳膠炸藥 0.5、2 條以上或貼面 0.8、ANFO 1.0） | 1 |  |
 | `blast_charge_radius` | 每條乳膠炸藥的作用半徑 (m) | 2.0 |  |
 | `blast_max_cartridges` | 每孔最多藥條數 | 4 |  |
 | `blast_hole_depth` | 鑿岩機孔深 (m) | 2 |  |

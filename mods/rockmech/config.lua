@@ -279,6 +279,7 @@ config.blast_defaults = {
 	ucs_ref = 60,             -- 破碎半徑 = 爆炸半徑 × (ucs_ref / UCS)^ucs_exp
 	ucs_exp = 0.167,          -- 強度指數：1/6 = 單位炸藥量 ∝ √UCS（花崗岩約頁岩的 2.4 倍）；1/3 = 單位炸藥量 ∝ UCS
 	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
+	damage_t = 1,             -- 爆破擾動帶厚度 (m)：破碎區外面這一圈的岩石用 Hoek-Brown 的 D 打折（D 依裝藥方式，見 blasting.lua）
 	-- 鑽孔爆破（drilling.lua）
 	charge_radius = 2.0,      -- 一條乳膠炸藥的爆炸半徑 R0 (m)；n 條 R = R0·n^(1/3)（再依岩石強度縮放）
 	max_cartridges = 4,       -- 一個鑽孔最多裝幾條

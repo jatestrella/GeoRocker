@@ -169,6 +169,8 @@ local function fmt_report_lines(r, pname)
 	if see(pname, "rockmass") then
 		lines[#lines + 1] = ("%s%s　上覆 %d m"):format(r.lith.description:gsub("\n.*", ""),
 			s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", i.h)
+		local D = rockmech.collapse.damage_at_xyz and r.pos and rockmech.collapse.damage_at_xyz(r.pos.x, r.pos.y, r.pos.z)
+		if D then lines[#lines + 1] = ("爆破擾動 D = %.1f（強度、變形模數打折）"):format(D) end
 	else
 		lines[#lines + 1] = "岩石"
 	end

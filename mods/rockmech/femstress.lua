@@ -240,7 +240,8 @@ local function make_job(pos)
 		end end end
 	end
 	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石算空：貼著它的岩面要判定，反力在 face_fs）
-	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}}
+	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}, dmg = {}}
+	local damage_at = rockmech.collapse.damage_at_xyz
 	local press = job.press or {}
 	for i = 1, #press, 3 do
 		local key = press[i] * 8 + press[i + 1]
@@ -252,6 +253,7 @@ local function make_job(pos)
 		local gi = 1 + (a.x + x - g.ox) + (a.y + y - g.oy) * gsy + (a.z + z - g.oz) * gsz
 		meta.lith[c] = g.lith_of[g.data[gi]]
 		meta.p2[c] = g.p2[gi]
+		meta.dmg[c] = damage_at(a.x + x, a.y + y, a.z + z)       -- 爆破擾動帶的 D（沒有是 nil）
 		meta.open[c] = not g.solid_of[g.data[gi]] or g.rubble_of[g.data[gi]] ~= nil
 	end
 	return job, meta
@@ -263,7 +265,7 @@ local function fs_text(f) return f == math.huge and "∞" or ("%.2f"):format(f) 
 local function strength_fs(job, meta, x, y, z, s1, s3)
 	local n = job.nx
 	local c = 1 + x + y * n + z * n * n
-	local rm = rockmech.collapse.rock.at(meta.lith[c], meta.a.y + y, meta.p2[c])
+	local rm = rockmech.collapse.rock.at(meta.lith[c], meta.a.y + y, meta.p2[c], meta.dmg[c])
 	local q = s1 - s3
 	local fs, mode = q > 0 and rockmech.collapse.rock.q_fail(rm, math.max(0, s3)) / q or math.huge, "剪"
 	if s3 < 0 and rm.sigt / -s3 < fs then fs, mode = rm.sigt / -s3, "拉" end

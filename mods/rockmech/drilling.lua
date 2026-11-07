@@ -162,7 +162,7 @@ local function detonate(pos)
 		local last
 		repeat
 			last = vector.add(pos, vector.multiply(dir, math.min(t, depth)))
-			rockmech.blast_charge(last, R * f, floor_y)
+			rockmech.blast_charge(last, R * f, floor_y, 1.0)      -- 台階生產爆破：擾動 D = 1.0
 			t = t + 1.5
 		until t > depth + 0.5
 		R = R * f + depth
@@ -195,7 +195,8 @@ local function detonate(pos)
 		R = R * bcfg.surface_factor
 	end
 	core.remove_node(pos)
-	rockmech.blast_charge(center, R)
+	-- 擾動 D：每孔 1 條（控制爆破、平滑爆破）0.5；2 條以上或貼面裝藥 0.8（Hoek 2002）
+	rockmech.blast_charge(center, R, nil, (kind == CHARGED and n <= 1) and 0.5 or 0.8)
 	-- 爆破直接改地圖、不會觸發貼壁方塊掉落：後面的岩石沒了的鑽孔、裝藥一起消失
 	local r = math.ceil(R) + depth + 1
 	for _, hp in ipairs(core.find_nodes_in_area(vector.subtract(center, r), vector.add(center, r), ALL)) do

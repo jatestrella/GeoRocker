@@ -61,7 +61,7 @@ function rockmech.monitor_update(job, res, meta)
 					local ni = ((x + i) + (y + j) * Nx + (z + l) * Nx * Ny) * 3
 					ux, uy, uz = ux + (u[ni + 1] or 0), uy + (u[ni + 2] or 0), uz + (u[ni + 3] or 0)
 				end
-				local rm = rockmech.collapse.rock.at(key, q.y, meta.p2[c])
+				local rm = rockmech.collapse.rock.at(key, q.y, meta.p2[c], meta.dmg and meta.dmg[c])
 				local D = rockmech.damage_at and rockmech.damage_at(q) or (cfg.rockmass.d or 0)
 				local erm = rockmech.erm(key, rm.gsi, D) or 1000
 				local s = E_FEM / (erm * 1000) * 1000 / 8      -- → mm

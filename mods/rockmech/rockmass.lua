@@ -82,15 +82,20 @@ function rockmass.new(cfg, legacy)
 		local prof = lith and lith.gsi or {top = 100}
 		return rockmass.gsi_at(prof, (cfg.surface_y or 0) - y)
 	end
-	function q.at(key, y, gsi)
+	-- D（可選）：這一格的擾動係數（爆破擾動帶，blasting.lua），沒給用整個世界的 rockmass.d
+	function q.at(key, y, gsi, D)
 		-- 礦石的 param2 是品位，不是 GSI
 		if not gsi or gsi < 1 or gsi > 100 or cfg.lithologies[key].ore then gsi = q.gsi(key, y) end
 		local c = cache[key]
 		if not c then c = {}; cache[key] = c end
-		local r = c[gsi]
+		local ck = D and (gsi + 1000 * math.floor(D * 100 + 0.5)) or gsi
+		local r = c[ck]
 		if not r then
-			r = rockmass.params(cfg.lithologies[key], gsi, opts)
-			c[gsi] = r
+			local o = opts
+			if D then o = {D = D, N = opts.N, ucs_scale = opts.ucs_scale, tensile_scale = opts.tensile_scale} end
+			r = rockmass.params(cfg.lithologies[key], gsi, o)
+			r.D = o.D
+			c[ck] = r
 		end
 		return r
 	end

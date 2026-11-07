@@ -79,6 +79,19 @@ describe("rockmass GSI 深度剖面", function()
 		assert.are.equal(80, q.at("shale", -20, 80).gsi)
 		assert.are.equal(q.at("shale", -20), q.at("shale", -20, 50))
 	end)
+
+	it("爆破擾動 D：每格可以給自己的 D，D 越大 mb、s、強度越低", function()
+		local cfg = {surface_y = 0, model_scale = 1, rockmass = {d = 0},
+			lithologies = {shale = {gamma = 25, ucs = 30, tensile = 2, mi = 6, gsi = {top = 50}}}}
+		local q = rockmass.new(cfg)
+		local r0, r5, r8 = q.at("shale", -10, 50), q.at("shale", -10, 50, 0.5), q.at("shale", -10, 50, 0.8)
+		assert.is_true(r5.mb < r0.mb and r8.mb < r5.mb)
+		assert.is_true(r5.s < r0.s and r8.s < r5.s)
+		assert.is_true(rockmass.q_fail(r8, 1) < rockmass.q_fail(r0, 1))
+		assert.are.equal(0.8, r8.D)
+		assert.are.equal(r8, q.at("shale", -10, 50, 0.8))      -- 快取
+		assert.are.equal(r0, q.at("shale", -10, 50))
+	end)
 end)
 
 describe("config 岩體設定", function()

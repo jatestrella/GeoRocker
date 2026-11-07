@@ -59,14 +59,19 @@ end
 
 -- 處理以 center 為中心、爆炸半徑 R 的岩石破碎。回傳 炸飛格數, 碎石化格數
 -- floor_y：只破碎這一層以上（台階爆破的底板 = 孔底）；nil 不限
-function rockmech.blast_rock(center, R, floor_y)
+-- D：爆破擾動帶（破碎區外 damage_t 公尺）的 Hoek-Brown 擾動係數，依裝藥方式（Hoek 2002 的表）：
+--   每孔 1 條乳膠炸藥（控制爆破、平滑爆破）0.5；每孔 2 條以上、貼面裝藥、一般 TNT 0.8；ANFO 台階生產爆破 1.0
+local DAMAGE_T = math.max(0, bcfg.damage_t or 1)
+function rockmech.blast_rock(center, R, floor_y, D)
 	build_maps()
+	D = D or 0.8
 	local fmax = 1
 	for _, l in pairs(cfg.lithologies) do
 		local f = blast.factor(l.ucs, bcfg.ucs_ref, bcfg.ucs_exp)
 		if f > fmax then fmax = f end
 	end
-	local rr = math.ceil(R * fmax)
+	local rr = math.ceil(R * fmax + DAMAGE_T)
+	local damaged = {}
 	local c0 = vector.round(center)   -- 掃描用整數格點（爆心可以不在格點上，距離照實際爆心算）
 	local p1, p2 = vector.subtract(c0, rr), vector.add(c0, rr)
 	if floor_y then p1.y = math.max(p1.y, floor_y) end
@@ -94,6 +99,10 @@ function rockmech.blast_rock(center, R, floor_y)
 				local p = {x = x, y = y, z = z}
 				if li then
 					local zone = blast.zone(d, R, li.lith.ucs, bcfg.ucs_ref, bcfg.inner, bcfg.ucs_exp)
+					-- 破碎區外一圈：岩石還在，但被爆破擾動（D）
+					if not zone and D > 0 and d <= R * blast.factor(li.lith.ucs, bcfg.ucs_ref, bcfg.ucs_exp) + DAMAGE_T then
+						damaged[#damaged + 1] = p
+					end
 					local rname = rockmech.rubble_for(li.name)
 					if zone then changes[#changes + 1] = {pos = p, name = li.name} end
 					if zone == "eject" then
@@ -132,6 +141,7 @@ function rockmech.blast_rock(center, R, floor_y)
 		if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
 	end
 	vm:close()
+	for _, p in ipairs(damaged) do rockmech.collapse.mark_damage(p, D) end
 	-- 級數 → 個數（四捨五入）
 	for name, lv in pairs(ejected) do ejected[name] = math.floor(lv / rockmech.RUBBLE_LEVELS + 0.5) end
 	if cfg.career then
@@ -179,10 +189,10 @@ local orig_boom = tnt.boom
 
 -- 炸藥（鑽孔裝藥、貼面裝藥，drilling.lua）：爆心 center（可以在岩石裡、可以不在格點上）、岩石破碎半徑 R（m，可為小數）。
 -- 原版爆炸照常（聲音、粒子、傷害、炸掉附近非岩石方塊與殉爆；在最近的格點），岩石的破碎用 center 與 R
-function rockmech.blast_charge(center, R, floor_y)
+function rockmech.blast_charge(center, R, floor_y, D)
 	orig_boom(vector.round(center), {radius = math.max(1, math.floor(R + 0.5)), explode_center = true})
 	if bcfg.enabled and R > 0 then
-		rockmech.blast_rock(center, R, floor_y)
+		rockmech.blast_rock(center, R, floor_y, D)
 	end
 end
 
