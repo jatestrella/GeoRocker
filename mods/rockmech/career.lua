@@ -72,15 +72,26 @@ local function cube(c)
 	return ("[inventorycube{%s{%s{%s"):format(t, t, t)
 end
 
--- 手上的岩芯箱：扁長的藍箱子（正面、頂面、右側面，斜投影），跟地上的岩芯箱一樣的比例
+-- 手上的岩芯箱：低頭看捧在胸前的箱子，主要看到蓋子（近寬遠窄），下面露一條正面（貼著標籤）。
+-- 畫得比兩手的間距寬，兩端壓在手後面（手的 HUD 在上層），看起來是兩手抓著箱子兩端
 local BOX_IMG = (function()
-	local t = {"[fill:40x20:#00000000", "[fill:30x10:0,9:#2a62c8", "[fill:28x1:1,12:#1a3a80", "[fill:28x1:1,15:#1a3a80"}
-	for i = 0, 5 do
-		t[#t + 1] = ("[fill:30x1:%d,%d:#5a8ee8"):format(6 - i, 3 + i)          -- 頂面
-		t[#t + 1] = ("[fill:1x10:%d,%d:#1e4ca0"):format(30 + i, 8 - i)        -- 右側面
+	local t = {"[fill:48x24:#00000000"}
+	for y = 0, 15 do
+		local inset = math.floor((15 - y) / 4 + 0.5)        -- 遠的那邊窄一點
+		t[#t + 1] = ("[fill:%dx1:%d,%d:#4f86e0"):format(48 - 2 * inset, inset, y)
+		t[#t + 1] = ("[fill:1x1:%d,%d:#1a3a80^[fill:1x1:%d,%d:#1a3a80"):format(inset, y, 47 - inset, y)   -- 蓋子左右邊
 	end
+	t[#t + 1] = "[fill:40x1:4,0:#1a3a80"                       -- 蓋子遠端的邊
+	t[#t + 1] = "[fill:44x1:2,8:#3a6cc8"                       -- 蓋子中間的接縫
+	t[#t + 1] = "[fill:48x8:0,16:#2a62c8^[fill:48x1:0,16:#1a3a80^[fill:48x1:0,23:#12285a"   -- 正面
+	t[#t + 1] = "[fill:12x4:18,18:#e8e8e0^[fill:8x1:20,19:#606060^[fill:6x1:20,21:#606060"   -- 標籤
 	return table.concat(t, "^")
 end)()
+-- 手上東西的圖、說明文字放哪：岩芯箱壓在兩手上、字在箱子上方；碎石在兩手中間
+local function carry_layout(c)
+	if c and c.box then return {x = 0.5, y = 0.7}, {x = -30, y = -17}, {x = 0.5, y = 0.57} end
+	return {x = 0.5, y = 0.74}, {x = 4, y = 4}, {x = 0.5, y = 0.8}
+end
 
 local function carried(player)
 	local s = player:get_meta():get_string(CARRY_KEY)
@@ -97,10 +108,12 @@ local function show_carry(player, c)
 		text = ("手上：%s　%s%s"):format(see(name, "rockmass") and core.registered_nodes[c.base].description:gsub("\n.*", "") or "碎石",
 			V.volume_text(c.lv, NLEV), ore and see(name, "grade") and ("　" .. rockmech.ore_text(ore, c.p2 / 255)) or "")
 	end
+	local ipos, iscale, tpos = carry_layout(c)
 	if carry_hud[name] then
 		player:hud_change(carry_hud[name], "text", text)
+		player:hud_change(carry_hud[name], "position", tpos)
 	else
-		carry_hud[name] = player:hud_add({type = "text", position = {x = 0.5, y = 0.8}, alignment = {x = 0, y = 0},
+		carry_hud[name] = player:hud_add({type = "text", position = tpos, alignment = {x = 0, y = 0},
 			number = 0xFFE080, text = text, z_index = 100})
 	end
 	local img = ""
@@ -108,10 +121,11 @@ local function show_carry(player, c)
 	elseif c then img = cube(c) end
 	if carry_img[name] then
 		player:hud_change(carry_img[name], "text", img)
-		player:hud_change(carry_img[name], "scale", c and c.box and {x = 2.5, y = 2.5} or {x = 4, y = 4})
+		player:hud_change(carry_img[name], "position", ipos)
+		player:hud_change(carry_img[name], "scale", iscale)
 	else
-		carry_img[name] = player:hud_add({type = "image", position = {x = 0.5, y = 0.74}, alignment = {x = 0, y = 0},
-			scale = c and c.box and {x = 2.5, y = 2.5} or {x = 4, y = 4}, text = img, z_index = 90})
+		carry_img[name] = player:hud_add({type = "image", position = ipos, alignment = {x = 0, y = 0},
+			scale = iscale, text = img, z_index = 90})
 	end
 end
 local function set_carried(player, c)
