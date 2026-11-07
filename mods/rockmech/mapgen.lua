@@ -97,13 +97,17 @@ local c_road = {}
 for k = 1, 7 do c_road[k] = core.get_content_id("rockmech:rubble_l" .. k .. "_c") end   -- 壓實的碎石（nodes.lua）
 
 -- 表土和樹（世界設定 rockmech_mapgen_topsoil，預設開）：任何世界、任何地形都一樣，不綁礦帶、營地。
---   比地表（surface_y）高 MIN_RISE 以上、頂上是天然岩石的每一欄，鋪 SOIL_MIN–SOIL_MAX m 的表土（平滑雜訊，有厚有薄；
---   不滿一格的零頭用薄的表土）；地表上離山坡 1–4 m 的那一圈鋪漸薄的坡腳（1 m、6/8、4/8、2/8）；
---   山坡上稀疏種蘋果樹（間距 TREE_GAP、隨機偏移、四成跳過；樹那一欄的表土取整格，至少 2 m）。
+--   頂上是天然岩石的每一欄都鋪表土（平滑雜訊，有厚有薄；不滿一格的零頭用薄的表土）：
+--     山坡（比地表 surface_y 高 MIN_RISE 以上）SOIL_MIN–SOIL_MAX m；礦帶地形的礦區山丘鋪薄一點（HILL_MIN–HILL_MAX），看得到煤層；
+--     平地 FLAT_MIN–FLAT_MAX；山腳離山坡 1–4 m 的那一圈是漸薄的坡腳（1 m、6/8、4/8、2/8，不比平地薄）。
+--   礦石露頭（最上面那格是礦石，例如煤層）不鋪：一進世界就看得到礦層。
+--   山坡上稀疏種蘋果樹（間距 TREE_GAP、隨機偏移、四成跳過；樹那一欄的表土取整格，山脊至少 2 m、礦區山丘 1 m）。
 --   只寫這個 chunk 自己的範圍（外圍那圈屬於隔壁 chunk，之後產生時會被蓋掉）；樹整棵要在 chunk 裡面
 local TS = cfg.mapgen_topsoil and core.registered_nodes["rockmech:topsoil"] and core.registered_nodes["default:tree"] and true
 local NL = 8
 local SOIL_MIN, SOIL_MAX, MIN_RISE, TREE_GAP = 1, 3, 1, 6
+local HILL_MIN, HILL_MAX = 0.25, 1          -- 礦區山丘的表土 (m)
+local FLAT_MIN, FLAT_MAX = 0.25, 0.75       -- 平地的表土 (m)
 local APRON = {8, 6, 4, 2}
 local c_soil, c_log, c_leaf, c_apple = {}, nil, nil, nil
 local is_rock = {[c_stone] = true}
@@ -116,6 +120,13 @@ if TS then
 	for _, t in pairs(c_var) do for _, id in pairs(t) do is_rock[id] = true end end
 	for _, t in pairs(c_plane) do for _, id in pairs(t) do is_rock[id] = true end end
 end
+local is_ore = {}            -- 礦石岩性的方塊（露頭不鋪土）
+for key, lith in pairs(cfg.lithologies) do
+	if lith.ore then
+		for _, id in pairs(c_var[key] or {}) do is_ore[id] = true end
+		for _, id in pairs(c_plane[key] or {}) do is_ore[id] = true end
+	end
+end
 local function rnd(x, z, seed)      -- 每個位置固定的 0..1 亂數
 	local v = math.sin(x * 12.9898 + z * 78.233 + seed * 37.719) * 43758.5453
 	return v - math.floor(v)
@@ -127,8 +138,11 @@ local function lay_topsoil(area, minp, maxp)
 	local function top_of(x, z)
 		for y = maxp.y, minp.y, -1 do
 			local c = data[area:index(x, y, z)]
-			if c ~= c_air then return is_rock[c] and y or nil end
+			if c ~= c_air then return is_rock[c] and y or nil, c end
 		end
+	end
+	local function noise_t(x, z, lo, hi)      -- 厚度（1/8 m），lo..hi m 之間的平滑雜訊
+		return math.floor(NL * (lo + (hi - lo) * stress.terrain_noise(x / 14, z / 14, 41)) + 0.5)
 	end
 	-- 坡腳要知道旁邊 4 格的欄是不是山坡：礦帶地形用公式算（隔壁 chunk 還沒產生也算得出來），否則看這個 chunk 的資料
 	local rise = {}
@@ -154,21 +168,30 @@ local function lay_topsoil(area, minp, maxp)
 		end
 	end
 	for z = minp.z, maxp.z do for x = minp.x, maxp.x do
-		local top = top_of(x, z)
-		if top and top < maxp.y then
+		local top, tc = top_of(x, z)
+		if top and top < maxp.y and not is_ore[tc] then
 			local key = x .. "," .. z
 			local t      -- 表土厚度（1/8 m）
 			if top - sy >= MIN_RISE then
-				t = math.floor(NL * (SOIL_MIN + (SOIL_MAX - SOIL_MIN) * stress.terrain_noise(x / 14, z / 14, 41)) + 0.5)
-				if trees[key] then t = math.max(2 * NL, t - t % NL) end
+				local tot, hill = 0, 0
+				if cfg.lane_terrain then tot, hill = stress.lane_terrain(cfg, x, z) end
+				local mine_hill = (hill or 0) > 0 and (hill or 0) >= tot - 0.5      -- 礦區山丘（不是交界山脊）
+				if mine_hill then
+					t = noise_t(x, z, HILL_MIN, HILL_MAX)
+					if trees[key] then t = NL end
+				else
+					t = noise_t(x, z, SOIL_MIN, SOIL_MAX)
+					if trees[key] then t = math.max(2 * NL, t - t % NL) end
+				end
 			elseif top - sy >= 0 then
-				-- 坡腳：離最近的山坡欄幾格（8 方向，切比雪夫距離）
+				t = noise_t(x, z, FLAT_MIN, FLAT_MAX)
+				-- 坡腳：離最近的山坡欄幾格（8 方向，切比雪夫距離），從坡上漸薄到平地的厚度
 				for d = 1, R do
 					local hit = false
 					for dx = -d, d do for dz = -d, d do
 						if (math.abs(dx) == d or math.abs(dz) == d) and (rise[(x + dx) .. "," .. (z + dz)] or 0) >= MIN_RISE then hit = true end
 					end end
-					if hit then t = APRON[d]; break end
+					if hit then t = math.max(t, APRON[d]); break end
 				end
 			end
 			if t then

@@ -192,6 +192,7 @@ function stress.lane_terrain(cfg, x, z)
 			end
 		end
 	end
+	local hill = h       -- 礦區山丘那一份（第二個回傳值：mapgen 的表土在礦區山丘鋪薄一點，看得到煤層）
 	-- 交界山脊：高度、寬度沿 z 起伏，表面有細碎凹凸；用到交界的距離 d 算，兩側接得起來
 	local other = lx > 0 and k + 1 or k - 1
 	if (k >= s.lane_min and k <= s.lane_max) or (other >= s.lane_min and other <= s.lane_max) then
@@ -205,7 +206,7 @@ function stress.lane_terrain(cfg, x, z)
 			h = math.max(h, (H + rough) * r)
 		end
 	end
-	return h * zf
+	return h * zf, hill * zf
 end
 
 -- 煤的品位（param2 1..255，煤佔的比例）：煤層中央最好，靠頂底板變差（夾雜質），再加緩慢的橫向變化
