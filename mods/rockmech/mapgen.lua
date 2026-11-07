@@ -105,10 +105,7 @@ for k = 1, 7 do c_road[k] = core.get_content_id("rockmech:rubble_l" .. k .. "_c"
 --   只寫這個 chunk 自己的範圍（外圍那圈屬於隔壁 chunk，之後產生時會被蓋掉）；樹整棵要在 chunk 裡面
 local TS = cfg.mapgen_topsoil and core.registered_nodes["rockmech:topsoil"] and core.registered_nodes["default:tree"] and true
 local NL = 8
-local SOIL_MIN, SOIL_MAX, MIN_RISE, TREE_GAP = 1, 3, 1, 6
-local HILL_MIN, HILL_MAX = 0.25, 1          -- 礦區山丘的表土 (m)
-local FLAT_MIN, FLAT_MAX = 0.25, 0.75       -- 平地的表土 (m)
-local APRON = {8, 6, 4, 2}
+local SC = stress.SOIL         -- 厚度規則在 stress.natural_soil（應力解的參考狀態也用同一個公式）
 local c_soil, c_log, c_leaf, c_apple = {}, nil, nil, nil
 local is_rock = {[c_stone] = true}
 if TS then
@@ -127,10 +124,7 @@ for key, lith in pairs(cfg.lithologies) do
 		for _, id in pairs(c_plane[key] or {}) do is_ore[id] = true end
 	end
 end
-local function rnd(x, z, seed)      -- 每個位置固定的 0..1 亂數
-	local v = math.sin(x * 12.9898 + z * 78.233 + seed * 37.719) * 43758.5453
-	return v - math.floor(v)
-end
+local rnd = stress.soil_rnd
 local function lay_topsoil(area, minp, maxp)
 	local sy = math.floor(cfg.surface_y)
 	local n_soil = 0
@@ -141,12 +135,9 @@ local function lay_topsoil(area, minp, maxp)
 			if c ~= c_air then return is_rock[c] and y or nil, c end
 		end
 	end
-	local function noise_t(x, z, lo, hi)      -- 厚度（1/8 m），lo..hi m 之間的平滑雜訊
-		return math.floor(NL * (lo + (hi - lo) * stress.terrain_noise(x / 14, z / 14, 41)) + 0.5)
-	end
 	-- 坡腳要知道旁邊 4 格的欄是不是山坡：礦帶地形用公式算（隔壁 chunk 還沒產生也算得出來），否則看這個 chunk 的資料
 	local rise = {}
-	local R = #APRON
+	local R = #SC.apron
 	for x = minp.x - R, maxp.x + R do for z = minp.z - R, maxp.z + R do
 		local r
 		if cfg.lane_terrain then r = math.floor(stress.lane_terrain(cfg, x, z) + 0.5)
@@ -156,45 +147,14 @@ local function lay_topsoil(area, minp, maxp)
 		else r = 0 end
 		rise[x .. "," .. z] = r
 	end end
-	-- 樹的位置（整棵在 chunk 裡）
-	local trees = {}
-	for gx = math.floor(minp.x / TREE_GAP) * TREE_GAP, maxp.x, TREE_GAP do
-		for gz = math.floor(minp.z / TREE_GAP) * TREE_GAP, maxp.z, TREE_GAP do
-			local x = gx + math.floor(rnd(gx, gz, 1) * 5) - 2
-			local z = gz + math.floor(rnd(gx, gz, 2) * 5) - 2
-			if rnd(gx, gz, 3) > 0.4 and x >= minp.x + 2 and x <= maxp.x - 2 and z >= minp.z + 2 and z <= maxp.z - 2 then
-				trees[x .. "," .. z] = gx * 7 + gz
-			end
-		end
-	end
+	local function rise_at(x, z) return rise[x .. "," .. z] end
+	-- 先把整片表土鋪完，再種樹：同一個迴圈裡種的話，先種的樹冠蓋住後面的欄，那些欄找不到岩石頂就沒鋪土
+	local plant = {}
 	for z = minp.z, maxp.z do for x = minp.x, maxp.x do
 		local top, tc = top_of(x, z)
-		if top and top < maxp.y and not is_ore[tc] then
-			local key = x .. "," .. z
-			local t      -- 表土厚度（1/8 m）
-			if top - sy >= MIN_RISE then
-				local tot, hill = 0, 0
-				if cfg.lane_terrain then tot, hill = stress.lane_terrain(cfg, x, z) end
-				local mine_hill = (hill or 0) > 0 and (hill or 0) >= tot - 0.5      -- 礦區山丘（不是交界山脊）
-				if mine_hill then
-					t = noise_t(x, z, HILL_MIN, HILL_MAX)
-					if trees[key] then t = NL end
-				else
-					t = noise_t(x, z, SOIL_MIN, SOIL_MAX)
-					if trees[key] then t = math.max(2 * NL, t - t % NL) end
-				end
-			elseif top - sy >= 0 then
-				t = noise_t(x, z, FLAT_MIN, FLAT_MAX)
-				-- 坡腳：離最近的山坡欄幾格（8 方向，切比雪夫距離），從坡上漸薄到平地的厚度
-				for d = 1, R do
-					local hit = false
-					for dx = -d, d do for dz = -d, d do
-						if (math.abs(dx) == d or math.abs(dz) == d) and (rise[(x + dx) .. "," .. (z + dz)] or 0) >= MIN_RISE then hit = true end
-					end end
-					if hit then t = math.max(t, APRON[d]); break end
-				end
-			end
-			if t then
+		if top and top < maxp.y then
+			local t = stress.natural_soil(cfg, x, z, top - sy, rise_at, is_ore[tc])
+			if t > 0 then
 				local full, r = math.floor(t / NL), t % NL
 				local done = 0
 				for dy = 1, full + (r > 0 and 1 or 0) do
@@ -206,33 +166,35 @@ local function lay_topsoil(area, minp, maxp)
 					n_soil = n_soil + 1
 					if dy <= full then done = dy end
 				end
-				-- 樹：表土整格都鋪上了，樹幹 4–5 m、樹冠半徑 2 m，整棵在 chunk 裡
-				local seed = trees[key]
-				if seed and done * NL == t then
-					local g = top + done
-					local h = 4 + (rnd(x, z, 5) > 0.5 and 1 or 0)
-					if g + h + 1 <= maxp.y then
-						for dy = 1, h do
-							local vi = area:index(x, g + dy, z)
-							if data[vi] == c_air then data[vi] = c_log end
-						end
-						for dy = h - 2, h + 1 do
-							local rr = dy == h + 1 and 1 or 2
-							for dx = -rr, rr do for dz = -rr, rr do
-								local corner = math.abs(dx) == rr and math.abs(dz) == rr
-								if not (corner and rnd(x + dx, z + dz, seed + dy) < 0.6) then
-									local vi = area:index(x + dx, g + dy, z + dz)
-									if data[vi] == c_air then
-										data[vi] = (dy <= h and rnd(x + dx * 3, z + dz * 5, seed + dy) < 0.06) and c_apple or c_leaf
-									end
-								end
-							end end
-						end
-					end
-				end
+				-- 樹（stress.tree_at）：表土整格都鋪上了，樹幹 4–5 m、樹冠半徑 2 m，整棵在 chunk 裡
+				local seed = top - sy >= SC.min_rise and stress.tree_at(x, z)
+				if seed and done * NL == t then plant[#plant + 1] = {x, z, top + done, seed} end
 			end
 		end
 	end end
+	-- 樹：表土整格都鋪上了，樹幹 4–5 m、樹冠半徑 2 m，整棵在 chunk 裡
+	for _, tp in ipairs(plant) do
+		local x, z, g, seed = tp[1], tp[2], tp[3], tp[4]
+		local h = 4 + (rnd(x, z, 5) > 0.5 and 1 or 0)
+		if g + h + 1 <= maxp.y then
+			for dy = 1, h do
+				local vi = area:index(x, g + dy, z)
+				if data[vi] == c_air then data[vi] = c_log end
+			end
+			for dy = h - 2, h + 1 do
+				local rr = dy == h + 1 and 1 or 2
+				for dx = -rr, rr do for dz = -rr, rr do
+					local corner = math.abs(dx) == rr and math.abs(dz) == rr
+					if not (corner and rnd(x + dx, z + dz, seed + dy) < 0.6) then
+						local vi = area:index(x + dx, g + dy, z + dz)
+						if data[vi] == c_air then
+							data[vi] = (dy <= h and rnd(x + dx * 3, z + dz * 5, seed + dy) < 0.06) and c_apple or c_leaf
+						end
+					end
+				end end
+			end
+		end
+	end
 	return n_soil
 end
 

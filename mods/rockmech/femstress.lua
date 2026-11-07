@@ -125,6 +125,40 @@ local function make_coarse(pos)
 	return job
 end
 
+-- 上覆的鬆散材料（碎石、鬆土、崩積土、表土）的重量（collapse.lua 的 loose_of：cid → 厚度比例）：
+--   頂面荷重 q = γ·h：岩石格正上方疊著的鬆散材料，h = 那一疊的厚度（不滿格照比例）
+--   側向土壓 K₀·γ·z（Jaky：K₀ = 1 − sin φ，φ = 安息角）：靠在岩壁上的鬆散材料，z = 那一格中心到鬆散材料表面的深度
+-- 天然表土（mapgen 鋪的，stress.natural_soil 算得出厚度）的重量也算進現地應力 σ₀，所以沒動過的地形兩邊抵銷、照樣平衡；
+-- 剝掉表土等於卸載，堆上碎石等於加載。γ 用非岩性格的單位重（rockmech_failure_gamma_other）
+local GAMMA_S = cfg.failure.gamma_other
+local K0_S = 1 - math.sin(math.rad(cfg.slope.angle))
+-- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料厚度 (m)，從 ly 那一格開始算
+local function loose_above(g, gx, ly, gz)
+	local h = 0
+	local sy, sz = g.nx, g.nx * g.ny
+	for y = ly, g.ny - 1 do
+		local f = g.loose_of[g.data[1 + gx + y * sy + gz * sz]]
+		if not f then break end
+		h = h + f
+	end
+	return h
+end
+-- 這一欄天然表土的厚度 (m)：礦帶地形的岩石頂用公式算（跟 mapgen 一樣），否則用目前的岩石頂
+local function natural_soil_m(wx, wz, top)
+	local S = rockmech.stress
+	local sy = math.floor(cfg.surface_y or 0)
+	local rise
+	if cfg.lane_terrain then rise = math.floor(S.lane_terrain(cfg, wx, wz) + 0.5) else rise = top - sy end
+	if top < sy + rise then return 0 end      -- 從頂上挖低了：表土跟岩石一起挖掉了
+	local key = S.lith_key_at(cfg, wx, sy + rise, wz)
+	local ore = key and cfg.lithologies[key] and cfg.lithologies[key].ore
+	local function rise_at(x, z)
+		if cfg.lane_terrain then return math.floor(S.lane_terrain(cfg, x, z) + 0.5) end
+		return 0
+	end
+	return S.natural_soil(cfg, wx, wz, rise, rise_at, ore) / 8
+end
+
 -- 組工作：box 內的岩石格、每格的現地應力（kPa，壓為正）。
 -- 現地應力是開挖前的狀態，由座標算（挖掉的算回去，所以開挖才會放出應力）；
 -- 開挖過的位置上的岩石是回填，從沒受過上覆荷重，現地應力為 0
@@ -153,6 +187,7 @@ local function make_job(pos)
 				break
 			end
 		end
+		local sv_soil = g.loose_of and GAMMA_S * natural_soil_m(a.x + x, a.z + z, top) or 0   -- 天然表土的重量 (kPa)
 		for y = 0, n - 1 do
 			local wy = a.y + y
 			local gi = 1 + gx + (wy - g.oy) * gsy + gz * gsz
@@ -165,7 +200,7 @@ local function make_job(pos)
 			local soft = fcfg.rubble_e > 0 and g.rubble_of[cid] == 1
 			if post_ids[cid] then soft = post_r end
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
-			local sv = gamma * math.max(0, top + 0.5 - wy)     -- kPa
+			local sv = gamma * math.max(0, top + 0.5 - wy) + (wy <= top and sv_soil or 0)     -- kPa
 			job.solid[c] = solid or (soft and true) or false
 			job.soft[c] = soft or nil
 			if soft or (solid and is_excavated_at(a.x + x, wy, a.z + z)) then
@@ -180,10 +215,37 @@ local function make_job(pos)
 		local x, y, z = wx - a.x, wy - a.y, wz - a.z
 		if x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n then return 1 + x + y * n + z * n * n end
 	end, 1)
+	-- 鬆散材料的重量：頂面 γ·h、側面 K₀·γ·z（見上面 loose_above）
+	if g.loose_of then
+		local press = job.press or {}
+		job.press = press
+		local SIDES = {{1, 0, 1}, {-1, 0, 2}, {0, 1, 5}, {0, -1, 6}}
+		for z = 0, n - 1 do for y = 0, n - 1 do for x = 0, n - 1 do
+			local c = 1 + x + y * n + z * n * n
+			if job.solid[c] and not job.soft[c] then
+				local gx, ly, gz = a.x + x - g.ox, a.y + y - g.oy, a.z + z - g.oz
+				local h = loose_above(g, gx, ly + 1, gz)
+				if h > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, GAMMA_S * h end
+				for _, d in ipairs(SIDES) do
+					local nx_, nz_ = gx + d[1], gz + d[2]
+					if nx_ >= 0 and nz_ >= 0 and nx_ < g.nx and nz_ < g.nz then
+						local f = g.loose_of[g.data[1 + nx_ + ly * gsy + nz_ * gsz]]
+						if f then
+							local zc = loose_above(g, nx_, ly + 1, nz_) + f / 2
+							press[#press + 1], press[#press + 2], press[#press + 3] = c, d[3], K0_S * GAMMA_S * zc
+						end
+					end
+				end
+			end
+		end end end
+	end
 	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石算空：貼著它的岩面要判定，反力在 face_fs）
 	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}}
 	local press = job.press or {}
-	for i = 1, #press, 3 do meta.press[press[i] * 8 + press[i + 1]] = press[i + 2] end
+	for i = 1, #press, 3 do
+		local key = press[i] * 8 + press[i + 1]
+		meta.press[key] = (meta.press[key] or 0) + press[i + 2]
+	end
 	for c = 1, n * n * n do
 		local k = c - 1
 		local x, y, z = k % n, math.floor(k / n) % n, math.floor(k / (n * n))

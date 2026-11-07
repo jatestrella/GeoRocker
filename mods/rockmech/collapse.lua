@@ -620,13 +620,21 @@ local fcfg = cfg.failure
 local stress = rockmech.stress
 local failure = rockmech.failure
 
-local solid_of, weight_of, lith_of, bonded_of, rubble_of
+local solid_of, weight_of, lith_of, bonded_of, rubble_of, loose_of
 local function build_cid_maps()
     if solid_of then return end
-    solid_of, weight_of, lith_of, bonded_of, rubble_of = {}, {}, {}, {}, {}
+    solid_of, weight_of, lith_of, bonded_of, rubble_of, loose_of = {}, {}, {}, {}, {}, {}
     -- 碎石：cid → 級數比例（側面的碎石只給側壓，見 failure.lua）
     for _, n in ipairs(rockmech.rubble_nodes) do
         rubble_of[core.get_content_id(n)] = (rockmech.rubble_level[n] or rockmech.RUBBLE_LEVELS) / rockmech.RUBBLE_LEVELS
+    end
+    -- 鬆散材料（碎石、鬆土、崩積土、表土）：cid → 厚度比例。應力解把它們的重量當上覆荷重（femstress.lua）
+    for cid, f in pairs(rubble_of) do loose_of[cid] = f end
+    for name, def in pairs(core.registered_nodes) do
+        if def.groups and (def.groups.rockmech_topsoil or 0) > 0 then
+            local k = tonumber(name:match("_(%d)$"))
+            loose_of[core.get_content_id(name)] = k and k / rockmech.RUBBLE_LEVELS or 1
+        end
     end
     for name, def in pairs(core.registered_nodes) do
         local cid = core.get_content_id(name)
@@ -672,7 +680,7 @@ function collapse.read_grid(minp, maxp, no_overburden)
         ox = emin.x, oy = emin.y, oz = emin.z,
         nx = emax.x - emin.x + 1, ny = emax.y - emin.y + 1, nz = emax.z - emin.z + 1,
         solid_of = solid_of, weight_of = weight_of, lith_of = lith_of, bonded_of = bonded_of,
-        rubble_of = rubble_of,
+        rubble_of = rubble_of, loose_of = loose_of,
         -- 實際需要的範圍（failure.compute_loads 只算這些欄）
         req = {x1 = minp.x, x2 = maxp.x, z1 = minp.z, z2 = maxp.z, y1 = minp.y, y2 = maxp.y},
     }

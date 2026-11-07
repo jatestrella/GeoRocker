@@ -207,3 +207,47 @@ describe("stress 上覆荷重外插", function()
 		assert.is_true(out < 700, "路程 " .. tostring(out))
 	end)
 end)
+
+describe("stress 天然表土（mapgen 和應力解共用）", function()
+	local cfg = {}      -- 沒有礦帶地形
+	local function none() return 0 end
+	it("礦石露頭、地表以下不鋪", function()
+		assert.are.equal(0, stress.natural_soil(cfg, 10, 10, 5, none, true))
+		assert.are.equal(0, stress.natural_soil(cfg, 10, 10, -1, none, false))
+	end)
+	it("平地 0.25–0.75 m（2–6 級），山坡 1–3 m（8–24 級，樹那一欄另計）", function()
+		for x = 0, 60, 7 do
+			local t = stress.natural_soil(cfg, x, 3, 0, none, false)
+			assert.is_true(t >= 2 and t <= 6)
+			if not stress.tree_at(x, 3) then
+				local h = stress.natural_soil(cfg, x, 3, 5, none, false)
+				assert.is_true(h >= 8 and h <= 24)
+			end
+		end
+	end)
+	it("山腳的坡腳：離山坡 1 格 1 m、4 格 2/8 m（不比平地薄）", function()
+		local function hill_west(x, z) return x <= 0 and 5 or 0 end
+		assert.are.equal(8, stress.natural_soil(cfg, 1, 7, 0, hill_west, false))
+		assert.is_true(stress.natural_soil(cfg, 4, 7, 0, hill_west, false) >= 2)
+		assert.are.equal(stress.natural_soil(cfg, 9, 7, 0, none, false), stress.natural_soil(cfg, 9, 7, 0, hill_west, false))
+	end)
+	it("種樹的位置：間距 6 m 的格點附近，不會相鄰", function()
+		local n = 0
+		for x = -40, 40 do for z = -40, 40 do
+			if stress.tree_at(x, z) then
+				n = n + 1
+				assert.is_nil(stress.tree_at(x + 1, z))
+				assert.is_nil(stress.tree_at(x, z + 1))
+			end
+		end end
+		assert.is_true(n > 50 and n < 200)
+	end)
+	it("樹那一欄的山坡表土取整格、至少 2 m", function()
+		for x = -40, 40 do for z = -40, 40 do
+			if stress.tree_at(x, z) then
+				local t = stress.natural_soil(cfg, x, z, 5, none, false)
+				assert.is_true(t >= 16 and t % 8 == 0)
+			end
+		end end
+	end)
+end)

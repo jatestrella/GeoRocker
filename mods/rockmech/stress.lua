@@ -250,4 +250,57 @@ function stress.layer_table(cfg, ymin, ymax)
 	return t
 end
 
+---------------------------------------------------------------------------
+-- 天然表土（mapgen.lua 產生地圖時鋪的厚度；femstress.lua 用同一個公式算「開挖前的表土」當現地應力的參考狀態）
+--   山坡（比地表 surface_y 高 MIN_RISE 以上）SOIL_MIN–SOIL_MAX m；礦帶地形的礦區山丘 HILL_MIN–HILL_MAX；
+--   平地 FLAT_MIN–FLAT_MAX；山腳離山坡 1–4 m 的那一圈是漸薄的坡腳（不比平地薄）；礦石露頭不鋪。
+--   樹的位置（稀疏、每個 mapgen chunk 內）那一欄取整格：山脊至少 2 m、礦區山丘 1 m
+---------------------------------------------------------------------------
+stress.SOIL = {min = 1, max = 3, hill_min = 0.25, hill_max = 1, flat_min = 0.25, flat_max = 0.75,
+	min_rise = 1, tree_gap = 6, apron = {8, 6, 4, 2}, chunk = 80, chunk_off = -32}
+local SOILC = stress.SOIL
+function stress.soil_rnd(x, z, seed)      -- 每個位置固定的 0..1 亂數
+	local v = math.sin(x * 12.9898 + z * 78.233 + seed * 37.719) * 43758.5453
+	return v - math.floor(v)
+end
+local rnd = stress.soil_rnd
+-- (x, z) 是不是種樹的位置：間距 tree_gap 的格點、隨機偏移 ±2、四成跳過，整棵要在 mapgen chunk 裡（離邊 2 格）。
+-- 是的話回傳這棵樹的種子
+function stress.tree_at(x, z)
+	local G = SOILC.tree_gap
+	local gx, gz = math.ceil((x - 2) / G) * G, math.ceil((z - 2) / G) * G
+	if gx > x + 2 or gz > z + 2 then return nil end
+	if x ~= gx + math.floor(rnd(gx, gz, 1) * 5) - 2 or z ~= gz + math.floor(rnd(gx, gz, 2) * 5) - 2 then return nil end
+	if rnd(gx, gz, 3) <= 0.4 then return nil end
+	local C, o = SOILC.chunk, SOILC.chunk_off
+	local mx, mz = math.floor((x - o) / C) * C + o, math.floor((z - o) / C) * C + o
+	if x < mx + 2 or x > mx + C - 3 or z < mz + 2 or z > mz + C - 3 then return nil end
+	return gx * 7 + gz
+end
+-- 天然表土厚度（1/8 m）。rise：這一欄岩石頂比地表高幾格；rise_at(x, z)：別欄的 rise（坡腳用）；ore_top：頂上是礦石
+function stress.natural_soil(cfg, x, z, rise, rise_at, ore_top)
+	if ore_top or rise < 0 then return 0 end
+	local NL = 8
+	local function noise_t(lo, hi) return math.floor(NL * (lo + (hi - lo) * fbm(x / 14, z / 14, 41)) + 0.5) end
+	if rise >= SOILC.min_rise then
+		local tot, hill = 0, 0
+		if cfg.lane_terrain then tot, hill = stress.lane_terrain(cfg, x, z) end
+		local tree = stress.tree_at(x, z)
+		if (hill or 0) > 0 and hill >= tot - 0.5 then        -- 礦區山丘（不是交界山脊）：鋪薄一點，看得到煤層
+			return tree and NL or noise_t(SOILC.hill_min, SOILC.hill_max)
+		end
+		local t = noise_t(SOILC.min, SOILC.max)
+		return tree and math.max(2 * NL, t - t % NL) or t
+	end
+	local t = noise_t(SOILC.flat_min, SOILC.flat_max)
+	for d = 1, #SOILC.apron do
+		for dx = -d, d do for dz = -d, d do
+			if (math.abs(dx) == d or math.abs(dz) == d) and (rise_at(x + dx, z + dz) or 0) >= SOILC.min_rise then
+				return math.max(t, SOILC.apron[d])
+			end
+		end end
+	end
+	return t
+end
+
 return stress
