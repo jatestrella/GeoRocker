@@ -269,12 +269,57 @@ local function remove_parts(self)
 	end
 	self.part_list = nil
 end
+-- 履帶滾動：履帶零件（貼圖是 V.track_tex 裡的）側面、頂面有一條白線，跟著那一側履帶走的距離往前、往後移。
+-- 轉彎時左右兩條速度不同（原地迴轉時方向相反）。一圈 TRACK_FRAMES 格，車子動了才換貼圖
+V.track_tex = {[V.TRACK] = true}
+local TRACK_FRAMES = 16
+local function track_frames(base)
+	local side, top = {}, {}
+	for k = 0, TRACK_FRAMES - 1 do
+		side[k] = base .. ("^[fill:1x16:%d,0:#e8e8e8"):format(k)        -- 側面：橫軸是車身前後
+		top[k] = base .. ("^[fill:16x1:0,%d:#e8e8e8"):format(15 - k)     -- 頂面：縱軸是車身前後
+	end
+	return side, top
+end
+local frame_cache = {}
+local function track_update(self, dtime)
+	local tr = self.tracks
+	if not tr then return end
+	local p, yaw = self.object:get_pos(), self.object:get_yaw()
+	if not p then return end
+	local last = self.track_last
+	self.track_last = {p = p, yaw = yaw}
+	if not last then return end
+	local fwd = {x = -math.sin(yaw), z = math.cos(yaw)}
+	local ds = (p.x - last.p.x) * fwd.x + (p.z - last.p.z) * fwd.z
+	local dyaw = (yaw - last.yaw + math.pi) % (2 * math.pi) - math.pi
+	if math.abs(ds) < 1e-4 and math.abs(dyaw) < 1e-5 then return end
+	for _, t in ipairs(tr) do
+		-- 那一側走的距離：前進 + 迴轉（往左轉 yaw 增加，右側 x > 0 走得多）
+		t.s = (t.s or 0) + ds + dyaw * t.x
+		local k = math.floor((t.s / t.len) * TRACK_FRAMES) % TRACK_FRAMES
+		if k ~= t.k and t.o:get_pos() then
+			t.k = k
+			local f = frame_cache[t.base]
+			t.o:set_properties({textures = {f.top[k], t.base, f.side[k], f.side[(TRACK_FRAMES - k) % TRACK_FRAMES], t.base, t.base}})
+		end
+	end
+end
+V.track_update = track_update
+
 -- parts：{id（可選，存到 self.parts[id]）, pos（m）, size, tex, rot（可選）}
 local function spawn_parts(self, parts)
 	remove_parts(self)
 	self.parts, self.part_list = {}, {}
+	self.tracks, self.track_last = nil, nil
 	for _, pt in ipairs(parts) do
 		local o = core.add_entity(self.object:get_pos(), PART)
+		if o and type(pt.tex) == "table" and V.track_tex[pt.tex[1]] then
+			local base = pt.tex[1]
+			if not frame_cache[base] then local sd, tp = track_frames(base); frame_cache[base] = {side = sd, top = tp} end
+			self.tracks = self.tracks or {}
+			self.tracks[#self.tracks + 1] = {o = o, x = pt.pos.x, len = pt.size.z * 2 + pt.size.y * 2, base = base}
+		end
 		if o then
 			o:set_properties({visual_size = pt.size, textures = pt.tex})
 			o:set_attach(self.object, "", {x = pt.pos.x * 10, y = pt.pos.y * 10, z = pt.pos.z * 10}, pt.rot or {x = 0, y = 0, z = 0})
@@ -1395,6 +1440,7 @@ function V.register(kind, def)
 				damage_smoke(self, dtime)
 				return
 			end
+			track_update(self, dtime)
 			local pos = obj:get_pos()
 			local yaw = obj:get_yaw()
 			local vel = obj:get_velocity()
