@@ -361,56 +361,11 @@ do
 	family(rockmech.modname .. ":rubble_mixed", rockmech.RUBBLE_GRANITE, tile(rockmech.RUBBLE_GRANITE), rockmech.RUBBLE,
 		"Mixed rubble (混合碎石)\n花崗岩碎石和一般碎石混在一起")
 end
--- 兩種成分 → 混合碎石 base 和 a 是哪個
-local function pair_base(x, y)
-	if mix_pair[x] and mix_pair[x][y] then return mix_pair[x][y], x end
-	if mix_pair[y] and mix_pair[y][x] then return mix_pair[y][x], y end
-end
--- 一份碎石拆成各成分的體積（級數）
-local function parts(base, k, p2, into)
-	local m = rockmech.mix_of[base]
-	if m then
-		local f = (p2 or 0) / 255
-		into[m.a] = (into[m.a] or 0) + k * f
-		into[m.b] = (into[m.b] or 0) + k * (1 - f)
-	else
-		into[base] = (into[base] or 0) + k
-	end
-	return into
-end
--- 各成分的體積 → 一種碎石（base, p2）
-local function compose(v)
-	local list = {}
-	for c, x in pairs(v) do if x > 0 then list[#list + 1] = c end end
-	table.sort(list, function(p, q) return v[p] > v[q] or (v[p] == v[q] and (COMP_RANK[p] or 2) > (COMP_RANK[q] or 2)) end)
-	local c1, c2 = list[1], list[2]
-	if not c1 then return rockmech.RUBBLE, 0 end
-	local rest = 0
-	for i = 3, #list do rest = rest + v[list[i]] end
-	local v1, v2 = v[c1], c2 and v[c2] or 0
-	-- 其餘的併進價值低的那種（一樣低併進第二多的）
-	if c2 and (COMP_RANK[c1] or 2) < (COMP_RANK[c2] or 2) then v1 = v1 + rest else v2 = v2 + rest end
-	if not c2 then
-		if c1:sub(1, 4) == "ore:" then      -- 純礦石：礦石＋廢石那種，品位 255
-			local ore = cfg.ores[c1:sub(5)]
-			return ore.rubble, 255
-		end
-		return c1, 0
-	end
-	local base, a = pair_base(c1, c2)
-	if not base then       -- 沒有這種組合（兩種礦石）：第二種當第一種的廢石
-		local ore = cfg.ores[c1:sub(5)] or cfg.ores[c2:sub(5)]
-		return ore.rubble, math.floor(255 * v1 / (v1 + v2) + 0.5)
-	end
-	local fa = (a == c1 and v1 or v2) / (v1 + v2)
-	local p2 = math.floor(255 * fa + 0.5)
-	local m = rockmech.mix_of[base]
-	if not m.ore then
-		if p2 <= 0 then return m.b, 0 end
-		if p2 >= 255 then return m.a, 0 end
-	elseif p2 <= 0 then return m.b, 0 end
-	return base, p2
-end
+-- 合併規則是純函式（mix.lua，單元測試 tests/mix_spec.lua 也用）
+local mix = dofile(rockmech.modpath .. "/mix.lua")
+rockmech.mix = mix
+local mix_ctx = {mix_of = rockmech.mix_of, pair = mix_pair, rank = COMP_RANK, ore_rubble = {}}
+for key, ore in pairs(cfg.ores) do mix_ctx.ore_rubble["ore:" .. key] = ore.rubble end
 
 -- 兩份碎石能不能放在同一格：都可以（混合碎石，最多記兩種成分）
 function rockmech.rubble_mixable(a, b)
@@ -423,8 +378,8 @@ function rockmech.mix_grade(k1, p1, k2, p2)
 end
 -- 合併一格的碎石（base 1 的 k1 級、param2 p1，加 base 2 的 k2 級、param2 p2）。回傳 種類, param2
 function rockmech.rubble_merge(b1, k1, p1, b2, k2, p2)
-	if b1 == b2 and not rockmech.mix_of[b1] then return b1, 0 end
-	return compose(parts(b2, k2, p2, parts(b1, k1, p1, {})))
+	local b, p = mix.merge(mix_ctx, b1, k1, p1, b2, k2, p2)
+	return b or b1, p
 end
 -- 混合碎石的成分文字（HUD、資訊頁）：礦石顯示品位，其他顯示兩種成分的比例
 function rockmech.mix_text(base, p2)

@@ -548,6 +548,16 @@ local function line_hopper(meta)
 	return n, missing
 end
 
+-- (x, z) 這一欄從 y 往下是不是受料倉（空氣、碎石往下找，碰到格柵或倉壁護坡就是）：原木倒進來當廢石（woodwork.lua）
+function rockmech.in_hopper(x, z, y)
+	for yy = y, y - 12, -1 do
+		local n = core.get_node({x = x, y = yy, z = z}).name
+		if n == GRATE or n == LINING then return true end
+		if n ~= "air" and not rockmech.rubble_level[n] then return false end
+	end
+	return false
+end
+
 -- 倉裡原有的碎石不挖，之後逐欄疊到新的倉底（舊倉擴建）
 local function dig_hopper(pos, dx, dz)
 	local half = (SIZE - 1) / 2

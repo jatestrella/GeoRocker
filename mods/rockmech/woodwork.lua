@@ -67,6 +67,11 @@ local function free(n)
 	return n == "air" or (d and d.buildable_to)
 end
 function rockmech.lay_log(x, z, y, axis)
+	-- 倒進受料倉（破碎站、選礦場）：原木當廢石，變成一般碎石落進倉裡（破碎站收處理費）
+	if rockmech.in_hopper and rockmech.in_hopper(x, z, y) and rockmech.vehicles and rockmech.vehicles.deposit_column then
+		local L8 = rockmech.RUBBLE_LEVELS
+		return rockmech.vehicles.deposit_column(x, z, y, rockmech.RUBBLE, L8) < L8
+	end
 	local yy = y
 	while not free(core.get_node({x = x, y = yy, z = z}).name) do
 		yy = yy + 1
@@ -522,7 +527,7 @@ function rockmech.loosen_under(p, name)
 end
 -- 表土的凝聚力（根系，rockmech_topsoil_c）→ 自立高度 H_c = 4c/γ·tan(45° + φ/2)：表土旁邊挖開的臨空面不超過 H_c 就站得住。
 -- γ 用非岩性格的單位重，φ 用安息角（鬆土沒有凝聚力，就是安息角）。c = 5 kPa、γ = 20、φ = 35° → H_c ≈ 1.9 m
-local HC = 4 * cfg.topsoil_c / math.max(1, cfg.failure.gamma_other) * math.tan(math.rad(45 + cfg.slope.angle / 2))
+local HC = rockmech.mix.standing_height(cfg.topsoil_c, cfg.failure.gamma_other, cfg.slope.angle)
 rockmech.topsoil_hc = HC
 local NB4 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 -- (x, z) 這一欄從 y 往下的地面高度（m）：空氣、植物、不滿格的碎石／鬆土／薄表土往下找，最多 8 格
