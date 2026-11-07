@@ -449,6 +449,45 @@ local function heightmap(x1, x2, z1, z2)
 	end end
 	return h, rock
 end
+-- 坡腳：山腳平地上離有表土的地方 1、2、3、4 m 的那一圈，鋪 1 m、6/8、4/8、2/8 m 的表土（蓋住最下面那一階的岩石側面，
+-- 逐漸變薄接到平地）。只鋪在天然岩石上。h、rock：每一欄岩石頂（下面墊表土的高度）；covered：山坡上鋪了表土的欄。
+-- redo = true：重鋪已經有的坡腳（舊版比較窄），那一格是空氣或表土才換，別的東西不動。回傳鋪了幾格
+local APRON = {NLEV, 6, 4, 2}
+local APRON_VER = "4"        -- 坡腳改版就改這個，舊世界開機時重鋪（ridge_apron:<xr>）
+local function lay_apron(x1, x2, h, rock, covered, area, data, redo)
+	local c_air = core.CONTENT_AIR
+	local c_lv, is_soil = {}, {}
+	for k = 1, NLEV do
+		local id = core.get_content_id(k == NLEV and TOPSOIL or TOPSOIL_THIN[k])
+		c_lv[k], is_soil[id] = id, true
+	end
+	local n = 0
+	local dist, frontier = {}, {}
+	for key in pairs(covered) do dist[key] = 0; frontier[#frontier + 1] = key end
+	for d = 1, #APRON do
+		local nxt = {}
+		for _, key in ipairs(frontier) do
+			local cx, cz = key:match("^(-?%d+),(-?%d+)$")
+			cx, cz = tonumber(cx), tonumber(cz)
+			for _, dd in ipairs(DIRS8) do
+				local x, z = cx + dd[1], cz + dd[2]
+				local k2 = x .. "," .. z
+				if not dist[k2] and x >= x1 and x <= x2 and z >= Z1 and z <= Z2 and rock[k2] and h[k2] then
+					dist[k2] = d
+					nxt[#nxt + 1] = k2
+					local i = area:index(x, h[k2] + 1, z)
+					if data[i] == c_air or (redo and is_soil[data[i]]) then
+						if data[i] ~= c_lv[APRON[d]] then n = n + 1 end
+						data[i] = c_lv[APRON[d]]
+					end
+				end
+			end
+		end
+		frontier = nxt
+	end
+	return n
+end
+
 local function rnd(x, z, seed)      -- 每個位置固定的 0..1 亂數
 	local v = math.sin(x * 12.9898 + z * 78.233 + seed * 37.719) * 43758.5453
 	return v - math.floor(v)
@@ -507,33 +546,7 @@ local function plant_ridge(xr)
 		end
 		if done > 0 then covered[key] = done end
 	end
-	-- 坡腳：山腳平地上離有表土的地方 1、2、3 m 的那一圈，鋪 1 m、5/8 m、2/8 m 的表土（蓋住最下面那一階的岩石側面，
-	-- 逐漸變薄接到平地）。只鋪在天然岩石上
-	local APRON = {NLEV, 5, 2}
-	local dist, frontier = {}, {}
-	for key in pairs(covered) do dist[key] = 0; frontier[#frontier + 1] = key end
-	for d = 1, #APRON do
-		local nxt = {}
-		for _, key in ipairs(frontier) do
-			local cx, cz = key:match("^(-?%d+),(-?%d+)$")
-			cx, cz = tonumber(cx), tonumber(cz)
-			for _, dd in ipairs(DIRS8) do
-				local x, z = cx + dd[1], cz + dd[2]
-				local k2 = x .. "," .. z
-				if not dist[k2] and x >= x1 and x <= x2 and z >= Z1 and z <= Z2 and rock[k2] and h[k2] then
-					dist[k2] = d
-					nxt[#nxt + 1] = k2
-					local i = area:index(x, h[k2] + 1, z)
-					if data[i] == core.CONTENT_AIR then
-						local lv = APRON[d]
-						data[i] = core.get_content_id(lv == NLEV and TOPSOIL or TOPSOIL_THIN[lv])
-						n_soil = n_soil + 1
-					end
-				end
-			end
-		end
-		frontier = nxt
-	end
+	n_soil = n_soil + lay_apron(x1, x2, h, rock, covered, area, data, false)
 	vm:set_data(data)
 	vm:write_to_map(true)
 	-- 樹：種在挑好的位置（整格表土上）；周圍 8 格的地面都比樹根高 1 m 以上（窪地）不種
@@ -559,8 +572,46 @@ local function plant_ridge(xr)
 	end
 	-- 做完、寫進地圖之後才記下來（中途關機的話下次重做）
 	storage:set_string(key, "1")
+	storage:set_string("ridge_apron:" .. xr, APRON_VER)
 	planting[xr] = nil
 	core.log("action", ("[rockmech] 山脊 x = %d 鋪了 %d 格表土、種了 %d 棵樹"):format(xr, n_soil, n_tree))
+end
+
+-- 已經鋪過的山脊，坡腳是舊版（比較窄）：照現在的 APRON 重鋪。岩石頂的高度要跳過表土、樹（heightmap 會停在它們上面）
+local function redo_apron(xr)
+	local key = "ridge_apron:" .. xr
+	if storage:get_string(key) == APRON_VER or planting[xr] then return end
+	local x1, x2 = xr - RIDGE_X, xr + RIDGE_X
+	local vm = core.get_voxel_manip()
+	local e1, e2 = vm:read_from_map({x = x1 - 1, y = -20, z = Z1 - 1}, {x = x2 + 1, y = 61 + SOIL_MAX, z = Z2 + 1})
+	local area = VoxelArea(e1, e2)
+	local data = vm:get_data()
+	local over = {[core.CONTENT_AIR] = true, [core.CONTENT_IGNORE] = true}
+	for name in pairs(TOPSOIL_K) do over[core.get_content_id(name)] = true end
+	for _, name in ipairs({"default:tree", "default:leaves", "default:apple"}) do
+		if core.registered_nodes[name] then over[core.get_content_id(name)] = true end
+	end
+	local is_rock = {}
+	for name in pairs(rockmech.lith_of_node) do is_rock[core.get_content_id(name)] = true end
+	local surface = cfg.surface_y or 0
+	local h, rock, covered = {}, {}, {}
+	for z = Z1 - 1, Z2 + 1 do for x = x1 - 1, x2 + 1 do
+		for y = 60, -20, -1 do
+			local c = data[area:index(x, y, z)]
+			if not over[c] then
+				local k = x .. "," .. z
+				h[k], rock[k] = y, is_rock[c]
+				if is_rock[c] and y >= surface + MIN_RISE and over[data[area:index(x, y + 1, z)]]
+						and data[area:index(x, y + 1, z)] ~= core.CONTENT_AIR then covered[k] = 1 end
+				break
+			end
+		end
+	end end
+	local n = lay_apron(x1, x2, h, rock, covered, area, data, true)
+	vm:set_data(data)
+	vm:write_to_map(true)
+	storage:set_string(key, APRON_VER)
+	core.log("action", ("[rockmech] 山脊 x = %d 坡腳重鋪 %d 格"):format(xr, n))
 end
 
 -- 鋸木台、木工桌：營地中心往東南，交車區北邊（營地中心 (x0, 0)）
@@ -598,9 +649,11 @@ function rockmech.career_build_grove(x0)
 	end)
 	if not W then return end
 	for _, xr in ipairs({c - W / 2, c + W / 2}) do
-		if storage:get_string("ridge_forest:" .. xr) == "" then
+		local fresh = storage:get_string("ridge_forest:" .. xr) == ""
+		if fresh or storage:get_string("ridge_apron:" .. xr) ~= APRON_VER then
 			core.emerge_area({x = xr - RIDGE_X - 2, y = -20, z = Z1 - 2}, {x = xr + RIDGE_X + 2, y = 61, z = Z2 + 2}, function(_, _, rem)
-				if rem == 0 then plant_ridge(xr) end
+				if rem > 0 then return end
+				if fresh then plant_ridge(xr) else redo_apron(xr) end
 			end)
 		end
 	end
