@@ -221,6 +221,12 @@ local function excavator(kind, P)
 	for _, p in ipairs(P.body) do parts[#parts + 1] = p end
 	for _, p in ipairs(P.house) do parts[#parts + 1] = p end
 	parts[#parts + 1] = {id = "bucket", pos = BUCKET_REST, size = P.bucket, tex = box_tex(P.bucket_color)}
+	-- 破碎錘：換掉鏟斗時，鏟斗那個零件變成細長的錘身，下面再伸出一根鋼鑿（平常藏起來）
+	local HAMMER = {x = P.bucket.x * 0.36, y = P.bucket.y * 1.6, z = P.bucket.z * 0.62}
+	local CHISEL = {x = P.bucket.x * 0.09, y = P.bucket.y * 0.75, z = P.bucket.x * 0.09}
+	local hs = "[fill:16x16:#2a2a2c^[fill:16x2:0,2:#d8a020^[fill:16x1:0,13:#18181a^[fill:2x6:7,6:#3a3a3e"
+	local HAMMER_TEX = {"[fill:16x16:#3a3a3e", "[fill:16x16:#18181a", hs, hs, hs, hs}
+	parts[#parts + 1] = {id = "chisel", pos = BUCKET_REST, size = CHISEL, tex = box_tex("#b8bcc2")}
 	parts[#parts + 1] = {id = "boom", pos = BUCKET_REST, size = {x = P.boom_w, y = BOOM_LEN, z = P.boom_w}, tex = box_tex(def.color)}
 	parts[#parts + 1] = {id = "stick", pos = BUCKET_REST, size = {x = P.stick_w, y = STICK_LEN, z = P.stick_w}, tex = box_tex(def.color)}
 	-- 鏟斗裡的碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
@@ -285,7 +291,14 @@ local function excavator(kind, P)
 				o:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, rot)
 			end
 		end
-		if ps.bucket then ps.bucket:set_attach(self.object, "", {x = vb.x * 10, y = vb.y * 10, z = vb.z * 10}, rot) end
+		local hammer = self.tool == "breaker"
+		-- 錘身比鏟斗高：往上提，讓錘身底部在原本鏟斗底部的位置，鋼鑿從那裡往下伸
+		local by = hammer and (vb.y + (HAMMER.y - P.bucket.y) / 2) or vb.y
+		if ps.bucket then ps.bucket:set_attach(self.object, "", {x = vb.x * 10, y = by * 10, z = vb.z * 10}, rot) end
+		if ps.chisel then
+			local cy = by - HAMMER.y / 2 - CHISEL.y / 2
+			ps.chisel:set_attach(self.object, "", {x = vb.x * 10, y = cy * 10, z = vb.z * 10}, rot)
+		end
 		place_fill(self, vb, psi)
 		self.bucket_at = vb
 		seg_attach(self, ps.boom, vr, ve)
@@ -410,8 +423,15 @@ local function excavator(kind, P)
 	function def.on_save(self, data) data.swing, data.op, data.breaker, data.tool = self.swing, self.op, self.breaker, self.tool end
 	-- 鏟斗的樣子：裝著破碎錘時是深灰色的錘頭
 	local function show_tool(self)
-		local o = self.parts and self.parts.bucket
-		if o then o:set_properties({textures = box_tex(self.tool == "breaker" and "#2a2a2a" or P.bucket_color)}) end
+		local ps = self.parts
+		if not ps then return end
+		local hammer = self.tool == "breaker"
+		if ps.bucket then
+			ps.bucket:set_properties(hammer and {visual_size = HAMMER, textures = HAMMER_TEX}
+				or {visual_size = P.bucket, textures = box_tex(P.bucket_color)})
+		end
+		if ps.chisel then ps.chisel:set_properties({is_visible = hammer}) end
+		place_arm(self, self.bucket_at and v2h(self.bucket_at, self.swing or 0) or BUCKET_REST)
 	end
 	function def.on_spawn(self) place_arm(self, BUCKET_REST); op_show(self); show_tool(self) end
 	-- 油壓破碎錘改裝套件（vehicles.lua：拿著套件對怪手右鍵）
@@ -664,7 +684,7 @@ local function excavator(kind, P)
 				dg.snd = (dg.snd or 0) - ctx.dtime
 				if dg.snd <= 0 then
 					dg.snd = 0.25
-					core.sound_play("default_dig_cracky", {pos = dg.target, gain = 0.8, max_hear_distance = 32}, true)
+					V.play(self, "default_dig_cracky", {pos = dg.target, gain = 0.8, max_hear_distance = 32})
 					core.add_particlespawner({amount = 8, time = 0.2, minpos = vector.subtract(dg.target, 0.5), maxpos = vector.add(dg.target, 0.5),
 						minvel = {x = -1, y = 0, z = -1}, maxvel = {x = 1, y = 2, z = 1}, minacc = {x = 0, y = -9, z = 0}, maxacc = {x = 0, y = -9, z = 0},
 						minexptime = 0.3, maxexptime = 0.8, minsize = 1, maxsize = 2, texture = "[fill:4x4:#8a8680"})

@@ -22,6 +22,10 @@ local FORM, BOOK_FORM = "rockmech:borehole", "rockmech:fieldbook"
 local COREBOX, BOOK = "rockmech:corebox", "rockmech:fieldbook"
 local COREBOX_OPEN = "rockmech:corebox_open"   -- 打開的岩芯箱（有人在看）：箱蓋掀起來、看得到岩芯
 local corebox_rightclick                       -- 下面定義（打開岩芯箱那段）
+-- 打開岩芯箱的狀態（捧起箱子時要先關掉在看的人的介面，所以放在前面）
+local OPEN_FORM = "rockmech:corebox_open"
+local opened = {}                          -- 方塊位置 → {玩家名稱 = true}
+local viewing_box = {}                     -- 玩家名稱 → 方塊位置
 local LOG_SEC_PER_M, LOG_STAY, BOOK_MAX = 0.5, 3, 20
 
 local box_spot             -- 下面定義（岩芯箱那段）
@@ -324,10 +328,7 @@ rockmech.COREBOX = COREBOX
 --   自己有「岩體分類」才在每公尺下面標岩性、RQD、節理，有「品位判讀」才標品位（看的人「現在」的能力）。
 ---------------------------------------------------------------------------
 
-local OPEN_FORM = "rockmech:corebox_open"
 local PER_ROW, VIEW_ROWS = 5, 5            -- 一槽幾公尺、一次看幾槽
-local opened = {}                          -- 方塊位置 → {玩家名稱 = true}
-local viewing_box = {}                     -- 玩家名稱 → 方塊位置
 local function is_corebox(name) return name == COREBOX or name == COREBOX_OPEN end
 rockmech.is_corebox = is_corebox
 

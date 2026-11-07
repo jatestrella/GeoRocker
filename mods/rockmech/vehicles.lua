@@ -774,10 +774,18 @@ end
 
 -- 引擎聲：有人駕駛（或自動駕駛）才發動，一段循環音，運作時放大，約 1 秒漸變。車越重音高越低
 local ENGINE_IDLE, ENGINE_RUN, ENGINE_FADE = 0.1, 0.55, 0.45
+-- 車子發出的一次性聲音：旁人照位置聽（越遠越小），駕駛另外一份不跟位置走（追蹤相機時視點離車很遠，聲音才不會變小）
+function V.play(self, name, spec)
+	local p = table.copy(spec)
+	p.exclude_player = self.driver
+	core.sound_play(name, p, true)
+	if self.driver then core.sound_play(name, {to_player = self.driver, gain = spec.gain, pitch = spec.pitch}, true) end
+end
 local function engine_stop(self)
 	local e = self.engine
 	if e then
 		core.sound_stop(e.handle)
+		if e.cab then core.sound_stop(e.cab) end
 		self.engine = nil
 	end
 end
@@ -819,16 +827,24 @@ local function engine_update(self, kind, working)
 	local g = rockmech.cfg.vehicle_sound_gain
 	if not (self.driver or self.autopilot) or g <= 0 then return engine_stop(self) end
 	local e = self.engine
+	-- 駕駛換人（或改成自動駕駛）：重新開始，駕駛聽的那一份要換人
+	if e and e.driver ~= self.driver then engine_stop(self); e = nil end
 	if not e then
 		local mass = kind == "excavator" and V.MASS.excavator_big or V.MASS[kind] or 20     -- 兩種挖土機同一個聲音
 		local pitch = math.max(0.55, math.min(0.8, 0.8 * (20 / mass) ^ 0.2))
-		e = {work = false, handle = core.sound_play("rockmech_engine", {object = self.object, loop = true,
-			gain = ENGINE_IDLE * g, pitch = pitch, max_hear_distance = 48})}
+		-- 旁人聽到的：掛在車上，越遠越小。駕駛自己聽的另外一份、不跟位置走：
+		-- 追蹤相機時視點離車很遠，掛在車上的聲音會變小
+		e = {work = false, driver = self.driver, handle = core.sound_play("rockmech_engine", {object = self.object, loop = true,
+			gain = ENGINE_IDLE * g, pitch = pitch, max_hear_distance = 48, exclude_player = self.driver})}
+		if self.driver then
+			e.cab = core.sound_play("rockmech_engine", {to_player = self.driver, loop = true, gain = ENGINE_IDLE * g, pitch = pitch})
+		end
 		self.engine = e
 	end
 	if working ~= e.work then
 		e.work = working
 		core.sound_fade(e.handle, ENGINE_FADE, (working and ENGINE_RUN or ENGINE_IDLE) * g)
+		if e.cab then core.sound_fade(e.cab, ENGINE_FADE, (working and ENGINE_RUN or ENGINE_IDLE) * g) end
 	end
 end
 
