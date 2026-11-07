@@ -105,6 +105,7 @@ config.shop = {
 	{key = "sawbench", shop = "tools", item = "rockmech:sawbench", label = "鋸木台（原木鋸成木柱、木板）", price = 800},
 	{key = "workbench", shop = "tools", item = "rockmech:workbench", label = "木工桌（木牆板、樓梯、門…）", price = 300},
 	{key = "rain_gauge", shop = "tools", item = "rockmech:rain_gauge", label = "氣象站（百葉箱，時雨量）", price = 500},
+	{key = "survey_prism", shop = "tools", item = "rockmech:survey_prism", label = "監測稜鏡（岩面位移）", price = 500, count = 5},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = "木柱（支撐、蓋房子）", price = 200, count = 10},
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = "木板", price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = "木板半格", price = 100, count = 10},

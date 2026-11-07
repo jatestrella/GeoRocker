@@ -447,6 +447,7 @@ function rockmech.fem_run(pos, callback)
 	end, function(res)
 		last_key, last_u, last_ckey, last_cu = key, res.u, ckey, res.cu
 		last_job, last_res, last_meta = job, res, meta
+		if rockmech.monitor_update then rockmech.monitor_update(job, res, meta) end     -- 監測稜鏡（monitor.lua）
 		callback(job, res, meta, (core.get_us_time() - t0) / 1000, t_build)
 	end, job)
 end
