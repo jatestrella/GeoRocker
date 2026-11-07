@@ -1,0 +1,566 @@
+<title>GeoRocker 外觀調整器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 版面：左邊畫面清單＋配色，中間是遊戲畫面（可點選、拖曳），右邊是選到的元件；窄螢幕依序往下排 */
+:root {
+  --bg: #eceae4;          /* 工作台：帶一點岩粉色調的灰 */
+  --panel: #f7f6f2;
+  --line: #d3cfc4;
+  --fg: #23211d;
+  --muted: #6f6a5f;
+  --accent: #b5562c;      /* 赭石 */
+  --accent-soft: #f1dfd3;
+  --stage: #2d3a2f;       /* 遊戲畫面後面的「世界」 */
+  --ok: #3b7a4a;
+  --font-ui: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1b1a17; --panel: #24221e; --line: #3a372f; --fg: #ece8de; --muted: #a39d8f;
+  --accent: #e0855a; --accent-soft: #3e2a1f; --stage: #1e2820; --ok: #78b88a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #1b1a17; --panel: #24221e; --line: #3a372f; --fg: #ece8de; --muted: #a39d8f;
+  --accent: #e0855a; --accent-soft: #3e2a1f; --stage: #1e2820; --ok: #78b88a; color-scheme: dark }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; }
+.wrap { padding-block: 14px 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+header h1 { font-size: 20px; margin: 0; letter-spacing: 0.02em; }
+header p { margin: 0; color: var(--muted); }
+.main { display: grid; grid-template-columns: 220px minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; display: grid; gap: 10px; min-width: 0; }
+.card h2 { font-size: 12px; margin: 0; color: var(--muted); letter-spacing: 0.08em; font-weight: 500; }
+.screens { display: grid; gap: 4px; }
+.screens button { text-align: left; border: 1px solid transparent; background: none; color: var(--fg); padding: 7px 9px; border-radius: 4px; font: inherit; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+.screens button:hover { background: var(--accent-soft); }
+.screens button[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.screens .n { font-family: var(--font-mono); color: var(--accent); font-size: 12px; }
+.tokens { display: grid; gap: 6px; max-height: 420px; overflow-y: auto; }
+.tok { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 2px 8px; align-items: center; }
+.tok input[type=color] { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; grid-row: span 2; }
+.tok .k { font-family: var(--font-mono); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.tok input[type=text] { font-family: var(--font-mono); font-size: 12px; width: 100%; min-width: 0; padding: 2px 4px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); color: var(--fg); }
+.tok.changed .k { color: var(--accent); font-weight: 500; }
+.stagecard { padding: 0; overflow: hidden; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.toolbar label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+.toolbar input[type=range] { width: 110px; }
+.stage { background: radial-gradient(ellipse at 30% 20%, #4c6a50 0%, var(--stage) 60%); overflow: auto; max-height: 78vh; position: relative; }
+.stage canvas { display: block; margin: 18px auto; cursor: default; touch-action: none; }
+.hint { color: var(--muted); font-size: 12px; margin: 0; }
+.insp { display: grid; gap: 8px; }
+.insp .type { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; }
+.field { display: grid; gap: 2px; }
+.field span { font-size: 11px; color: var(--muted); }
+.field input, .field textarea { font: inherit; font-family: var(--font-mono); font-size: 12px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); width: 100%; min-width: 0; }
+.field textarea { font-family: var(--font-ui); min-height: 54px; resize: vertical; }
+.raw { font-family: var(--font-mono); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; max-height: 90px; overflow-y: auto; background: var(--bg); padding: 6px; border-radius: 4px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+button.btn { font: inherit; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+button.btn:focus-visible, .screens button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.out { font-family: var(--font-mono); font-size: 11px; width: 100%; min-height: 160px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--fg); padding: 8px; }
+.count { font-family: var(--font-mono); color: var(--accent); }
+.toast { color: var(--ok); font-size: 12px; min-height: 1em; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>GeoRocker 外觀調整器</h1>
+    <p>點選遊戲畫面裡的東西 → 拖曳移動、拉右下角改大小、右邊改數值和顏色、寫備註 → 「複製改動」貼給 Claude。</p>
+  </header>
+  <div class="main">
+    <div class="card">
+      <h2>畫面</h2>
+      <div class="screens" id="screens"></div>
+      <h2>配色（具名顏色）</h2>
+      <div class="tokens" id="tokens"></div>
+    </div>
+    <div class="card stagecard">
+      <div class="toolbar">
+        <label>縮放 <input id="zoom" type="range" min="28" max="80" value="48"></label>
+        <label>字體 <input id="fontk" type="range" min="0.25" max="0.5" step="0.01" value="0.36"></label>
+        <label><input id="grid" type="checkbox"> 格線（1 格）</label>
+        <span class="hint">方向鍵微調 0.05 格（Shift ×4）</span>
+      </div>
+      <div class="stage" id="stage"><canvas id="cv"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>選到的元件</h2>
+      <div class="insp" id="insp"><p class="hint">在畫面上點一個東西（字、框、按鈕、圖）。</p></div>
+      <h2>整個畫面的備註</h2>
+      <div class="field"><textarea id="screennote" placeholder="例如：整本書再寬一點、字太小"></textarea></div>
+      <h2>改動 <span class="count" id="count">0</span></h2>
+      <div class="row">
+        <button class="btn primary" id="copy">複製改動</button>
+        <button class="btn" id="resetall">全部還原</button>
+      </div>
+      <div class="toast" id="toast" role="status"></div>
+      <textarea class="out" id="out" readonly aria-label="改動內容"></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const $ = (id) => document.getElementById(id);
+
+// ---------- formspec 解析 ----------
+function splitEsc(s, sep) {          // 依沒跳脫的 sep 切開（保留跳脫）
+  const out = []; let cur = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "\\" && i + 1 < s.length) { cur += c + s[i + 1]; i++; continue; }
+    if (c === sep) { out.push(cur); cur = ""; continue; }
+    cur += c;
+  }
+  out.push(cur); return out;
+}
+const unesc = (s) => s.replace(/\\(.)/gs, "$1");
+function parseFS(fs) {
+  const els = []; let i = 0;
+  while (i < fs.length) {
+    let j = fs.indexOf("[", i); if (j < 0) break;
+    const name = fs.slice(i, j).trim();
+    let k = j + 1, body = "";
+    while (k < fs.length) {
+      const c = fs[k];
+      if (c === "\\" && k + 1 < fs.length) { body += c + fs[k + 1]; k += 2; continue; }
+      if (c === "]") break;
+      body += c; k++;
+    }
+    els.push({ type: name, args: splitEsc(body, ";") });
+    i = k + 1;
+  }
+  return els;
+}
+const ser = (e) => e.type + "[" + e.args.join(";") + "]";
+const nums = (a) => splitEsc(a || "", ",").map(Number);
+
+// ---------- 顏色 ----------
+const NAMED = { white: "#ffffff", black: "#000000", red: "#ff0000", green: "#008000", blue: "#0000ff", yellow: "#ffff00", gray: "#808080", grey: "#808080", orange: "#ffa500" };
+function rgba(c) {
+  if (!c) return [0, 0, 0, 0];
+  c = c.trim(); if (NAMED[c.toLowerCase()]) c = NAMED[c.toLowerCase()];
+  let h = c.replace("#", "");
+  if (h.length === 3 || h.length === 4) h = h.split("").map((x) => x + x).join("");
+  const n = (o) => parseInt(h.slice(o, o + 2), 16);
+  return [n(0), n(2), n(4), h.length >= 8 ? n(6) : 255];
+}
+const css = (c) => { const [r, g, b, a] = rgba(c); return `rgba(${r},${g},${b},${a / 255})`; };
+
+// ---------- 貼圖（Luanti 的貼圖修飾字） ----------
+const imgs = {};
+function loadImages() {
+  return Promise.all(Object.entries(DATA.textures || {}).map(([n, src]) => new Promise((res) => {
+    const im = new Image(); im.onload = () => { imgs[n] = im; res(); }; im.onerror = res; im.src = src;
+  })));
+}
+function canvasOf(w, h) { const c = document.createElement("canvas"); c.width = Math.max(1, w); c.height = Math.max(1, h); return c; }
+function splitTop(s) {               // 依最外層、沒跳脫的 ^ 切開（括號裡的不切）
+  const out = []; let cur = "", depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "\\" && i + 1 < s.length) { cur += c + s[i + 1]; i++; continue; }
+    if (c === "(") depth++; else if (c === ")") depth--;
+    if (c === "^" && depth === 0) { out.push(cur); cur = ""; continue; }
+    cur += c;
+  }
+  out.push(cur); return out;
+}
+const texCache = new Map();
+function tex(s) {
+  if (texCache.has(s)) return texCache.get(s);
+  let cv = null;
+  try { cv = texInner(s); } catch (e) { cv = null; }
+  texCache.set(s, cv); return cv;
+}
+function texInner(s) {
+  s = s.trim();
+  if (s.startsWith("(") && s.endsWith(")")) s = s.slice(1, -1);
+  const parts = splitTop(s);
+  let cur = base(parts[0]);
+  for (let p of parts.slice(1)) {
+    if (p.startsWith("[")) cur = modify(cur, p);
+    else { const o = tex(p); if (o && cur) { const c = canvasOf(cur.width, cur.height); const g = c.getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(cur, 0, 0); g.drawImage(o, 0, 0, cur.width, cur.height); cur = c; } }
+  }
+  return cur;
+}
+function base(p) {
+  if (p.startsWith("(")) return tex(p);
+  if (p.startsWith("[fill:")) {
+    const a = p.slice(6).split(":"); const [w, h] = a[0].split("x").map(Number);
+    const c = canvasOf(w, h); const g = c.getContext("2d"); g.fillStyle = css(a[a.length - 1]); g.fillRect(0, 0, w, h); return c;
+  }
+  if (p.startsWith("[combine:")) return combine(p);
+  const im = imgs[p];
+  if (!im) { const c = canvasOf(16, 16); const g = c.getContext("2d"); g.fillStyle = "#ff00ff"; g.fillRect(0, 0, 16, 16); return c; }
+  const c = canvasOf(im.width, im.height); c.getContext("2d").drawImage(im, 0, 0); return c;
+}
+function combine(p) {
+  const a = splitEsc(p.slice(9), ":"); const [w, h] = a[0].split("x").map(Number);
+  const c = canvasOf(w, h); const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+  for (const ent of a.slice(1)) {
+    const eq = ent.indexOf("="); if (eq < 0) continue;
+    const [x, y] = ent.slice(0, eq).split(",").map(Number);
+    const o = tex(unesc(ent.slice(eq + 1)));
+    if (o) g.drawImage(o, x, y);
+  }
+  return c;
+}
+function modify(cur, p) {
+  if (!cur) return cur;
+  const name = p.slice(1, p.indexOf(":") > 0 ? p.indexOf(":") : undefined);
+  const args = p.indexOf(":") > 0 ? splitEsc(p.slice(p.indexOf(":") + 1), ":") : [];
+  const W = cur.width, H = cur.height;
+  const out = canvasOf(W, H); const g = out.getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(cur, 0, 0);
+  if (name === "fill") {
+    const [w, h] = args[0].split("x").map(Number);
+    const [x, y] = args.length > 2 ? args[1].split(",").map(Number) : [0, 0];
+    g.fillStyle = css(args[args.length - 1]); g.fillRect(x, y, w, h); return out;
+  }
+  if (name === "resize") {
+    const [w, h] = args[0].split("x").map(Number); const c = canvasOf(w, h); const gg = c.getContext("2d");
+    gg.imageSmoothingEnabled = false; gg.drawImage(cur, 0, 0, w, h); return c;
+  }
+  if (name === "combine") { const o = combine(p); g.drawImage(o, 0, 0); return out; }
+  const id = g.getImageData(0, 0, W, H), d = id.data;
+  if (name === "colorize") {
+    const [r, gg, b, a] = rgba(args[0]); let t = a / 255;
+    if (args[1] !== undefined && args[1] !== "alpha") t = Number(args[1]) / 255;
+    for (let i = 0; i < d.length; i += 4) { d[i] += (r - d[i]) * t; d[i + 1] += (gg - d[i + 1]) * t; d[i + 2] += (b - d[i + 2]) * t; }
+  } else if (name === "multiply") {
+    const [r, gg, b] = rgba(args[0]);
+    for (let i = 0; i < d.length; i += 4) { d[i] = d[i] * r / 255; d[i + 1] = d[i + 1] * gg / 255; d[i + 2] = d[i + 2] * b / 255; }
+  } else if (name === "opacity") {
+    const t = Number(args[0]) / 255; for (let i = 3; i < d.length; i += 4) d[i] *= t;
+  } else if (name === "mask") {
+    const m = tex(unesc(args.join(":"))); if (m) { const mc = canvasOf(W, H); const mg = mc.getContext("2d"); mg.drawImage(m, 0, 0, W, H);
+      const md = mg.getImageData(0, 0, W, H).data; for (let i = 0; i < d.length; i += 4) { d[i] = d[i] & md[i]; d[i + 1] &= md[i + 1]; d[i + 2] &= md[i + 2]; d[i + 3] &= md[i + 3]; } }
+  }
+  g.putImageData(id, 0, 0); return out;
+}
+
+// ---------- 狀態 ----------
+const screens = DATA.screens.map((s) => ({ ...s, orig: parseFS(s.fs), els: parseFS(s.fs), notes: {}, note: "" }));
+const tokenDefaults = DATA.colors || {};
+const tokens = { ...tokenDefaults };
+let cur = 0, sel = -1, U = 48, FK = 0.36, showGrid = false;
+const scrolls = {};                 // 每個畫面、每個捲動區的捲動量（格）
+try {
+  const saved = JSON.parse(localStorage.getItem("ui_tuner_state") || "null");
+  if (saved && saved.v === 1) {
+    Object.assign(tokens, saved.tokens || {});
+    for (const s of screens) { const o = saved.screens && saved.screens[s.id]; if (o && o.args) { o.args.forEach((a, i) => { if (s.els[i] && a) s.els[i].args = a; }); s.notes = o.notes || {}; s.note = o.note || ""; } }
+  }
+} catch (e) {}
+function save() {
+  try {
+    const o = { v: 1, tokens, screens: {} };
+    for (const s of screens) o.screens[s.id] = { args: s.els.map((e, i) => ser(e) !== ser(s.orig[i]) ? e.args : null), notes: s.notes, note: s.note };
+    localStorage.setItem("ui_tuner_state", JSON.stringify(o));
+  } catch (e) {}
+}
+// 具名顏色換掉：畫的時候把預設色碼換成新的
+function tokenMap() {
+  const m = [];
+  for (const [k, v] of Object.entries(tokens)) if (v.toLowerCase() !== (tokenDefaults[k] || "").toLowerCase()) m.push([tokenDefaults[k], v]);
+  return m;
+}
+function applyTokens(str, m) {
+  for (const [a, b] of m) str = str.split(a).join(b).split(a.toUpperCase()).join(b);
+  return str;
+}
+
+// ---------- 畫 ----------
+const cv = $("cv"), g = cv.getContext("2d");
+let hits = [];
+function textRuns(t) {
+  const runs = []; let color = "#ffffff", buf = "";
+  const re = /\x1b\((c@([^)]*)|[^)]*)\)|\x1b./g; let last = 0, m;
+  while ((m = re.exec(t))) {
+    buf += t.slice(last, m.index); last = re.lastIndex;
+    if (m[2]) { if (buf) runs.push([buf, color]); buf = ""; color = m[2]; }
+  }
+  buf += t.slice(last); if (buf) runs.push([buf, color]);
+  return runs;
+}
+function drawText(t, x, y, opt) {
+  const lines = []; let line = [];
+  for (const [s, c] of textRuns(t)) {
+    const parts = s.split("\n");
+    parts.forEach((p, i) => { if (i > 0) { lines.push(line); line = []; } if (p) line.push([p, c]); });
+  }
+  lines.push(line);
+  const fs = U * FK * (opt.scale || 1);
+  g.font = `${fs}px "Noto Sans TC", sans-serif`; g.textBaseline = "middle";
+  const lh = fs * 1.25;
+  lines.forEach((ln, li) => {
+    const w = ln.reduce((a, [s]) => a + g.measureText(s).width, 0);
+    let cx = opt.center ? x - w / 2 : x;
+    const cy = (opt.vcenter ? y - (lines.length - 1) * lh / 2 : y) + li * lh;
+    for (const [s, c] of ln) { g.fillStyle = opt.color || css(c); g.fillText(s, cx, cy); cx += g.measureText(s).width; }
+  });
+}
+function draw() {
+  const s = screens[cur], m = tokenMap();
+  const size = s.els.find((e) => e.type === "size"); const [W, H] = size ? nums(size.args[0]) : [10, 10];
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.ceil(W * U * dpr); cv.height = Math.ceil(H * U * dpr);
+  cv.style.width = W * U + "px"; cv.style.height = H * U + "px";
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.imageSmoothingEnabled = false;
+  hits = [];
+  const bgEl = s.els.find((e) => e.type === "bgcolor");
+  const bg = bgEl ? applyTokens(unesc(bgEl.args[0]), m) : "#0000008c";
+  g.fillStyle = css(bg); g.fillRect(0, 0, W * U, H * U);
+  const styles = {}, stypes = {};
+  let fontScale = 1;
+  let ox = 0, oy = 0, clip = null, sbOpts = {};
+  s.els.forEach((e, idx) => {
+    const a = e.args.map((x) => applyTokens(x, m));
+    const t = e.type;
+    if (t === "style" || t === "style_type") {
+      const props = {}; a.slice(1).forEach((p) => { const k = p.indexOf("="); if (k > 0) props[p.slice(0, k).trim()] = unesc(p.slice(k + 1)); });
+      splitEsc(a[0], ",").forEach((n) => { if (n.includes(":")) return; const tgt = t === "style" ? styles : stypes; tgt[n] = { ...(tgt[n] || {}), ...props }; });
+      if (t === "style_type" && a[0].split(",").includes("label") && props.font_size) { const v = props.font_size; fontScale = v.startsWith("*") ? Number(v.slice(1)) : 1; }
+      return;
+    }
+    if (t === "scrollbaroptions") { a.forEach((p) => { const k = p.indexOf("="); if (k > 0) sbOpts[p.slice(0, k)] = Number(p.slice(k + 1)) || p.slice(k + 1); }); return; }
+    if (t === "scroll_container") {
+      const [x, y] = nums(a[0]), [w, h] = nums(a[1]); const key = s.id + ":" + a[2]; const f = Number(a[4] || 0.1);
+      const sc = (scrolls[key] || 0) * f;
+      g.save(); g.beginPath(); g.rect(x * U, y * U, w * U, h * U); g.clip();
+      clip = { x, y, w, h, key, f }; ox = x; oy = y - sc; return;
+    }
+    if (t === "scroll_container_end") { g.restore(); clip = null; ox = oy = 0; return; }
+    const pos = a[0] !== undefined ? nums(a[0]) : null;
+    const dim = a[1] !== undefined ? nums(a[1]) : null;
+    const name = a[2];
+    let rect = null;
+    if (t === "box") {
+      const [x, y] = pos, [w, h] = dim; g.fillStyle = css(unesc(a[2])); g.fillRect((x + ox) * U, (y + oy) * U, w * U, h * U); rect = [x, y, w, h];
+    } else if (t === "label") {
+      const [x, y] = pos; const txt = unesc(a[1] || "");
+      drawText(txt, (x + ox) * U, (y + oy) * U, { scale: fontScale });
+      g.font = `${U * FK * fontScale}px "Noto Sans TC", sans-serif`;
+      const lines = txt.replace(/\x1b\([^)]*\)|\x1b./g, "").split("\n");
+      const w = Math.max(...lines.map((l) => g.measureText(l).width)) / U; const lh = FK * fontScale * 1.25;
+      rect = [x, y - lh / 2, Math.max(w, 0.2), lh * lines.length];
+    } else if (t === "image" || t === "image_button") {
+      const [x, y] = pos, [w, h] = dim; const tc = tex(unesc(a[2]));
+      if (tc) g.drawImage(tc, (x + ox) * U, (y + oy) * U, w * U, h * U);
+      if (t === "image_button" && a[4]) drawText(unesc(a[4]), (x + ox + w / 2) * U, (y + oy + h / 2) * U, { center: true, vcenter: true });
+      rect = [x, y, w, h];
+    } else if (t === "button" || t === "button_exit") {
+      const [x, y] = pos, [w, h] = dim; const st = { ...(stypes.button || {}), ...(styles[unesc(a[2])] || {}) };
+      const X = (x + ox) * U, Y = (y + oy) * U;
+      const bgc = st.bgcolor !== undefined ? st.bgcolor : null;
+      if (bgc === null) { g.fillStyle = "#4b4b4b"; g.fillRect(X, Y, w * U, h * U); g.strokeStyle = "#8a8a8a"; g.lineWidth = 1; g.strokeRect(X + 0.5, Y + 0.5, w * U - 1, h * U - 1); }
+      else if (rgba(bgc)[3] > 0) { g.fillStyle = css(bgc); g.fillRect(X, Y, w * U, h * U); if (st.border !== "false") { g.strokeStyle = "rgba(0,0,0,0.35)"; g.strokeRect(X + 0.5, Y + 0.5, w * U - 1, h * U - 1); } }
+      drawText(unesc(a[3] || ""), X + w * U / 2, Y + h * U / 2, { center: true, vcenter: true, color: st.textcolor ? css(st.textcolor) : null });
+      rect = [x, y, w, h];
+    } else if (t === "scrollbar") {
+      const [x, y] = pos, [w, h] = dim; g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(x * U, y * U, w * U, h * U);
+      const key = s.id + ":" + a[3]; const max = Number(sbOpts.max || 1000); const v = scrolls[key] ?? Number(a[4] || 0);
+      scrolls[key] = v; const th = Math.max(0.6, h * 0.2);
+      g.fillStyle = "rgba(255,255,255,0.55)"; g.fillRect(x * U + 2, (y + (h - th) * (max ? v / max : 0)) * U, w * U - 4, th * U);
+      scrollMax[key] = max; rect = [x, y, w, h];
+    } else if (["field", "textarea", "table", "textlist", "dropdown", "checkbox", "list", "item_image", "item_image_button", "tooltip"].includes(t) && pos && dim) {
+      const [x, y] = pos, [w, h] = dim; g.setLineDash([4, 3]); g.strokeStyle = "rgba(255,255,255,0.6)"; g.strokeRect((x + ox) * U, (y + oy) * U, w * U, h * U); g.setLineDash([]);
+      drawText(t, (x + ox) * U + 4, (y + oy) * U + 10, {}); rect = [x, y, w, h];
+    }
+    if (rect) {
+      const [x, y, w, h] = rect; let r = [(x + ox) * U, (y + oy) * U, w * U, h * U];
+      if (clip) { const cx0 = clip.x * U, cy0 = clip.y * U, cx1 = (clip.x + clip.w) * U, cy1 = (clip.y + clip.h) * U;
+        const x0 = Math.max(r[0], cx0), y0 = Math.max(r[1], cy0), x1 = Math.min(r[0] + r[2], cx1), y1 = Math.min(r[1] + r[3], cy1);
+        r = x1 > x0 && y1 > y0 ? [x0, y0, x1 - x0, y1 - y0] : null; }
+      if (r) hits.push({ idx, r, ox, oy, clip: clip && clip.key });
+    }
+  });
+  if (showGrid) {
+    g.strokeStyle = "rgba(255,255,255,0.18)"; g.lineWidth = 1;
+    for (let x = 0; x <= W; x++) { g.beginPath(); g.moveTo(x * U + 0.5, 0); g.lineTo(x * U + 0.5, H * U); g.stroke(); }
+    for (let y = 0; y <= H; y++) { g.beginPath(); g.moveTo(0, y * U + 0.5); g.lineTo(W * U, y * U + 0.5); g.stroke(); }
+  }
+  const h = hits.filter((x) => x.idx === sel).pop();
+  if (h) {
+    const [x, y, w, hh] = h.r; g.strokeStyle = "#ff7a3d"; g.lineWidth = 2; g.setLineDash([5, 3]); g.strokeRect(x - 1, y - 1, w + 2, hh + 2); g.setLineDash([]);
+    if (hasSize(s.els[sel])) { g.fillStyle = "#ff7a3d"; g.fillRect(x + w - 5, y + hh - 5, 10, 10); }
+  }
+}
+const scrollMax = {};
+const hasSize = (e) => ["box", "image", "image_button", "button", "button_exit", "scrollbar", "field", "textarea", "table", "textlist"].includes(e.type);
+
+// ---------- 介面 ----------
+function changedCount() { let n = 0; for (const s of screens) s.els.forEach((e, i) => { if (ser(e) !== ser(s.orig[i]) || s.notes[i]) n++; }); return n + tokenMap().length + screens.filter((s) => s.note).length; }
+function renderScreens() {
+  $("screens").innerHTML = "";
+  screens.forEach((s, i) => {
+    const b = document.createElement("button"); b.type = "button";
+    const n = s.els.filter((e, k) => ser(e) !== ser(s.orig[k]) || s.notes[k]).length + (s.note ? 1 : 0);
+    b.innerHTML = `<span></span><span class="n">${n || ""}</span>`; b.firstChild.textContent = s.title;
+    if (i === cur) b.setAttribute("aria-current", "true");
+    b.onclick = () => { cur = i; sel = -1; $("screennote").value = screens[cur].note; refresh(); };
+    $("screens").appendChild(b);
+  });
+}
+function renderTokens() {
+  $("tokens").innerHTML = "";
+  for (const k of Object.keys(tokenDefaults).sort()) {
+    const d = document.createElement("div"); d.className = "tok" + (tokens[k].toLowerCase() !== tokenDefaults[k].toLowerCase() ? " changed" : "");
+    const v = tokens[k]; const hex6 = "#" + rgba(v).slice(0, 3).map((x) => x.toString(16).padStart(2, "0")).join("");
+    d.innerHTML = `<input type="color" aria-label="${k}"><span class="k"></span><input type="text" aria-label="${k} 色碼">`;
+    const [c, lab, t] = d.children; c.value = hex6; lab.textContent = k; t.value = v; c.id = "tokc_" + k; t.id = "tokt_" + k;
+    const alpha = v.replace("#", "").length === 8 ? v.slice(-2) : "";
+    c.oninput = () => { tokens[k] = c.value + alpha; t.value = tokens[k]; texCache.clear(); refresh(false); };
+    t.onchange = () => { if (/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(t.value.trim())) { tokens[k] = t.value.trim(); texCache.clear(); refresh(); } };
+    $("tokens").appendChild(d);
+  }
+}
+function setArg(e, i, v) { e.args[i] = v; }
+function renderInsp() {
+  const s = screens[cur], e = s.els[sel], box = $("insp");
+  if (!e) { box.innerHTML = '<p class="hint">在畫面上點一個東西（字、框、按鈕、圖）。</p>'; return; }
+  const o = s.orig[sel];
+  box.innerHTML = "";
+  const t = document.createElement("div"); t.className = "type"; t.textContent = `${e.type} #${sel}`; box.appendChild(t);
+  const grid = document.createElement("div"); grid.className = "grid2"; box.appendChild(grid);
+  const mk = (label, val, on, id) => { const f = document.createElement("label"); f.className = "field"; f.innerHTML = `<span></span><input>`;
+    f.firstChild.textContent = label; const inp = f.lastChild; inp.value = val; inp.id = id; inp.onchange = () => { on(inp.value); refresh(); }; return f; };
+  const p = nums(e.args[0]);
+  grid.appendChild(mk("x（格）", p[0], (v) => setArg(e, 0, `${+v},${p[1]}`), "ix"));
+  grid.appendChild(mk("y（格）", p[1], (v) => setArg(e, 0, `${p[0]},${+v}`), "iy"));
+  if (hasSize(e)) {
+    const d = nums(e.args[1]);
+    grid.appendChild(mk("寬", d[0], (v) => setArg(e, 1, `${+v},${d[1]}`), "iw"));
+    grid.appendChild(mk("高", d[1], (v) => setArg(e, 1, `${d[0]},${+v}`), "ih"));
+  }
+  if (e.type === "box") {
+    const f = mk("顏色（#rrggbb 或 #rrggbbaa）", unesc(e.args[2]), (v) => setArg(e, 2, v), "icol"); f.style.gridColumn = "span 2"; grid.appendChild(f);
+  }
+  const ti = { label: 1, button: 3, button_exit: 3, image_button: 4 }[e.type];
+  if (ti !== undefined) {
+    const raw = unesc(e.args[ti] || ""); const cm = raw.match(/\x1b\(c@([^)]*)\)/);
+    const plain = raw.replace(/\x1b\([^)]*\)|\x1b./g, "");
+    const f = mk("文字", plain, (v) => setArg(e, ti, (cm ? `\x1b(c@${cm[1]})` : "") + v.replace(/[\\\[\];,]/g, (c) => "\\" + c) + (cm ? "\x1b(c@#ffffff)" : "")), "itext");
+    f.style.gridColumn = "span 2"; grid.appendChild(f);
+    if (cm) { const fc = mk("文字顏色", cm[1], (v) => setArg(e, ti, e.args[ti].split(`\x1b(c@${cm[1]})`).join(`\x1b(c@${v})`)), "itcol"); fc.style.gridColumn = "span 2"; grid.appendChild(fc); }
+  }
+  if (e.type === "image" || e.type === "image_button") {
+    const f = mk("貼圖", unesc(e.args[2]), (v) => setArg(e, 2, v.replace(/[\\\[\];,]/g, (c) => "\\" + c)), "itex"); f.style.gridColumn = "span 2"; grid.appendChild(f);
+  }
+  const nf = document.createElement("label"); nf.className = "field"; nf.innerHTML = '<span>這個元件的備註</span><textarea id="inote" placeholder="例如：這行字再往右一點、顏色太亮"></textarea>';
+  const ta = nf.lastChild; ta.value = s.notes[sel] || ""; ta.oninput = () => { if (ta.value) s.notes[sel] = ta.value; else delete s.notes[sel]; refresh(false, true); };
+  box.appendChild(nf);
+  const raw = document.createElement("div"); raw.className = "raw"; raw.textContent = "原本：" + ser(o).replace(/\x1b/g, "␛"); box.appendChild(raw);
+  const r = document.createElement("div"); r.className = "row";
+  const rb = document.createElement("button"); rb.className = "btn"; rb.textContent = "還原這個元件";
+  rb.onclick = () => { s.els[sel] = { type: o.type, args: [...o.args] }; delete s.notes[sel]; refresh(); };
+  r.appendChild(rb); box.appendChild(r);
+}
+function exportText() {
+  const lines = [];
+  const tm = Object.keys(tokens).filter((k) => tokens[k].toLowerCase() !== tokenDefaults[k].toLowerCase());
+  if (tm.length) { lines.push("【配色】"); tm.forEach((k) => lines.push(`  ${k}: ${tokenDefaults[k]} → ${tokens[k]}`)); }
+  for (const s of screens) {
+    const items = [];
+    s.els.forEach((e, i) => {
+      const a = ser(s.orig[i]), b = ser(e);
+      if (a === b && !s.notes[i]) return;
+      const vis = (x) => x.replace(/\x1b\(c@([^)]*)\)/g, "{$1}").replace(/\x1b/g, "␛");
+      items.push(`  #${i} ${e.type}` + (s.notes[i] ? `  備註：${s.notes[i]}` : ""));
+      if (a !== b) { items.push(`    原本 ${vis(a)}`); items.push(`    改成 ${vis(b)}`); }
+      else items.push(`    元件 ${vis(a)}`);
+    });
+    if (items.length || s.note) { lines.push(`【${s.title}】（${s.id}）` + (s.note ? `  整頁備註：${s.note}` : "")); lines.push(...items); }
+  }
+  return lines.length ? "外觀調整器的改動（formspec 單位：格）\n" + lines.join("\n") : "";
+}
+function refresh(full = true, light = false) {
+  if (!light) draw();
+  if (full) { renderInsp(); renderTokens(); }
+  renderScreens();
+  $("count").textContent = changedCount();
+  $("out").value = exportText();
+  save();
+}
+
+// ---------- 滑鼠：點選、拖曳、改大小、捲動 ----------
+let drag = null;
+cv.addEventListener("pointerdown", (ev) => {
+  const rc = cv.getBoundingClientRect(); const px = ev.clientX - rc.left, py = ev.clientY - rc.top;
+  const s = screens[cur];
+  const cand = hits.filter((h) => px >= h.r[0] && px <= h.r[0] + h.r[2] && py >= h.r[1] && py <= h.r[1] + h.r[3]);
+  // 已選的那個的右下角：改大小
+  const curHit = hits.filter((h) => h.idx === sel).pop();
+  if (curHit && hasSize(s.els[sel]) && Math.abs(px - (curHit.r[0] + curHit.r[2])) < 9 && Math.abs(py - (curHit.r[1] + curHit.r[3])) < 9) {
+    drag = { mode: "size", idx: sel, sx: px, sy: py, start: nums(s.els[sel].args[1]) };
+  } else {
+    if (!cand.length) { sel = -1; refresh(); return; }
+    // 點到已選的那個：保持選著（才能拖）；不然選最上面那層。雙擊往下一層（dblclick）
+    const pick = cand.find((h) => h.idx === sel) || cand[cand.length - 1];
+    sel = pick.idx;
+    drag = { mode: "move", idx: sel, sx: px, sy: py, start: nums(s.els[sel].args[0]), moved: false };
+  }
+  cv.setPointerCapture(ev.pointerId); refresh();
+});
+cv.addEventListener("dblclick", (ev) => {     // 雙擊：選疊在下面的那一層
+  const rc = cv.getBoundingClientRect(); const px = ev.clientX - rc.left, py = ev.clientY - rc.top;
+  const cand = hits.filter((h) => px >= h.r[0] && px <= h.r[0] + h.r[2] && py >= h.r[1] && py <= h.r[1] + h.r[3]);
+  const k = cand.findIndex((h) => h.idx === sel);
+  if (cand.length > 1) { sel = cand[(k - 1 + cand.length) % cand.length].idx; refresh(); }
+});
+cv.addEventListener("pointermove", (ev) => {
+  if (!drag) return;
+  const rc = cv.getBoundingClientRect(); const px = ev.clientX - rc.left, py = ev.clientY - rc.top;
+  const e = screens[cur].els[drag.idx]; const q = (v) => Math.round(v * 20) / 20;
+  const dx = (px - drag.sx) / U, dy = (py - drag.sy) / U;
+  if (Math.abs(dx) + Math.abs(dy) < 0.04 && !drag.moved) return;
+  drag.moved = true;
+  if (drag.mode === "move") e.args[0] = `${q(drag.start[0] + dx)},${q(drag.start[1] + dy)}`;
+  else e.args[1] = `${Math.max(0.05, q(drag.start[0] + dx))},${Math.max(0.05, q(drag.start[1] + dy))}`;
+  draw();
+});
+cv.addEventListener("pointerup", () => { if (drag) { drag = null; refresh(); } });
+cv.addEventListener("wheel", (ev) => {
+  const rc = cv.getBoundingClientRect(); const px = (ev.clientX - rc.left) / U, py = (ev.clientY - rc.top) / U;
+  const s = screens[cur];
+  for (const e of s.els) if (e.type === "scroll_container") {
+    const [x, y] = nums(e.args[0]), [w, h] = nums(e.args[1]);
+    if (px >= x && px <= x + w && py >= y && py <= y + h) {
+      const key = s.id + ":" + e.args[2]; const max = scrollMax[key] || 0; if (!max) return;
+      ev.preventDefault(); scrolls[key] = Math.max(0, Math.min(max, (scrolls[key] || 0) + Math.sign(ev.deltaY) * 5)); draw(); return;
+    }
+  }
+}, { passive: false });
+document.addEventListener("keydown", (ev) => {
+  if (sel < 0 || ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key]; if (!d) return;
+  ev.preventDefault(); const e = screens[cur].els[sel]; const p = nums(e.args[0]); const st = ev.shiftKey ? 0.2 : 0.05;
+  e.args[0] = `${Math.round((p[0] + d[0] * st) * 100) / 100},${Math.round((p[1] + d[1] * st) * 100) / 100}`; refresh();
+});
+$("zoom").oninput = (e) => { U = +e.target.value; draw(); };
+$("fontk").oninput = (e) => { FK = +e.target.value; draw(); };
+$("grid").onchange = (e) => { showGrid = e.target.checked; draw(); };
+$("screennote").oninput = (e) => { screens[cur].note = e.target.value; refresh(false, true); };
+$("copy").onclick = async () => {
+  const t = exportText() || "（沒有改動）"; $("out").value = t;
+  try { await navigator.clipboard.writeText(t); $("toast").textContent = "已複製，貼給 Claude 就好"; }
+  catch (e) { $("out").focus(); $("out").select(); $("toast").textContent = "瀏覽器不讓複製：已經選好下面的文字，按 Ctrl+C"; }
+};
+$("resetall").onclick = () => {
+  if ($("resetall").dataset.armed !== "1") { $("resetall").dataset.armed = "1"; $("resetall").textContent = "再按一次確定還原"; setTimeout(() => { $("resetall").dataset.armed = ""; $("resetall").textContent = "全部還原"; }, 3000); return; }
+  for (const s of screens) { s.els = s.orig.map((e) => ({ type: e.type, args: [...e.args] })); s.notes = {}; s.note = ""; }
+  Object.assign(tokens, tokenDefaults); texCache.clear(); sel = -1; $("screennote").value = "";
+  $("resetall").dataset.armed = ""; $("resetall").textContent = "全部還原"; refresh();
+};
+
+$("screennote").value = screens[cur].note;
+Promise.all([loadImages(), document.fonts ? document.fonts.ready : Promise.resolve()]).then(() => refresh());
+</script>
