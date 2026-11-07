@@ -82,19 +82,19 @@ end
 --   dump_rows：倒在車尾幾排（預設 1）
 local function hauler(def, spec)
 	local bed = spec
-	local S = bed.size
+	local SZ = bed.size   -- 車斗大小（不要叫 S：會蓋掉翻譯函式 S）
 	-- 預設：空心方盒車斗的 5 片。碎石塊放在裡面，四周與上緣都留空隙，
 	-- 不和車斗的任何一面重疊（重疊會 z-fighting 閃爍）
 	bed.plates = spec.plates or {
-		{id = "bed_floor", rel = {x = 0, y = BED_T / 2, z = S.z / 2}, size = {x = S.x, y = BED_T, z = S.z}, floor = true},
-		{id = "bed_left", rel = {x = -(S.x - BED_T) / 2, y = S.y / 2, z = S.z / 2}, size = {x = BED_T, y = S.y, z = S.z}},
-		{id = "bed_right", rel = {x = (S.x - BED_T) / 2, y = S.y / 2, z = S.z / 2}, size = {x = BED_T, y = S.y, z = S.z}},
-		{id = "bed_front", rel = {x = 0, y = S.y / 2, z = S.z - BED_T / 2}, size = {x = S.x, y = S.y, z = BED_T}},
-		{id = "bed_back", rel = {x = 0, y = S.y / 2, z = BED_T / 2}, size = {x = S.x, y = S.y, z = BED_T}},
+		{id = "bed_floor", rel = {x = 0, y = BED_T / 2, z = SZ.z / 2}, size = {x = SZ.x, y = BED_T, z = SZ.z}, floor = true},
+		{id = "bed_left", rel = {x = -(SZ.x - BED_T) / 2, y = SZ.y / 2, z = SZ.z / 2}, size = {x = BED_T, y = SZ.y, z = SZ.z}},
+		{id = "bed_right", rel = {x = (SZ.x - BED_T) / 2, y = SZ.y / 2, z = SZ.z / 2}, size = {x = BED_T, y = SZ.y, z = SZ.z}},
+		{id = "bed_front", rel = {x = 0, y = SZ.y / 2, z = SZ.z - BED_T / 2}, size = {x = SZ.x, y = SZ.y, z = BED_T}},
+		{id = "bed_back", rel = {x = 0, y = SZ.y / 2, z = BED_T / 2}, size = {x = SZ.x, y = SZ.y, z = BED_T}},
 	}
-	bed.fill_w = S.x - 2 * BED_T - 0.1
-	bed.fill_hmax = S.y - BED_T - 0.1
-	bed.fills = spec.fills or {{id = "bedfill", z = S.z / 2, len = S.z - 2 * BED_T - 0.1, y0 = BED_T}}
+	bed.fill_w = SZ.x - 2 * BED_T - 0.1
+	bed.fill_hmax = SZ.y - BED_T - 0.1
+	bed.fills = spec.fills or {{id = "bedfill", z = SZ.z / 2, len = SZ.z - 2 * BED_T - 0.1, y0 = BED_T}}
 	def.bed = bed
 	def.tail_lat, def.tail_dy = spec.overlap_lat, spec.overlap_dy   -- 車斗那段的倒車、轉彎檢查（V.tail_guard）
 	def.look_limit = def.look_limit or math.rad(75)   -- 駕駛只看車頭前方 150°（不會轉頭看到自己的車斗）

@@ -143,7 +143,8 @@ core.register_node(CASING, {
 	}},
 	selection_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0.3, 0.5}},
 	collision_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.38, 0.5}},
-	groups = {not_in_creative_inventory = 1},
+	-- 底下的方塊被挖掉就跟著消失（attached_node：貼著下面那格）
+	groups = {not_in_creative_inventory = 1, attached_node = 1},
 	drop = "",
 	on_rightclick = function(pos, node, clicker)
 		if not (clicker and clicker:is_player()) then return end
@@ -152,6 +153,15 @@ core.register_node(CASING, {
 })
 
 -- 鑽孔取名：對套管右鍵。自己組（和老師）可以改；名字存在鑽孔紀錄（bh:<帳戶>）裡，空白就回到 BH-n
+-- 爆破、崩塌直接改地圖，不會觸發貼附檢查：每 10 秒看一次，底下空了（不是可以站的方塊）就拿掉
+core.register_abm({
+	label = "Borehole casing without ground", nodenames = {CASING}, interval = 10, chance = 1,
+	action = function(pos)
+		local below = core.registered_nodes[core.get_node({x = pos.x, y = pos.y - 1, z = pos.z}).name]
+		if below and below.walkable == false then core.remove_node(pos) end
+	end,
+})
+
 local NAME_FORM = "rockmech:borehole_name"
 local naming = {}            -- 玩家名稱 → 套管位置
 local function casing_info(pos, acc, n, depth)
