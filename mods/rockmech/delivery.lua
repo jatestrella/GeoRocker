@@ -169,7 +169,8 @@ end
 -- 施工單
 ---------------------------------------------------------------------------
 
-local PAPER = "[fill:16x16:#00000000^[fill:12x14:2,1:#f2eee0^[fill:8x1:4,4:#808080^[fill:8x1:4,7:#808080^[fill:6x1:4,10:#808080"
+-- 施工單的圖示：建築物的圖示，右下角疊一張小施工單（devtools/make_icons.py）
+local BADGE = "rockmech_order_badge.png"
 local ORDERS = {      -- 施工單 → 原本的物品、標籤顏色、名稱、有沒有受料倉（要檢查施工範圍）
 	{order = "rockmech:order_crusher", item = "rockmech:crusher", color = "#b08a20", label = "破碎站", hopper = true},
 	{order = "rockmech:order_crusher_big", item = "rockmech:crusher_big", color = "#4a5058", label = "大型破碎站", hopper = true},
@@ -209,7 +210,7 @@ for _, o in ipairs(ORDERS) do
 	local desc = o.label .. "施工單\n拿著對地面按右鍵，就在那裡施工（" .. (o.hopper and "受料倉朝自己這邊挖，先看地上的預覽框" or o.how) .. "）"
 	core.register_craftitem(o.order, {
 		description = desc .. (o.item == "rockmech:belt" and "\n左鍵點輸送帶收回那一格（加回施工單），點別的地方切換坡度" or ""),
-		inventory_image = PAPER .. "^[fill:12x3:2,1:" .. o.color,
+		inventory_image = (orig and orig.inventory_image ~= "" and orig.inventory_image or "rockmech_icon_crusher.png") .. "^" .. BADGE,
 		stack_max = o.item == "rockmech:belt" and 99 or 1,
 		on_place = function(itemstack, placer, pointed)
 			if pointed.type ~= "node" or not placer or not orig then return itemstack end

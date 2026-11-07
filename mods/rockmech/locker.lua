@@ -31,6 +31,7 @@ end
 core.register_node(LOCKER, {
 	description = ("置物箱\n放小東西，%d 格；全組共用，只有自己組和老師打得開\n拆掉（要先清空）變回施工單"):format(SLOTS),
 	tiles = {SIDE, SIDE, SIDE, SIDE, SIDE, FRONT},
+	inventory_image = "rockmech_icon_locker.png",      -- devtools/make_icons.py
 	paramtype2 = "facedir",
 	groups = {cracky = 2, not_in_creative_inventory = 1},
 	is_ground_content = false,

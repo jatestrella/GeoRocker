@@ -665,7 +665,7 @@ local crusher_def = {
 	paramtype = "light",
 	node_box = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}},
 	tiles = {BODY},
-	inventory_image = BODY,
+	inventory_image = "rockmech_icon_crusher.png",      -- devtools/make_icons.py
 	groups = {cracky = 2},
 	is_ground_content = false,
 	on_place = function(itemstack, placer, pointed)
@@ -708,7 +708,7 @@ local big = table.copy(crusher_def)
 local BIG_BODY = "[fill:16x16:#4a5058^[fill:16x2:0,0:#f0c020^[fill:16x2:0,14:#f0c020^[fill:2x2:2,0:#202020^[fill:2x2:8,0:#202020^[fill:2x2:14,0:#202020"
 big.description = ("Large crusher (大型破碎站)\n處理能力 %g t/s（一般破碎站 %g t/s）\n對著平地按右鍵放置，朝自己的方向挖 %d×%d m 受料倉"):format(
 	cfg.crusher_big_rate, cfg.crusher_rate, SIZE, SIZE)
-big.tiles, big.inventory_image = {BIG_BODY}, BIG_BODY
+big.tiles, big.inventory_image = {BIG_BODY}, "rockmech_icon_crusher_big.png"
 big.node_box = {type = "fixed", fixed = {{-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}, {-0.6, 2.4, -0.6, 0.6, 2.9, 0.6}}}
 core.register_node(CRUSHER_BIG, big)
 

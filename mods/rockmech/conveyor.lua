@@ -427,7 +427,7 @@ end
 
 core.register_craftitem(ITEM, {
 	description = "輸送帶\n右鍵放：點輸送帶從那格往前接，點地面從地上開始\n左鍵點輸送帶收回那一格，點別的地方切換坡度",
-	inventory_image = "[fill:16x16:#00000000^[fill:16x6:0,5:#6c6c6c^[fill:14x3:1,6:#262626^[fill:2x5:2,11:#4a4a4a^[fill:2x5:12,11:#4a4a4a",
+	inventory_image = "rockmech_icon_belt.png",      -- devtools/make_icons.py
 	stack_max = 99,
 	on_use = function(itemstack, user, pointed)
 		if not user then return end

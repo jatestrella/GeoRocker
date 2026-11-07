@@ -348,7 +348,7 @@ core.register_node(PLANT, {
 	paramtype = "light",
 	node_box = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}},
 	tiles = {BODY},
-	inventory_image = BODY,
+	inventory_image = "rockmech_icon_plant.png",      -- devtools/make_icons.py
 	groups = {cracky = 2},
 	is_ground_content = false,
 	on_place = function(itemstack, placer, pointed)
