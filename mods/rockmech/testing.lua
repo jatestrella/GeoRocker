@@ -18,7 +18,7 @@ local function ucs_of(key)
 	local l = cfg.lithologies[key]
 	return l and l.ucs / (cfg.model_scale or 1)
 end
-local function tell(name, msg) core.chat_send_player(name, msg) end
+local function tell(name, msg) rockmech.notify(name, msg) end
 
 -- 回彈值 R ↔ UCS（Katz et al. 2000）
 local function r_of_ucs(ucs) return math.log(math.max(2.3, ucs) / 2.208) / 0.067 end

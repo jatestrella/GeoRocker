@@ -21,7 +21,7 @@ local SAW, BENCH = "rockmech:sawbench", "rockmech:workbench"
 local SAW_FORM, BENCH_FORM = "rockmech:sawbench", "rockmech:workbench"
 local USE_R = 4             -- 離台子幾公尺內才能用
 
-local function tell(name, msg) if name then core.chat_send_player(name, S("[Woodwork] @1", msg)) end end
+local function tell(name, msg) if name then rockmech.notify(name, S("[Woodwork] @1", msg)) end end
 
 ---------------------------------------------------------------------------
 -- 遊戲內建的木製品：加進木材（岩石力學裡算空格），空手挖得起來；原木的說明改成中文

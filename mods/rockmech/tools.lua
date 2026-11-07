@@ -136,7 +136,7 @@ core.register_tool("rockmech:compass", {
 		elseif rockmech.lith_of_node[node.name] then
 			rockmech.fem_request(pos, name)
 		else
-			core.chat_send_player(name, core.colorize("#80d0ff", S("[Compass]")) .. " " .. S("This is not rock"))
+			rockmech.notify(name, core.colorize("#80d0ff", S("[Compass]")) .. " " .. S("This is not rock"))
 		end
 		return nil
 	end,
@@ -710,7 +710,7 @@ if core.get_modpath("sfinv") and sfinv then
 				local v = fields["rm_" .. t.id]
 				if v ~= nil then
 					local _, msg = rockmech.set_toggle(t.id, v == "true", name)
-					core.chat_send_player(name, "[rockmech] " .. msg)
+					rockmech.notify(name, "[rockmech] " .. msg)
 					handled = true
 				end
 			end

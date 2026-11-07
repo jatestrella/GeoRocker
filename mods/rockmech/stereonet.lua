@@ -27,7 +27,7 @@ local function save(stack, d)
 		or S("Geological compass (stereonet: @1 joint readings)", tostring(#d.m)))
 end
 local function gauss() return (math.random() + math.random() + math.random() - 1.5) * 2 end
-local function tell(name, msg) core.chat_send_player(name, core.colorize("#80d0ff", S("[Stereonet]") .. " ") .. msg) end
+local function tell(name, msg) rockmech.notify(name, core.colorize("#80d0ff", S("[Stereonet]") .. " ") .. msg) end
 
 -- 量節理：切過這一格（六個面任一面）而且是節理（不是岩橋）的組
 local function measure_joints(pos)

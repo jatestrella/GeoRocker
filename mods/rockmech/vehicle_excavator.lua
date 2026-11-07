@@ -98,7 +98,7 @@ rockmech.op_paid = op_paid
 -- 只有派了操作員的怪手聽得到。走法見 op_drive
 local RADIO = "rockmech:radio"
 local radio_sel = {}        -- 玩家名稱 → 選定的怪手 uid
-local function radio_tell(name, msg) if name then core.chat_send_player(name, S("[Radio] @1", msg)) end end
+local function radio_tell(name, msg) if name then rockmech.notify(name, S("[Radio] @1", msg)) end end
 local function excavator_of(ref)
 	for _ = 1, 3 do                          -- 點到手臂、駕駛室這些零件：往上找車身
 		local e = ref and ref:get_luaentity()
@@ -182,7 +182,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if fields.off and op.on then
 		-- 叫下車：站到怪手旁邊等（照樣計薪），人才能上車
 		rockmech.op_step_down(self)
-		core.chat_send_player(name, S("[Operator] Stepped down and waiting beside the excavator; right-click him to send him back to work or to rest at base"))
+		rockmech.notify(name, S("[Operator] Stepped down and waiting beside the excavator; right-click him to send him back to work or to rest at base"))
 		op_editing[name] = nil
 		core.close_formspec(name, OP_ITEM)
 		return true
@@ -417,12 +417,12 @@ local function excavator(kind, P)
 	-- 油壓破碎錘改裝套件（vehicles.lua：拿著套件對怪手右鍵）
 	function def.install_breaker(self, player)
 		local name = player:get_player_name()
-		if self.breaker then core.chat_send_player(name, S("[Breaker] This one already has it installed")); return end
+		if self.breaker then rockmech.notify(name, S("[Breaker] This one already has it installed")); return end
 		self.breaker, self.tool = true, "bucket"
 		if not core.is_creative_enabled(name) then
 			local st = player:get_wielded_item(); st:take_item(); player:set_wielded_item(st)
 		end
-		core.chat_send_player(name, S("[Breaker] Installed: with an empty bucket press Space to switch to the breaker, then point at rock and press E to break it"))
+		rockmech.notify(name, S("[Breaker] Installed: with an empty bucket press Space to switch to the breaker, then point at rock and press E to break it"))
 		update_hud(self)
 	end
 	def.show_tool = show_tool
@@ -438,7 +438,7 @@ local function excavator(kind, P)
 		end
 		if clicker:get_wielded_item():get_name() ~= OP_ITEM then return false end
 		if op and op.standby then
-			core.chat_send_player(name, S("[Operator] This excavator's operator is waiting beside it: right-click him to send him in"))
+			rockmech.notify(name, S("[Operator] This excavator's operator is waiting beside it: right-click him to send him in"))
 			return true
 		end
 		local stack = clicker:get_wielded_item()
@@ -450,7 +450,7 @@ local function excavator(kind, P)
 			clicker:set_wielded_item(stack)
 		end
 		op_show(self)
-		core.chat_send_player(name, op_paid(self) and S("[Operator] Getting in to work, daily wage $@1 (paid while team members are online)", ("%g"):format(rockmech.operator_wage()))
+		rockmech.notify(name, op_paid(self) and S("[Operator] Getting in to work, daily wage $@1 (paid while team members are online)", ("%g"):format(rockmech.operator_wage()))
 			or S("[Operator] Getting in to work"))
 		op_editing[name] = self
 		core.show_formspec(name, OP_ITEM, op_form(self))

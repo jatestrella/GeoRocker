@@ -66,7 +66,7 @@ function rockmech.impact_hit(pos, m, v, hits, now, dtime)
 					local dmg = math.min(HP_MAX, math.floor(kj / HP_KJ))
 					if dmg >= 1 and not target:get_armor_groups().immortal then
 						target:set_hp(target:get_hp() - dmg, {type = "set_hp", from = "mod", rockmech = "rockfall"})
-						core.chat_send_player(target:get_player_name(), S("[Rockfall] You were hit (@1 kJ) and lost @2 HP", ("%.0f"):format(kj), ("%d"):format(dmg)))
+						rockmech.notify(target:get_player_name(), S("[Rockfall] You were hit (@1 kJ) and lost @2 HP", ("%.0f"):format(kj), ("%d"):format(dmg)))
 					end
 				elseif rockmech.vehicles.damage then
 					rockmech.vehicles.damage(target:get_luaentity(), kj)

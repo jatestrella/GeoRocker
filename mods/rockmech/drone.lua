@@ -185,7 +185,7 @@ end
 local function take_off(player)
 	local name = player:get_player_name()
 	if player:get_attach() then
-		core.chat_send_player(name, S("[Drone] Get out of the vehicle before taking off"))
+		rockmech.notify(name, S("[Drone] Get out of the vehicle before taking off"))
 		return
 	end
 	local home = player:get_pos()
@@ -221,7 +221,7 @@ local function take_off(player)
 		f.psnd_move = core.sound_play("rockmech_drone", {to_player = name, loop = true, gain = SOUND_OFF, pitch = PITCH_MOVE})
 		f.moving = false
 	end
-	core.chat_send_player(name, S("[Drone] Take-off! WASD to move, E to speed up, Space to climb, Shift to descend; right-click again to return to the take-off point (limits: @1 m above the take-off point, within @2 m horizontally)",
+	rockmech.notify(name, S("[Drone] Take-off! WASD to move, E to speed up, Space to climb, Shift to descend; right-click again to return to the take-off point (limits: @1 m above the take-off point, within @2 m horizontally)",
 		("%d"):format(CEILING), ("%d"):format(cfg.drone_range)))
 end
 

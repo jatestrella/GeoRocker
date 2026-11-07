@@ -105,7 +105,7 @@ end
 function rockmech.owner_ok(owner, name)
 	if owner == "" or owner == name or owner == rockmech.account_of(name) then return true end
 	if core.check_player_privs(name, {server = true}) then return true end
-	core.chat_send_player(name, S("This facility belongs to @1; other teams cannot touch it", rockmech.account_label(owner)))
+	rockmech.notify(name, S("This facility belongs to @1; other teams cannot touch it", rockmech.account_label(owner)))
 	return false
 end
 
@@ -190,7 +190,7 @@ local function open_market()
 		end
 		storage:set_float(PRICE .. ore.key, math.exp(x))
 		local prev = ore.price * storage:get_float(PRICE_PREV .. ore.key)
-		core.chat_send_all(S("[Market] Today's @1 price $@2/t (yesterday $@3, @4 @5%)", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)),
+		rockmech.notify_all(S("[Market] Today's @1 price $@2/t (yesterday $@3, @4 @5%)", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)),
 			("%.0f"):format(prev), price_change(ore) >= 0 and "▲" or "▼", ("%.0f"):format(math.abs(price_change(ore)) * 100)))
 	end
 	for _, player in ipairs(core.get_connected_players()) do
@@ -379,7 +379,7 @@ local function report(meta, owner, dump, day)
 	local title = S("Trading day @1   @2 t", tostring(day + 1), ("%.1f"):format(bt))
 	if dump then
 		for _, m in ipairs(members) do
-			core.chat_send_player(m, bf > 0 and S("[Waste dump] Daily total: @1 t dumped, dumping fee −$@2", ("%.1f"):format(bt), ("%.0f"):format(bf))
+			rockmech.notify(m, bf > 0 and S("[Waste dump] Daily total: @1 t dumped, dumping fee −$@2", ("%.1f"):format(bt), ("%.0f"):format(bf))
 				or S("[Waste dump] Daily total: @1 t dumped", ("%.1f"):format(bt)))
 			if bf > 0 then
 				show_bill(m, S("Waste dump daily statement   @1", title), {
@@ -417,7 +417,7 @@ local function report(meta, owner, dump, day)
 		end
 		core.after(COIN_LEAD, function()
 			for _, m in ipairs(members) do
-				core.chat_send_player(m, S("[Crusher] Daily total: @1 t, net income @2", ("%.1f"):format(bt), money_text(net)))
+				rockmech.notify(m, S("[Crusher] Daily total: @1 t, net income @2", ("%.1f"):format(bt), money_text(net)))
 				show_bill(m, S("Crusher daily statement   @1", title), rows)
 			end
 		end)
@@ -734,7 +734,7 @@ local crusher_def = {
 		else dz = look.z > 0 and -1 or 1 end
 		local name = placer:get_player_name()
 		if not rockmech.crusher_build(pos, dx, dz, name, itemstack:get_name()) then
-			core.chat_send_player(name, S("[Crusher] Place it on flat ground: the 3×3 m machine and the @1×@2 m area in front need level ground, solid rock below and clear space above",
+			rockmech.notify(name, S("[Crusher] Place it on flat ground: the 3×3 m machine and the @1×@2 m area in front need level ground, solid rock below and clear space above",
 				tostring(SIZE), tostring(SIZE)))
 			return itemstack
 		end

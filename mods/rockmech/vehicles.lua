@@ -21,7 +21,7 @@ function V.may_use(self, name)
 	if not self.owner or self.owner == "" or not rockmech.account_of then return true end
 	if rockmech.account_of(name) == self.owner then return true end
 	if core.check_player_privs(name, {server = true}) then return true end
-	core.chat_send_player(name, S("This vehicle belongs to @1; other teams cannot drive it", rockmech.account_label(self.owner)))
+	rockmech.notify(name, S("This vehicle belongs to @1; other teams cannot drive it", rockmech.account_label(self.owner)))
 	return false
 end
 -- 血條：受損的車頭上浮一條（永遠面向看的人），滿血時拿掉。50% 以上綠、30% 以上黃、以下紅，報廢是空的紅框
@@ -131,8 +131,8 @@ function V.damage(self, kj)
 	local msg = self.hp <= 0 and S("@1 was wrecked by falling rock (@2 kJ); get a mechanic to repair it", def.desc, ("%.0f"):format(kj))
 		or S("@1 was hit by falling rock (@2 kJ); durability @3% left", def.desc, ("%.0f"):format(kj), ("%d"):format(math.floor(self.hp + 0.5)))
 	if self.owner and rockmech.account_members then
-		for _, m in ipairs(rockmech.account_members(self.owner)) do core.chat_send_player(m, S("[Vehicle] @1", msg)) end
-	elseif who then core.chat_send_player(who, S("[Vehicle] @1", msg)) end
+		for _, m in ipairs(rockmech.account_members(self.owner)) do rockmech.notify(m, S("[Vehicle] @1", msg)) end
+	elseif who then rockmech.notify(who, S("[Vehicle] @1", msg)) end
 end
 -- 受損的車冒煙（沒有人開也冒）
 local function damage_smoke(self, dtime)
@@ -1300,7 +1300,7 @@ function V.register(kind, def)
 			end
 			if clicker:get_wielded_item():get_name() == "rockmech:breaker_kit" then  -- 油壓破碎錘改裝套件：只有怪手裝得上
 				if def.install_breaker then def.install_breaker(self, clicker)
-				else core.chat_send_player(name, S("[Breaker] Only excavators can be fitted with it")) end
+				else rockmech.notify(name, S("[Breaker] Only excavators can be fitted with it")) end
 				return
 			end
 			if def.rightclick and def.rightclick(self, clicker) then return end   -- 拿著特定物品按右鍵（怪手操作員）
@@ -1335,7 +1335,7 @@ function V.register(kind, def)
 			if rockmech.cfg.career and puncher:get_meta():get_int("godmode:on") ~= 1 then return true end
 			if not V.may_use(self, puncher:get_player_name()) then return true end
 			if rockmech.cfg.career and load_total(self) > 0 then    -- 經營模式碎石不進物品欄
-				core.chat_send_player(puncher:get_player_name(), S("There is still rubble on the vehicle; dump it before picking the vehicle up"))
+				rockmech.notify(puncher:get_player_name(), S("There is still rubble on the vehicle; dump it before picking the vehicle up"))
 				return true
 			end
 			local inv = puncher:get_inventory()

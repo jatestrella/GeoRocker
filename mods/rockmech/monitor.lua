@@ -132,7 +132,7 @@ core.register_node(PRISM, {
 	groups = {dig_immediate = 2, attached_node = 1},
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" or not rockmech.lith_of_node[core.get_node(pointed.under).name] then
-			if placer and placer:is_player() then core.chat_send_player(placer:get_player_name(), S("[Monitor] Must be attached to a rock face")) end
+			if placer and placer:is_player() then rockmech.notify(placer:get_player_name(), S("[Monitor] Must be attached to a rock face")) end
 			return itemstack
 		end
 		return core.item_place_node(itemstack, placer, pointed)

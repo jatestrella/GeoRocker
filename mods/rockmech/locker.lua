@@ -55,7 +55,7 @@ core.register_node(LOCKER, {
 	can_dig = function(pos, player)
 		if not (player and may(pos, player:get_player_name())) then return false end
 		if not core.get_meta(pos):get_inventory():is_empty("main") then
-			core.chat_send_player(player:get_player_name(), S("[Locker] There are still items inside: take them out before removing it"))
+			rockmech.notify(player:get_player_name(), S("[Locker] There are still items inside: take them out before removing it"))
 			return false
 		end
 		return true

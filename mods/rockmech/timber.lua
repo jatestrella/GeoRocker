@@ -20,7 +20,7 @@ local SLAB = "rockmech:timber_slab"
 local IS_POST = {[POST] = true, [POST_TOP] = true}
 
 local function tell(player, msg)
-	if player and player:is_player() then core.chat_send_player(player:get_player_name(), S("[Timber] @1", msg)) end
+	if player and player:is_player() then rockmech.notify(player:get_player_name(), S("[Timber] @1", msg)) end
 end
 local function creative(player)
 	return core.is_creative_enabled(player and player:is_player() and player:get_player_name() or "")
@@ -462,7 +462,7 @@ local function break_post(top)
 	core.sound_play("default_dig_choppy", {pos = top, gain = 1.0, max_hear_distance = 32}, true)
 	for _, pl in ipairs(core.get_connected_players()) do
 		if vector.distance(pl:get_pos(), top) <= 32 then
-			core.chat_send_player(pl:get_player_name(), S("[Timber post] The timber post at @1 was crushed: it could not hold the roof above", core.pos_to_string(top)))
+			rockmech.notify(pl:get_player_name(), S("[Timber post] The timber post at @1 was crushed: it could not hold the roof above", core.pos_to_string(top)))
 		end
 	end
 	core.log("action", ("[rockmech] 木柱壓斷 %s（長 %d m）"):format(core.pos_to_string(top), len))

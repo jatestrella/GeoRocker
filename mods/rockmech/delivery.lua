@@ -229,7 +229,7 @@ for _, o in ipairs(ORDERS) do
 				local cells = rockmech.facility_cells(o.item, a, dx, dz)
 				local who = rockmech.cells_blocked(cells, a.y - 1, a.y + 4, placer)
 				if who then
-					core.chat_send_player(name, S("[Construction] There is @1 in the construction area: move it away first", who))
+					rockmech.notify(name, S("[Construction] There is @1 in the construction area: move it away first", who))
 					return itemstack
 				end
 				local tmp = ItemStack(o.item)
@@ -248,7 +248,7 @@ for _, o in ipairs(ORDERS) do
 							if nd and nd.walkable then q.y = y + 0.5; break end
 						end
 						placer:set_pos(q)
-						core.chat_send_player(name, S("[Construction] You were standing where the hopper goes, so you were moved outside it"))
+						rockmech.notify(name, S("[Construction] You were standing where the hopper goes, so you were moved outside it"))
 						break
 					end
 				end

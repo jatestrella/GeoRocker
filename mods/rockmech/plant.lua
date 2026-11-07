@@ -367,7 +367,7 @@ core.register_node(PLANT, {
 		else dz = look.z > 0 and -1 or 1 end
 		local name = placer:get_player_name()
 		if not build(pos, dx, dz, name) then
-			core.chat_send_player(name, S("[Ore plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above",
+			rockmech.notify(name, S("[Ore plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above",
 				tostring(H.SIZE), tostring(H.SIZE), tostring(TOWER_H)))
 			return itemstack
 		end

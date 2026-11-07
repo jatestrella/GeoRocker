@@ -107,7 +107,7 @@ local function section_owned(pos, node)
 end
 
 local function tell(player, msg)
-	if player and player:is_player() then core.chat_send_player(player:get_player_name(), S("[Support]") .. " " .. msg) end
+	if player and player:is_player() then rockmech.notify(player:get_player_name(), S("[Support]") .. " " .. msg) end
 end
 local function creative(player)
 	return core.is_creative_enabled(player and player:is_player() and player:get_player_name() or "")

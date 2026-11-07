@@ -194,13 +194,13 @@ local function use(player, pointed_thing, flood, tag)
 		local starts = core.find_nodes_in_area(vector.subtract(under, 2), vector.add(under, 2),
 			{"group:rockmech_rubble"})
 		if #starts == 0 then
-			core.chat_send_player(pname, S("[@1] No rubble within 2 blocks", tag))
+			rockmech.notify(pname, S("[@1] No rubble within 2 blocks", tag))
 			return
 		end
 		cells, p1, p2, capped = flood_cells(starts)
 	elseif flood then
 		if not rockmech.is_rubble(core.get_node(under).name) then
-			core.chat_send_player(pname, S("[Rubble wand] Right-click must point at rubble"))
+			rockmech.notify(pname, S("[Rubble wand] Right-click must point at rubble"))
 			return
 		end
 		cells, p1, p2, capped = flood_cells(under)
@@ -218,7 +218,7 @@ local function use(player, pointed_thing, flood, tag)
 		local got = collect(player, levels)
 		if got ~= "" then msg = S("@1, collected into inventory: @2", msg, got) end
 	end
-	core.chat_send_player(pname, msg)
+	rockmech.notify(pname, msg)
 	core.log("action", ("[rockmech] %s 清碴 %s %s：%d 格（%.1f ms）"):format(pname,
 		flood and "相連" or "3×3×3", core.pos_to_string(under), count,
 		(core.get_us_time() - t0) / 1000))
@@ -246,7 +246,7 @@ core.register_tool("rockmech:rubble_wand", {
 local function blast_at(player, pointed_thing)
 	if not player or not player:is_player() or pointed_thing.type ~= "node" then return end
 	if not (tnt and tnt.boom) then
-		core.chat_send_player(player:get_player_name(), S("[Blast wand] The tnt mod is not loaded"))
+		rockmech.notify(player:get_player_name(), S("[Blast wand] The tnt mod is not loaded"))
 		return
 	end
 	-- 炸藥放在岩面前那一格（同把 TNT 放在岩面上點燃）；explode_center：該格算一個 TNT

@@ -95,11 +95,11 @@ function AHS.install(self, player)
 	local name = player:get_player_name()
 	local d = V.TYPES[self.vkind]
 	if not (d and d.bed and not d.no_ahs) then
-		core.chat_send_player(name, S("[AHS] The autonomous haulage kit can only be installed on dump trucks and haul trucks"))
+		rockmech.notify(name, S("[AHS] The autonomous haulage kit can only be installed on dump trucks and haul trucks"))
 		return
 	end
 	if self.ahs_mod then
-		core.chat_send_player(name, S("[AHS] This vehicle already has an autonomous haulage kit"))
+		rockmech.notify(name, S("[AHS] This vehicle already has an autonomous haulage kit"))
 		return
 	end
 	local st = player:get_wielded_item()
@@ -110,7 +110,7 @@ function AHS.install(self, player)
 	if self.uid then mod_store():set_string(MOD_KEY .. self.uid, "1") end
 	V.refresh(self)
 	core.log("action", ("[rockmech] %s 在 %s（%s）裝上自動駕駛模組"):format(name, d.desc, tostring(self.uid)))
-	core.chat_send_player(name, S("[AHS] Autonomous haulage kit installed on @1: get in and press E to set a route", d.desc))
+	rockmech.notify(name, S("[AHS] Autonomous haulage kit installed on @1: get in and press E to set a route", d.desc))
 end
 
 -- 名牌上的無人駕駛狀態
@@ -1025,7 +1025,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		end
 	end
 	if not fields.delete then deleting[name] = nil end      -- 按了別的就取消刪除
-	if msg then core.chat_send_player(name, S("[AHS] @1", msg)) end
+	if msg then rockmech.notify(name, S("[AHS] @1", msg)) end
 	V.refresh(self)
 	if fields.quit or fields.ok then editing[name], picked[name], deleting[name] = nil, nil, nil
 	else core.show_formspec(name, "rockmech:ahs", formspec(self, name)) end

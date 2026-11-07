@@ -75,17 +75,17 @@ core.register_craftitem("rockmech:gsi_card", {
 ---------------------------------------------------------------------------
 
 local function tell(acc, msg)
-	for _, m in ipairs(rockmech.account_members(acc)) do core.chat_send_player(m, S("[Geologist] @1", msg)) end
+	for _, m in ipairs(rockmech.account_members(acc)) do rockmech.notify(m, S("[Geologist] @1", msg)) end
 end
 
 function rockmech.knowledge_hire(name)
 	local acc = rockmech.account_of(name)
 	if hire_left(acc) > 0 then
-		core.chat_send_player(name, S("[Geologist] Already hired, @1 left", mmss(hire_left(acc))))
+		rockmech.notify(name, S("[Geologist] Already hired, @1 left", mmss(hire_left(acc))))
 	elseif not rockmech.has_account(name) then
-		core.chat_send_player(name, S("[Geologist] You are not in a team yet, so you have no funds"))
+		rockmech.notify(name, S("[Geologist] You are not in a team yet, so you have no funds"))
 	elseif rockmech.money(name) < HIRE_COST then
-		core.chat_send_player(name, S("[Geologist] Not enough money: hiring costs @1", money_text(HIRE_COST)))
+		rockmech.notify(name, S("[Geologist] Not enough money: hiring costs @1", money_text(HIRE_COST)))
 	else
 		rockmech.add_money(name, -HIRE_COST)
 		storage:set_float(HIRE .. acc, HIRE_SECS)
@@ -151,7 +151,7 @@ core.register_entity(FOLLOWER, {
 	on_punch = function() return true end,
 	on_rightclick = function(self, clicker)
 		if clicker and clicker:is_player() then
-			core.chat_send_player(clicker:get_player_name(), S("[Geologist] @1 left on my contract. While I'm here, the whole team can see grade, lithology, GSI, stress and factor of safety.",
+			rockmech.notify(clicker:get_player_name(), S("[Geologist] @1 left on my contract. While I'm here, the whole team can see grade, lithology, GSI, stress and factor of safety.",
 				mmss(hire_left(self.acc or ""))))
 		end
 	end,
@@ -561,17 +561,17 @@ function rockmech.knowledge_exam(player, ab)
 	local name = player:get_player_name()
 	local meta = player:get_meta()
 	if meta:get_string(KNOW .. ab) == "1" then
-		core.chat_send_player(name, S("[Training] You have already passed \"@1\"", S(AB[ab].label)))
+		rockmech.notify(name, S("[Training] You have already passed \"@1\"", S(AB[ab].label)))
 		return
 	end
 	local wait = meta:get_int(COOL .. ab) - os.time()
 	if wait > 0 then
-		core.chat_send_player(name, S("[Training] You have to wait @1 before retaking \"@2\"", mmss(wait), S(AB[ab].label)))
+		rockmech.notify(name, S("[Training] You have to wait @1 before retaking \"@2\"", mmss(wait), S(AB[ab].label)))
 		return
 	end
 	local pool = BANK[ab]
 	if #pool < EXAM_N then
-		core.chat_send_player(name, S("[Training] The \"@1\" question bank only has @2 questions; at least @3 are needed (ask the teacher to add some to questions.txt)",
+		rockmech.notify(name, S("[Training] The \"@1\" question bank only has @2 questions; at least @3 are needed (ask the teacher to add some to questions.txt)",
 			S(AB[ab].label), tostring(#pool), tostring(EXAM_N)))
 		return
 	end
@@ -625,7 +625,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		core.log("action", ("[rockmech] exam %s passed %s (%d/%d)"):format(name, ab, right, #s.qs))
 		if rockmech.account_of then
 			for _, m in ipairs(rockmech.account_members(rockmech.account_of(name))) do
-				core.chat_send_player(m, S("[Training] @1 passed \"@2\"", name, S(AB[ab].label)))
+				rockmech.notify(m, S("[Training] @1 passed \"@2\"", name, S(AB[ab].label)))
 			end
 		end
 	else

@@ -109,7 +109,7 @@ core.register_on_joinplayer(function(player)
 	end)
 	if storage:get_string(NICK .. name) == "" and not is_teacher(name) then
 		core.after(4, function()
-			core.chat_send_player(name, S("[Name tag] You have not set a nickname, so classmates see your account name. Press I → \"Profile\" to set a nickname"))
+			rockmech.notify(name, S("[Name tag] You have not set a nickname, so classmates see your account name. Press I → \"Profile\" to set a nickname"))
 		end)
 	end
 end)

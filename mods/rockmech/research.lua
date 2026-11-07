@@ -216,7 +216,7 @@ local function open(player, who)
 end
 
 local function tell(acc, msg)
-	for _, m in ipairs(rockmech.account_members(acc)) do core.chat_send_player(m, S("[Research lab] @1", msg)) end
+	for _, m in ipairs(rockmech.account_members(acc)) do rockmech.notify(m, S("[Research lab] @1", msg)) end
 end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
@@ -244,11 +244,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local d
 			for _, x in ipairs(damaged_list(acc)) do if x.uid == uid then d = x end end
 			if repair_job(acc) then
-				core.chat_send_player(name, S("[Mechanic] Already repairing another vehicle; one at a time"))
+				rockmech.notify(name, S("[Mechanic] Already repairing another vehicle; one at a time"))
 			elseif d then
 				local cost, secs = repair_quote(d)
 				if rockmech.money(name) < cost then
-					core.chat_send_player(name, S("[Mechanic] Not enough money: repairing this one costs @1", money_text(cost)))
+					rockmech.notify(name, S("[Mechanic] Not enough money: repairing this one costs @1", money_text(cost)))
 				else
 					rockmech.add_money(name, -cost)
 					set_repair(acc, {uid = uid, kind = d.kind, left = secs, total = secs})
@@ -267,13 +267,13 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local lv = rockmech.research_level(acc, it.key)
 			local cost = cost_of(it, lv + 1)
 			if job_of(acc, who) then
-				core.chat_send_player(name, S("[Research lab] Already researching another item; a researcher can only work on one item at a time"))
+				rockmech.notify(name, S("[Research lab] Already researching another item; a researcher can only work on one item at a time"))
 			elseif lv >= it.max then
-				core.chat_send_player(name, S("[Research lab] Already at the maximum level"))
+				rockmech.notify(name, S("[Research lab] Already at the maximum level"))
 			elseif not rockmech.has_account(name) then
-				core.chat_send_player(name, S("[Research lab] You are not in a team yet, so you have no funds"))
+				rockmech.notify(name, S("[Research lab] You are not in a team yet, so you have no funds"))
 			elseif rockmech.money(name) < cost then
-				core.chat_send_player(name, S("[Research lab] Not enough money: @1 Lv@2 costs @3", S(it.label), tostring(lv + 1), money_text(cost)))
+				rockmech.notify(name, S("[Research lab] Not enough money: @1 Lv@2 costs @3", S(it.label), tostring(lv + 1), money_text(cost)))
 			else
 				rockmech.add_money(name, -cost)
 				set_job(acc, who, {key = it.key, level = lv + 1, left = secs_of(it, lv + 1), total = secs_of(it, lv + 1)})

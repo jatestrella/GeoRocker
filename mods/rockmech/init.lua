@@ -16,6 +16,8 @@ function rockmech.desc_short(def)
 	return def.short_description or def.description or ""
 end
 
+dofile(modpath .. "/notify.lua")       -- 遊戲訊息顯示在左下角（rockmech.notify）
+
 -- 純模組
 rockmech.config = dofile(modpath .. "/config.lua")
 rockmech.joints = dofile(modpath .. "/joints.lua")

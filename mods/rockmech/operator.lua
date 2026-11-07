@@ -25,7 +25,7 @@ local BENCH_SPOTS = "opbench_spots"            -- {{acc, seats = {pos...}}...}
 local SEATS = 4
 local FOLLOW_GAP, WALK, TELEPORT = 1.5, 4, 30  -- 站在怪手邊緣外幾公尺、走路速度 (m/s)、離太遠就直接過去 (m)
 
-local function tell(name, msg) if name then core.chat_send_player(name, S("[Operator] @1", msg)) end end
+local function tell(name, msg) if name then rockmech.notify(name, S("[Operator] @1", msg)) end end
 local function geti(k) return storage:get_int(k) end
 local function addi(k, d) storage:set_int(k, math.max(0, storage:get_int(k) + d)) end
 function rockmech.op_rest_count(acc) return geti(REST .. acc) end

@@ -453,7 +453,7 @@ core.register_craftitem(ITEM, {
 		local r = list[i % #list + 1]
 		itemstack:get_meta():set_int("slope", r)
 		describe(itemstack, r)
-		core.chat_send_player(user:get_player_name(), S("[Conveyor] Slope: @1 (maximum inclination @2°)", slope_text(r), ("%g"):format(cfg.conveyor_max_angle)))
+		rockmech.notify(user:get_player_name(), S("[Conveyor] Slope: @1 (maximum inclination @2°)", slope_text(r), ("%g"):format(cfg.conveyor_max_angle)))
 		return itemstack
 	end,
 	on_place = function(itemstack, placer, pointed)
@@ -464,7 +464,7 @@ core.register_craftitem(ITEM, {
 			return udef.on_rightclick(pointed.under, un, placer, itemstack, pointed) or itemstack
 		end
 		local name = placer:get_player_name()
-		local function say(s) core.chat_send_player(name, S("[Conveyor]") .. " " .. s) end
+		local function say(s) rockmech.notify(name, S("[Conveyor]") .. " " .. s) end
 		local look = placer:get_look_dir()
 		local fd = core.dir_to_fourdir({x = look.x, y = 0, z = look.z})
 		local d = core.fourdir_to_dir(fd)

@@ -154,7 +154,7 @@ function rockmech.borehole_name_form(player, pos)
 	local meta = core.get_meta(pos)
 	local acc, n, depth = meta:get_string("acc"), meta:get_int("n"), meta:get_int("depth")
 	local b = find_bh(acc, n)
-	if not b then core.chat_send_player(name, S("[Borehole] No record found for this hole")); return end
+	if not b then rockmech.notify(name, S("[Borehole] No record found for this hole")); return end
 	local mine = not rockmech.owner_ok or rockmech.owner_ok(acc, name)
 	naming[name] = pos
 	local out = {"formspec_version[6]size[10,5]",
@@ -208,7 +208,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		end
 	end
 	local msg = S("[Borehole] @1 renamed @2 to @3", name, old, label_of(b))
-	for _, m in ipairs(rockmech.account_members and rockmech.account_members(acc) or {name}) do core.chat_send_player(m, msg) end
+	for _, m in ipairs(rockmech.account_members and rockmech.account_members(acc) or {name}) do rockmech.notify(m, msg) end
 	rockmech.borehole_name_form(player, pos)
 	return true
 end)
@@ -235,7 +235,7 @@ core.register_craftitem("rockmech:core_box", {
 		for _, b in ipairs(logs_of(acc)) do
 			if b.n == n then core.show_formspec(user:get_player_name(), FORM, log_form(user:get_player_name(), b)); return end
 		end
-		core.chat_send_player(user:get_player_name(), S("[Core box] No record found for this hole"))
+		rockmech.notify(user:get_player_name(), S("[Core box] No record found for this hole"))
 	end,
 })
 
@@ -414,26 +414,26 @@ local function stop_logging(name, msg)
 	logging[name] = nil
 	local p = core.get_player_by_name(name)
 	if p and L.hud then p:hud_remove(L.hud) end
-	if msg then core.chat_send_player(name, S("[Field notebook]") .. " " .. msg) end
+	if msg then rockmech.notify(name, S("[Field notebook]") .. " " .. msg) end
 end
 
 local function start_logging(player, pos)
 	local name = player:get_player_name()
 	local meta = core.get_meta(pos)
 	local acc, n, depth = meta:get_string("acc"), meta:get_int("n"), meta:get_int("depth")
-	if not find_bh(acc, n) then core.chat_send_player(name, S("[Field notebook] No borehole record found for this box")); return end
+	if not find_bh(acc, n) then rockmech.notify(name, S("[Field notebook] No borehole record found for this box")); return end
 	local entries = book_entries(player:get_wielded_item())
 	local have = false
 	for _, e in ipairs(entries) do if e.acc == acc and e.n == n then have = true end end
 	if not have and #entries >= BOOK_MAX then
-		core.chat_send_player(name, S("[Field notebook] Full (@1 holes): buy a new one", tostring(BOOK_MAX)))
+		rockmech.notify(name, S("[Field notebook] Full (@1 holes): buy a new one", tostring(BOOK_MAX)))
 		return
 	end
 	stop_logging(name)
 	logging[name] = {pos = pos, acc = acc, n = n, depth = depth, t = 0, need = math.max(1, depth) * LOG_SEC_PER_M,
 		hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.7}, alignment = {x = 0, y = 0},
 			number = 0x9fe0ff, text = "", z_index = 100})}
-	core.chat_send_player(name, S("[Field notebook] Logging @1 (depth @2 m, about @3 s): stay next to the core box and keep holding the field notebook",
+	rockmech.notify(name, S("[Field notebook] Logging @1 (depth @2 m, about @3 s): stay next to the core box and keep holding the field notebook",
 		bh_label(acc, n), tostring(depth), tostring(math.ceil(depth * LOG_SEC_PER_M))))
 end
 
@@ -487,7 +487,7 @@ core.register_craftitem(BOOK, {
 			local un = core.get_node(pointed.under)
 			local nd = core.registered_nodes[un.name]
 			if nd and nd.on_rightclick then return nd.on_rightclick(pointed.under, un, placer, itemstack, pointed) end
-			core.chat_send_player(placer:get_player_name(), S("[Field notebook] Right-click a core box to log it"))
+			rockmech.notify(placer:get_player_name(), S("[Field notebook] Right-click a core box to log it"))
 		end
 		return itemstack
 	end,
@@ -509,7 +509,7 @@ local function finish(name, d, why)
 	drilling[name] = nil
 	if d.on_done then d.on_done() end
 	if #d.rows == 0 then
-		core.chat_send_player(name, why and S("[Core drilling] Nothing was drilled (@1)", why) or S("[Core drilling] Nothing was drilled"))
+		rockmech.notify(name, why and S("[Core drilling] Nothing was drilled (@1)", why) or S("[Core drilling] Nothing was drilled"))
 		return
 	end
 	local acc = rockmech.account_of and rockmech.account_of(name) or name
@@ -544,16 +544,16 @@ local function finish(name, d, why)
 	end
 	if rockmech.account_members then
 		for _, m in ipairs(rockmech.account_members(acc)) do
-			core.chat_send_player(m, msg)
+			rockmech.notify(m, msg)
 		end
 	end
 end
 
 -- 從 collar（孔口那一格，空的）往下鑽到 max m。ok() 每一步檢查還能不能繼續（回傳停下的原因或 nil）
 function rockmech.coredrill_start(name, collar, max, ok, on_done)
-	if drilling[name] then core.chat_send_player(name, S("[Core drilling] Already drilling")); return false end
+	if drilling[name] then rockmech.notify(name, S("[Core drilling] Already drilling")); return false end
 	drilling[name] = {collar = collar, x = collar.x, y = collar.y - 1, z = collar.z, rows = {}, t = 0, max = max, ok = ok, on_done = on_done}
-	core.chat_send_player(name, S("[Core drilling] Drilling down (@1 s per metre, max @2 m)", tostring(SEC_PER_M), tostring(max)))
+	rockmech.notify(name, S("[Core drilling] Drilling down (@1 s per metre, max @2 m)", tostring(SEC_PER_M), tostring(max)))
 	return true
 end
 function rockmech.coredrill_depth(name) local d = drilling[name]; return d and #d.rows, d and d.max end
@@ -561,7 +561,7 @@ function rockmech.coredrill_depth(name) local d = drilling[name]; return d and #
 local function start_hand(player, pointed)
 	if pointed.type ~= "node" then return end
 	if pointed.above.y ~= pointed.under.y + 1 then
-		core.chat_send_player(player:get_player_name(), S("[Core drilling] Aim at the ground (the top of a block) to drill down"))
+		rockmech.notify(player:get_player_name(), S("[Core drilling] Aim at the ground (the top of a block) to drill down"))
 		return
 	end
 	local name = player:get_player_name()

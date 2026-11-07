@@ -228,7 +228,7 @@ function rockmech.career_load(player, self, def)
 	local now = core.get_us_time() / 1e6
 	local c = carried(player)
 	if c and c.box then
-		core.chat_send_player(name, S("You are holding a core box: right-click to put it down first"))
+		rockmech.notify(name, S("You are holding a core box: right-click to put it down first"))
 		return true
 	end
 	if not c and now - (loaded_at[name] or -LOAD_HOLD) < LOAD_HOLD then return true end
@@ -237,7 +237,7 @@ function rockmech.career_load(player, self, def)
 	if c.log then
 		-- 一根原木佔車斗 1 m³（跟一格碎石一樣）
 		if def.cap - V.load_total(self) < NLEV then
-			core.chat_send_player(name, S("There is no room for a log in the bed"))
+			rockmech.notify(name, S("There is no room for a log in the bed"))
 			return true
 		end
 		V.load_put(self, LOG, NLEV, 0)
@@ -247,7 +247,7 @@ function rockmech.career_load(player, self, def)
 	end
 	local put = math.min(c.lv, def.cap - V.load_total(self))
 	if put <= 0 then
-		core.chat_send_player(player:get_player_name(), S("The bed is full"))
+		rockmech.notify(player:get_player_name(), S("The bed is full"))
 		return true
 	end
 	V.load_put(self, c.base, put, c.p2)
@@ -263,7 +263,7 @@ local function put_down(player, pos)
 	if not c then return end
 	if c.box then
 		if rockmech.corebox_put and rockmech.corebox_put(pos, c.box) then set_carried(player, nil)
-		else core.chat_send_player(player:get_player_name(), S("The core box does not fit here: right-click empty ground (or the top of another box)")) end
+		else rockmech.notify(player:get_player_name(), S("The core box does not fit here: right-click empty ground (or the top of another box)")) end
 		return
 	end
 	if c.log then
@@ -271,7 +271,7 @@ local function put_down(player, pos)
 		local d = core.yaw_to_dir(player:get_look_horizontal())
 		if rockmech.lay_log and rockmech.lay_log(pos.x, pos.z, pos.y, math.abs(d.x) > math.abs(d.z) and "x" or "z") then
 			set_carried(player, nil)
-		else core.chat_send_player(player:get_player_name(), S("The log does not fit here")) end
+		else rockmech.notify(player:get_player_name(), S("The log does not fit here")) end
 		return
 	end
 	local rest = V.deposit_column(pos.x, pos.z, pos.y, c.base, c.lv, nil, nil, c.p2)
@@ -286,7 +286,7 @@ function core.node_dig(pos, node, digger)
 		-- 橫躺在地上的原木：捧起來，一次一根（站著的樹幹照常砍倒，woodwork.lua）
 		local name = digger:get_player_name()
 		if carried(digger) then
-			core.chat_send_player(name, S("Your hands are full: right-click to put it down before carrying a log"))
+			rockmech.notify(name, S("Your hands are full: right-click to put it down before carrying a log"))
 			return false
 		end
 		core.remove_node(pos)
@@ -297,7 +297,7 @@ function core.node_dig(pos, node, digger)
 		-- 岩芯箱：捧起來，一次一個
 		local name = digger:get_player_name()
 		if carried(digger) then
-			core.chat_send_player(name, S("Your hands are full: right-click to put it down before picking up a core box"))
+			rockmech.notify(name, S("Your hands are full: right-click to put it down before picking up a core box"))
 			return false
 		end
 		local data = rockmech.corebox_take(pos, digger)
@@ -311,15 +311,15 @@ function core.node_dig(pos, node, digger)
 		local name = digger:get_player_name()
 		local base = rockmech.rubble_base[node.name]
 		if c and (c.box or c.log) then
-			core.chat_send_player(name, c.box and S("You are holding a core box: right-click to put it down first") or S("You are carrying a log: right-click to put it down first"))
+			rockmech.notify(name, c.box and S("You are holding a core box: right-click to put it down first") or S("You are carrying a log: right-click to put it down first"))
 			return false
 		end
 		if c and c.lv >= NLEV then
-			core.chat_send_player(name, S("Your hands are full: right-click to put it down, or right-click a cart bed to load it"))
+			rockmech.notify(name, S("Your hands are full: right-click to put it down, or right-click a cart bed to load it"))
 			return false
 		end
 		if c and not rockmech.rubble_mixable(c.base, base) then
-			core.chat_send_player(name, S("You are holding a different kind of rubble: put it down first"))
+			rockmech.notify(name, S("You are holding a different kind of rubble: put it down first"))
 			return false
 		end
 		local t, b, p2 = V.take_rubble(pos, NLEV - (c and c.lv or 0))
@@ -507,21 +507,21 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local inv = player:get_inventory()
 			local ok, msg = true, nil
 			if rockmech.money(name) < it.price then
-				core.chat_send_player(name, S("[Supplier] Not enough money: @1 costs $@2", S(it.label), ("%d"):format(it.price)))
+				rockmech.notify(name, S("[Supplier] Not enough money: @1 costs $@2", S(it.label), ("%d"):format(it.price)))
 				ok = false
 			elseif operator and not inv:room_for_item("main", stack) then
-				core.chat_send_player(name, S("[Supplier] Your inventory is full"))
+				rockmech.notify(name, S("[Supplier] Your inventory is full"))
 				ok = false
 			elseif operator then
 				-- 操作員不能比全組的怪手多（operator.lua）
 				local hired, why = rockmech.op_hire(name)
 				if hired then inv:add_item("main", stack)
-				else core.chat_send_player(name, S("[Supplier] @1", why)); ok = false end
+				else rockmech.notify(name, S("[Supplier] @1", why)); ok = false end
 			elseif vkind then
 				ok, msg = rockmech.deliver_vehicle(name, vkind)
-				if not ok then core.chat_send_player(name, S("[Supplier] @1", msg)) end
+				if not ok then rockmech.notify(name, S("[Supplier] @1", msg)) end
 			elseif not inv:room_for_item("main", stack) then
-				core.chat_send_player(name, S("[Supplier] Your inventory is full"))
+				rockmech.notify(name, S("[Supplier] Your inventory is full"))
 				ok = false
 			else
 				inv:add_item("main", stack)
@@ -533,20 +533,20 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				if acc ~= name then
 					-- 整組共用的錢：組員都看得到誰買了什麼
 					for _, m in ipairs(rockmech.account_members(acc)) do
-						core.chat_send_player(m, S("[@1] @2 bought @3 ($@4)", rockmech.account_label(acc), name, S(it.label), ("%d"):format(it.price)))
+						rockmech.notify(m, S("[@1] @2 bought @3 ($@4)", rockmech.account_label(acc), name, S(it.label), ("%d"):format(it.price)))
 					end
 					core.log("action", ("[rockmech] %s (%s) bought %s for $%d"):format(name, acc, it.key, it.price))
 				else
-					core.chat_send_player(name, S("[Supplier] Bought @1", S(it.label)))
+					rockmech.notify(name, S("[Supplier] Bought @1", S(it.label)))
 				end
 				if msg then
 					for _, m in ipairs(acc ~= name and rockmech.account_members(acc) or {name}) do
-						core.chat_send_player(m, S("[Supplier] @1", msg))
+						rockmech.notify(m, S("[Supplier] @1", msg))
 					end
 				end
 				if it.final then
 					-- 終極目標：全服廣播
-					core.chat_send_all(S("★★★ @1 bought the @2! ★★★", rockmech.account_label(acc), S(it.label)))
+					rockmech.notify_all(S("★★★ @1 bought the @2! ★★★", rockmech.account_label(acc), S(it.label)))
 					core.log("action", ("[rockmech] FINAL: %s (%s) bought %s"):format(name, acc, it.key))
 					for _, p in ipairs(core.get_connected_players()) do
 						core.sound_play("rockmech_coin", {to_player = p:get_player_name(), gain = 1.0}, true)

@@ -26,7 +26,7 @@ local STEP = 1
 local STALL_T = 10                             -- 這麼久沒進料、倉也空了：在臂下等的無人卡車半車以上就先走
 local BOOM_REST = 3
 
-local function tell(name, msg) if name then core.chat_send_player(name, S("[Loadout bin]") .. " " .. msg) end end
+local function tell(name, msg) if name then rockmech.notify(name, S("[Loadout bin]") .. " " .. msg) end end
 
 -- 料斗的格子（控制箱在 pos，放料臂朝 (dx, dz)）
 local function parts(pos, dx, dz)

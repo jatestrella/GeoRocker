@@ -337,7 +337,7 @@ do
 end
 
 local function tell(player, msg)
-	if player and player:is_player() then core.chat_send_player(player:get_player_name(), S("[Blasting]") .. " " .. msg) end
+	if player and player:is_player() then rockmech.notify(player:get_player_name(), S("[Blasting]") .. " " .. msg) end
 end
 
 -- 能不能在這個岩面鑽孔（under 是岩石、above 是空的）：回傳 nil 或不能的原因

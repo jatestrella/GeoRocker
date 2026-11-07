@@ -80,7 +80,7 @@ local function sync()
 		if on then start_fx(p, i) else stop_fx(p) end
 	end
 	if was ~= nil and was ~= on then
-		core.chat_send_all(on and S("It starts raining (@1 mm/h): soil is getting weaker, watch the slopes.", g(i))
+		rockmech.notify_all(on and S("It starts raining (@1 mm/h): soil is getting weaker, watch the slopes.", g(i))
 			or S("The rain has stopped (@1 mm in total).", f0(rockmech.rain_total())))
 	end
 	was = on

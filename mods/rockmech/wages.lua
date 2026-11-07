@@ -105,7 +105,7 @@ core.register_globalstep(function(dtime)
 			end
 			if #rows > 0 then
 				for _, m in ipairs(rockmech.account_members(acc)) do
-					core.chat_send_player(m, S("[Operating costs] Trading day @1 −$@2", tostring(d + 1), ("%.0f"):format(total)))
+					rockmech.notify(m, S("[Operating costs] Trading day @1 −$@2", tostring(d + 1), ("%.0f"):format(total)))
 					if rockmech.show_bill then
 						rockmech.show_bill(m, S("Operating cost statement – trading day @1", tostring(d + 1)), rows)
 					end

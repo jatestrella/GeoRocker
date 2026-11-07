@@ -529,7 +529,7 @@ end
 rockmech.debug_allowed = debug_allowed
 function rockmech.show_info(name)
 	if not debug_allowed(name) then
-		core.chat_send_player(name, S("[rockmech] The info page is for debugging (only visible with /god on)"))
+		rockmech.notify(name, S("[rockmech] The info page is for debugging (only visible with /god on)"))
 		return
 	end
 	local player = core.get_player_by_name(name)
@@ -572,7 +572,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		local v = fields["rm_" .. t.id]
 		if v ~= nil then
 			local _, msg = rockmech.set_toggle(t.id, v == "true", name)
-			core.chat_send_player(name, "[rockmech] " .. msg)
+			rockmech.notify(name, "[rockmech] " .. msg)
 			redraw = true
 		end
 	end
