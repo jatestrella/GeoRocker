@@ -115,6 +115,10 @@ local function start_world(m, fields)
 	core.start()
 end
 
+-- 記住密碼：明碼存在這台電腦的 minetest.conf（standalone_pass_<位址>_<帳號>），勾選框 standalone_remember
+local function pass_key(addr, name) return (("standalone_pass_%s_%s"):format(addr, name):gsub("[^%w_]", "_")) end
+local function remember() return core.settings:get("standalone_remember") ~= "false" end
+
 local function join(fields)
 	local addr = (fields.j_addr or ""):match("^%s*(.-)%s*$")
 	local port = tonumber(fields.j_port or "")
@@ -128,7 +132,12 @@ local function join(fields)
 	gamedata.address = addr
 	gamedata.port = tostring(port)
 	gamedata.playername = name
-	gamedata.password = fields.j_pass or ""
+	local key = pass_key(addr, name)
+	local pass = fields.j_pass or ""
+	if pass == "" then pass = core.settings:get(key) or "" end
+	if remember() and pass ~= "" then core.settings:set(key, pass)
+	elseif not remember() then core.settings:remove(key) end
+	gamedata.password = pass
 	gamedata.selected_world = 0
 	gamedata.singleplayer = false
 	core.start()
@@ -192,9 +201,11 @@ local function formspec()
 		fs[#fs + 1] = ("field[0.5,3.0;8.5,0.8;j_addr;%s;%s]"):format(F("位址（IP）"), F(core.settings:get("address") or ""))
 		fs[#fs + 1] = ("field[9.3,3.0;4.2,0.8;j_port;%s;%s]"):format(F("埠"), F(core.settings:get("remote_port") or "30000"))
 		fs[#fs + 1] = ("field[0.5,4.4;6.4,0.8;j_name;%s;%s]"):format(F("帳號"), F(core.settings:get("name") or ""))
-		fs[#fs + 1] = ("pwdfield[7.1,4.4;6.4,0.8;j_pass;%s]"):format(F("密碼"))
-		fs[#fs + 1] = "button[0.5,5.8;6.4,0.9;connect;" .. F("連線") .. "]"
-		fs[#fs + 1] = "button[7.1,5.8;6.4,0.9;back;" .. F("返回") .. "]"
+		local saved = core.settings:get(pass_key(core.settings:get("address") or "", core.settings:get("name") or ""))
+		fs[#fs + 1] = ("pwdfield[7.1,4.4;6.4,0.8;j_pass;%s]"):format(F(saved and saved ~= "" and "密碼（已記住：空白就用記住的）" or "密碼"))
+		fs[#fs + 1] = ("checkbox[0.5,5.5;remember;%s;%s]"):format(F("記住密碼（明碼存在這台電腦，公用電腦不要勾）"), tostring(remember()))
+		fs[#fs + 1] = "button[0.5,6.2;6.4,0.9;connect;" .. F("連線") .. "]"
+		fs[#fs + 1] = "button[7.1,6.2;6.4,0.9;back;" .. F("返回") .. "]"
 	else
 		state.page = "settings"
 		fs[#fs + 1] = "label[1,2.4;" .. F(("音量 %d%%"):format(vol())) .. "]"
@@ -246,6 +257,11 @@ core.button_handler = function(fields)
 	elseif fields.vol then
 		local e = core.explode_scrollbar_event(fields.vol)
 		if e.type == "CHG" then core.settings:set("sound_volume", tostring(e.value / 100)) end
+	elseif fields.remember then
+		core.settings:set("standalone_remember", fields.remember)
+		if fields.remember == "false" then
+			core.settings:remove(pass_key(core.settings:get("address") or "", core.settings:get("name") or ""))
+		end
 	elseif fields.fullscreen then
 		core.settings:set("fullscreen", fields.fullscreen)
 	end
