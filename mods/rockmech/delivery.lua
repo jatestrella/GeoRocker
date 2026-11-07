@@ -178,6 +178,8 @@ local ORDERS = {      -- 施工單 → 原本的物品、標籤顏色、名稱�
 	{order = "rockmech:order_belt", item = "rockmech:belt", color = "#262626", label = "輸送帶",
 		how = "跟輸送帶一樣：點輸送帶往前接、點地面從地上開始"},
 	{order = "rockmech:order_locker", item = "rockmech:locker", color = "#6a7078", label = "置物箱", how = "放在點到的地方"},
+	{order = "rockmech:order_loadout", item = "rockmech:loadout", color = "#8a8e92", label = "裝車料斗",
+		how = "3×3 m 平地、上方 6 m 淨空；放料臂朝自己這邊，頂上格柵接輸送帶"},
 }
 local by_order, by_item = {}, {}
 for _, o in ipairs(ORDERS) do by_order[o.order], by_item[o.item] = o, o end

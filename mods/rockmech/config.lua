@@ -88,6 +88,7 @@ config.shop = {
 	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = "鑽孔台車", price = 60000},
 	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = "礦卡", price = 150000},
 	{key = "excavator_big", shop = "vehicle", item = "rockmech:excavator_big_item", label = "礦用怪手", price = 200000},
+	{key = "loadout", shop = "vehicle", item = "rockmech:loadout", label = "裝車料斗（接輸送帶裝車）", price = 25000},
 	-- 終極目標：買下時全服廣播（career.lua）
 	{key = "miner", shop = "vehicle", item = "rockmech:miner_item", label = "連續採礦機", price = 1500000, final = true},
 	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = "怪手操作員（雇用另付日薪）", price = 0},
