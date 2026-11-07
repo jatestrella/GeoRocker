@@ -13,7 +13,7 @@
 #   - no worlds: the start screen lists the maps in standalone\maps and creates one world per map
 
 param(
-	[string]$Out = "D:\Teaching",
+	[string]$Out = "",        # default: the folder that contains the Luanti root (e.g. D:\Teaching\GeoRocker)
 	[string]$Name = "GeoRocker"
 )
 
@@ -21,7 +21,14 @@ $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path        # games\mining_sim\standalone
 $game = Split-Path -Parent $here                                 # games\mining_sim
 $root = Split-Path -Parent (Split-Path -Parent $game)            # Luanti root
+if (-not $Out) { $Out = Split-Path -Parent $root }
 $dest = Join-Path $Out $Name
+# Safety: /MIR below would delete everything in $dest, so it must never contain (or be) the Luanti root
+$rootFull = [System.IO.Path]::GetFullPath($root).TrimEnd('\') + '\'
+$destFull = [System.IO.Path]::GetFullPath($dest).TrimEnd('\') + '\'
+if ($rootFull.StartsWith($destFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+	throw "Output folder $dest contains the Luanti root $root - choose another -Out or -Name"
+}
 $stageRoot = Join-Path ([System.IO.Path]::GetTempPath()) "mm_package_stage"
 $stage = Join-Path $stageRoot $Name       # the package is built here, then zipped and synced to $dest
 
