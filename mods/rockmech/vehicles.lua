@@ -63,9 +63,36 @@ function V.update_infotext(self)
 	elseif hp < 100 then t[#t + 1] = ("耐久 %d%%"):format(math.floor(hp + 0.5)) end
 	self.object:set_properties({infotext = table.concat(t, "\n")})
 end
+-- 車輛登記：mod storage 的 vreg:<車輛編號> = "車種|主人"，車子沒載入也數得到（操作員人數上限 = 全組的怪手數，operator.lua）。
+-- 車子載入、換主人時寫，收起來時刪
+local VREG = "vreg:"
+function V.registry_save(self)
+	if not self.uid then return end
+	local v = (self.vkind or "") .. "|" .. (self.owner or "")
+	if self.vreg_v == v then return end
+	self.vreg_v = v
+	rockmech.collapse.storage:set_string(VREG .. self.uid, v)
+end
+function V.registry_drop(uid) if uid then rockmech.collapse.storage:set_string(VREG .. uid, "") end end
+-- 帳戶 acc 有幾台車種名稱含 pattern 的車（純文字比對）
+function V.count_owned(acc, pattern)
+	local n, seen = 0, {}
+	for _, k in ipairs(rockmech.collapse.storage:get_keys()) do
+		local uid = k:match("^" .. VREG .. "(.+)$")
+		if uid then
+			local kind, owner = rockmech.collapse.storage:get_string(k):match("^(.-)|(.*)$")
+			if kind and owner == acc and kind:find(pattern, 1, true) then n = n + 1; seen[uid] = true end
+		end
+	end
+	for uid, e in pairs(V.by_uid) do
+		if not seen[uid] and e.owner == acc and e.vkind and e.vkind:find(pattern, 1, true) then n = n + 1 end
+	end
+	return n
+end
 function V.set_owner(self, acc)
 	self.owner = acc
 	V.update_infotext(self)
+	V.registry_save(self)
 end
 
 -- 耐久度（impact.lua 的落石、之後的機械技工修理）：0–100%，存在 mod storage 的 vhp:<車輛編號>
@@ -1204,6 +1231,7 @@ function V.register(kind, def)
 				V.load_hp(self)
 			end
 			if def.on_load then def.on_load(self, data or {}) end
+			V.registry_save(self)
 			self.object:set_acceleration({x = 0, y = -9.81, z = 0})
 			self.object:set_armor_groups({immortal = 1})
 			V.refresh(self)
@@ -1307,8 +1335,10 @@ function V.register(kind, def)
 				local l4 = inv:add_item("main", ItemStack("rockmech:ahs_module"))
 				if not l4:is_empty() then core.add_item(self.object:get_pos(), l4) end
 			end
-			if self.op and self.op.on and rockmech.wage_fire then rockmech.wage_fire(self.uid) end
+			-- 有操作員（在車上或站在旁邊等）：回營地休息（operator.lua）
+			if self.op and (self.op.on or self.op.standby) and rockmech.op_send_rest then rockmech.op_send_rest(self, puncher) end
 			V.snapshot_clear(self.uid)
+			V.registry_drop(self.uid)
 			remove_parts(self)
 			self.object:remove()
 			return true

@@ -122,6 +122,19 @@ do
 	SKINS.professor = p.done()
 end
 
+-- 怪手操作員：黃安全帽、橘色反光背心（銀色反光條）、深藍工作服、工作手套
+do
+	local p = painter()
+	p.head("#2a2018", 2)
+	p.hat("#f0c020", 2)
+	p.top("#26324a")
+	p.r(16, 20, 24, 10, "#f07818"); p.r(23, 20, 2, 8, "#26324a")
+	p.r(16, 24, 24, 1, "#d8d8d8"); p.r(16, 27, 24, 1, "#d8d8d8")
+	p.r(40, 28, 16, 2, "#9a8058")                                    -- 工作手套
+	p.pants("#26324a", "#1a1a1a")
+	SKINS.operator = p.done()
+end
+
 function rockmech.npc_skin(role) return SKINS[role] or "character.png" end
 
 ---------------------------------------------------------------------------
@@ -169,6 +182,7 @@ local DRESS = {
 		{bone = "Arm_Right", pos = {x = 0, y = 5.5, z = 3}, rot = {x = -90, y = 225, z = 90}, item = "rockmech:geo_hammer"},
 	},
 	vehicle = HARDHAT("#f4f4f0"),
+	operator = HARDHAT("#f0c020"),
 	blast = HARDHAT("#c02020"),
 	mechanic = (function()
 		local t = HARDHAT("#f0c020")

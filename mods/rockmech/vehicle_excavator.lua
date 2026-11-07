@@ -47,44 +47,42 @@ local function hauler_def(e)
 	return hd and hd.bed and hd
 end
 
--- 操作員（像雇人開怪手）：拿「怪手操作員」對怪手按右鍵設定截止品位、派上車／叫下車。
+-- 操作員是真的人（operator.lua）：在機械設備課長那裡雇用拿到一張「怪手操作員」，對沒人的怪手按右鍵就用掉這張、
+-- 他坐上怪手作業。右鍵有操作員坐著的怪手不會上車，而是打開操作員頁面：截止品位、叫下車（站在怪手旁邊等，人才能上車）、
+-- 回基地休息。站在旁邊等的操作員對他按右鍵可以叫他上車作業或回基地。
 -- 他坐在怪手上原地作業（不開動履帶，換工作面由玩家開過去）：在手臂範圍內挖表面露出、品位 ≥ 截止品位的碎石
 -- （最近的先挖；鏟斗會帶到旁邊的格子，界線附近的廢石一起上來就是貧化），有卡車停在手臂範圍內就倒進去
--- （無人卡車、玩家開來的都算），沒車就拿著滿斗等。車子（自己、卡車）底下的格子不挖。有人上車駕駛就暫停
+-- （無人卡車、玩家開來的都算），沒車就拿著滿斗等。車子（自己、卡車）底下的格子不挖
 local OP_ITEM = "rockmech:operator"
 local OP_THINK, OP_IDLE = 0.5, 2     -- 每隔幾秒想下一步；沒東西可挖時隔久一點再找 (s)
 local op_editing = {}                -- 玩家名稱 → 正在設定的怪手
-core.register_craftitem(OP_ITEM, {
-	description = "怪手操作員 Excavator operator\n拿著對怪手按右鍵：設定截止品位、派上車或叫下車",
-	inventory_image = "[fill:16x16:#00000000^[fill:6x6:5,1:#e0b080^[fill:8x7:4,7:#e8a818^[fill:8x2:4,7:#303030^[fill:2x2:7,3:#303030",
-	stack_max = 1,
-})
--- 經營模式（車子有主人）：操作員要雇用，付日薪（wages.lua），解雇才停止計薪
+-- 經營模式（車子有主人）：操作員付日薪（wages.lua），在車上、站在旁邊等都計薪，回基地休息才停
 local function op_paid(self) return rockmech.cfg.career and self.owner and self.owner ~= "" and rockmech.wage_hire end
 local function op_form(self)
 	local op = self.op or {cutoff = 0.5}
 	local paid = op_paid(self)
-	local on_label = paid and ("雇用（日薪 $%g）"):format(rockmech.operator_wage()) or "派上車（開始作業）"
 	local items, sel = {}, 1
 	for i = 0, 20 do
 		items[#items + 1] = (i * 5) .. "%"
 		if math.abs(i * 0.05 - op.cutoff) < 1e-6 then sel = i + 1 end
 	end
 	return table.concat({
-		"formspec_version[6]size[8,5.7]",
+		"formspec_version[6]size[11.5,5.7]",
 		("label[0.5,0.6;%s 操作員]"):format(TYPES[self.vkind].short or "怪手"),
 		("label[0.5,1.2;狀態：%s]"):format(core.formspec_escape(op.on and (op.msg or "作業中") or "沒有操作員")),
 		"label[0.5,1.9;截止品位（只挖品位 ≥ 這個的碎石）]",
 		("dropdown[0.5,2.2;3,0.8;cutoff;%s;%d;false]"):format(table.concat(items, ","), sel),
-		("button[0.5,3.4;3.4,0.8;%s;%s]"):format(op.on and "off" or "on", op.on and (paid and "解雇" or "叫下車") or on_label),
-		"button_exit[4.1,3.4;3.4,0.8;close;關閉]",
+		"button[0.5,3.4;3.4,0.8;off;叫下車（人才能上車）]",
+		"button[4.05,3.4;3.4,0.8;rest;回基地休息]",
+		"button_exit[7.6,3.4;3.4,0.8;close;關閉]",
 		paid and ("label[0.5,4.6;%s]label[0.5,5.1;%s]"):format(
 			core.formspec_escape(("日薪 $%g（一個交易日 %d 分鐘），組員在線時按比例扣"):format(
 				rockmech.operator_wage(), math.floor(rockmech.cfg.price_period / 60 + 0.5))),
-			core.formspec_escape("列在每日結算；解雇才停止計薪"))
+			core.formspec_escape("在車上、站在旁邊等都計薪；回基地休息才停止計薪"))
 			or "label[0.5,4.6;原地作業：挖完手臂範圍內的礦，把怪手開到新的工作面]",
 	})
 end
+rockmech.op_paid = op_paid
 -- 對講機：左鍵點怪手選定，再左鍵點地面叫那台的操作員開過去（op.go）；點正在移動的那台叫它停下。
 -- 只有派了操作員的怪手聽得到。走法見 op_drive
 local RADIO = "rockmech:radio"
@@ -167,17 +165,18 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local op = self.op or {cutoff = 0.5}
 	self.op = op
 	if fields.cutoff then op.cutoff = (tonumber(fields.cutoff:match("^(%d+)")) or 50) / 100 end
-	if fields.on and not op.on then
-		op.on, op.msg, op.t = true, nil, 0
-		if op_paid(self) then
-			rockmech.wage_hire(self.uid, self.owner)
-			core.chat_send_player(name, ("[人事] 雇用怪手操作員，日薪 $%g（組員在線時計薪），不用時記得解雇"):format(rockmech.operator_wage()))
-		end
-	elseif fields.off and op.on then
-		op.on, op.msg = false, nil
-		self.autopilot = nil
-		if rockmech.wage_fire then rockmech.wage_fire(self.uid) end
-		if op_paid(self) then core.chat_send_player(name, "[人事] 已解雇怪手操作員，停止計薪") end
+	if fields.off and op.on then
+		-- 叫下車：站到怪手旁邊等（照樣計薪），人才能上車
+		rockmech.op_step_down(self)
+		core.chat_send_player(name, "[操作員] 下車了，在怪手旁邊等；對他按右鍵可以叫他上車作業或回基地休息")
+		op_editing[name] = nil
+		core.close_formspec(name, OP_ITEM)
+		return true
+	elseif fields.rest and op.on then
+		rockmech.op_send_rest(self, player)
+		op_editing[name] = nil
+		core.close_formspec(name, OP_ITEM)
+		return true
 	end
 	op_show(self)
 	if fields.quit or fields.close then op_editing[name] = nil
@@ -380,18 +379,47 @@ local function excavator(kind, P)
 		return #list > 0 and list or nil
 	end
 
-	function def.on_load(self, data) self.swing, self.op = data.swing, data.op end
+	function def.on_load(self, data)
+		self.swing, self.op = data.swing, data.op
+		-- 舊版的操作員（還沒算進全組的雇用人數）：補算一個
+		if self.op and (self.op.on or self.op.standby) and not self.op.counted then
+			self.op.counted = true
+			if rockmech.op_adopt then rockmech.op_adopt(data.owner) end
+		end
+	end
 	function def.on_save(self, data) data.swing, data.op = self.swing, self.op end
 	function def.on_spawn(self) place_arm(self, BUCKET_REST); op_show(self) end
 
-	-- 拿著操作員對怪手按右鍵：設定畫面（不上車）
+	-- 右鍵：操作員坐在車上 → 操作員頁面（不上車）；拿著「怪手操作員」對沒人的怪手 → 派他上車
 	function def.rightclick(self, clicker)
-		if clicker:get_wielded_item():get_name() ~= OP_ITEM then return false end
 		local name = clicker:get_player_name()
+		local op = self.op
+		if op and op.on then
+			op_editing[name] = self
+			core.show_formspec(name, OP_ITEM, op_form(self))
+			return true
+		end
+		if clicker:get_wielded_item():get_name() ~= OP_ITEM then return false end
+		if op and op.standby then
+			core.chat_send_player(name, "[操作員] 這台的操作員在旁邊等：對他按右鍵叫他上車")
+			return true
+		end
+		local stack = clicker:get_wielded_item()
+		if not rockmech.op_card_ok(stack, clicker, self) then return true end
+		self.op = {cutoff = op and op.cutoff or 0.5, on = true, t = 0, counted = true}
+		if op_paid(self) then rockmech.wage_hire(self.uid, self.owner) end
+		if not core.is_creative_enabled(name) then
+			stack:take_item()
+			clicker:set_wielded_item(stack)
+		end
+		op_show(self)
+		core.chat_send_player(name, op_paid(self) and ("[操作員] 上車作業，日薪 $%g（組員在線時計薪）"):format(rockmech.operator_wage())
+			or "[操作員] 上車作業")
 		op_editing[name] = self
 		core.show_formspec(name, OP_ITEM, op_form(self))
 		return true
 	end
+	def.op_show = op_show
 
 	-- 操作員：手臂搆得到 wp 嗎（和 def.action 用同一套算法，挑出來的目標一定挖得到）
 	local function in_reach(self, wp)
@@ -620,6 +648,7 @@ local function excavator(kind, P)
 			end
 		end
 		if self.op and self.op.on and not ctx.d then operate(self, ctx) end
+		if self.op and self.op.standby and rockmech.op_standby_step then rockmech.op_standby_step(self) end
 		-- 第一人稱駕駛：上部結構轉向視線的水平方向（車身座標的迴轉角 ψ 往右為正，實體 yaw 往左為正）
 		local d = ctx.d
 		self.follow = d ~= nil and not self.chase

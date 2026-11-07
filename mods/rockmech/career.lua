@@ -441,11 +441,21 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local vkind = rockmech.vehicle_kind_of_item and rockmech.vehicle_kind_of_item(it.item)
 			local order = rockmech.order_of_item and rockmech.order_of_item(it.item)
 			local stack = ItemStack((order or it.item) .. " " .. (it.count or 1))
+			local operator = it.item == "rockmech:operator" and rockmech.op_hire
+			if operator then stack = rockmech.op_card(rockmech.account_of(name)) end
 			local inv = player:get_inventory()
 			local ok, msg = true, nil
 			if rockmech.money(name) < it.price then
 				core.chat_send_player(name, ("[供應商] 錢不夠：%s 要 $%d"):format(it.label, it.price))
 				ok = false
+			elseif operator and not inv:room_for_item("main", stack) then
+				core.chat_send_player(name, "[供應商] 物品欄滿了")
+				ok = false
+			elseif operator then
+				-- 操作員不能比全組的怪手多（operator.lua）
+				local hired, why = rockmech.op_hire(name)
+				if hired then inv:add_item("main", stack)
+				else core.chat_send_player(name, "[供應商] " .. why); ok = false end
 			elseif vkind then
 				ok, msg = rockmech.deliver_vehicle(name, vkind)
 				if not ok then core.chat_send_player(name, "[供應商] " .. msg) end
@@ -845,6 +855,7 @@ local function build_camp(owner, x0)
 	build_market(x0)
 	if rockmech.career_build_research then rockmech.career_build_research(x0) end      -- 研究帳篷（research.lua）
 	if rockmech.career_build_professor then rockmech.career_build_professor(x0) end    -- 大學教授的講堂（knowledge.lua）
+	if rockmech.career_build_opbench then rockmech.career_build_opbench(x0, owner) end  -- 操作員休息長椅（operator.lua）
 	local team = owner:match("^team:(%d)$")
 	if team then build_sign(x0, team) end
 	local y = ground_y(x0 + CRUSHER_X, CAMP_Z) or 0

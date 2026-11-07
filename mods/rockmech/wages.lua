@@ -57,9 +57,9 @@ core.register_globalstep(function(dtime)
 		local uid = k:match("^" .. HIRE .. "(.+)$")
 		if uid then
 			local acc = storage:get_string(k)
-			-- 怪手在載入中、操作員卻不在了（例如被收起來）：當作解雇
+			-- 怪手在載入中、操作員卻不在了（不在車上也沒站在旁邊等）：當作解雇
 			local e = V and V.by_uid and (V.by_uid[uid] or V.by_uid[tonumber(uid) or -1])
-			if e and e.object:get_pos() and not (e.op and e.op.on) then
+			if e and e.object:get_pos() and not (e.op and (e.op.on or e.op.standby)) then
 				storage:set_string(k, "")
 			elseif acc ~= "" then
 				per[acc] = (per[acc] or 0) + 1
