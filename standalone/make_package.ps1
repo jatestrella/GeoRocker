@@ -1,4 +1,4 @@
-# Build the standalone (single player) package of this game.
+# Build the standalone package of this game (single player, hosting a class, joining a server).
 # ASCII only: Windows PowerShell 5 reads .ps1 files as ANSI.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File games\mining_sim\standalone\make_package.ps1
@@ -7,7 +7,7 @@
 #   - builtin\mainmenu\init.lua is replaced by standalone\mainmenu.lua (our own start screen, no Luanti menu)
 #   - minetest.conf: single player defaults
 #   - a "start game" .bat that starts bin\luanti.exe
-#   - no worlds: "New game" in the start screen creates one (settings from standalone\rockmech.conf)
+#   - no worlds: the start screen lists the maps in standalone\maps and creates one world per map
 
 param(
 	[string]$Out = "D:\Teaching\dist",
