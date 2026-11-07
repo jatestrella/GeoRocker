@@ -1,6 +1,6 @@
 -- rockmech/woodwork.lua
 -- 木工：樹木、砍樹、鋸木台、木工桌、木製建材。
---   林地：每座營地研究帳篷東邊一塊草地，種幾棵蘋果樹（遊戲內建的樹）。樹苗種在土上會自己長（default 的樹苗計時器）。
+--   林地：每座營地研究帳篷東邊的平地上鋪一層土壤（土壤碎石，有重量），種幾棵蘋果樹（遊戲內建的樹）。樹苗種在土上會自己長。
 --   砍樹：斧頭（工具室管理員）砍樹幹任何一格，整棵倒下：樹幹全部變成原木給砍的人，樹葉拿掉，掉 1–2 棵樹苗和蘋果。
 --   鋸木台（營地裡的一張台子）：手上有原木，右鍵選要鋸成什麼：2 根木柱、4 塊木板、8 塊木板半格。
 --   木工桌（營地裡一張單純的木桌）：用木板做：木牆板、樓梯、門、活板門、柵欄、柵欄橫桿、梯子、木板半格。
@@ -254,28 +254,41 @@ local function ground_y(x, z)
 		if n ~= "air" and n ~= "ignore" and core.get_item_group(n, "rockmech_timber") == 0 then return y end
 	end
 end
+-- 林地：在岩盤上面鋪一層土壤（nodes.lua 的土壤碎石：有重量、照安息角流動，跟碎石一樣），樹種在土上。
+-- 蓋林地絕不動岩石：換掉岩石等於開挖，邊坡會垮（2026-11-07 真的垮過）
+local SOIL = rockmech.RUBBLE_SOIL
 local function flag_of(x0) return "grove_site:" .. x0 end
 function rockmech.career_build_grove(x0)
 	storage:set_string(flag_of(x0), "1")
 	local x1, z1 = x0 + GROVE_DX, GROVE_Z
-	-- 草地：表層換成草皮，下面兩層土
+	-- 只鋪在平坦的地方：取範圍內最常見的地面高度，高度不同的格子（邊坡）跳過；上面要是空的
+	local hist, ys = {}, {}
 	for x = x1, x1 + GROVE_W - 1 do for z = z1, z1 + GROVE_W - 1 do
 		local y = ground_y(x, z)
-		if y then
-			core.set_node({x = x, y = y, z = z}, {name = "default:dirt_with_grass"})
-			for d = 1, 2 do core.set_node({x = x, y = y - d, z = z}, {name = "default:dirt"}) end
+		ys[x .. "," .. z] = y
+		if y then hist[y] = (hist[y] or 0) + 1 end
+	end end
+	local base, best = nil, 0
+	for y, c in pairs(hist) do if c > best then base, best = y, c end end
+	if not base then return end
+	local soil = {}
+	for x = x1, x1 + GROVE_W - 1 do for z = z1, z1 + GROVE_W - 1 do
+		local p = {x = x, y = base + 1, z = z}
+		if ys[x .. "," .. z] == base and core.get_node(p).name == "air" then
+			core.set_node(p, {name = SOIL})
+			soil[x .. "," .. z] = true
 		end
 	end end
-	-- 蘋果樹：間隔 3 m（9 棵）
+	-- 蘋果樹：間隔 3 m（9 棵），只種在鋪了土的地方
 	local n = 0
 	for x = x1 + 1, x1 + GROVE_W - 2, 3 do for z = z1 + 1, z1 + GROVE_W - 2, 3 do
-		local y = ground_y(x, z)
-		if y then default.grow_new_apple_tree({x = x, y = y + 1, z = z}); n = n + 1 end
+		if soil[x .. "," .. z] then default.grow_new_apple_tree({x = x, y = base + 2, z = z}); n = n + 1 end
 	end end
 	-- 鋸木台、木工桌：林地西邊（靠研究帳篷那側）
 	local function put(x, z, name)
 		local y = ground_y(x, z)
-		if y then core.set_node({x = x, y = y + 1, z = z}, {name = name, param2 = 1}) end
+		local p = y and {x = x, y = y + 1, z = z}
+		if p and core.get_node(p).name == "air" then core.set_node(p, {name = name, param2 = 1}) end
 	end
 	put(x1 - 2, z1 + 3, SAW)
 	put(x1 - 2, z1 + 6, BENCH)

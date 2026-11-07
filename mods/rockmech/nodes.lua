@@ -274,7 +274,18 @@ core.register_node(rockmech.RUBBLE_GRANITE, {
 	sounds = gravel_sounds,
 })
 
-rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE}
+-- 土壤：跟碎石同一套（顆粒流、安息角、8 級高度、有重量、可以搬、可以壓實），表面長草，樹苗種得活（group soil）。
+-- 營地的林地鋪這個（woodwork.lua）。以後深開挖時，上覆的土壤一樣是荷重
+rockmech.RUBBLE_SOIL = rockmech.modname .. ":rubble_soil"
+core.register_node(rockmech.RUBBLE_SOIL, {
+	description = "Soil (土壤)\n跟碎石一樣會照安息角流動、有重量",
+	tiles = has_default and {"default_grass.png", "default_dirt.png",
+		{name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}} or {"[fill:16x16:#6a5030"},
+	groups = {crumbly = 3, rockmech_rubble = 1, soil = 1},
+	sounds = has_default and default.node_sound_dirt_defaults and default.node_sound_dirt_defaults() or gravel_sounds,
+})
+
+rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE, rockmech.RUBBLE_SOIL}
 
 -- 岩性 → 碎石（未列出的岩性用一般碎石）、碎石 → 岩性
 rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
