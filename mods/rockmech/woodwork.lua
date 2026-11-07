@@ -395,7 +395,8 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 山上的表土和樹林：每條礦帶交界的山脊，比地表高 1 m 以上的每一欄都鋪一層 1 m 的表土（陡坡也鋪：根系抓住），
+-- 山上的表土和樹林：每條礦帶交界的山脊，比地表高 1 m 以上、頂上是天然岩石的每一欄都鋪 SOIL_T m 的表土
+-- （陡坡也鋪：根系抓住；2 m 才蓋得住 1 m 一階的岩石台階；屋頂、帳篷等建築上面不鋪），
 -- 上面稀疏種蘋果樹；鋸木台、木工桌放在營地裡。
 -- 2026-11-07 的教訓：蓋的時候絕不動岩石（換掉岩石等於開挖），而且用 VoxelManip 寫（不觸發破壞判定）
 ---------------------------------------------------------------------------
@@ -404,23 +405,26 @@ local RIDGE_X = 30           -- 山脊中線兩側各鋪幾公尺
 local Z1, Z2 = -40, 160      -- 沿山脊鋪到哪裡（z）
 local MIN_RISE = 1           -- 比地表高這麼多才算山坡（走廊、平地不鋪）
 local TREE_GAP = 6           -- 樹距 (m)，再加隨機偏移、隨機跳過一些
+local SOIL_T = 2             -- 表土厚度 (m)
 local DIRS8 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}}
 
--- 範圍內每一欄最高的非空氣格
+-- 範圍內每一欄最高的非空氣格 h，和那一格是不是天然岩石 rock（建築、樹、土上面不鋪）
 local function heightmap(x1, x2, z1, z2)
 	local vm = core.get_voxel_manip()
 	local e1, e2 = vm:read_from_map({x = x1, y = -20, z = z1}, {x = x2, y = 60, z = z2})
 	local area = VoxelArea(e1, e2)
 	local data = vm:get_data()
 	local c_air, c_ign = core.CONTENT_AIR, core.CONTENT_IGNORE
-	local h = {}
+	local is_rock = {}
+	for name in pairs(rockmech.lith_of_node) do is_rock[core.get_content_id(name)] = true end
+	local h, rock = {}, {}
 	for z = z1, z2 do for x = x1, x2 do
 		for y = 60, -20, -1 do
 			local c = data[area:index(x, y, z)]
-			if c ~= c_air and c ~= c_ign then h[x .. "," .. z] = y; break end
+			if c ~= c_air and c ~= c_ign then h[x .. "," .. z] = y; rock[x .. "," .. z] = is_rock[c]; break end
 		end
 	end end
-	return h
+	return h, rock
 end
 local function rnd(x, z, seed)      -- 每個位置固定的 0..1 亂數
 	local v = math.sin(x * 12.9898 + z * 78.233 + seed * 37.719) * 43758.5453
@@ -433,20 +437,25 @@ local function plant_ridge(xr)
 	if storage:get_string(key) ~= "" or planting[xr] then return end
 	planting[xr] = true
 	local x1, x2 = xr - RIDGE_X, xr + RIDGE_X
-	local h = heightmap(x1 - 1, x2 + 1, Z1 - 1, Z2 + 1)
+	local h, rock = heightmap(x1 - 1, x2 + 1, Z1 - 1, Z2 + 1)
 	local surface = cfg.surface_y or 0
 	-- 表土（VoxelManip：不觸發破壞判定）
 	local vm = core.get_voxel_manip()
-	local e1, e2 = vm:read_from_map({x = x1, y = -20, z = Z1}, {x = x2, y = 61, z = Z2})
+	local e1, e2 = vm:read_from_map({x = x1, y = -20, z = Z1}, {x = x2, y = 60 + SOIL_T, z = Z2})
 	local area = VoxelArea(e1, e2)
 	local data = vm:get_data()
 	local c_top = core.get_content_id(TOPSOIL)
 	local covered, n_soil = {}, 0
 	for x = x1, x2 do for z = Z1, Z2 do
 		local y = h[x .. "," .. z]
-		if y and y >= surface + MIN_RISE then
-			local i = area:index(x, y + 1, z)
-			if data[i] == core.CONTENT_AIR then data[i] = c_top; covered[x .. "," .. z] = true; n_soil = n_soil + 1 end
+		if y and y >= surface + MIN_RISE and rock[x .. "," .. z] then
+			local t = 0
+			for dy = 1, SOIL_T do
+				local i = area:index(x, y + dy, z)
+				if data[i] ~= core.CONTENT_AIR then break end
+				data[i] = c_top; t = dy; n_soil = n_soil + 1
+			end
+			if t > 0 then covered[x .. "," .. z] = t end
 		end
 	end end
 	vm:set_data(data)
@@ -454,13 +463,13 @@ local function plant_ridge(xr)
 	-- 樹：稀疏（間距 TREE_GAP、隨機偏移、四成跳過），種在表土上；周圍 8 格的地面都比樹根高 1 m 以上（窪地）不種
 	local function ground(x, z)
 		local y = h[x .. "," .. z]
-		return y and (y + (covered[x .. "," .. z] and 1 or 0)) or nil
+		return y and (y + (covered[x .. "," .. z] or 0)) or nil
 	end
 	local n_tree = 0
 	for gx = x1, x2, TREE_GAP do for gz = Z1, Z2, TREE_GAP do
 		local x = gx + math.floor(rnd(gx, gz, 1) * 5) - 2
 		local z = gz + math.floor(rnd(gx, gz, 2) * 5) - 2
-		if rnd(gx, gz, 3) > 0.4 and covered[x .. "," .. z] then
+		if rnd(gx, gz, 3) > 0.4 and covered[x .. "," .. z] == SOIL_T then
 			local g = ground(x, z)
 			local buried = true
 			for _, d in ipairs(DIRS8) do
