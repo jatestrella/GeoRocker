@@ -158,6 +158,17 @@ Core box @1 (@2, depth @3 m)@nLeft-click to pick it up; right-click with a field
 [Borehole] @1 renamed @2 to @3=[鑽孔] @1 把 @2 改名為 @3
 Core box=岩芯箱
 [Core box] No record found for this hole=[岩芯箱] 找不到這一孔的紀錄
+Core box @1 (@2, depth @3 m)@nRight-click to open it; left-click to pick it up; right-click with a field notebook to log it=岩芯箱 @1（@2，深 @3 m）@n右鍵打開；左鍵捧起來；拿野帳本右鍵判讀
+Core box @1 (@2)   Collar (@3, @4, @5)   Depth @6 m=岩芯箱 @1（@2）   孔口 (@3, @4, @5)   深 @6 m
+RQD @1%  joints @2=RQD @1%  節理 @2
+grade @1%=品位 @1%
+grade ?=品位 ?
+End of hole @1 m=孔底 @1 m
+You can see the core, but not read it: learn "Rock mass classification" to see lithology, joints and RQD (and "Grade interpretation" for grade)=看得到岩芯，但看不懂：學會「岩體分類」才看得出岩性、節理、RQD（品位要「品位判讀」）
+Grade needs "Grade interpretation"=品位要學會「品位判讀」才看得出來
+@1 m per row; scroll down with the mouse wheel or the scrollbar=一槽 @1 m；用滑鼠滾輪或右邊的捲軸往下看
+@1 m per row=一槽 @1 m
+[Core box] No borehole record found for this box=[岩芯箱] 找不到這一箱的鑽孔紀錄
 Field notebook: Schmidt hammer readings (@1)=野帳本：施密特錘讀數（@1 筆）
 No readings yet: right-click a rock face with the Schmidt hammer=還沒有讀數：拿施密特錘對岩面右鍵
 No.=編號

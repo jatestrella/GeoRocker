@@ -158,6 +158,17 @@ Core box @1 (@2, depth @3 m)@nLeft-click to pick it up; right-click with a field
 [Borehole] @1 renamed @2 to @3=
 Core box=
 [Core box] No record found for this hole=
+Core box @1 (@2, depth @3 m)@nRight-click to open it; left-click to pick it up; right-click with a field notebook to log it=
+Core box @1 (@2)   Collar (@3, @4, @5)   Depth @6 m=
+RQD @1%  joints @2=
+grade @1%=
+grade ?=
+End of hole @1 m=
+You can see the core, but not read it: learn "Rock mass classification" to see lithology, joints and RQD (and "Grade interpretation" for grade)=
+Grade needs "Grade interpretation"=
+@1 m per row; scroll down with the mouse wheel or the scrollbar=
+@1 m per row=
+[Core box] No borehole record found for this box=
 Field notebook: Schmidt hammer readings (@1)=
 No readings yet: right-click a rock face with the Schmidt hammer=
 No.=

@@ -20,6 +20,8 @@ local SEC_PER_M, HAND_DEPTH, STAY_R = 1, 10, 3      -- 手持鑽機最深 10 m�
 local LOG = "bh:"            -- mod storage：bh:<帳戶> = {{n, pos, depth, rows = {{lith, grade, joints}}}, ...}
 local FORM, BOOK_FORM = "rockmech:borehole", "rockmech:fieldbook"
 local COREBOX, BOOK = "rockmech:corebox", "rockmech:fieldbook"
+local COREBOX_OPEN = "rockmech:corebox_open"   -- 打開的岩芯箱（有人在看）：箱蓋掀起來、看得到岩芯
+local corebox_rightclick                       -- 下面定義（打開岩芯箱那段）
 local LOG_SEC_PER_M, LOG_STAY, BOOK_MAX = 0.5, 3, 20
 
 local box_spot             -- 下面定義（岩芯箱那段）
@@ -258,6 +260,23 @@ core.register_node(COREBOX, {
 	selection_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.5 + 0.4 / 3, 0.3}},
 	groups = {crumbly = 3, falling_node = 1, not_in_creative_inventory = 1},
 	is_ground_content = false, drop = "",
+	on_rightclick = function(...) return corebox_rightclick(...) end,
+})
+-- 打開的岩芯箱：箱蓋立在後面，上面看得到五條岩芯
+local BOX_H = 0.4 / 3
+local open_top = ("[fill:16x16:%s"):format(BLUE)
+for k = 0, 4 do open_top = open_top .. ("^[fill:14x2:1,%d:#a09a90"):format(1 + k * 3) end
+core.register_node(COREBOX_OPEN, {
+	description = S("Core box"), drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
+	tiles = {open_top, box_tex(false), box_tex(false), box_tex(false), box_tex(false), "[fill:16x16:#3a72d8"},
+	node_box = {type = "fixed", fixed = {
+		{-0.45, -0.5, -0.3, 0.45, -0.5 + BOX_H, 0.3},
+		{-0.45, -0.5 + BOX_H, 0.3, 0.45, -0.5 + BOX_H + 0.6, 0.34},
+	}},
+	selection_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.5 + BOX_H, 0.3}},
+	groups = {crumbly = 3, falling_node = 1, not_in_creative_inventory = 1},
+	is_ground_content = false, drop = "",
+	on_rightclick = function(...) return corebox_rightclick(...) end,
 })
 
 -- 放一箱在 pos（空的那一格）：data = {acc, n, depth}
@@ -269,7 +288,7 @@ function rockmech.corebox_put(pos, data)
 	meta:set_string("acc", data.acc)
 	meta:set_int("n", data.n)
 	meta:set_int("depth", data.depth)
-	meta:set_string("infotext", S("Core box @1 (@2, depth @3 m)\nLeft-click to pick it up; right-click with a field notebook to log it", bh_label(data.acc, data.n),
+	meta:set_string("infotext", S("Core box @1 (@2, depth @3 m)\nRight-click to open it; left-click to pick it up; right-click with a field notebook to log it", bh_label(data.acc, data.n),
 		rockmech.account_label and rockmech.account_label(data.acc) or data.acc, tostring(data.depth)))
 	return true
 end
@@ -278,11 +297,170 @@ function rockmech.corebox_take(pos, player)
 	local meta = core.get_meta(pos)
 	local data = {acc = meta:get_string("acc"), n = meta:get_int("n"), depth = meta:get_int("depth")}
 	if rockmech.owner_ok and not rockmech.owner_ok(data.acc, player:get_player_name()) then return nil end
+	for name, p in pairs(viewing_box) do
+		if vector.equals(p, pos) then core.close_formspec(name, OPEN_FORM); viewing_box[name] = nil end
+	end
+	opened[core.hash_node_position(pos)] = nil
 	core.remove_node(pos)
 	core.check_for_falling({x = pos.x, y = pos.y + 1, z = pos.z})
 	return data
 end
 rockmech.COREBOX = COREBOX
+
+---------------------------------------------------------------------------
+-- 打開岩芯箱：右鍵打開（旁人看到箱蓋掀起來、裡面一排排岩芯），自己看到一個大的岩芯箱介面：
+--   藍色箱子、一槽一條 5 m 的岩芯、一次看 5 槽（25 m），更深的往下捲。
+--   岩芯照實際岩石的顏色畫，節理是岩芯上的黑色裂縫、碎石段是碎塊；
+--   自己有「岩體分類」才在每公尺下面標岩性、RQD、節理，有「品位判讀」才標品位（看的人「現在」的能力）。
+---------------------------------------------------------------------------
+
+local OPEN_FORM = "rockmech:corebox_open"
+local PER_ROW, VIEW_ROWS = 5, 5            -- 一槽幾公尺、一次看幾槽
+local opened = {}                          -- 方塊位置 → {玩家名稱 = true}
+local viewing_box = {}                     -- 玩家名稱 → 方塊位置
+local function is_corebox(name) return name == COREBOX or name == COREBOX_OPEN end
+rockmech.is_corebox = is_corebox
+
+local function close_for(name)
+	local pos = viewing_box[name]
+	viewing_box[name] = nil
+	if not pos then return end
+	local key = core.hash_node_position(pos)
+	local set = opened[key]
+	if set then set[name] = nil; if next(set) then return end end
+	opened[key] = nil
+	local node = core.get_node(pos)
+	if node.name == COREBOX_OPEN then core.swap_node(pos, {name = COREBOX, param2 = node.param2}) end
+end
+
+-- 0..1 的假亂數（同一孔同一公尺每次一樣）：節理裂縫畫在那一公尺的哪裡、碎石段的碎塊
+local function frac(n, i, k) local v = math.sin(n * 12.9898 + i * 78.233 + k * 37.719) * 43758.5453; return v - math.floor(v) end
+
+local function corebox_form(name, bh, acc)
+	local rm, gr = see(name, "rockmass"), see(name, "grade")
+	local rows = bh.rows or {}
+	local nrow = math.max(1, math.ceil(#rows / PER_ROW))
+	local RH, X0, W = 2.2, 1.0, 17.6          -- 一槽高、岩芯起點、5 m 岩芯的長度
+	local MW = W / PER_ROW
+	local TOP, VIEW = 1.2, VIEW_ROWS * RH
+	local out = {"formspec_version[6]size[20.4,14.6]",
+		"style_type[label;font_size=*0.85]",
+		("label[0.5,0.6;%s]"):format(core.formspec_escape(S("Core box @1 (@2)   Collar (@3, @4, @5)   Depth @6 m", label_of(bh),
+			rockmech.account_label and rockmech.account_label(acc) or acc,
+			tostring(bh.pos.x), tostring(bh.pos.y), tostring(bh.pos.z), tostring(bh.depth)))),
+		("box[0.3,%g;19.4,%g;#2a62c8]"):format(TOP - 0.1, VIEW + 0.2),
+		("scroll_container[0.3,%g;19.4,%g;cb_scroll;vertical;0.1]"):format(TOP, VIEW)}
+	local function lambda(i)
+		local s, c = 0, 0
+		for j = math.max(1, i - 1), math.min(#rows, i + 1) do s = s + (rows[j].joints or 0); c = c + 1 end
+		return c > 0 and s / c or 0
+	end
+	for k = 0, nrow - 1 do
+		local y0 = k * RH
+		-- 一槽：深藍色的槽，槽和槽之間是箱子的藍色隔板
+		out[#out + 1] = ("box[0.2,%g;19.0,%g;#173d8a]"):format(y0 + 0.12, RH - 0.24)
+		out[#out + 1] = ("label[0.3,%g;%s]"):format(y0 + 0.9, ("%d m"):format(k * PER_ROW))
+		for m = 1, PER_ROW do
+			local i = k * PER_ROW + m
+			local r = rows[i]
+			if not r then break end
+			local x = X0 + (m - 1) * MW
+			local cy, ch = y0 + 0.5, 0.58
+			out[#out + 1] = ("label[%g,%g;%d]"):format(x, y0 + 0.36, i - 1)
+			if r.lith == "rubble" then
+				-- 碎石段：一堆碎塊
+				local px = x + 0.04
+				local c = 0
+				while px < x + MW - 0.15 do
+					c = c + 1
+					local w = 0.15 + 0.35 * frac(bh.n, i, c)
+					local hh = ch * (0.45 + 0.5 * frac(bh.n, i, c + 50))
+					w = math.min(w, x + MW - 0.04 - px)
+					out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(px, cy + ch - hh, w, hh, lith_color(r.lith))
+					px = px + w + 0.06
+				end
+			else
+				out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(x + 0.04, cy, MW - 0.08, ch, lith_color(r.lith))
+				-- 岩芯的亮面（圓柱的反光）
+				out[#out + 1] = ("box[%g,%g;%g,0.08;#ffffff30]"):format(x + 0.04, cy + 0.12, MW - 0.08)
+				for j = 1, math.min(r.joints or 0, 8) do
+					local jx = x + 0.2 + (MW - 0.4) * frac(bh.n, i, j)
+					out[#out + 1] = ("box[%g,%g;0.06,%g;#141414]"):format(jx, cy, ch)
+				end
+			end
+			if rm then
+				local is_ore = rockmech.cfg.ores[r.lith] ~= nil or (rockmech.cfg.lithologies[r.lith] or {}).ore ~= nil
+				out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.27, core.formspec_escape(lith_label(r.lith)))
+				local info = S("RQD @1%  joints @2", ("%.0f"):format(rqd_of(lambda(i))), tostring(r.joints or 0))
+				if is_ore or r.grade then
+					out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.93, core.formspec_escape((gr and r.grade) and S("grade @1%", ("%.0f"):format(r.grade / 255 * 100)) or S("grade ?")))
+				end
+				out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.6, core.formspec_escape(info))
+			end
+		end
+		local last = math.min(#rows, (k + 1) * PER_ROW)
+		if last == (k + 1) * PER_ROW then
+			out[#out + 1] = ("label[%g,%g;%d]"):format(X0 + W - 0.2, y0 + 0.36, last)
+		elseif last < (k + 1) * PER_ROW then
+			out[#out + 1] = ("label[%g,%g;%s]"):format(X0 + (last - k * PER_ROW) * MW + 0.1, y0 + 0.9,
+				core.formspec_escape(S("End of hole @1 m", tostring(#rows))))
+		end
+	end
+	out[#out + 1] = "scroll_container_end[]"
+	local bottom = TOP + VIEW + 0.3
+	if nrow > VIEW_ROWS then
+		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=%d;largestep=%d;arrows=show]"):format(
+			math.floor((nrow - VIEW_ROWS) * RH * 10 + 0.5), math.floor(RH * 10 + 0.5), math.floor(VIEW * 10 + 0.5))
+		out[#out + 1] = ("scrollbar[19.75,%g;0.45,%g;vertical;cb_scroll;0]"):format(TOP - 0.1, VIEW + 0.2)
+	end
+	local hint
+	if not rm then
+		hint = S("You can see the core, but not read it: learn \"Rock mass classification\" to see lithology, joints and RQD (and \"Grade interpretation\" for grade)")
+	elseif not gr then
+		hint = S("Grade needs \"Grade interpretation\"")
+	end
+	local tail = nrow > VIEW_ROWS and S("@1 m per row; scroll down with the mouse wheel or the scrollbar", tostring(PER_ROW))
+		or S("@1 m per row", tostring(PER_ROW))
+	out[#out + 1] = ("label[0.5,%g;%s]"):format(bottom + 0.1, core.formspec_escape(tail))
+	if hint then out[#out + 1] = ("label[0.5,%g;%s]"):format(bottom + 1.0, core.formspec_escape(hint)) end
+	out[#out + 1] = ("button_exit[16.7,%g;3,0.8;close;%s]"):format(bottom, core.formspec_escape(S("Close")))
+	return table.concat(out)
+end
+
+local function open_box(pos, clicker)
+	if not (clicker and clicker:is_player()) then return end
+	local name = clicker:get_player_name()
+	local meta = core.get_meta(pos)
+	local acc, n = meta:get_string("acc"), meta:get_int("n")
+	local bh = find_bh(acc, n)
+	if not bh then rockmech.notify(name, S("[Core box] No borehole record found for this box")); return end
+	close_for(name)
+	local node = core.get_node(pos)
+	if node.name == COREBOX then core.swap_node(pos, {name = COREBOX_OPEN, param2 = node.param2}) end
+	local key = core.hash_node_position(pos)
+	opened[key] = opened[key] or {}
+	opened[key][name] = true
+	viewing_box[name] = vector.copy(pos)
+	core.sound_play("default_dig_choppy", {pos = pos, gain = 0.3, max_hear_distance = 10}, true)
+	core.show_formspec(name, OPEN_FORM, corebox_form(name, bh, acc))
+end
+corebox_rightclick = function(pos, node, clicker, itemstack)
+	open_box(pos, clicker)
+	return itemstack
+end
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= OPEN_FORM then return end
+	if fields.quit then close_for(player:get_player_name()) end
+	return true
+end)
+core.register_on_leaveplayer(function(player) close_for(player:get_player_name()) end)
+-- 重開伺服器時沒人在看：打開的箱子蓋回去
+core.register_lbm({
+	label = "Close open core boxes", name = "rockmech:corebox_close", nodenames = {COREBOX_OPEN}, run_at_every_load = true,
+	action = function(pos, node)
+		if not opened[core.hash_node_position(pos)] then core.swap_node(pos, {name = COREBOX, param2 = node.param2}) end
+	end,
+})
 
 -- 孔口旁邊放岩芯箱的格子：四邊、再斜角、再外一圈；那格空的、下面是實心、沒有人或車
 box_spot = function(c)
@@ -444,7 +622,7 @@ core.register_globalstep(function(dtime)
 		else
 			local pp = p:get_pos()
 			local m = core.get_meta(L.pos)
-			if core.get_node(L.pos).name ~= COREBOX or m:get_int("n") ~= L.n or m:get_string("acc") ~= L.acc then
+			if not is_corebox(core.get_node(L.pos).name) or m:get_int("n") ~= L.n or m:get_string("acc") ~= L.acc then
 				stop_logging(name, S("The core box was moved; logging interrupted"))
 			elseif vector.distance(pp, L.pos) > LOG_STAY or p:get_wielded_item():get_name() ~= BOOK then
 				stop_logging(name, S("You walked away (or are not holding the field notebook); logging interrupted"))
@@ -482,7 +660,7 @@ core.register_craftitem(BOOK, {
 	stack_max = 1,
 	on_place = function(itemstack, placer, pointed)
 		if not placer or pointed.type ~= "node" then return itemstack end
-		if core.get_node(pointed.under).name == COREBOX then start_logging(placer, pointed.under)
+		if is_corebox(core.get_node(pointed.under).name) then start_logging(placer, pointed.under)
 		else
 			local un = core.get_node(pointed.under)
 			local nd = core.registered_nodes[un.name]

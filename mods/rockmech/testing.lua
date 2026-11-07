@@ -104,7 +104,7 @@ core.register_craftitem(PLT, {
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" or not (placer and placer:is_player()) then return itemstack end
 		local name = placer:get_player_name()
-		if core.get_node(pointed.under).name ~= rockmech.COREBOX then
+		if not rockmech.is_corebox(core.get_node(pointed.under).name) then
 			tell(name, S("[Point load] Right-click a core box on the ground (drill a core first and put the box down)"))
 			return itemstack
 		end
@@ -118,7 +118,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local name = player:get_player_name()
 	if fields.quit then viewing[name] = nil; return true end
 	local pos = viewing[name]
-	if fields.again and pos and core.get_node(pos).name == rockmech.COREBOX then
+	if fields.again and pos and rockmech.is_corebox(core.get_node(pos).name) then
 		core.show_formspec(name, PLT_FORM, plt_form(name, pos))
 	end
 	return true

@@ -293,7 +293,7 @@ function core.node_dig(pos, node, digger)
 		set_carried(digger, {log = true})
 		return true
 	end
-	if node.name == rockmech.COREBOX then
+	if rockmech.is_corebox(node.name) then
 		-- 岩芯箱：捧起來，一次一個
 		local name = digger:get_player_name()
 		if carried(digger) then
