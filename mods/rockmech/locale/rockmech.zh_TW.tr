@@ -211,10 +211,11 @@ Field notebook@nRight-click a core box to log it; left-click to read=野帳本@n
 [Core drilling] Drilling down (@1 s per metre, max @2 m)=[岩芯鑽探] 開始往下鑽（每公尺 @1 秒，最深 @2 m）
 [Core drilling] Aim at the ground (the top of a block) to drill down=[岩芯鑽探] 要對著地面（方塊的上面）往下鑽
 you walked away=人離開了
+you let go=放開了
 hit a void=鑽到空洞
 map not loaded yet=地圖還沒載入
 hit a facility=碰到設施
-Hand-held core drill@nRight-click the ground to drill down=手持岩芯鑽機@n對地面右鍵往下鑽
+Hand-held core drill@nHold right-click on the ground to drill down=手持岩芯鑽機@n對地面按住右鍵往下鑽
 Hand-held core drill=手持岩芯鑽機
 
 ### crusher.lua
@@ -1356,6 +1357,7 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Hand-held core drill@nRight-click the ground to drill down=手持岩芯鑽機@n對地面右鍵往下鑽
 Pickaxe@nDigs rock slowly; rock turns into rubble@nDigging rubble picks it up, one block at a time@nRight-click to put down the rubble you are holding=挖礦鎬@n挖岩石很慢，岩石會變成碎石@n挖碎石就是拿起來，一次一塊@n右鍵放下手上的碎石
 Shovel@nQuickly shovels up rubble, one block at a time@nCannot dig rock@nRight-click to put down the rubble you are holding=鏟子@n很快把碎石鏟起來，一次一塊@n挖不動岩石@n右鍵放下手上的碎石
 Conveyor belt@nRight-click to place: click a belt to extend from that block, click the ground to start from the ground@nLeft-click a belt to pick up that block; left-click elsewhere to change the slope=輸送帶@n右鍵放：點輸送帶從那格往前接，點地面從地上開始@n左鍵點輸送帶收回那一格，點別的地方切換坡度

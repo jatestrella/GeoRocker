@@ -211,10 +211,11 @@ Field notebook@nRight-click a core box to log it; left-click to read=
 [Core drilling] Drilling down (@1 s per metre, max @2 m)=
 [Core drilling] Aim at the ground (the top of a block) to drill down=
 you walked away=
+you let go=
 hit a void=
 map not loaded yet=
 hit a facility=
-Hand-held core drill@nRight-click the ground to drill down=
+Hand-held core drill@nHold right-click on the ground to drill down=
 Hand-held core drill=
 
 ### crusher.lua

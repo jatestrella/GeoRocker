@@ -1,5 +1,5 @@
 -- rockmech/coredrill.lua
--- 岩芯鑽探：手持岩芯鑽機（$3,000，工具室管理員）對地面右鍵往下鑽一個垂直孔，每公尺 SEC_PER_M 秒，最深 HAND_DEPTH m；
+-- 岩芯鑽探：手持岩芯鑽機（$3,000，工具室管理員）對地面按住右鍵往下鑽一個垂直孔（放開就停），每公尺 SEC_PER_M 秒，最深 HAND_DEPTH m；
 -- 要待在孔旁 STAY_R m 內、手上拿著鑽機。更深的孔用岩芯鑽探車（rockmech.coredrill_start，60 m）。碰到空洞或設施就停。
 -- 鑽完：孔口留一根套管（混凝土墊、橘色套管、管蓋），岩芯裝進藍色岩芯箱放在孔口旁邊的地上。
 --   岩芯箱比照碎石搬：左鍵捧起來（一次一個，不進背包），右鍵放下（可以疊起來當岩芯庫）。只有自己組（和老師）搬得動。
@@ -291,6 +291,13 @@ function rockmech.corebox_put(pos, data)
 	meta:set_string("acc", data.acc)
 	meta:set_int("n", data.n)
 	meta:set_int("depth", data.depth)
+	-- 岩芯（每公尺的地層紀錄）裝在箱子裡：打開時直接讀，不用每次去翻全組的鑽孔紀錄；捧著走也跟著走
+	local cs = data.core
+	if not cs or cs == "" then
+		local b = find_bh(data.acc, data.n)
+		cs = b and core.serialize({pos = b.pos, rows = b.rows, stop = b.stop}) or ""
+	end
+	meta:set_string("core", cs)
 	meta:set_string("infotext", S("Core box @1 (@2, depth @3 m)\nRight-click to open it; left-click to pick it up; right-click with a field notebook to log it", bh_label(data.acc, data.n),
 		rockmech.account_label and rockmech.account_label(data.acc) or data.acc, tostring(data.depth)))
 	return true
@@ -298,7 +305,7 @@ end
 -- 捧起 pos 那一箱：回傳 data，或 nil（不是自己組的）
 function rockmech.corebox_take(pos, player)
 	local meta = core.get_meta(pos)
-	local data = {acc = meta:get_string("acc"), n = meta:get_int("n"), depth = meta:get_int("depth")}
+	local data = {acc = meta:get_string("acc"), n = meta:get_int("n"), depth = meta:get_int("depth"), core = meta:get_string("core")}
 	if rockmech.owner_ok and not rockmech.owner_ok(data.acc, player:get_player_name()) then return nil end
 	for name, p in pairs(viewing_box) do
 		if vector.equals(p, pos) then core.close_formspec(name, OPEN_FORM); viewing_box[name] = nil end
@@ -362,6 +369,13 @@ local function seg_tex(r)
 	return t
 end
 local function crumbly(r) return r.lith == "rubble" or r.lith == "soil" end
+-- 同一張方塊貼圖橫排 n 格拼成一張（[combine 裡的 ^ 和 : 要用 \ 跳脫）
+local function strip_tex(t, n)
+	local e = t:gsub("\\", "\\\\"):gsub("%^", "\\^"):gsub(":", "\\:")
+	local parts = {("[combine:%dx16"):format(16 * n)}
+	for q = 0, n - 1 do parts[#parts + 1] = ("%d,0=%s\\^[resize\\:16x16"):format(16 * q, e) end
+	return table.concat(parts, ":")
+end
 local function plt_near(pos) return pos and core.find_node_near(pos, PLT_R, {PLT_NODE}, true) ~= nil end
 
 local function corebox_form(name, bh, acc, pos)
@@ -414,13 +428,10 @@ local function corebox_form(name, bh, acc, pos)
 					px = px + w + 0.06
 				end
 			else
-				-- 岩芯：方塊貼圖一格一格排成一條
+				-- 岩芯：方塊貼圖一格一格排成一條，拼成一張圖（一公尺一個元件，介面才不會卡）
 				local L = MW - 0.08
 				local nq = math.max(1, math.floor(L / ch + 0.5))
-				local w = L / nq
-				for q = 0, nq - 1 do
-					out[#out + 1] = ("image[%g,%g;%g,%g;%s]"):format(x + 0.04 + q * w, cy, w, ch, tex)
-				end
+				out[#out + 1] = ("image[%g,%g;%g,%g;%s]"):format(x + 0.04, cy, L, ch, esc(strip_tex(seg_tex(r), nq)))
 				out[#out + 1] = ("box[%g,%g;%g,0.06;#ffffff28]"):format(x + 0.04, cy + 0.1, L)
 				for j = 1, math.min(r.joints or 0, 8) do
 					local jx = x + 0.2 + (MW - 0.4) * frac(bh.n, i, j)
@@ -502,8 +513,15 @@ local function open_box(pos, clicker)
 	local name = clicker:get_player_name()
 	local meta = core.get_meta(pos)
 	local acc, n = meta:get_string("acc"), meta:get_int("n")
-	local bh = find_bh(acc, n)
-	if not bh then rockmech.notify(name, S("[Core box] No borehole record found for this box")); return end
+	-- 岩芯從箱子裡拿（舊的箱子沒有就去翻一次鑽孔紀錄，順便裝進箱子）
+	local c = core.deserialize(meta:get_string("core"))
+	if not (c and c.rows) then
+		local b = find_bh(acc, n)
+		if not b then rockmech.notify(name, S("[Core box] No borehole record found for this box")); return end
+		c = {pos = b.pos, rows = b.rows, stop = b.stop}
+		meta:set_string("core", core.serialize(c))
+	end
+	local bh = {n = n, pos = c.pos, rows = c.rows, stop = c.stop, depth = #c.rows, name = (find_bh(acc, n) or {}).name}
 	close_for(name)
 	local node = core.get_node(pos)
 	if node.name == COREBOX then core.swap_node(pos, {name = COREBOX_OPEN, param2 = node.param2}) end
@@ -511,7 +529,7 @@ local function open_box(pos, clicker)
 	opened[key] = opened[key] or {}
 	opened[key][name] = true
 	viewing_box[name] = vector.copy(pos)
-	cb_state[name] = {}
+	cb_state[name] = {bh = bh, acc = acc}      -- 打開期間點來點去都用這份，不再讀
 	core.sound_play("default_dig_choppy", {pos = pos, gain = 0.3, max_hear_distance = 10}, true)
 	core.show_formspec(name, OPEN_FORM, corebox_form(name, bh, acc, pos))
 end
@@ -528,9 +546,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if not (pos and st and is_corebox(core.get_node(pos).name)) then return true end
 	local v = fields.cb_scroll and tonumber(fields.cb_scroll:match(":(%d+)"))
 	if v then st.scroll = v end
-	local meta = core.get_meta(pos)
-	local acc = meta:get_string("acc")
-	local bh = find_bh(acc, meta:get_int("n"))
+	local bh, acc = st.bh, st.acc
 	if not bh then return true end
 	local changed = false
 	for k in pairs(fields) do
@@ -890,11 +906,15 @@ local function start_hand(player, pointed)
 		return
 	end
 	local name = player:get_player_name()
+	if drilling[name] then return end          -- 按住右鍵時 on_place 會一直重複觸發
 	local c = pointed.above
 	rockmech.coredrill_start(name, c, HAND_DEPTH, function()
 		local p = core.get_player_by_name(name)
 		local pp = p:get_pos()
 		if math.sqrt((pp.x - c.x) ^ 2 + (pp.z - c.z) ^ 2) > STAY_R or p:get_wielded_item():get_name() ~= ITEM then return S("you walked away") end
+		-- 要一直按住右鍵才會鑽（比照鑿岩機按住左鍵），放開就停在目前的深度
+		local ctrl = p:get_player_control()
+		if not (ctrl.place or ctrl.RMB) then return S("you let go") end
 	end)
 end
 
@@ -947,10 +967,9 @@ end)
 core.register_on_leaveplayer(function(player) drilling[player:get_player_name()] = nil end)
 
 core.register_tool(ITEM, {
-	description = S("Hand-held core drill\nRight-click the ground to drill down"),
+	description = S("Hand-held core drill\nHold right-click on the ground to drill down"),
 	short_description = S("Hand-held core drill"),
 	inventory_image = "[fill:16x16:#00000000^[fill:4x10:6,1:#d0a020^[fill:2x5:7,11:#808488^[fill:8x3:4,3:#303030^[fill:2x1:7,15:#c0c0c0",
 	stack_max = 1,
 	on_place = function(itemstack, placer, pointed) if placer then start_hand(placer, pointed) end return itemstack end,
-	on_use = function(itemstack, user, pointed) if user then start_hand(user, pointed) end return itemstack end,
 })

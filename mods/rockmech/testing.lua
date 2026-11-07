@@ -51,13 +51,22 @@ core.register_tool(HAMMER, {
 
 -- 點荷重試驗機：放在地上（岩芯箱 3 格內），打開岩芯箱點一段岩芯做試驗（coredrill.lua）
 rockmech.PLT_K = K_PLT
-local GREY, DARK = "[fill:16x16:#707880", "[fill:16x16:#404850"
-local PLT_INV = "[fill:16x16:#00000000^[fill:12x2:2,2:#606870^[fill:12x2:2,12:#606870^[fill:2x12:3,2:#404850^[fill:2x12:11,2:#404850^[fill:4x4:6,6:#d0a040"
+-- 配色：藍色鋼構框架、深灰底座、黑色油壓千斤頂、銀色錐頭、白色錶面黑框紅指針。
+-- nodebox 每個盒子取貼圖上自己那塊位置（32 px = 1 m，列由上往下），所以一張貼圖上分區塗色就能讓各部件不同色
+local FRAME, BASE, JACK, STEEL, FACE, NEEDLE = "#2f6db5", "#2b2e33", "#1d1d1f", "#c9ccd0", "#f2f2ea", "#d02020"
+local function fill(w, h, x, y, c) return ("^[fill:%dx%d:%d,%d:%s"):format(w, h, x, y, c) end
+local PLT_FRONT = "[fill:32x32:" .. FRAME .. fill(32, 3, 0, 29, BASE) .. fill(5, 7, 14, 22, JACK) .. fill(2, 2, 15, 20, STEEL)
+	.. fill(2, 6, 15, 6, STEEL) .. fill(5, 5, 26, 15, JACK) .. fill(3, 3, 27, 16, FACE) .. fill(1, 2, 28, 16, NEEDLE)
+local PLT_SIDE_G = "[fill:32x32:" .. FRAME .. fill(32, 3, 0, 29, BASE) .. fill(6, 5, 13, 15, JACK) .. fill(4, 3, 14, 16, FACE) .. fill(1, 2, 16, 16, NEEDLE)
+local PLT_SIDE = "[fill:32x32:" .. FRAME .. fill(32, 3, 0, 29, BASE)
+local PLT_TOP = "[fill:32x32:" .. BASE .. fill(20, 4, 6, 14, FRAME) .. fill(4, 6, 26, 13, JACK)
+local PLT_INV = "[fill:16x16:#00000000^[fill:12x2:2,13:" .. BASE .. "^[fill:2x11:3,2:" .. FRAME .. "^[fill:2x11:11,2:" .. FRAME
+	.. "^[fill:10x2:3,2:" .. FRAME .. "^[fill:2x3:7,10:" .. JACK .. "^[fill:1x2:7,4:" .. STEEL .. "^[fill:3x3:13,7:" .. JACK .. "^[fill:1x1:14,8:" .. FACE
 core.register_node(PLT, {
 	description = S("Point load tester"),
 	inventory_image = PLT_INV, wield_image = PLT_INV,
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
-	tiles = {GREY, GREY, DARK, DARK, GREY, GREY},
+	tiles = {PLT_TOP, "[fill:32x32:" .. BASE, PLT_SIDE_G, PLT_SIDE, PLT_FRONT, PLT_FRONT},
 	node_box = {type = "fixed", fixed = {
 		{-0.35, -0.5, -0.25, 0.35, -0.42, 0.25},      -- 底座
 		{-0.3, -0.42, -0.05, -0.22, 0.3, 0.05},       -- 兩根立柱
