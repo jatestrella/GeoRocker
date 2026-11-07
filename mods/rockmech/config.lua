@@ -547,6 +547,9 @@ function config.load(get)
 	local ol = parse_bool(get("rockmech_only_lithologies"))
 	if ol == nil then ol = config.defaults.only_lithologies end
 	cfg.only_lithologies = ol
+	-- 產生地圖時，比地表（surface_y）高 1 m 以上的天然岩石鋪 1–3 m 表土、種樹，山腳鋪漸薄的坡腳（mapgen.lua）
+	local mt = parse_bool(get("rockmech_mapgen_topsoil"))
+	cfg.mapgen_topsoil = mt ~= false
 	local lm = get("rockmech_lith_mode")
 	cfg.lith_mode = (lm == "zones" or lm == "layers") and lm or config.defaults.lith_mode
 	cfg.zone_width = math.max(4, math.floor(tonumber(get("rockmech_zone_width")) or config.defaults.zone_width))
