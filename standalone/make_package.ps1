@@ -14,7 +14,7 @@
 
 param(
 	[string]$Out = "D:\Teaching",
-	[string]$Name = "MiningMechanics"
+	[string]$Name = "GeoRocker"
 )
 
 $ErrorActionPreference = "Stop"

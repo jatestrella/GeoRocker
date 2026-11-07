@@ -1,4 +1,4 @@
-# Mining Mechanics 遊戲參數總表
+# GeoRocker 遊戲參數總表
 
 rockmech 模組所有可調參數，依學科分類。設定名都加上前綴 `rockmech_`（例如 `slope_angle` 是 `rockmech_slope_angle`）。
 可以寫在世界資料夾的 `rockmech.conf`（優先）或 `minetest.conf`。完整英文說明與範圍見 `mods/rockmech/settingtypes.txt`。

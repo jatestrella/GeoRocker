@@ -187,7 +187,7 @@ end)
 
 local BANK_FILE = core.get_worldpath() .. "/questions.txt"
 local DEFAULT_BANK = [[
-# Mining Mechanics 進修題庫（老師可以自己改；改完重開伺服器生效）
+# GeoRocker 進修題庫（老師可以自己改；改完重開伺服器生效）
 #
 # 格式：
 #   [品位判讀]、[岩體分類]、[岩石力學] 開始一個科目（科目名稱要跟這三個一樣）

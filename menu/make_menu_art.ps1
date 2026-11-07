@@ -1,5 +1,5 @@
 ﻿param([string]$OutDir)
-# Mining Mechanics 主選單／標題畫面的圖：背景插圖（露天礦坑）、標題 logo、遊戲圖示
+# GeoRocker 主選單／標題畫面的圖：背景插圖（露天礦坑）、標題 logo、遊戲圖示
 Add-Type -AssemblyName System.Drawing
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
@@ -121,7 +121,7 @@ $fam = New-Object System.Drawing.FontFamily('Bahnschrift SemiBold Condensed')
 $sf = New-Object System.Drawing.StringFormat; $sf.Alignment = 'Center'
 $path = New-Object System.Drawing.Drawing2D.GraphicsPath
 $path.FillMode = "Winding"
-$path.AddString('MINING MECHANICS', $fam, 0, 170, (New-Object System.Drawing.RectangleF(0, 10, $LW, 200)), $sf)
+$path.AddString('GEOROCKER', $fam, 0, 170, (New-Object System.Drawing.RectangleF(0, 10, $LW, 200)), $sf)
 # 陰影
 $m = New-Object System.Drawing.Drawing2D.Matrix; $m.Translate(8, 10)
 $shadow = $path.Clone(); $shadow.Transform($m)
@@ -134,8 +134,8 @@ $g.FillPath($gold, $path)
 # 副標與線條
 $g.FillRectangle((New-Object System.Drawing.SolidBrush((C "#e0a020"))), 250, 205, 900, 4)
 $sub = New-Object System.Drawing.Font('Bahnschrift SemiBold SemiConden', 34)
-$g.DrawString('ROCK MECHANICS  ·  DRILL & BLAST  ·  HAULAGE', $sub, (New-Object System.Drawing.SolidBrush((C '#000000' 160))), (New-Object System.Drawing.RectangleF(3, 219, $LW, 60)), $sf)
-$g.DrawString('ROCK MECHANICS  ·  DRILL & BLAST  ·  HAULAGE', $sub, (New-Object System.Drawing.SolidBrush((C '#f4e6c8'))), (New-Object System.Drawing.RectangleF(0, 216, $LW, 60)), $sf)
+$g.DrawString('ROCK MECHANICS  ·  MINING  ·  GEOTECHNICS', $sub, (New-Object System.Drawing.SolidBrush((C '#000000' 160))), (New-Object System.Drawing.RectangleF(3, 219, $LW, 60)), $sf)
+$g.DrawString('ROCK MECHANICS  ·  MINING  ·  GEOTECHNICS', $sub, (New-Object System.Drawing.SolidBrush((C '#f4e6c8'))), (New-Object System.Drawing.RectangleF(0, 216, $LW, 60)), $sf)
 $g.Dispose()
 $bmp.Save((Join-Path $OutDir 'header.png'), [System.Drawing.Imaging.ImageFormat]::Png)
 $bmp.Dispose()
