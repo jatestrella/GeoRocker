@@ -326,19 +326,21 @@ do
 end
 
 ---------------------------------------------------------------------------
--- 山上的樹林：每條礦帶交界的山脊種滿蘋果樹（每棵樹底下一格滿土、周圍一圈半格土，土是 nodes.lua 的土壤碎石）；
+-- 山上的土和樹林：每條礦帶交界的山脊整片鋪一層土（nodes.lua 的土壤碎石，0–1 m），上面稀疏種蘋果樹；
 -- 鋸木台、木工桌放在營地裡。
--- 2026-11-07 的教訓：蓋的時候絕不動岩石（換掉岩石等於開挖），而且用 VoxelManip 寫（不觸發破壞判定、顆粒流）。
--- 種樹的位置：局部平坦（周圍 8 格的地面高度是 h 或 h + 1，外面一圈不低於 h），樹根的土和半格土都在安息角內，
--- 之後不會自己流動、樹也不會自己倒
+-- 土的厚度照安息角算：顆粒流在相鄰兩格土面高差 ≥ 8·d·tan(安息角) + 1（八分之一公尺，d = 1 或 √2）時才流
+-- （granular.choose_flow），所以每一格有土的格子，對 8 個鄰格的高差都壓在這以下：鋪好就是穩定的，不會自己流。
+-- 太陡、怎麼鋪都會超過的地方就不鋪，留岩石（陡坡只有岩石、緩坡才積得住土）。
+-- 2026-11-07 的教訓：蓋的時候絕不動岩石（換掉岩石等於開挖），而且用 VoxelManip 寫（不觸發破壞判定、顆粒流）
 ---------------------------------------------------------------------------
 
-local SPACING = 3            -- 樹距 (m)
-local RIDGE_X = 30           -- 山脊中線兩側各找幾公尺
-local Z1, Z2 = -40, 160      -- 沿山脊種到哪裡（z）
-local MIN_RISE = 4           -- 比地表高這麼多才算山上（走廊、平地不種）
+local RIDGE_X = 30           -- 山脊中線兩側各鋪幾公尺
+local Z1, Z2 = -40, 160      -- 沿山脊鋪到哪裡（z）
+local MIN_RISE = 1           -- 比地表高這麼多才算山坡（走廊、平地不鋪）
+local TREE_GAP = 6           -- 樹距 (m)，再加隨機偏移、隨機跳過一些
+local DIRS8 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}}
 
--- 範圍內每一欄最高的非空氣格（有東西就不是空地）
+-- 範圍內每一欄最高的非空氣格
 local function heightmap(x1, x2, z1, z2)
 	local vm = core.get_voxel_manip()
 	local e1, e2 = vm:read_from_map({x = x1, y = -20, z = z1}, {x = x2, y = 60, z = z2})
@@ -354,9 +356,9 @@ local function heightmap(x1, x2, z1, z2)
 	end end
 	return h
 end
-local function jitter(x, z, seed)   -- 每個位置固定的小偏移，樹才不會排成棋盤
+local function rnd(x, z, seed)      -- 每個位置固定的 0..1 亂數
 	local v = math.sin(x * 12.9898 + z * 78.233 + seed * 37.719) * 43758.5453
-	return math.floor((v - math.floor(v)) * 3) - 1
+	return v - math.floor(v)
 end
 
 local function plant_ridge(xr)
@@ -364,47 +366,75 @@ local function plant_ridge(xr)
 	if storage:get_string(key) ~= "" then return end
 	storage:set_string(key, "1")
 	local x1, x2 = xr - RIDGE_X, xr + RIDGE_X
-	local h = heightmap(x1 - 2, x2 + 2, Z1 - 2, Z2 + 2)
+	local h = heightmap(x1 - 1, x2 + 1, Z1 - 1, Z2 + 1)
 	local surface = cfg.surface_y or 0
-	local spots, taken = {}, {}
-	for gx = x1, x2, SPACING do for gz = Z1, Z2, SPACING do
-		local x, z = gx + jitter(gx, gz, 1), gz + jitter(gx, gz, 2)
+	local tan = math.tan(math.rad(rockmech.cfg.slope.angle))
+	local LIM = {}                  -- 往 DIRS8[i] 的鄰格，土面最多可以高幾個八分之一公尺（再高一點就會流）
+	for i, d in ipairs(DIRS8) do
+		local dist = (d[1] ~= 0 and d[2] ~= 0) and math.sqrt(2) or 1
+		LIM[i] = math.ceil(8 * dist * tan + 1) - 1
+	end
+	-- 土的級數 k（0..8，鋪在地面上一格）：先全部鋪滿，再一輪一輪把比鄰格高太多的那格削薄，直到全部穩定
+	local k = {}
+	for x = x1, x2 do for z = Z1, Z2 do
 		local y = h[x .. "," .. z]
-		local ok = y and y >= surface + MIN_RISE and not taken[x .. "," .. z]
-		for dx = -2, 2 do
-			if not ok then break end
-			for dz = -2, 2 do
-				local t = h[(x + dx) .. "," .. (z + dz)]
-				local near = math.abs(dx) <= 1 and math.abs(dz) <= 1
-				if not t or t < y or (near and t > y + 1) then ok = false; break end
-			end
-		end
-		if ok then
-			spots[#spots + 1] = {x = x, y = y, z = z}
-			for dx = -1, 1 do for dz = -1, 1 do taken[(x + dx) .. "," .. (z + dz)] = true end end
-		end
+		if y and y >= surface + MIN_RISE then k[x .. "," .. z] = NLEV end
 	end end
-	if #spots == 0 then return end
-	-- 土：樹根一格滿土、周圍同高的一圈半格土（VoxelManip：不觸發破壞判定、顆粒流）
-	local vm = core.get_voxel_manip()
-	local e1, e2 = vm:read_from_map({x = x1 - 2, y = -20, z = Z1 - 2}, {x = x2 + 2, y = 61, z = Z2 + 2})
-	local area = VoxelArea(e1, e2)
-	local data = vm:get_data()
-	local c_full = core.get_content_id(SOIL)
-	local c_half = core.get_content_id(rockmech.rubble_with_level(SOIL, NLEV / 2))
-	for _, s in ipairs(spots) do
-		for dx = -1, 1 do for dz = -1, 1 do
-			if h[(s.x + dx) .. "," .. (s.z + dz)] == s.y then
-				local i = area:index(s.x + dx, s.y + 1, s.z + dz)
-				if data[i] == core.CONTENT_AIR then data[i] = (dx == 0 and dz == 0) and c_full or c_half end
+	local function e(x, z)          -- 土面高度（八分之一公尺）
+		local y = h[x .. "," .. z]
+		return y and (8 * (y + 1) + (k[x .. "," .. z] or 0)) or nil
+	end
+	for _ = 1, 40 do
+		local changed = false
+		for x = x1, x2 do for z = Z1, Z2 do
+			local kk = k[x .. "," .. z]
+			if kk and kk > 0 then
+				local base = 8 * (h[x .. "," .. z] + 1)
+				for i, d in ipairs(DIRS8) do
+					local eb = e(x + d[1], z + d[2])
+					if eb and base + kk - eb > LIM[i] then kk = math.max(0, eb + LIM[i] - base) end
+				end
+				if kk ~= k[x .. "," .. z] then k[x .. "," .. z] = kk; changed = true end
 			end
 		end end
+		if not changed then break end
 	end
+	-- 寫進地圖（VoxelManip：不觸發破壞判定、顆粒流）
+	local vm = core.get_voxel_manip()
+	local e1, e2 = vm:read_from_map({x = x1, y = -20, z = Z1}, {x = x2, y = 61, z = Z2})
+	local area = VoxelArea(e1, e2)
+	local data = vm:get_data()
+	local cid = {}
+	for lv = 1, NLEV do cid[lv] = core.get_content_id(rockmech.rubble_with_level(SOIL, lv)) end
+	local n_soil = 0
+	for x = x1, x2 do for z = Z1, Z2 do
+		local kk = k[x .. "," .. z]
+		if kk and kk > 0 then
+			local i = area:index(x, h[x .. "," .. z] + 1, z)
+			if data[i] == core.CONTENT_AIR then data[i] = cid[kk]; n_soil = n_soil + 1 end
+		end
+	end end
 	vm:set_data(data)
 	vm:write_to_map(true)
-	-- 樹（grow_tree 也是 VoxelManip，樹幹就長在這一格）
-	for _, s in ipairs(spots) do default.grow_tree({x = s.x, y = s.y + 2, z = s.z}, true) end
-	core.log("action", ("[rockmech] 山脊 x = %d 種了 %d 棵樹"):format(xr, #spots))
+	-- 樹：稀疏（間距 TREE_GAP、隨機偏移、四成跳過），只種在滿格土上；周圍 8 格的土面都高出 1 m 以上的（窪地）不種
+	local n_tree = 0
+	for gx = x1, x2, TREE_GAP do for gz = Z1, Z2, TREE_GAP do
+		local x = gx + math.floor(rnd(gx, gz, 1) * 5) - 2
+		local z = gz + math.floor(rnd(gx, gz, 2) * 5) - 2
+		if rnd(gx, gz, 3) > 0.4 and k[x .. "," .. z] == NLEV then
+			local root = 8 * (h[x .. "," .. z] + 2)     -- 樹根（樹幹最下面那格的底）
+			local buried = true
+			for _, d in ipairs(DIRS8) do
+				local eb = e(x + d[1], z + d[2])
+				if not eb or eb - root <= 8 then buried = false; break end
+			end
+			if not buried then
+				default.grow_tree({x = x, y = h[x .. "," .. z] + 2, z = z}, true)
+				n_tree = n_tree + 1
+			end
+		end
+	end end
+	core.log("action", ("[rockmech] 山脊 x = %d 鋪了 %d 格土、種了 %d 棵樹"):format(xr, n_soil, n_tree))
 end
 
 -- 鋸木台、木工桌：營地中心往東南，交車區北邊（營地中心 (x0, 0)）
