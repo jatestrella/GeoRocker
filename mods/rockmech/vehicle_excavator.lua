@@ -326,10 +326,14 @@ local function excavator(kind, P)
 		local hl = math.sqrt(look.x * look.x + look.z * look.z)
 		local fx, fz = hl > 0 and look.x / hl or 0, hl > 0 and look.z / hl or 0
 		local side = def.eye_side or 0   -- 往右（視線的右邊 = (fz, −fx)）
-		local eye = {x = pos.x + fx * def.eye_fwd + fz * side, y = pos.y + def.eye_up, z = pos.z + fz * def.eye_fwd - fx * side}
+		-- 相機高度：坐著的動畫把玩家的眼睛高度改成 0.8 m（不是站著的 1.625），照玩家實際的 eye_height 算，
+		-- 不然射線從比相機高約 0.8 m 的地方出發，指到的格子會比準心遠
+		local pr = d.get_properties and d:get_properties()
+		local eh = pr and pr.eye_height or V.EYE_HEIGHT
+		local eye = {x = pos.x + fx * def.eye_fwd + fz * side, y = pos.y + eh + def.eye_up - V.EYE_HEIGHT, z = pos.z + fz * def.eye_fwd - fx * side}
 		local reach = P.dig_reach
 		if self.chase and self.chase:get_pos() then
-			eye = vector.add(self.chase:get_pos(), {x = 0, y = V.EYE_HEIGHT, z = 0})
+			eye = vector.add(self.chase:get_pos(), {x = 0, y = eh, z = 0})
 			reach = P.dig_reach + 12   -- 追蹤相機在車子後方，射線要長一點
 		end
 		-- 先找方塊
