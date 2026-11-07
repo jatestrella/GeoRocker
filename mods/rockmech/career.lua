@@ -262,7 +262,9 @@ local function put_down(player, pos)
 	local c = carried(player)
 	if not c then return end
 	if c.box then
-		if rockmech.corebox_put and rockmech.corebox_put(pos, c.box) then set_carried(player, nil)
+		-- 箱子的方向照玩家面對的方向（疊上去的跟著底下那箱）
+		local fd = core.dir_to_facedir(core.yaw_to_dir(player:get_look_horizontal()))
+		if rockmech.corebox_put and rockmech.corebox_put(pos, c.box, fd) then set_carried(player, nil)
 		else rockmech.notify(player:get_player_name(), S("The core box does not fit here: right-click empty ground (or the top of another box)")) end
 		return
 	end
@@ -362,16 +364,24 @@ local function load_near(player, pos)
 	return false
 end
 
--- 右鍵：點到方塊的右鍵功能優先，再來是旁邊的車斗，否則放下手上的碎石（鎬子和空手共用）
+-- 右鍵：手上捧著東西就先處理捧著的（裝上旁邊的車斗、放下；岩芯箱點另一箱就疊上去），
+-- 沒捧東西才是點到方塊的右鍵功能（鎬子和空手共用）
 local function place(itemstack, placer, pointed)
 	if pointed.type ~= "node" then return itemstack end
+	local c = carried(placer)
+	if c then
+		if c.box and rockmech.is_corebox and rockmech.is_corebox(core.get_node(pointed.under).name) then
+			put_down(placer, pointed.under)
+		elseif not (not c.box and load_near(placer, pointed.above)) then
+			put_down(placer, pointed.above)
+		end
+		return itemstack
+	end
 	local un = core.get_node(pointed.under)
 	local def = core.registered_nodes[un.name]
 	if def and def.on_rightclick and not placer:get_player_control().sneak then
 		return def.on_rightclick(pointed.under, un, placer, itemstack, pointed)
 	end
-	local c = carried(placer)
-	if not (c and not c.box and load_near(placer, pointed.above)) then put_down(placer, pointed.above) end
 	return itemstack
 end
 
@@ -415,6 +425,14 @@ core.register_tool(SHOVEL, {
 	on_secondary_use = place_air,
 })
 
+-- 手上的東西有自己的右鍵動作（無人機遙控器、地質羅盤、起爆器、回營地…）：對 NPC、車子按右鍵時，
+-- 引擎會同時叫 NPC 的 on_rightclick 和物品的 on_secondary_use；手上物品優先，NPC、車子這邊就不理
+local own_rightclick = {}
+function rockmech.hand_first(player)
+	if not (player and player:is_player()) then return false end
+	return own_rightclick[player:get_wielded_item():get_name()] == true
+end
+
 -- 徒手：只敲得動礦石，碎石拿得起來
 core.register_on_mods_loaded(function()
 	local t = cfg.hand_rubble_time
@@ -431,9 +449,14 @@ core.register_on_mods_loaded(function()
 	-- 手上捧著東西（碎石、岩芯箱）時，不管手上拿著什麼（木板、方塊、別的工具），右鍵都先放下捧著的東西：
 	-- 不然拿著方塊的右鍵會變成放方塊，岩芯箱放不下來
 	local skip = {[""] = true, [PICK] = true, [SHOVEL] = true, air = true, ignore = true, unknown = true}
+	local default_secondary = {}
+	for _, d in ipairs({core.nodedef_default, core.craftitemdef_default, core.tooldef_default, core.noneitemdef_default}) do
+		if d and d.on_secondary_use then default_secondary[d.on_secondary_use] = true end
+	end
 	for name, def in pairs(core.registered_items) do
 		if not skip[name] then
 			local op, os = def.on_place, def.on_secondary_use
+			if os and not default_secondary[os] then own_rightclick[name] = true end     -- 引擎預設的不算
 			core.override_item(name, {
 				on_place = function(itemstack, placer, pointed)
 					if placer and placer:is_player() and carried(placer) then return place(itemstack, placer, pointed) end
@@ -577,7 +600,7 @@ core.register_entity(VENDOR, {
 		self.object:set_armor_groups({immortal = 1})
 		self.object:set_animation({x = 0, y = 79}, 30)
 	end,
-	on_rightclick = function(self, clicker) open_shop(clicker) end,
+	on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end open_shop(clicker) end,
 	on_punch = function() return true end,
 })
 
@@ -596,7 +619,7 @@ for kind, b in pairs(BOOTHS) do
 			if b.sit then self.object:set_animation({x = 81, y = 160}, 30)
 			else self.object:set_animation({x = 0, y = 79}, 30) end
 		end,
-		on_rightclick = function(self, clicker) open_shop(clicker, kind) end,
+		on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end open_shop(clicker, kind) end,
 		on_punch = function() return true end,
 	})
 end

@@ -365,7 +365,7 @@ for who, npc in pairs(NPCS) do
 			if npc.sit then self.object:set_animation({x = 81, y = 160}, 30)
 			else self.object:set_animation({x = 0, y = 79}, 30) end
 		end,
-		on_rightclick = function(self, clicker) if clicker and clicker:is_player() then open(clicker, who) end end,
+		on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end if clicker and clicker:is_player() then open(clicker, who) end end,
 		on_punch = function() return true end,
 	})
 	-- 由 career.lua 的 ensure_vendors 補人（攤主位置清單裡 kind = who）

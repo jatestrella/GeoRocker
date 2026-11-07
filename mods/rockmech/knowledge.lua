@@ -149,7 +149,7 @@ core.register_entity(FOLLOWER, {
 		end
 	end,
 	on_punch = function() return true end,
-	on_rightclick = function(self, clicker)
+	on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end
 		if clicker and clicker:is_player() then
 			rockmech.notify(clicker:get_player_name(), S("[Geologist] @1 left on my contract. While I'm here, the whole team can see grade, lithology, GSI, stress and factor of safety.",
 				mmss(hire_left(self.acc or ""))))
@@ -745,7 +745,7 @@ core.register_entity(PROF, {
 		self.object:set_armor_groups({immortal = 1})
 		self.object:set_animation({x = 0, y = 79}, 20)
 	end,
-	on_rightclick = function(self, clicker)
+	on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end
 		if clicker and clicker:is_player() then core.show_formspec(clicker:get_player_name(), PROF_FORM, prof_form(clicker:get_player_name())) end
 	end,
 	on_punch = function() return true end,

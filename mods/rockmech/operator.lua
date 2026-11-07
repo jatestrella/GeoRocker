@@ -245,7 +245,7 @@ core.register_entity(NPC, {
 			else self.object:set_animation({x = 0, y = 79}, 30) end
 		end
 	end,
-	on_rightclick = function(self, clicker)
+	on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end
 		if not (clicker and clicker:is_player()) then return end
 		local ex = self.uid and V.by_uid[self.uid]
 		if not ex then return end
@@ -386,7 +386,7 @@ core.register_entity(SEATED, {
 		self.object:set_animation({x = 81, y = 160}, 30)
 		rockmech.npc_dress(self.object, "operator")
 	end,
-	on_rightclick = function(self, clicker)
+	on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end
 		if clicker and clicker:is_player() then rockmech.op_bench_click(self.object:get_pos(), clicker) end
 	end,
 	on_punch = function() return true end,

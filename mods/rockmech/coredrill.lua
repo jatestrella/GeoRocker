@@ -209,12 +209,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	save_logs(acc, list)
 	casing_info(pos, acc, n, meta:get_int("depth"))
 	-- 附近（48 m 內）這一孔的岩芯箱跟著改名牌；遠處的在下次放下時更新
-	for _, p in ipairs(core.find_nodes_in_area(vector.subtract(pos, 48), vector.add(pos, 48), {COREBOX})) do
+	for _, p in ipairs(core.find_nodes_in_area(vector.subtract(pos, 48), vector.add(pos, 48), rockmech.corebox_names)) do
 		local m = core.get_meta(p)
-		if m:get_string("acc") == acc and m:get_int("n") == n then
-			m:set_string("infotext", S("Core box @1 (@2, depth @3 m)\nLeft-click to pick it up; right-click with a field notebook to log it", label_of(b),
-				rockmech.account_label and rockmech.account_label(acc) or acc, tostring(m:get_int("depth"))))
-		end
+		if m:get_string("acc") == acc and m:get_int("n") == n then rockmech.corebox_relabel(p) end
 	end
 	local msg = S("[Borehole] @1 renamed @2 to @3", name, old, label_of(b))
 	for _, m in ipairs(rockmech.account_members and rockmech.account_members(acc) or {name}) do rockmech.notify(m, msg) end
@@ -259,39 +256,49 @@ local function box_tex(top)
 end
 rockmech.corebox_tex = box_tex(true)
 rockmech.corebox_side_tex = box_tex(false)
-core.register_node(COREBOX, {
-	description = S("Core box"), drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
-	tiles = {box_tex(true), box_tex(false), box_tex(false)},
-	node_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.5 + 0.4 / 3, 0.3}},
-	-- 高度 0.4/3 m（實際的岩芯箱約 10 cm 高）；疊起來時一箱佔一格，上面那箱放在上一格
-	selection_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.5 + 0.4 / 3, 0.3}},
-	groups = {crumbly = 3, falling_node = 1, not_in_creative_inventory = 1},
-	is_ground_content = false, drop = "",
-	on_rightclick = function(...) return corebox_rightclick(...) end,
-})
--- 打開的岩芯箱：箱蓋立在後面，上面看得到五條岩芯
-local BOX_H = 0.4 / 3
+-- 岩芯箱可以疊：一格裡最多 STACK_MAX 箱（一箱高 BOX_H = 0.4/3 m，實際的岩芯箱約 10 cm 高），滿了再往上一格疊。
+-- 一格一個方塊：corebox（1 箱）、corebox_2 … corebox_7；最上面那箱的資料在 meta 的 acc、n、depth、core，
+-- 下面幾箱在 meta below = {{acc, n, depth, core}, …}（由下往上）。打開、判讀、點荷重、捧起來都是對最上面那箱。
+-- 有人在看：換成打開的版本（最上面那箱的箱蓋立在後面、看得到岩芯）
+local BOX_H, STACK_MAX = 0.4 / 3, 7
+-- 側面：每箱之間一條深色接縫（貼圖 30 px = 1 m，一箱 4 px，從底下往上）
+local SIDE = "[fill:30x30:" .. BLUE
+for k = 1, STACK_MAX do SIDE = SIDE .. ("^[fill:30x1:0,%d:#1a3a80"):format(30 - 4 * k) end
 local open_top = ("[fill:16x16:%s"):format(BLUE)
 for k = 0, 4 do open_top = open_top .. ("^[fill:14x2:1,%d:#a09a90"):format(1 + k * 3) end
-core.register_node(COREBOX_OPEN, {
-	description = S("Core box"), drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
-	tiles = {open_top, box_tex(false), box_tex(false), box_tex(false), box_tex(false), "[fill:16x16:#3a72d8"},
-	node_box = {type = "fixed", fixed = {
-		{-0.45, -0.5, -0.3, 0.45, -0.5 + BOX_H, 0.3},
-		{-0.45, -0.5 + BOX_H, 0.3, 0.45, -0.5 + BOX_H + 0.6, 0.34},
-	}},
-	selection_box = {type = "fixed", fixed = {-0.45, -0.5, -0.3, 0.45, -0.5 + BOX_H, 0.3}},
-	groups = {crumbly = 3, falling_node = 1, not_in_creative_inventory = 1},
-	is_ground_content = false, drop = "",
-	on_rightclick = function(...) return corebox_rightclick(...) end,
-})
+local closed_of, open_of, count_of = {}, {}, {}      -- 箱數 → 名稱；名稱 → 箱數
+for k = 1, STACK_MAX do
+	closed_of[k] = k == 1 and COREBOX or (COREBOX .. "_" .. k)
+	open_of[k] = k == 1 and COREBOX_OPEN or (COREBOX_OPEN .. "_" .. k)
+	count_of[closed_of[k]], count_of[open_of[k]] = k, k
+	local top = -0.5 + k * BOX_H
+	local body = {-0.45, -0.5, -0.3, 0.45, top, 0.3}
+	local common = {
+		description = S("Core box"), drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
+		selection_box = {type = "fixed", fixed = body},
+		groups = {crumbly = 3, falling_node = 1, not_in_creative_inventory = 1},
+		is_ground_content = false, drop = "",
+		on_rightclick = function(...) return corebox_rightclick(...) end,
+	}
+	local c = table.copy(common)
+	c.tiles = {box_tex(true), box_tex(false), SIDE}
+	c.node_box = {type = "fixed", fixed = body}
+	core.register_node(closed_of[k], c)
+	local o = table.copy(common)
+	o.tiles = {open_top, box_tex(false), SIDE, SIDE, SIDE, "[fill:16x16:#3a72d8"}
+	o.node_box = {type = "fixed", fixed = {body, {-0.45, top, 0.3, 0.45, top + 0.6, 0.34}}}
+	core.register_node(open_of[k], o)
+end
 
--- 放一箱在 pos（空的那一格）：data = {acc, n, depth}
-function rockmech.corebox_put(pos, data)
-	local nd = core.registered_nodes[core.get_node(pos).name]
-	if not (nd and nd.buildable_to) then return false end
-	core.set_node(pos, {name = COREBOX, param2 = math.random(0, 3)})
-	local meta = core.get_meta(pos)
+local function box_infotext(meta, data, k)
+	meta:set_string("infotext", S("Core box @1 (@2, depth @3 m)\nRight-click to open it; left-click to pick it up; right-click with a field notebook to log it", bh_label(data.acc, data.n),
+		rockmech.account_label and rockmech.account_label(data.acc) or data.acc, tostring(data.depth))
+		.. (k > 1 and ("\n" .. S("@1 boxes stacked", tostring(k))) or ""))
+end
+local function top_of(meta)
+	return {acc = meta:get_string("acc"), n = meta:get_int("n"), depth = meta:get_int("depth"), core = meta:get_string("core")}
+end
+local function set_top(meta, data)
 	meta:set_string("acc", data.acc)
 	meta:set_int("n", data.n)
 	meta:set_int("depth", data.depth)
@@ -302,24 +309,70 @@ function rockmech.corebox_put(pos, data)
 		cs = b and core.serialize({pos = b.pos, rows = b.rows, stop = b.stop}) or ""
 	end
 	meta:set_string("core", cs)
-	meta:set_string("infotext", S("Core box @1 (@2, depth @3 m)\nRight-click to open it; left-click to pick it up; right-click with a field notebook to log it", bh_label(data.acc, data.n),
-		rockmech.account_label and rockmech.account_label(data.acc) or data.acc, tostring(data.depth)))
-	return true
 end
--- 捧起 pos 那一箱：回傳 data，或 nil（不是自己組的）
+-- 放一箱在 pos：空的那一格就放一箱（facedir：朝向，省略就隨機）；pos 已經是一疊岩芯箱就疊上去，滿了往上一格。
+-- data = {acc, n, depth, core}。回傳放下了沒
+function rockmech.corebox_put(pos, data, facedir)
+	for _ = 1, 3 do
+		local node = core.get_node(pos)
+		local k = count_of[node.name]
+		if k then
+			if k < STACK_MAX then
+				local meta = core.get_meta(pos)
+				local below = core.deserialize(meta:get_string("below")) or {}
+				below[#below + 1] = top_of(meta)
+				meta:set_string("below", core.serialize(below))
+				set_top(meta, data)
+				local opened_now = node.name == open_of[k]
+				core.swap_node(pos, {name = (opened_now and open_of or closed_of)[k + 1], param2 = node.param2})
+				box_infotext(meta, data, k + 1)
+				return true
+			end
+			pos = {x = pos.x, y = pos.y + 1, z = pos.z}
+		else
+			local nd = core.registered_nodes[node.name]
+			if not (nd and nd.buildable_to) then return false end
+			core.set_node(pos, {name = COREBOX, param2 = facedir or math.random(0, 3)})
+			local meta = core.get_meta(pos)
+			set_top(meta, data)
+			box_infotext(meta, data, 1)
+			return true
+		end
+	end
+	return false
+end
+-- 捧起 pos 那一疊最上面的一箱：回傳 data，或 nil（不是自己組的）
 function rockmech.corebox_take(pos, player)
+	local node = core.get_node(pos)
+	local k = count_of[node.name]
+	if not k then return nil end
 	local meta = core.get_meta(pos)
-	local data = {acc = meta:get_string("acc"), n = meta:get_int("n"), depth = meta:get_int("depth"), core = meta:get_string("core")}
+	local data = top_of(meta)
 	if rockmech.owner_ok and not rockmech.owner_ok(data.acc, player:get_player_name()) then return nil end
 	for name, p in pairs(viewing_box) do
 		if vector.equals(p, pos) then core.close_formspec(name, OPEN_FORM); viewing_box[name] = nil end
 	end
 	opened[core.hash_node_position(pos)] = nil
-	core.remove_node(pos)
-	core.check_for_falling({x = pos.x, y = pos.y + 1, z = pos.z})
+	if k > 1 then
+		local below = core.deserialize(meta:get_string("below")) or {}
+		local nxt = table.remove(below) or data
+		meta:set_string("below", core.serialize(below))
+		set_top(meta, nxt)
+		core.swap_node(pos, {name = closed_of[k - 1], param2 = node.param2})
+		box_infotext(meta, nxt, k - 1)
+	else
+		core.remove_node(pos)
+		core.check_for_falling({x = pos.x, y = pos.y + 1, z = pos.z})
+	end
 	return data
 end
 rockmech.COREBOX = COREBOX
+rockmech.corebox_names = {}
+for k = 1, STACK_MAX do table.insert(rockmech.corebox_names, closed_of[k]); table.insert(rockmech.corebox_names, open_of[k]) end
+function rockmech.corebox_relabel(p)
+	local k = count_of[core.get_node(p).name]
+	if k then local meta = core.get_meta(p); box_infotext(meta, top_of(meta), k) end
+end
 
 ---------------------------------------------------------------------------
 -- 打開岩芯箱：右鍵打開（旁人看到箱蓋掀起來、裡面一排排岩芯），自己看到一個大的岩芯箱介面：
@@ -329,7 +382,7 @@ rockmech.COREBOX = COREBOX
 ---------------------------------------------------------------------------
 
 local PER_ROW, VIEW_ROWS = 5, 5            -- 一槽幾公尺、一次看幾槽
-local function is_corebox(name) return name == COREBOX or name == COREBOX_OPEN end
+local function is_corebox(name) return count_of[name] ~= nil end
 rockmech.is_corebox = is_corebox
 
 local function close_for(name)
@@ -341,7 +394,8 @@ local function close_for(name)
 	if set then set[name] = nil; if next(set) then return end end
 	opened[key] = nil
 	local node = core.get_node(pos)
-	if node.name == COREBOX_OPEN then core.swap_node(pos, {name = COREBOX, param2 = node.param2}) end
+	local k = count_of[node.name]
+	if k and node.name == open_of[k] then core.swap_node(pos, {name = closed_of[k], param2 = node.param2}) end
 end
 
 -- 0..1 的假亂數（同一孔同一公尺每次一樣）：節理裂縫畫在那一公尺的哪裡、碎石段的碎塊
@@ -525,7 +579,8 @@ local function open_box(pos, clicker)
 	local bh = {n = n, pos = c.pos, rows = c.rows, stop = c.stop, depth = #c.rows, name = (find_bh(acc, n) or {}).name}
 	close_for(name)
 	local node = core.get_node(pos)
-	if node.name == COREBOX then core.swap_node(pos, {name = COREBOX_OPEN, param2 = node.param2}) end
+	local k = count_of[node.name]
+	if k and node.name == closed_of[k] then core.swap_node(pos, {name = open_of[k], param2 = node.param2}) end
 	local key = core.hash_node_position(pos)
 	opened[key] = opened[key] or {}
 	opened[key][name] = true
@@ -561,9 +616,9 @@ end)
 core.register_on_leaveplayer(function(player) close_for(player:get_player_name()) end)
 -- 重開伺服器時沒人在看：打開的箱子蓋回去
 core.register_lbm({
-	label = "Close open core boxes", name = "rockmech:corebox_close", nodenames = {COREBOX_OPEN}, run_at_every_load = true,
+	label = "Close open core boxes", name = "rockmech:corebox_close", nodenames = open_of, run_at_every_load = true,
 	action = function(pos, node)
-		if not opened[core.hash_node_position(pos)] then core.swap_node(pos, {name = COREBOX, param2 = node.param2}) end
+		if not opened[core.hash_node_position(pos)] then core.swap_node(pos, {name = closed_of[count_of[node.name]], param2 = node.param2}) end
 	end,
 })
 

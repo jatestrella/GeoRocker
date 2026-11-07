@@ -1294,7 +1294,7 @@ function V.register(kind, def)
 			if def.on_save then def.on_save(self, data) end
 			return core.serialize(data)
 		end,
-		on_rightclick = function(self, clicker)
+		on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end
 			if not clicker or not clicker:is_player() then return end
 			local name = clicker:get_player_name()
 			if self.driver == name then get_off(self); return end

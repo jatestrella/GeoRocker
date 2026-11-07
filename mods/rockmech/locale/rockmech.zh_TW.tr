@@ -155,11 +155,11 @@ The core is in the blue core box; right-click the core box with a field notebook
 Borehole name (up to @1 characters, blank @= BH-@2)=鑽孔名稱（最多 @1 個字，空白 @= BH-@2）
 Save name=儲存名稱
 Another team's borehole; you cannot rename it=別組的鑽孔，不能改名字
-Core box @1 (@2, depth @3 m)@nLeft-click to pick it up; right-click with a field notebook to log it=岩芯箱 @1（@2，深 @3 m）@n左鍵捧起來；拿野帳本右鍵判讀
 [Borehole] @1 renamed @2 to @3=[鑽孔] @1 把 @2 改名為 @3
 Core box=岩芯箱
 [Core box] No record found for this hole=[岩芯箱] 找不到這一孔的紀錄
 Core box @1 (@2, depth @3 m)@nRight-click to open it; left-click to pick it up; right-click with a field notebook to log it=岩芯箱 @1（@2，深 @3 m）@n右鍵打開；左鍵捧起來；拿野帳本右鍵判讀
+@1 boxes stacked=疊了 @1 箱
 Core box @1 (@2)   Collar (@3, @4, @5)   Depth @6 m=岩芯箱 @1（@2）   孔口 (@3, @4, @5)   深 @6 m
 RQD @1%  joints @2=RQD @1%  節理 @2
 grade @1%=品位 @1%
@@ -1350,6 +1350,7 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Core box @1 (@2, depth @3 m)@nLeft-click to pick it up; right-click with a field notebook to log it=岩芯箱 @1（@2，深 @3 m）@n左鍵捧起來；拿野帳本右鍵判讀
 Field notebook: point load tests (@1)=野帳本：點荷重試驗（@1 筆）
 Hole=鑽孔
 Depth (m)=深度 (m)

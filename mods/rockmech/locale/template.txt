@@ -155,11 +155,11 @@ The core is in the blue core box; right-click the core box with a field notebook
 Borehole name (up to @1 characters, blank @= BH-@2)=
 Save name=
 Another team's borehole; you cannot rename it=
-Core box @1 (@2, depth @3 m)@nLeft-click to pick it up; right-click with a field notebook to log it=
 [Borehole] @1 renamed @2 to @3=
 Core box=
 [Core box] No record found for this hole=
 Core box @1 (@2, depth @3 m)@nRight-click to open it; left-click to pick it up; right-click with a field notebook to log it=
+@1 boxes stacked=
 Core box @1 (@2)   Collar (@3, @4, @5)   Depth @6 m=
 RQD @1%  joints @2=
 grade @1%=
