@@ -361,10 +361,11 @@ local function rnd(x, z, seed)      -- 每個位置固定的 0..1 亂數
 	return v - math.floor(v)
 end
 
+local planting = {}          -- 正在做的山脊（這次開機）
 local function plant_ridge(xr)
 	local key = "ridge_forest:" .. xr
-	if storage:get_string(key) ~= "" then return end
-	storage:set_string(key, "1")
+	if storage:get_string(key) ~= "" or planting[xr] then return end
+	planting[xr] = true
 	local x1, x2 = xr - RIDGE_X, xr + RIDGE_X
 	local h = heightmap(x1 - 1, x2 + 1, Z1 - 1, Z2 + 1)
 	local surface = cfg.surface_y or 0
@@ -434,6 +435,9 @@ local function plant_ridge(xr)
 			end
 		end
 	end end
+	-- 做完、寫進地圖之後才記下來（中途關機的話下次重做）
+	storage:set_string(key, "1")
+	planting[xr] = nil
 	core.log("action", ("[rockmech] 山脊 x = %d 鋪了 %d 格土、種了 %d 棵樹"):format(xr, n_soil, n_tree))
 end
 
@@ -467,8 +471,8 @@ function rockmech.career_build_grove(x0)
 	local c = x0 - (cfg.career_camp_dx or 0)
 	core.emerge_area({x = x0 - 2, y = -30, z = -12}, {x = x0 + 20, y = 40, z = -4}, function(_, _, rem)
 		if rem > 0 or storage:get_string(flag_of(x0)) ~= "" then return end
-		storage:set_string(flag_of(x0), "1")
 		put_benches(x0)
+		storage:set_string(flag_of(x0), "1")
 	end)
 	if not W then return end
 	for _, xr in ipairs({c - W / 2, c + W / 2}) do
