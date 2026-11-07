@@ -90,6 +90,16 @@ local function ore_palette(key)
 	return ore.palette
 end
 
+-- 礦石方塊 param2 那一格的顏色（跟調色盤同一個公式），岩芯箱畫岩芯用
+function rockmech.ore_color(key, p2)
+	local ore = cfg.ores[key]
+	if not ore then return "#ffffff" end
+	local r0, g0, b0 = rgb(ore.waste_color)
+	local r1, g1, b1 = rgb(ore.pure)
+	local t = ((p2 or 0) == 0 and ore.default or p2) / 255
+	return ("#%02x%02x%02x"):format(math.floor(r0 + (r1 - r0) * t + 0.5), math.floor(g0 + (g1 - g0) * t + 0.5), math.floor(b0 + (b1 - b0) * t + 0.5))
+end
+
 for _, key in ipairs(cfg.lithology_order) do
 	local lith = cfg.lithologies[key]
 	local base = rockmech.modname .. ":" .. lith.name

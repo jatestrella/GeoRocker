@@ -339,16 +339,44 @@ end
 -- 0..1 的假亂數（同一孔同一公尺每次一樣）：節理裂縫畫在那一公尺的哪裡、碎石段的碎塊
 local function frac(n, i, k) local v = math.sin(n * 12.9898 + i * 78.233 + k * 37.719) * 43758.5453; return v - math.floor(v) end
 
-local function corebox_form(name, bh, acc)
+-- 岩芯的外觀：鑽到的是什麼方塊就畫什麼方塊的貼圖（礦石方塊再乘上那一格品位的顏色，跟世界裡看到的一樣）
+local PLT_NODE, PLT_R = "rockmech:point_load", 3
+local cb_state = {}                        -- 玩家名稱 → {sel = 選的那一公尺, scroll = 捲軸位置, last = 上一次試驗的結果}
+local function row_node(r)
+	if r.node and core.registered_nodes[r.node] then return r.node end
+	if r.lith == "soil" then return rockmech.RUBBLE_SOIL end
+	if r.lith == "rubble" then return rockmech.RUBBLE end
+	return rockmech.node_of_lith[r.lith]
+end
+local function seg_tex(r)
+	local name = row_node(r)
+	local def = name and core.registered_nodes[name]
+	if not def then return "[fill:16x16:" .. lith_color(r.lith) end
+	local tiles = def.tiles or {}
+	local t = tiles[3] or tiles[#tiles] or tiles[1] or "blank.png"
+	if type(t) == "table" then t = t.name or "blank.png" end
+	local lith = rockmech.lith_of_node[name]
+	if def.paramtype2 == "color" and lith and lith.ore and rockmech.ore_color then
+		t = t .. "^[multiply:" .. rockmech.ore_color(lith.ore, r.p2 or r.grade or 0)
+	end
+	return t
+end
+local function crumbly(r) return r.lith == "rubble" or r.lith == "soil" end
+local function plt_near(pos) return pos and core.find_node_near(pos, PLT_R, {PLT_NODE}, true) ~= nil end
+
+local function corebox_form(name, bh, acc, pos)
+	local st = cb_state[name] or {}
+	cb_state[name] = st
 	local rm, gr = see(name, "rockmass"), see(name, "grade")
 	local rows = bh.rows or {}
 	local nrow = math.max(1, math.ceil(#rows / PER_ROW))
 	local RH, X0, W = 2.2, 1.0, 17.6          -- 一槽高、岩芯起點、5 m 岩芯的長度
 	local MW = W / PER_ROW
 	local TOP, VIEW = 1.2, VIEW_ROWS * RH
+	local esc = core.formspec_escape
 	local out = {"formspec_version[6]size[20.4,14.6]",
 		"style_type[label;font_size=*0.85]",
-		("label[0.5,0.6;%s]"):format(core.formspec_escape(S("Core box @1 (@2)   Collar (@3, @4, @5)   Depth @6 m", label_of(bh),
+		("label[0.5,0.6;%s]"):format(esc(S("Core box @1 (@2)   Collar (@3, @4, @5)   Depth @6 m", label_of(bh),
 			rockmech.account_label and rockmech.account_label(acc) or acc,
 			tostring(bh.pos.x), tostring(bh.pos.y), tostring(bh.pos.z), tostring(bh.depth)))),
 		("box[0.3,%g;19.4,%g;#2a62c8]"):format(TOP - 0.1, VIEW + 0.2),
@@ -358,6 +386,7 @@ local function corebox_form(name, bh, acc)
 		for j = math.max(1, i - 1), math.min(#rows, i + 1) do s = s + (rows[j].joints or 0); c = c + 1 end
 		return c > 0 and s / c or 0
 	end
+	local buttons = {}
 	for k = 0, nrow - 1 do
 		local y0 = k * RH
 		-- 一槽：深藍色的槽，槽和槽之間是箱子的藍色隔板
@@ -369,36 +398,48 @@ local function corebox_form(name, bh, acc)
 			if not r then break end
 			local x = X0 + (m - 1) * MW
 			local cy, ch = y0 + 0.5, 0.58
+			local tex = esc(seg_tex(r))
 			out[#out + 1] = ("label[%g,%g;%d]"):format(x, y0 + 0.36, i - 1)
-			if r.lith == "rubble" or r.lith == "soil" then
-				-- 碎石段、土：一堆碎塊（取出來的土不成柱）
-				local px = x + 0.04
-				local c = 0
+			if st.sel == i then
+				out[#out + 1] = ("box[%g,%g;%g,%g;#ffd040]"):format(x, cy - 0.05, MW, ch + 0.1)
+			end
+			if crumbly(r) then
+				-- 碎石、土：一堆碎塊（取出來不成柱）
+				local px, c = x + 0.04, 0
 				while px < x + MW - 0.15 do
 					c = c + 1
-					local w = 0.15 + 0.35 * frac(bh.n, i, c)
+					local w = math.min(0.15 + 0.35 * frac(bh.n, i, c), x + MW - 0.04 - px)
 					local hh = ch * (0.45 + 0.5 * frac(bh.n, i, c + 50))
-					w = math.min(w, x + MW - 0.04 - px)
-					out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(px, cy + ch - hh, w, hh, lith_color(r.lith))
+					out[#out + 1] = ("image[%g,%g;%g,%g;%s]"):format(px, cy + ch - hh, w, hh, tex)
 					px = px + w + 0.06
 				end
 			else
-				out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(x + 0.04, cy, MW - 0.08, ch, lith_color(r.lith))
-				-- 岩芯的亮面（圓柱的反光）
-				out[#out + 1] = ("box[%g,%g;%g,0.08;#ffffff30]"):format(x + 0.04, cy + 0.12, MW - 0.08)
+				-- 岩芯：方塊貼圖一格一格排成一條
+				local L = MW - 0.08
+				local nq = math.max(1, math.floor(L / ch + 0.5))
+				local w = L / nq
+				for q = 0, nq - 1 do
+					out[#out + 1] = ("image[%g,%g;%g,%g;%s]"):format(x + 0.04 + q * w, cy, w, ch, tex)
+				end
+				out[#out + 1] = ("box[%g,%g;%g,0.06;#ffffff28]"):format(x + 0.04, cy + 0.1, L)
 				for j = 1, math.min(r.joints or 0, 8) do
 					local jx = x + 0.2 + (MW - 0.4) * frac(bh.n, i, j)
 					out[#out + 1] = ("box[%g,%g;0.06,%g;#141414]"):format(jx, cy, ch)
 				end
 			end
+			-- 點一段岩芯：選它（上面再疊一個透明的按鈕）
+			buttons[#buttons + 1] = ("image_button[%g,%g;%g,%g;blank.png;seg_%d;;true;false]"):format(x + 0.04, cy, MW - 0.08, ch, i)
 			if rm then
 				local is_ore = rockmech.cfg.ores[r.lith] ~= nil or (rockmech.cfg.lithologies[r.lith] or {}).ore ~= nil
-				out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.27, core.formspec_escape(lith_label(r.lith)))
-				local info = r.lith == "soil" and "" or S("RQD @1%  joints @2", ("%.0f"):format(rqd_of(lambda(i))), tostring(r.joints or 0))
-				if is_ore or r.grade then
-					out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.93, core.formspec_escape((gr and r.grade) and S("grade @1%", ("%.0f"):format(r.grade / 255 * 100)) or S("grade ?")))
+				out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.27, esc(lith_label(r.lith)))
+				if not crumbly(r) then
+					out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.6,
+						esc(S("RQD @1%  joints @2", ("%.0f"):format(rqd_of(lambda(i))), tostring(r.joints or 0))))
 				end
-				out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.6, core.formspec_escape(info))
+				if is_ore or r.grade then
+					out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.93, esc((gr and r.grade)
+						and S("grade @1%", ("%.0f"):format(r.grade / 255 * 100)) or S("grade ?")))
+				end
 			end
 		end
 		local last = math.min(#rows, (k + 1) * PER_ROW)
@@ -406,7 +447,23 @@ local function corebox_form(name, bh, acc)
 			out[#out + 1] = ("label[%g,%g;%d]"):format(X0 + W - 0.2, y0 + 0.36, last)
 		elseif last < (k + 1) * PER_ROW then
 			out[#out + 1] = ("label[%g,%g;%s]"):format(X0 + (last - k * PER_ROW) * MW + 0.1, y0 + 0.9,
-				core.formspec_escape(S("End of hole @1 m", tostring(#rows))))
+				esc(S("End of hole @1 m", tostring(#rows))))
+		end
+	end
+	for _, b in ipairs(buttons) do out[#out + 1] = b end
+	-- 選了一段：旁邊浮出選項
+	local r = st.sel and rows[st.sel]
+	if r then
+		local k, m = math.floor((st.sel - 1) / PER_ROW), (st.sel - 1) % PER_ROW
+		local px, py = X0 + m * MW, k * RH + 1.15
+		if m == PER_ROW - 1 then px = X0 + W - 3.6 end
+		out[#out + 1] = ("box[%g,%g;3.6,0.9;#101820e8]"):format(px, py)
+		if crumbly(r) then
+			out[#out + 1] = ("label[%g,%g;%s]"):format(px + 0.15, py + 0.45, esc(S("No specimen")))
+		elseif not plt_near(pos) then
+			out[#out + 1] = ("label[%g,%g;%s]"):format(px + 0.15, py + 0.45, esc(S("No point load tester nearby")))
+		else
+			out[#out + 1] = ("button[%g,%g;3.4,0.7;plt_go;%s]"):format(px + 0.1, py + 0.1, esc(S("Point load test")))
 		end
 	end
 	out[#out + 1] = "scroll_container_end[]"
@@ -414,20 +471,30 @@ local function corebox_form(name, bh, acc)
 	if nrow > VIEW_ROWS then
 		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=%d;largestep=%d;arrows=show]"):format(
 			math.floor((nrow - VIEW_ROWS) * RH * 10 + 0.5), math.floor(RH * 10 + 0.5), math.floor(VIEW * 10 + 0.5))
-		out[#out + 1] = ("scrollbar[19.75,%g;0.45,%g;vertical;cb_scroll;0]"):format(TOP - 0.1, VIEW + 0.2)
+		out[#out + 1] = ("scrollbar[19.75,%g;0.45,%g;vertical;cb_scroll;%d]"):format(TOP - 0.1, VIEW + 0.2, st.scroll or 0)
 	end
-	local hint
-	if not rm then
-		hint = S("You can see the core, but not read it: learn \"Rock mass classification\" to see lithology, joints and RQD (and \"Grade interpretation\" for grade)")
-	elseif not gr then
-		hint = S("Grade needs \"Grade interpretation\"")
-	end
-	local tail = nrow > VIEW_ROWS and S("@1 m per row; scroll down with the mouse wheel or the scrollbar", tostring(PER_ROW))
-		or S("@1 m per row", tostring(PER_ROW))
-	out[#out + 1] = ("label[0.5,%g;%s]"):format(bottom + 0.1, core.formspec_escape(tail))
-	if hint then out[#out + 1] = ("label[0.5,%g;%s]"):format(bottom + 1.0, core.formspec_escape(hint)) end
-	out[#out + 1] = ("button_exit[16.7,%g;3,0.8;close;%s]"):format(bottom, core.formspec_escape(S("Close")))
+	if st.last then out[#out + 1] = ("label[0.5,%g;%s]"):format(bottom + 0.1, esc(st.last)) end
+	out[#out + 1] = ("button_exit[16.7,%g;3,0.8;close;%s]"):format(bottom, esc(S("Close")))
 	return table.concat(out)
+end
+
+-- 點荷重試驗：一個試體，讀 Is(50)（± 10 % 散布），記進野帳本
+local function point_load(player, pos, bh, acc, i)
+	local name = player:get_player_name()
+	local r = bh.rows[i]
+	local lith = r and rockmech.cfg.lithologies[r.lith]
+	if not lith or crumbly(r) or not plt_near(pos) then return end
+	local K = rockmech.PLT_K or 22
+	local is50 = lith.ucs / (rockmech.cfg.model_scale or 1) / K * (1 + (math.random() * 2 - 1) * 0.1)
+	is50 = math.floor(is50 * 100 + 0.5) / 100
+	local rec = {acc = acc, n = bh.n, d = i - 1, lith = see(name, "rockmass") and r.lith or nil, is = is50}
+	local cnt = rockmech.fieldbook_add_plt and rockmech.fieldbook_add_plt(player, rec)
+	local where = ("%s %d–%d m"):format(label_of(bh), i - 1, i)
+	local msg = cnt and S("[Point load] @1: Is(50) = @2 MPa (field notebook, @3)", where, ("%.2f"):format(is50), tostring(cnt))
+		or S("[Point load] @1: Is(50) = @2 MPa (no field notebook: not recorded)", where, ("%.2f"):format(is50))
+	cb_state[name].last = msg
+	rockmech.notify(name, msg)
+	core.sound_play("default_dig_cracky", {pos = pos, gain = 0.6, max_hear_distance = 10}, true)
 end
 
 local function open_box(pos, clicker)
@@ -444,8 +511,9 @@ local function open_box(pos, clicker)
 	opened[key] = opened[key] or {}
 	opened[key][name] = true
 	viewing_box[name] = vector.copy(pos)
+	cb_state[name] = {}
 	core.sound_play("default_dig_choppy", {pos = pos, gain = 0.3, max_hear_distance = 10}, true)
-	core.show_formspec(name, OPEN_FORM, corebox_form(name, bh, acc))
+	core.show_formspec(name, OPEN_FORM, corebox_form(name, bh, acc, pos))
 end
 corebox_rightclick = function(pos, node, clicker, itemstack)
 	open_box(pos, clicker)
@@ -453,7 +521,24 @@ corebox_rightclick = function(pos, node, clicker, itemstack)
 end
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= OPEN_FORM then return end
-	if fields.quit then close_for(player:get_player_name()) end
+	local name = player:get_player_name()
+	if fields.quit then close_for(name); cb_state[name] = nil; return true end
+	local pos = viewing_box[name]
+	local st = cb_state[name]
+	if not (pos and st and is_corebox(core.get_node(pos).name)) then return true end
+	local v = fields.cb_scroll and tonumber(fields.cb_scroll:match(":(%d+)"))
+	if v then st.scroll = v end
+	local meta = core.get_meta(pos)
+	local acc = meta:get_string("acc")
+	local bh = find_bh(acc, meta:get_int("n"))
+	if not bh then return true end
+	local changed = false
+	for k in pairs(fields) do
+		local i = tonumber(k:match("^seg_(%d+)$"))
+		if i then st.sel = st.sel ~= i and i or nil; changed = true end
+	end
+	if fields.plt_go and st.sel then point_load(player, pos, bh, acc, st.sel); changed = true end
+	if changed then core.show_formspec(name, OPEN_FORM, corebox_form(name, bh, acc, pos)) end
 	return true
 end)
 core.register_on_leaveplayer(function(player) close_for(player:get_player_name()) end)
@@ -506,6 +591,43 @@ function rockmech.fieldbook_add_schmidt(player, rec)
 		end
 	end
 end
+-- 點荷重的讀數（打開的岩芯箱裡做）：meta plt = {{acc, n, d（從幾公尺）, lith, is}, …}
+local function plt_of(stack) return core.deserialize(stack:get_meta():get_string("plt")) or {} end
+function rockmech.fieldbook_add_plt(player, rec)
+	local inv = player:get_inventory()
+	for i, st in ipairs(inv:get_list("main") or {}) do
+		if st:get_name() == BOOK then
+			local list = plt_of(st)
+			if #list >= SCHMIDT_MAX then table.remove(list, 1) end
+			list[#list + 1] = rec
+			st:get_meta():set_string("plt", core.serialize(list))
+			inv:set_stack("main", i, st)
+			return #list
+		end
+	end
+end
+local PLT_BOOK_FORM = "rockmech:fieldbook_plt"
+local function plt_book_form(name, list)
+	local esc = core.formspec_escape
+	local out = {"formspec_version[6]size[12,11]",
+		("label[0.5,0.6;%s]"):format(esc(S("Field notebook: point load tests (@1)", tostring(#list))))}
+	if #list > 0 then
+		out[#out + 1] = "tablecolumns[text,align=right;text;text;text;text,align=right]"
+		local cells = {esc(S("No.")), esc(S("Hole")), esc(S("Depth (m)")), esc(S("Rock")), "Is(50) MPa"}
+		for i, e in ipairs(list) do
+			cells[#cells + 1] = tostring(i)
+			cells[#cells + 1] = esc(bh_label(e.acc, e.n))
+			cells[#cells + 1] = ("%d–%d"):format(e.d, e.d + 1)
+			cells[#cells + 1] = esc(e.lith and lith_label(e.lith) or "?")
+			cells[#cells + 1] = ("%.2f"):format(e.is)
+		end
+		out[#out + 1] = "table[0.5,1.0;11,8.6;plt;" .. table.concat(cells, ",") .. ";0]"
+	end
+	out[#out + 1] = "button[0.5,10.1;3,0.7;back;" .. esc(S("Back")) .. "]"
+	out[#out + 1] = "button[4.5,10.1;3,0.7;clear;" .. esc(S("Clear readings")) .. "]"
+	out[#out + 1] = "button_exit[8.5,10.1;3,0.7;close;" .. esc(S("Close")) .. "]"
+	return table.concat(out)
+end
 local SCHMIDT_FORM = "rockmech:fieldbook_schmidt"
 local function schmidt_form(name, list)
 	local out = {"formspec_version[6]size[12,11]",
@@ -548,13 +670,20 @@ local function book_form(name, entries)
 	local player = core.get_player_by_name(name)
 	local st = player and player:get_wielded_item()
 	local nsch = st and st:get_name() == BOOK and #schmidt_of(st) or 0
-	out[#out + 1] = "button[0.5,10.1;6,0.7;schmidt;" .. core.formspec_escape(S("Schmidt hammer readings (@1)", tostring(nsch))) .. "]"
+	out[#out + 1] = "button[0.5,10.1;5.4,0.7;schmidt;" .. core.formspec_escape(S("Schmidt hammer readings (@1)", tostring(nsch))) .. "]"
+	local nplt = st and st:get_name() == BOOK and #plt_of(st) or 0
+	out[#out + 1] = "button[6.1,10.1;5.4,0.7;plt;" .. core.formspec_escape(S("Point load tests (@1)", tostring(nplt))) .. "]"
 	return table.concat(out)
 end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= BOOK_FORM then return end
 	local name = player:get_player_name()
+	if fields.plt then
+		local st = player:get_wielded_item()
+		core.show_formspec(name, PLT_BOOK_FORM, plt_book_form(name, st:get_name() == BOOK and plt_of(st) or {}))
+		return true
+	end
 	if fields.schmidt then
 		local st = player:get_wielded_item()
 		core.show_formspec(name, SCHMIDT_FORM, schmidt_form(name, st:get_name() == BOOK and schmidt_of(st) or {}))
@@ -582,6 +711,22 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		st:get_meta():set_string("schmidt", "")
 		player:set_wielded_item(st)
 		core.show_formspec(name, SCHMIDT_FORM, schmidt_form(name, {}))
+	elseif fields.back then
+		book_view[name] = book_entries(st)
+		core.show_formspec(name, BOOK_FORM, book_form(name, book_view[name]))
+	end
+	return true
+end)
+
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= PLT_BOOK_FORM then return end
+	local name = player:get_player_name()
+	local st = player:get_wielded_item()
+	if st:get_name() ~= BOOK then return true end
+	if fields.clear then
+		st:get_meta():set_string("plt", "")
+		player:set_wielded_item(st)
+		core.show_formspec(name, PLT_BOOK_FORM, plt_book_form(name, {}))
 	elseif fields.back then
 		book_view[name] = book_entries(st)
 		core.show_formspec(name, BOOK_FORM, book_form(name, book_view[name]))
@@ -779,12 +924,12 @@ core.register_globalstep(function(dtime)
 					local row
 					if core.get_item_group(node.name, "rockmech_topsoil") > 0
 							or (rockmech.is_rubble(node.name) and rockmech.rubble_base[node.name] == rockmech.RUBBLE_SOIL) then
-						row = {lith = "soil"}         -- 表土、鬆土：鑽得過去，岩芯裡是一段土
+						row = {lith = "soil", node = node.name}         -- 表土、鬆土：鑽得過去，岩芯裡是一段土
 					elseif lith then
-						row = {lith = lith.name, grade = lith.ore and node.param2 or nil}
+						row = {lith = lith.name, grade = lith.ore and node.param2 or nil, node = rockmech.node_of_lith[lith.name]}
 					elseif rockmech.is_rubble(node.name) then
 						local base = rockmech.rubble_base[node.name]
-						row = {lith = "rubble", grade = rockmech.ore_of_rubble[base] and node.param2 or nil}
+						row = {lith = "rubble", grade = rockmech.ore_of_rubble[base] and node.param2 or nil, node = node.name}
 					end
 					if not row then
 						finish(name, d, node.name == "air" and S("hit a void") or node.name == "ignore" and S("map not loaded yet") or S("hit a facility"))
