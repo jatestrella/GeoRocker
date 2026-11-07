@@ -45,7 +45,15 @@ New-Item -ItemType Directory -Force (Join-Path $dest "worlds") | Out-Null
 Say "Replacing the main menu"
 $mm = Join-Path $dest "builtin\mainmenu"
 Copy-Item (Join-Path $mm "init.lua") (Join-Path $mm "init_luanti.lua")
-Copy-Item (Join-Path $here "mainmenu.lua") (Join-Path $mm "init.lua") -Force
+# A small stub that loads the start screen from the game folder, so "git pull" in games\mining_sim updates it too
+$stub = @(
+	"-- Start screen of this package: loaded from the game folder (games/mining_sim/standalone/mainmenu.lua),",
+	"-- so updating the game (git pull) also updates the start screen. Falls back to the Luanti menu if missing.",
+	"local p = core.get_builtin_path() .. '..' .. DIR_DELIM .. 'games' .. DIR_DELIM .. 'mining_sim' .. DIR_DELIM .. 'standalone' .. DIR_DELIM .. 'mainmenu.lua'",
+	"local f = io.open(p, 'r')",
+	"if f then f:close(); dofile(p) else dofile(core.get_builtin_path() .. 'mainmenu' .. DIR_DELIM .. 'init_luanti.lua') end"
+)
+[System.IO.File]::WriteAllLines((Join-Path $mm "init.lua"), $stub)
 
 Say "Writing minetest.conf"
 $conf = @(
