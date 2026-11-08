@@ -1,9 +1,10 @@
 -- rockmech/vehicle_lift.lua
 -- 高空作業車（雲梯車）、吊車（吊籠）：把人送到高處的邊坡面施作護坡（岩栓、噴凝土、監測稜鏡…）。由 vehicles.lua 載入。
 -- 流程：開到邊坡前 → E 放固定腳（OUT_T 秒；車身傾斜不超過 5°、四支腳底下都有地面）→ 空白鍵進作業籠
---   作業籠裡：WASD 照視線方向水平移動、空白鍵上升、Shift 下降（碰到方塊、到作業範圍邊界就停）；
---             E 回駕駛座（作業籠自動收回原位）；Shift＋E 跨出去：人站在作業籠裡但可以自由走動、自己跳出去，
---             對作業籠右鍵再回到操作。
+--   作業籠裡平常自由走動（欄杆擋人，跳過欄杆就出去了）；按住 E 才操作：人固定在籠裡，
+--             WASD 照視線方向水平移動、空白鍵上升、Shift 下降（碰到方塊、到作業範圍邊界就停）；放開 E 停住、又能走動。
+--             （人站在移動的東西上不會被帶著走，所以作業籠只在按住 E、人固定時才動）
+--   駕駛座：空白鍵進作業籠（籠裡有人就改成從駕駛座操作）；Shift＋E 把作業籠收回原位（籠裡的人跟著回來）。
 --   固定腳伸出時車子不能開；作業籠收回原位才能收固定腳。
 -- 作業範圍（作業籠中心，車身座標）：離轉台軸的水平距離 rmin..rmax、高度 ymin..ymax、吊臂長 Lmin..Lmax。
 --   高空作業車：伸縮臂前端就是作業籠（作業籠保持水平）；吊車：臂尖垂下鋼索吊著吊籠，可以往下吊到車底下。
@@ -229,15 +230,39 @@ local function lift(kind, P)
 		local st = L(self)
 		return V.to_world(self, {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z})
 	end
-	-- 作業籠裡的人：駕駛（st.drv_in）、乘客（st.rider）都掛在同一個座位上，座位移到作業籠地板；沒人就收掉座位
-	local function place_people(self)
+	-- 作業籠裡的人：st.occ（名字 → true）。作業籠會動的時候（籠裡的人按住 E 操作、駕駛座操作、收回）籠裡的人
+	-- 掛在同一個座位上，座位移到作業籠地板；其他時候自由走動（欄杆擋人：下面每一步檢查）
+	local function carried(self)
 		local st = L(self)
 		local list = {}
-		local dp = st.drv_in and self.driver and core.get_player_by_name(self.driver)
-		if dp then list[#list + 1] = dp end
-		local rp = st.rider and core.get_player_by_name(st.rider)
-		if st.rider and not rp then st.rider = nil end
-		if rp then list[#list + 1] = rp end
+		if st.mode == "basket" and st.drv_in and self.driver then
+			local dp = core.get_player_by_name(self.driver)
+			if dp then list[#list + 1] = dp end
+		elseif st.mode == "op" or st.mode == "return" then
+			for n in pairs(st.occ) do
+				local p = core.get_player_by_name(n)
+				if p then list[#list + 1] = p else st.occ[n] = nil end
+			end
+		end
+		return list
+	end
+	local function place_people(self)
+		local st = L(self)
+		local list = carried(self)
+		-- 不用再掛著的人：放下來站在作業籠地板上
+		if st.seat and st.seat:get_pos() then
+			local keep = {}
+			for _, p in ipairs(list) do keep[p:get_player_name()] = true end
+			for n in pairs(st.occ) do
+				local p = core.get_player_by_name(n)
+				if p and not keep[n] and p:get_attach() == st.seat then
+					local w = p:get_pos()
+					p:set_detach()
+					V.set_seated(p, false)
+					core.after(0.05, function() if p:get_pos() then p:set_pos(w) end end)
+				end
+			end
+		end
 		if #list == 0 then
 			if st.seat and st.seat:get_pos() then st.seat:remove() end
 			st.seat = nil
@@ -252,11 +277,12 @@ local function lift(kind, P)
 			st.seat:move_to(w, true)
 		end
 		for i, p in ipairs(list) do
-			local off = #list == 2 and {x = i == 1 and -4 or 4, y = 0, z = 0} or {x = 0, y = 0, z = 0}
+			local off = #list >= 2 and {x = (i - 1.5) * 8, y = 0, z = 0} or {x = 0, y = 0, z = 0}
 			local par, _, pos = p:get_attach()
 			if par ~= st.seat or not pos or math.abs(pos.x - off.x) > 0.1 then
 				p:set_detach()
 				p:set_attach(st.seat, "", off, {x = 0, y = 0, z = 0})
+				V.set_seated(p, true, "stand")
 			end
 		end
 	end
@@ -277,55 +303,53 @@ local function lift(kind, P)
 			st.floor = nil
 		end
 	end
-	local function to_basket(self, d)
+	-- 從駕駛座進作業籠：離開駕駛座，人放到作業籠地板上（自由走動）
+	local function board(self, d)
 		local st = L(self)
+		local f = floor_w(self)
 		V.drop_chase(self)
-		st.mode = "basket"
-		st.drv_in = true
-		place_people(self)
-		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
-		d:set_camera({mode = st.cam3 and "third" or "first"})
-		V.set_seated(d, true, "stand")
-		d:hud_set_flags({hotbar = true, wielditem = true})      -- 作業籠裡要用工具
-		update_hud(self)
-	end
-	-- 跨出去：人放在作業籠地板上、自由走動；地板是一個有碰撞的實體
-	local function step_out(self, d)
-		local st = L(self)
-		local f = V.to_world(self, {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z})
 		d:set_detach()
-		st.drv_in = false
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		d:set_camera({mode = "any"})
 		V.set_seated(d, false)
 		V.hud_clear(self, d)
+		d:hud_set_flags({hotbar = true, wielditem = true})
 		self.driver = nil
-		st.mode = "free"
-		place_people(self)
+		st.drv_in = false
+		if st.mode == "cab" then st.mode = "free" end
+		st.occ[d:get_player_name()] = true
 		sync_floor(self)
 		core.after(0.05, function() if d:get_pos() then d:set_pos({x = f.x, y = f.y + 0.02, z = f.z}) end end)
+		rockmech.notify(d:get_player_name(), P.crane and S("[Basket] Hold E to operate (Space + Shift switches boom / rope); jump over the rail to get out")
+			or S("[Basket] Hold E to operate; jump over the rail to get out"))
 	end
-
+	-- 籠裡的人按住 E：變成操作的人，固定在籠裡
+	local function operate(self, pl)
+		local st = L(self)
+		self.driver = pl:get_player_name()
+		st.mode, st.drv_in = "basket", true
+		place_people(self)
+		pl:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+		pl:set_camera({mode = st.cam3 and "third" or "first"})
+		pl:hud_set_flags({hotbar = true, wielditem = true})      -- 作業籠裡要用工具
+		update_hud(self)
+	end
+	-- 放開 E：停住，人又能在籠裡走動
+	local function release(self, d)
+		local st = L(self)
+		V.hud_clear(self, d)
+		d:set_camera({mode = "any"})
+		self.driver = nil
+		st.mode, st.drv_in = "free", false
+		place_people(self)
+		update_hud(self)
+	end
 	-- 地板實體右鍵：回到作業籠操作
 	function def.on_spawn(self)
 		self.lift = self.lift or {e = 0, B = vector.copy(REST), mode = "cab",
 			T = T_REST and vector.copy(T_REST), rope = ROPE_REST}
-		self.lift_board = function(me, clicker)
-			if not clicker or not clicker:is_player() then return end
-			local name = clicker:get_player_name()
-			if not V.may_use(me, name) then return end
-			local st = L(me)
-			if not me.driver then
-				me.driver = name
-				to_basket(me, clicker)
-			elseif name ~= me.driver and not st.rider then
-				st.rider = name
-				place_people(me)
-				V.set_seated(clicker, true, "stand")
-				clicker:hud_set_flags({hotbar = true, wielditem = true})
-				rockmech.notify(name, S("[Basket] Shift to step out"))
-			end
-		end
+		self.lift.occ = self.lift.occ or {}
+		self.lift_board = function() end          -- 以前右鍵作業籠回到操作；現在走進去、按住 E 就好
 		for _, id in ipairs({"brf", "brb", "brl", "brr"}) do
 			local o = self.parts and self.parts[id]
 			if o then o:set_properties({use_texture_alpha = true, backface_culling = false}) end
@@ -373,33 +397,27 @@ local function lift(kind, P)
 	function def.action(self, ctx)
 		local st, ctrl = L(self), ctx.ctrl
 		if not st then return end
-		if st.mode == "basket" then
-			if ctrl.aux1 and ctrl.sneak then
-				self.t_act = 0.5
-				step_out(self, ctx.d)
-			elseif ctrl.aux1 then
-				self.t_act = 0.5
-				st.mode = "return"
-				update_hud(self)
-			end
-			return
-		end
-		if st.mode == "return" then return end
+		if st.mode == "basket" or st.mode == "return" then return end      -- 作業籠裡：按住 E 操作（下面 step）
+		local away = vector.distance(P.crane and st.T or st.B, P.crane and T_REST or REST) > 0.05 or (P.crane and math.abs(st.rope - ROPE_REST) > 0.05)
 		-- 從駕駛座操作作業籠：E 停止操作（作業籠留在原地）、Shift＋E 收回
 		if st.mode == "op" then
 			if ctrl.aux1 and ctrl.sneak then
-				self.t_act = 0.5; st.mode = "return"; update_hud(self)
+				self.t_act = 0.5; st.mode = "return"; place_people(self); update_hud(self)
 			elseif ctrl.aux1 then
-				self.t_act = 0.5; st.mode = "cab"; update_hud(self)
+				self.t_act = 0.5; st.mode = away and "free" or "cab"; place_people(self); update_hud(self)
 			end
 			return
 		end
-		-- 駕駛座
+		-- 駕駛座：Shift＋E 把作業籠收回原位（籠裡的人跟著回來）
+		if ctrl.aux1 and ctrl.sneak and away then
+			self.t_act = 0.5; st.mode = "return"; place_people(self); update_hud(self)
+			return
+		end
 		if ctrl.aux1 then
 			self.t_act = 0.5
-			if st.mode ~= "cab" or vector.distance(st.B, REST) > 0.05 then
-				self.msg = S("Bring the basket back first")
-			elseif st.e > 0 and st.rider then
+			if away then
+				self.msg = S("Bring the basket back first (Shift + E)")
+			elseif st.e > 0 and next(st.occ) then
 				self.msg = S("Someone is in the basket")
 			elseif st.e > 0 then
 				st.edir = -1; self.msg = nil
@@ -412,8 +430,8 @@ local function lift(kind, P)
 			self.t_act = 0.5
 			if st.e < 1 then self.msg = S("Put the outriggers down first (E)"); update_hud(self); return end
 			self.msg = nil
-			if st.rider then st.mode = "op"; update_hud(self)       -- 作業籠裡有人：從駕駛座操作
-			else to_basket(self, ctx.d) end
+			if next(st.occ) then st.mode = "op"; place_people(self); update_hud(self)       -- 作業籠裡有人：從駕駛座操作
+			else board(self, ctx.d) end
 		end
 	end
 
@@ -429,20 +447,8 @@ local function lift(kind, P)
 		end
 		local d = ctx.d
 		st.moving = false
-		if st.rider then
-			local rp = core.get_player_by_name(st.rider)
-			if not rp then
-				st.rider = nil; place_people(self)
-			elseif rp:get_player_control().sneak then
-				st.rider = nil
-				rp:set_detach()
-				V.set_seated(rp, false)
-				place_people(self)
-				sync_floor(self)
-				local f = floor_w(self)
-				core.after(0.05, function() if rp:get_pos() then rp:set_pos({x = f.x, y = f.y + 0.02, z = f.z}) end end)
-			end
-		end
+		-- 作業籠裡操作的人放開 E：停住
+		if st.mode == "basket" and d and not ctx.ctrl.aux1 then release(self, d); return end
 		if st.mode == "basket" and d then
 			local z = ctx.ctrl.zoom
 			if z and not st.zoom_held then
@@ -462,7 +468,6 @@ local function lift(kind, P)
 				update_hud(self)
 			end
 			st.chord_held = chord
-			if c.aux1 then return end
 			local f = (c.up and 1 or 0) - (c.down and 1 or 0)
 			local s = (c.right and 1 or 0) - (c.left and 1 or 0)
 			local u = (c.jump and 1 or 0) - (c.sneak and 1 or 0)
@@ -495,7 +500,6 @@ local function lift(kind, P)
 			end
 		elseif ctrl_mode then
 			local c = ctx.ctrl
-			if c.aux1 then return end
 			local f = (c.up and 1 or 0) - (c.down and 1 or 0)
 			local s = (c.right and 1 or 0) - (c.left and 1 or 0)
 			local u = (c.jump and 1 or 0) - (c.sneak and 1 or 0)
@@ -536,7 +540,6 @@ local function lift(kind, P)
 			if dist <= step and math.abs(dr) <= step then
 				st.T, st.rope, st.mode = vector.copy(T_REST), ROPE_REST, "cab"
 				place_arm(self)
-				if d and st.drv_in then V.seat_driver(self, d) end
 				st.drv_in = false
 				place_people(self)
 				update_hud(self)
@@ -555,7 +558,6 @@ local function lift(kind, P)
 				st.B = vector.copy(REST)
 				st.mode = "cab"
 				place_arm(self)
-				if d and st.drv_in then V.seat_driver(self, d) end
 				st.drv_in = false
 				place_people(self)
 				update_hud(self)
@@ -564,6 +566,41 @@ local function lift(kind, P)
 				if solve(nb) then st.B = nb else st.B = vector.copy(REST) end
 				place_arm(self)
 				place_people(self)
+			end
+		end
+	end
+
+	-- 每一步（下面的 globalstep 呼叫）：籠裡的人、欄杆擋人、按住 E 開始操作
+	local RAIL_TOP = 0.9                  -- 腳底高過地板這麼多（跳起來）才跨得過欄杆
+	function def.occ_step(self)
+		local st = L(self)
+		if not (st and st.e >= 1 and st.psi) then return end
+		local hx, hz = BK.x / 2 - 0.3, BK.z / 2 - 0.3
+		local fy = st.B.y - BK.y / 2 + 0.1
+		for _, pl in ipairs(core.get_connected_players()) do
+			local name = pl:get_player_name()
+			local par = pl:get_attach()
+			if not par then
+				local lp = V.to_local(self, pl:get_pos())
+				local r = h2v({x = lp.x - st.B.x, y = 0, z = lp.z - st.B.z}, -st.psi)
+				local dy = lp.y - fy
+				local inside = math.abs(r.x) <= hx + 0.05 and math.abs(r.z) <= hz + 0.05 and dy > -0.4 and dy < 1.6
+				if st.occ[name] then
+					if math.abs(r.x) > hx + 1.5 or math.abs(r.z) > hz + 1.5 or dy < -1.5 or dy > 3 then
+						st.occ[name] = nil                           -- 出去了
+					elseif not inside and dy < RAIL_TOP then
+						-- 欄杆擋住：推回籠裡
+						local c = h2v({x = math.max(-hx, math.min(hx, r.x)), y = 0, z = math.max(-hz, math.min(hz, r.z))}, st.psi)
+						local w = V.to_world(self, {x = st.B.x + c.x, y = math.max(lp.y, fy), z = st.B.z + c.z})
+						pl:set_pos(w)
+					elseif inside and pl:get_player_control().aux1 and (st.mode == "free" or st.mode == "cab") then
+						if self.driver then
+							rockmech.notify(name, S("[Basket] Someone is in the driver's seat: the driver operates the basket"))
+						else operate(self, pl) end
+					end
+				elseif inside then
+					st.occ[name] = true                              -- 走（跳）進籠裡
+				end
 			end
 		end
 	end
@@ -582,98 +619,49 @@ local function lift(kind, P)
 	end
 	function def.keys(self)
 		local st = L(self)
+		local chord = P.crane and {S("Space + Shift"), st and st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st and st.hoist} or nil
 		if st and st.mode == "op" then
-			local k = {{"WASD", P.crane and S("Move the boom") or S("Move the basket")}}
-			if P.crane then
-				k[#k + 1] = {S("Space") .. " / Shift", st.hoist and S("Basket up / down (rope)") or S("Boom up / down")}
-				k[#k + 1] = {S("Q (hold the control box)"), st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist}
-			else
-				k[#k + 1] = {S("Space") .. " / Shift", S("Up / down")}
-			end
+			local k = {{"WASD", P.crane and S("Move the boom") or S("Move the basket")},
+				{S("Space") .. " / Shift", P.crane and (st.hoist and S("Basket up / down (rope)") or S("Boom up / down")) or S("Up / down")}}
+			if chord then k[#k + 1] = chord end
 			k[#k + 1] = {"E", S("Stop operating")}
 			k[#k + 1] = {"Shift+E", S("Bring the basket back")}
 			return k
 		end
-		if st and (st.mode == "basket" or st.mode == "return") then
-			if P.crane then
-				return {{"WASD", S("Move the boom")},
-					{S("Space") .. " / Shift", st.hoist and S("Basket up / down (rope)") or S("Boom up / down")},
-					{S("Q (hold the control box)"), st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist},
-					{"E", S("Back to the cab")}, {"Shift+E", S("Step out")}}
-			end
-			return {{"WASD", S("Move the basket")}, {S("Space") .. " / Shift", S("Up / down")},
-				{"E", S("Back to the cab")}, {"Shift+E", S("Step out")}}
+		if st and st.mode == "basket" then
+			local k = {{"WASD", P.crane and S("Move the boom") or S("Move the basket")},
+				{S("Space") .. " / Shift", P.crane and (st.hoist and S("Basket up / down (rope)") or S("Boom up / down")) or S("Up / down")}}
+			if chord then k[#k + 1] = chord end
+			k[#k + 1] = {S("Release E"), S("Stop and walk around")}
+			return k
 		end
-		return {{"E", st and st.e > 0 and S("Raise the outriggers") or S("Put the outriggers down"), on = st and st.e >= 1},
-			{S("Space"), st and st.rider and S("Operate the basket") or S("Go to the basket")}}
-	end
-	-- Q：吊車吊籠裡切換動吊臂／收放吊索
-	if P.crane then
-		function def.on_q(self)
-			local st = L(self)
-			if not (st and (st.mode == "basket" or st.mode == "op")) then return false end
-			st.hoist = not st.hoist
-			update_hud(self)
-			return true
-		end
+		local away = st and (vector.distance(P.crane and st.T or st.B, P.crane and T_REST or REST) > 0.05)
+		local k = {{"E", st and st.e > 0 and S("Raise the outriggers") or S("Put the outriggers down"), on = st and st.e >= 1},
+			{S("Space"), st and next(st.occ) and S("Operate the basket") or S("Go to the basket")}}
+		if away then k[#k + 1] = {"Shift+E", S("Bring the basket back")} end
+		return k
 	end
 	V.register(kind, def)
 end
 
--- Q（丟東西）：人在作業籠裡時不丟東西；吊車吊籠裡拿來切換動吊臂／收放吊索。
--- 空手按 Q 伺服器收不到（引擎不送），空手時用空白鍵＋Shift 一起按
--- 玩家在哪台作業車上：坐在駕駛座（掛在車上）或站在作業籠裡（掛在座位上，座位記著車）。回傳 車, 是不是駕駛
-local function lift_of(player)
-	local parent = player:get_attach()
-	local pe = parent and parent:get_luaentity()
-	local e = pe and (pe.lift and pe or pe.vehicle)
-	if e and e.lift then return e, e.driver == player:get_player_name() end
-end
--- Q 只有手上拿著東西時伺服器才收得到（引擎把 Q 當成丟東西）。操作吊車吊籠時給一個吊籠操作盒（手上空著就放手上，
--- 不然放背包）：拿著它按 Q 切換動吊臂／收放吊索，它不會被丟出去；拿著別的東西按 Q 照常丟（吊籠裡也能丟東西）。
--- 不在操作了就收走
-local REMOTE = "rockmech:crane_remote"
-local function q_press(dropper)
-	local e, is_driver = lift_of(dropper)
-	if not e then return false end
-	local st = e.lift
-	local in_basket = st.mode == "basket" or st.mode == "op" or st.rider == dropper:get_player_name()
-	if not in_basket then return false end
-	local def = V.TYPES[e.vkind]
-	if is_driver and def.on_q then def.on_q(e) end
-	return true
-end
-core.register_craftitem(REMOTE, {
-	description = S("Basket control box\nQ switches between moving the boom and the rope"),
-	short_description = S("Basket control box"),
-	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,2:#e8c020^[fill:6x2:5,4:#303030^[fill:2x2:5,8:#d03030^[fill:2x2:9,8:#30a040^[fill:2x2:7,11:#3060c0",
-	stack_max = 1, groups = {not_in_creative_inventory = 1},
-	on_drop = function(itemstack, dropper)
-		if dropper and dropper:is_player() then q_press(dropper) end
-		return itemstack                                   -- 丟不出去
-	end,
-})
--- 每秒檢查：正在操作吊車吊籠、手上空著 → 放操作盒；沒在操作 → 收走
-local remote_t = 0
+-- 作業籠裡的人：欄杆擋人、按住 E 開始操作（每台作業車的 def.occ_step）
+local occ_t = 0
 core.register_globalstep(function(dtime)
-	remote_t = remote_t + dtime
-	if remote_t < 0.5 then return end
-	remote_t = 0
-	for _, pl in ipairs(core.get_connected_players()) do
-		local e, is_driver = lift_of(pl)
-		local st = e and e.lift
-		local operating = st and is_driver and V.TYPES[e.vkind].on_q and (st.mode == "basket" or st.mode == "op")
-		local inv = pl:get_inventory()
-		if operating then
-			if not inv:contains_item("main", REMOTE) then
-				if pl:get_wielded_item():is_empty() then pl:set_wielded_item(ItemStack(REMOTE))
-				else inv:add_item("main", ItemStack(REMOTE)) end
-			end
-		elseif inv:contains_item("main", REMOTE) then
-			for i, it in ipairs(inv:get_list("main") or {}) do
-				if it:get_name() == REMOTE then inv:set_stack("main", i, ItemStack("")) end
-			end
-		end
+	occ_t = occ_t + dtime
+	if occ_t < 0.1 then return end
+	occ_t = 0
+	for _, e in pairs(V.by_uid) do
+		local d = e.lift and e.object and e.object:get_pos() and V.TYPES[e.vkind]
+		if d and d.occ_step then d.occ_step(e) end
+	end
+end)
+-- 以前的吊籠操作盒：不再使用，背包裡有的收走
+core.register_craftitem("rockmech:crane_remote", {description = "", groups = {not_in_creative_inventory = 1},
+	inventory_image = "[fill:16x16:#e8c020", stack_max = 1})
+core.register_on_joinplayer(function(pl)
+	local inv = pl:get_inventory()
+	for i, it in ipairs(inv:get_list("main") or {}) do
+		if it:get_name() == "rockmech:crane_remote" then inv:set_stack("main", i, ItemStack("")) end
 	end
 end)
 
