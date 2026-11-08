@@ -47,7 +47,7 @@ describe("airflow 空氣品質", function()
 		assert.is_true(ppm(st, 11, 0, 0) > 200)
 	end)
 
-	it("風機：風管口在工作面、抽出式，工作面的炮煙幾分鐘內抽乾淨", function()
+	it("風機：沿著隧道推空氣，工作面的炮煙幾分鐘內清乾淨", function()
 		local s, g = A.new(), tunnel(12, true)
 		local path = {}
 		for x = 0, 11 do path[#path + 1] = {x, 0, 0} end

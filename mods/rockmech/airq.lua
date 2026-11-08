@@ -3,8 +3,8 @@
 --   地形：每個 8³ 格子用 VoxelManip 讀一次，記哪些格是空氣（不可走、非液體的方塊也算空氣），
 --         看得到天空的比例（格子頂層的自然光）；挖、放方塊時重讀那格，其他改地圖（爆破）RESCAN 秒內重讀
 --   來源：柴油引擎（fuel.lua 每步燒掉的柴油）、炸藥（drilling.lua 引爆時的炸藥量）
---   通風：抽風機（rockmech:vent_fan）＋風管（rockmech:vent_duct）。從風機沿著接起來的風管走到最遠那節（風管口），
---         隧道裡的空氣沿著這條路線往風管口流，從風管口吸走、排到外面
+--   通風：抽風機（rockmech:vent_fan）＋風管（rockmech:vent_duct），壓入式：風機從洞口外吸新鮮空氣吹進風管，
+--         從最遠那節（風管口，通常在工作面）吹出來；隧道裡的空氣被推著沿這條路線往風機那頭（洞口）流出去
 --   人：  氣體偵測器（背包裡有就顯示 CO 濃度）；濃了起霧；ppm ≥ HURT 開始扣血，越濃扣越快
 
 local A = rockmech.airflow
@@ -178,28 +178,29 @@ local function player_near(p, r)
 	end
 	return false
 end
--- 粒子：風機出風口往外吹；風管口的空氣往管子裡吸
+-- 粒子：風機的進風口把外面的空氣吸進去；風管口往外吹
 local AIR_TEX = "[fill:4x4:#e8ecee^[opacity:120"
 local function fan_particles(p, c)
-	local o = c.out
+	local o = c.out             -- 進風口朝外的方向（接風管那一邊的對面）
 	if player_near(p, 40) then
-		local m = vector.add(p, vector.multiply(o, 0.55))
-		local spread = {x = 0.3 - math.abs(o.x) * 0.3, y = 0.3 - math.abs(o.y) * 0.3, z = 0.3 - math.abs(o.z) * 0.3}
-		core.add_particlespawner({amount = 18, time = STEP, glow = 2,
-			minpos = vector.subtract(m, spread), maxpos = vector.add(m, spread),
-			minvel = vector.add(vector.multiply(o, 4), {x = -0.3, y = -0.2, z = -0.3}),
-			maxvel = vector.add(vector.multiply(o, 6), {x = 0.3, y = 0.4, z = 0.3}),
-			minexptime = 0.4, maxexptime = 0.9, minsize = 1.5, maxsize = 3, texture = AIR_TEX})
-	end
-	if c.tip and player_near(c.tip, 40) then
-		-- 從開口前方約 1.8 m 一帶往開口飄進去
-		local d = c.tip_dir
-		local m = vector.add(c.tip, vector.multiply(d, 1.8))
-		local sp = vector.multiply(d, -2.5)
+		-- 從進風口前方約 1.8 m 一帶往風機飄進去
+		local m = vector.add(p, vector.multiply(o, 1.8))
+		local sp = vector.multiply(o, -2.5)
 		core.add_particlespawner({amount = 14, time = STEP, glow = 2,
 			minpos = vector.subtract(m, 0.6), maxpos = vector.add(m, 0.6),
 			minvel = vector.add(sp, {x = -0.15, y = -0.15, z = -0.15}), maxvel = vector.add(sp, {x = 0.15, y = 0.15, z = 0.15}),
 			minexptime = 0.5, maxexptime = 0.6, minsize = 1, maxsize = 2, texture = AIR_TEX})
+	end
+	if c.tip and player_near(c.tip, 40) then
+		-- 風管口往外吹
+		local d = c.tip_dir
+		local m = vector.add(c.tip, vector.multiply(d, 0.55))
+		local spread = {x = 0.3 - math.abs(d.x) * 0.3, y = 0.3 - math.abs(d.y) * 0.3, z = 0.3 - math.abs(d.z) * 0.3}
+		core.add_particlespawner({amount = 18, time = STEP, glow = 2,
+			minpos = vector.subtract(m, spread), maxpos = vector.add(m, spread),
+			minvel = vector.add(vector.multiply(d, 4), {x = -0.3, y = -0.2, z = -0.3}),
+			maxvel = vector.add(vector.multiply(d, 6), {x = 0.3, y = 0.4, z = 0.3}),
+			minexptime = 0.4, maxexptime = 0.9, minsize = 1.5, maxsize = 3, texture = AIR_TEX})
 	end
 end
 local function active_fans()
@@ -213,7 +214,7 @@ local function active_fans()
 			local on = meta:get_int("off") == 0
 			if not c or t - c.t > 5 then
 				local cells, len, tip, tip_dir, first = duct_path(p)
-				-- 出風口：接風管那一邊的對面；沒接風管就從正面（facedir 的反方向）吹
+				-- 進風口：接風管那一邊的對面；沒接風管就是正面（facedir 的反方向）
 				local out = first and vector.subtract(p, first) or vector.multiply(core.facedir_to_dir(node.param2), -1)
 				c = {t = t, path = cells, len = len, tip = tip, tip_dir = tip_dir, out = out}
 				fan_cache[ps] = c
@@ -222,7 +223,12 @@ local function active_fans()
 				.. "\n" .. (on and S("Fan running") or S("Fan off"))
 			if meta:get_string("infotext") ~= info then meta:set_string("infotext", info) end
 			if on then
-				if #c.path > 0 then list[#list + 1] = {path = c.path, q = FAN_Q} end
+				-- 壓入式：隧道裡的空氣從風管口那頭往風機那頭（洞口）流，路線倒過來
+				if #c.path > 0 then
+					local rev = {}
+					for i = #c.path, 1, -1 do rev[#rev + 1] = c.path[i] end
+					list[#list + 1] = {path = rev, q = FAN_Q}
+				end
 				fan_particles(p, c)
 			end
 		elseif node then
