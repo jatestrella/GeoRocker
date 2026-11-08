@@ -18,7 +18,22 @@ local function trailer(kind, P)
 	local FRONT = DECK_Z + DECK_LEN / 2          -- 平板前端（車身座標 z）
 	def.trailer = true
 
-	local function len_of(d) return d.half + (d.rear or d.half) end     -- 車子前後的長度
+	-- 車子前後的實際範圍（零件伸出碰撞箱的也算：挖土機收起的鏟斗、礦用挖土機的配重）：回傳 車頭往前, 車尾往後
+	local ext_cache = {}
+	local function extent(d)
+		local e = ext_cache[d]
+		if e then return e[1], e[2] end
+		local front, back = d.half, d.rear or d.half
+		for _, pt in ipairs(d.parts or {}) do
+			if pt.pos and pt.size then
+				front = math.max(front, pt.pos.z + pt.size.z / 2)
+				back = math.max(back, -(pt.pos.z - pt.size.z / 2))
+			end
+		end
+		ext_cache[d] = {front, back}
+		return front, back
+	end
+	local function len_of(d) local f, b = extent(d); return f + b end     -- 車子前後的長度
 	-- 載著的車：self.carry = {{uid, z（掛在平板上的位置）}, ...}，照載上去的順序
 	local function list_of(self)
 		if self.carry_uid and not self.carry then self.carry = {{uid = self.carry_uid}}; self.carry_uid = nil end   -- 舊存檔（只載一台）
@@ -77,8 +92,13 @@ local function trailer(kind, P)
 		end
 		local used, l = used_len(self), len_of(d)
 		if used + l > DECK_LEN + 0.5 then return S("No room left on the deck for @1", d.desc) end
-		-- 從平板前端往後排：車頭朝前，車身中心離前端 used + 車頭長
-		local z = FRONT - used - d.half
+		-- 從平板前端往後排：車頭朝前，車身中心離前端 used + 車頭往前的長度
+		local z = FRONT - used - (extent(d))
+		-- 挖土機：手臂收回原位再運
+		if best.arm_h ~= nil or (best.swing or 0) ~= 0 then
+			best.arm_h, best.swing = nil, 0
+			if d.show_tool then d.show_tool(best) end
+		end
 		attach(self, best, z)
 		local list = list_of(self)
 		list[#list + 1] = {uid = best.uid, z = z, len = l, t = t}
@@ -154,7 +174,7 @@ local function trailer(kind, P)
 			for _, c in ipairs(list) do
 				local e = ent(c)
 				if e then
-					if not c.z then local d = V.TYPES[e.vkind]; c.z, c.len = FRONT - d.half, len_of(d) end    -- 舊存檔
+					if not c.z then local d = V.TYPES[e.vkind]; c.z, c.len = FRONT - (extent(d)), len_of(d) end    -- 舊存檔
 					local parent = e.object:get_attach()
 					if not parent then attach(self, e, c.z) end
 				end
@@ -241,8 +261,8 @@ end
 ---------------------------------------------------------------------------
 do
 	local c = "#2a4a8a"
-	local def = {desc = S("Heavy haul trailer"), short = S("Heavy trailer"), color = c, cap = 0, speed = 3,
-		top_speed = 8, accel = 1.0,    -- 空車約 29 km/h
+	local def = {desc = S("Heavy haul trailer"), short = S("Heavy trailer"), color = c, cap = 0, speed = 4,
+		top_speed = 12, accel = 1.2,   -- 空車約 43 km/h（同卡車）
 		tire = 1.0, max_grade = math.rad(12),
 		half = 1.5, top = 1.8, lat = {-1, 0, 1}, eye_up = 1.9, eye_fwd = 0.9, rear = 15.5,
 		mirror = {x = 1.45, y = 1.5, z = 0.6}, rearcam = {x = 0, y = 1.4, z = -15.7},
@@ -288,5 +308,5 @@ do
 	end
 	def.exhaust = {x = 0.95, y = 2.35, z = -0.95}
 	def.overhangs = {{x0 = -1.8, x1 = 1.8, z0 = -15.5, z1 = -1.5, y0 = -1.5, y1 = -0.3, body = "z1"}}
-	trailer("heavyhaul", {def = def, max_t = 150, load_r = 12, loaded_speed = 4, deck_z = DECK_Z, deck_top = DECK_TOP, deck_len = 13.0})
+	trailer("heavyhaul", {def = def, max_t = 150, load_r = 12, loaded_speed = 6, deck_z = DECK_Z, deck_top = DECK_TOP, deck_len = 13.0})   -- 載車約 22 km/h
 end
