@@ -31,6 +31,9 @@ local ITEMS = {
 	{key = "conveyor_rate", who = "mechanic", label = TR("Conveyor upgrade"), max = 5, base = 15000, minutes = 10,
 		desc = TR("Conveyor capacity +10%"),
 		value = function(acc) return ("×%.1f"):format(rockmech.eff_conveyor_mult(acc)) end},
+	{key = "maintenance", who = "mechanic", label = TR("Regular maintenance"), max = 5, base = 20000, minutes = 10,
+		desc = TR("The team's vehicles move 5% faster"),
+		value = function(acc) return ("×%.2f"):format(rockmech.eff_vehicle_mult(acc)) end},
 	{key = "mine_planning", who = "geologist", label = TR("Mine planning"), max = 1, base = 30000, minutes = 10,
 		desc = TR("The whole team can see the stripping ratio"),
 		value = function(acc) return rockmech.research_level(acc, "mine_planning") >= 1 and S("Learned") or S("Not yet") end},
@@ -54,6 +57,7 @@ local ICON = {
 	plant_misplaced = function() return badged("rockmech_icon_plant.png", "minus") end,
 	crusher_rate = function() return badged("rockmech_icon_crusher.png", "up") end,
 	conveyor_rate = function() return badged("rockmech_icon_belt.png", "up") end,
+	maintenance = function() return badged(item_img("rockmech:truck_item"), "up") end,
 	-- 剝採比：長條圖（廢石灰、礦石黑）
 	mine_planning = function() return "[fill:16x16:#f4f0e0^[fill:14x1:1,14:#404040^[fill:1x13:1,1:#404040"
 		.. "^[fill:3x9:3,5:#9a9890^[fill:3x4:6,10:#2a2a2a^[fill:3x11:9,3:#9a9890^[fill:3x5:12,9:#2a2a2a" end,
@@ -167,7 +171,7 @@ local function form(name, who)
 	local job = job_of(acc, who)
 	local head = rockmech.team_of(name) and S("@1  Team @2 funds: @3", S(npc.title), tostring(rockmech.team_of(name)), money_text(rockmech.money(name)))
 		or S("@1  Funds: @2", S(npc.title), money_text(rockmech.money(name)))
-	local out = {"formspec_version[6]size[15,13]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
+	local out = {"formspec_version[6]size[15,16]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	if job then
 		local it = BY_KEY[job.key]
 		out[#out + 1] = ("label[0.5,1.2;%s]"):format(core.formspec_escape(

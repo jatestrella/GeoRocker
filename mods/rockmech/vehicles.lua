@@ -1850,6 +1850,13 @@ function V.register(kind, def)
 				-- 燃料費（fuel.lua）：引擎發動（有人駕駛或自動駕駛）才耗油，空車停著不算
 				if driven and rockmech.fuel_step then rockmech.fuel_step(self, kind, working, dtime) end
 			end
+			-- 定期保養（研發）：全組的車跑得快一點；每秒查一次等級
+			self.mult_t = (self.mult_t or 1) + dtime
+			if self.mult_t >= 1 then
+				self.mult_t = 0
+				self.speed_mult = (self.owner and self.owner ~= "" and rockmech.eff_vehicle_mult) and rockmech.eff_vehicle_mult(self.owner) or 1
+			end
+			ctx.speed = ctx.speed * (self.speed_mult or 1)
 			obj:set_velocity({x = dir.x * ctx.speed + slide_x, y = vel.y, z = dir.z * ctx.speed + slide_z})
 			-- HUD 時速（每 5 km/h 更新一次）
 			if def.top_speed then
