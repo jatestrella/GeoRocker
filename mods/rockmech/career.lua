@@ -486,8 +486,8 @@ local BOOTHS = {
 		color = "#ff8060", tint = "#c03020", sit = false},
 	tools = {entity = "rockmech:vendor_tools", title = S("Tool Room Keeper"), sells = S("Hand tools · timber · drones · safety"),
 		color = "#a0e080", tint = "#407020", sit = true},
-	-- 地質技師、大地技師：也在貨櫃辦公室 2 樓，跟採礦技師坐一排
-	geo = {entity = "rockmech:vendor_geo", title = S("Geology Technician"), sells = S("Geological instruments"),
+	-- 應用地質技師、大地技師：也在貨櫃辦公室 2 樓，跟採礦技師坐一排
+	geo = {entity = "rockmech:vendor_geo", title = S("Engineering Geologist"), sells = S("Geological instruments"),
 		color = "#c0e0a0", tint = "#507030", sit = true},
 	geotech = {entity = "rockmech:vendor_geotech", title = S("Geotechnical Engineer"), sells = S("Rock testing · in-situ stress · monitoring · support"),
 		color = "#a0d0ff", tint = "#204a80", sit = true},
@@ -801,7 +801,7 @@ end
 local OFFICE_DX, OFFICE_Z = 27, -10
 rockmech.career_office_dx = OFFICE_DX
 
--- 2 樓的擺設：門在 +dx 那一頭（dx = RX）。三位技師坐成一排（dx = 1）、面向門：中間採礦技師、兩邊地質技師和大地技師；
+-- 2 樓的擺設：門在 +dx 那一頭（dx = RX）。三位技師坐成一排（dx = 1）、面向門：中間採礦技師、兩邊應用地質技師和大地技師；
 -- 前面一整排辦公桌（dx = 2），跟門之間留兩格走道；背後（dx = −1）一面設計圖板，西邊櫃子。
 local OFFICE_NPC = {civil = {dx = 1, dz = 0}, geo = {dx = 1, dz = -2}, geotech = {dx = 1, dz = 2}}
 function rockmech.career_office_2f(set)
@@ -1156,7 +1156,7 @@ local function fix_stairs(x0)
 	core.log("action", ("[rockmech] 營地 x = %d 的 2 樓：樓梯補成四階、辦公桌面向門"):format(x0))
 end
 
--- 已經有 2 樓的營地：擺設換成三位技師一排（加地質技師、大地技師）
+-- 已經有 2 樓的營地：擺設換成三位技師一排（加應用地質技師、大地技師）
 local function office3(x0)
 	local cx, cz = x0 + OFFICE_DX, OFFICE_Z
 	local y
@@ -1179,7 +1179,7 @@ local function office3(x0)
 	for kind in pairs(OFFICE_NPC) do keep[#keep + 1] = office_spot(kind, at, y) end
 	storage:set_string(VENDOR_SPOTS, core.serialize(keep))
 	if rockmech.career_reset_vendors then rockmech.career_reset_vendors() end
-	core.log("action", ("[rockmech] 營地 x = %d 的 2 樓：加上地質技師、大地技師"):format(x0))
+	core.log("action", ("[rockmech] 營地 x = %d 的 2 樓：加上應用地質技師、大地技師"):format(x0))
 end
 if cfg.career then
 	core.after(3, function()
