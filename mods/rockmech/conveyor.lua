@@ -605,19 +605,29 @@ core.register_craftitem(ITEM, {
 		-- 點在輸送帶上：從這條的兩頭都可以接，往看的方向放下一格
 		--   尾巴（後面沒有接下去）或照原方向直走：往下游接（尾巴可以轉彎；轉彎那格是平的）
 		--   頭（前面沒有東西送進來）：往上游接，新的那格把料送進這格（從料斗接出來的線，可以從料斗旁邊往回鋪）
+		-- 點在輸送帶上：跟一般方塊一樣放在點的那一面旁邊；點上面、下面才往看的方向延伸。
+		-- 方向照新的那格在原本那格的哪一邊：前方 → 接在下游；後方 → 接在上游；側邊 → 尾巴還沒接下去就轉彎往這邊接，
+		-- 不然頭還沒有進料就從側邊送進去；都不行 → 一進一出
 		if BELT_H[un.name] then
 			local c, cn = pointed.under, un
 			local d0 = dir_of(cn)
-			local n = {x = c.x + d.x, z = c.z + d.z}
-			local down = next_of(c, cn)
-			local straight = d0.x == d.x and d0.z == d.z
-			if straight or not down then
-				if put(n, surf(c, cn) + (straight and slope or 0), d, c) and not straight then
-					core.swap_node(c, {name = cn.name, param2 = fd})      -- 尾巴轉向
+			local s = d
+			if pointed.above.y == c.y then s = {x = pointed.above.x - c.x, y = 0, z = pointed.above.z - c.z} end
+			local n = {x = c.x + s.x, z = c.z + s.z}
+			local down, up = next_of(c, cn), prev_of(c, cn)
+			local ahead = d0.x == s.x and d0.z == s.z
+			local behind = d0.x == -s.x and d0.z == -s.z
+			local back_s = {x = -s.x, y = 0, z = -s.z}
+			if ahead and not down then
+				put(n, surf(c, cn) + slope, s, c)
+			elseif behind and not up then
+				put(n, surf(c, cn) - slope, back_s)
+			elseif not ahead and not behind and not down then
+				if put(n, surf(c, cn), s, c) then
+					core.swap_node(c, {name = cn.name, param2 = core.dir_to_fourdir(s)})      -- 尾巴轉彎（轉彎那格是平的）
 				end
-			elseif not prev_of(c, cn) then
-				local back = d0.x == -d.x and d0.z == -d.z
-				put(n, surf(c, cn) - (back and slope or 0), {x = -d.x, y = 0, z = -d.z})
+			elseif not ahead and not behind and not up then
+				put(n, surf(c, cn), back_s)
 			else
 				say(S("A conveyor belt can only have one way in and one way out"))
 			end
