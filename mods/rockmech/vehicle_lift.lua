@@ -574,7 +574,7 @@ local function lift(kind, P)
 		local s = "\n" .. (st.edir and S("Outriggers moving") or st.e >= 1 and S("Outriggers down") or S("Outriggers up"))
 		if st.mode ~= "cab" or vector.distance(st.B, REST) > 0.05 then
 			local r
-			if P.crane then _, _, _, r = solve_c(st.T, st.rope) else _, _, _, r = solve(st.B) end
+			if P.crane then r = select(4, solve_c(st.T, st.rope)) else r = select(4, solve(st.B)) end
 			s = s .. "   " .. S("Basket: @1 m high, @2 m out", ("%.1f"):format(st.B.y - BK.y / 2 + 1.5), ("%.1f"):format(r or 0))
 			if P.crane then s = s .. "   " .. S("Rope @1 m", ("%.1f"):format(st.rope)) end
 		end
@@ -629,21 +629,54 @@ local function lift_of(player)
 	local e = pe and (pe.lift and pe or pe.vehicle)
 	if e and e.lift then return e, e.driver == player:get_player_name() end
 end
+-- Q 只有手上拿著東西時伺服器才收得到（引擎把 Q 當成丟東西）：操作吊車吊籠時手上是空的，就放一個吊籠操作盒，
+-- 按 Q 不會丟出去、只切換動吊臂／收放吊索；不在操作了就收走
+local REMOTE = "rockmech:crane_remote"
+local function q_press(dropper)
+	local e, is_driver = lift_of(dropper)
+	if not e then return false end
+	local st = e.lift
+	local in_basket = st.mode == "basket" or st.mode == "op" or st.rider == dropper:get_player_name()
+	if not in_basket then return false end
+	local def = V.TYPES[e.vkind]
+	if is_driver and def.on_q then def.on_q(e) end
+	return true
+end
 local old_drop = core.item_drop
 function core.item_drop(itemstack, dropper, pos)
-	local e, is_driver
-	if dropper and dropper.is_player and dropper:is_player() then e, is_driver = lift_of(dropper) end
-	if e then
-		local st = e.lift
-		local in_basket = st.mode == "basket" or st.mode == "op" or st.rider == dropper:get_player_name()
-		if in_basket then
-			local def = V.TYPES[e.vkind]
-			if is_driver and def.on_q then def.on_q(e) end
-			return itemstack
-		end
-	end
+	if dropper and dropper.is_player and dropper:is_player() and q_press(dropper) then return itemstack end
 	return old_drop(itemstack, dropper, pos)
 end
+core.register_craftitem(REMOTE, {
+	description = S("Basket control box\nQ switches between moving the boom and the rope"),
+	short_description = S("Basket control box"),
+	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,2:#e8c020^[fill:6x2:5,4:#303030^[fill:2x2:5,8:#d03030^[fill:2x2:9,8:#30a040^[fill:2x2:7,11:#3060c0",
+	stack_max = 1, groups = {not_in_creative_inventory = 1},
+	on_drop = function(itemstack, dropper)
+		if dropper and dropper:is_player() then q_press(dropper) end
+		return itemstack                                   -- 丟不出去
+	end,
+})
+-- 每秒檢查：正在操作吊車吊籠、手上空著 → 放操作盒；沒在操作 → 收走
+local remote_t = 0
+core.register_globalstep(function(dtime)
+	remote_t = remote_t + dtime
+	if remote_t < 0.5 then return end
+	remote_t = 0
+	for _, pl in ipairs(core.get_connected_players()) do
+		local e, is_driver = lift_of(pl)
+		local st = e and e.lift
+		local operating = st and is_driver and V.TYPES[e.vkind].on_q and (st.mode == "basket" or st.mode == "op")
+		local inv = pl:get_inventory()
+		if operating then
+			if pl:get_wielded_item():is_empty() then pl:set_wielded_item(ItemStack(REMOTE)) end
+		elseif inv:contains_item("main", REMOTE) then
+			for i, it in ipairs(inv:get_list("main") or {}) do
+				if it:get_name() == REMOTE then inv:set_stack("main", i, ItemStack("")) end
+			end
+		end
+	end
+end)
 
 -- 高空作業車：伸縮臂 15 m 級（作業高度 15 m：籠底最高離地 13 m、水平 10 m），白車身、橘色臂
 do
