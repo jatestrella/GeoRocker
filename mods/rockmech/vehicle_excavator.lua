@@ -803,9 +803,9 @@ local function excavator(kind, P)
 		end
 		if self.op and self.op.on and not ctx.d then operate(self, ctx) end
 		if self.op and self.op.standby and rockmech.op_standby_step then rockmech.op_standby_step(self) end
-		-- 第一人稱駕駛：上部結構轉向視線的水平方向（車身座標的迴轉角 ψ 往右為正，實體 yaw 往左為正）
+		-- 駕駛（第一人稱、追蹤視角都一樣）：上部結構轉向視線的水平方向（車身座標的迴轉角 ψ 往右為正，實體 yaw 往左為正）
 		local d = ctx.d
-		self.follow = d ~= nil and not self.chase
+		self.follow = d ~= nil
 		self.swing_t = math.max(0, (self.swing_t or 0) - ctx.dtime)     -- 迴轉中：引擎算運作（多留一下，滑鼠微動時音量才不會一直跳）
 		if self.follow and not self.dig and self.parts then
 			local goal = ctx.yaw - d:get_look_horizontal()
