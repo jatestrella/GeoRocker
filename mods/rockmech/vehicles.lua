@@ -1375,6 +1375,15 @@ function V.register(kind, def)
 			if not clicker or not clicker:is_player() then return end
 			local name = clicker:get_player_name()
 			if self.driver == name then get_off(self); return end
+			-- 開著別台車對拖車按右鍵：把那台開上平板（已經在這台拖車上就開下來，vehicle_lowboy.lua）
+			if def.drive_on then
+				local par = clicker:get_attach()
+				local pe = par and par:get_luaentity()
+				if pe and pe ~= self and pe.vkind and pe.driver == name then
+					def.drive_on(self, pe, clicker)
+					return
+				end
+			end
 			if self.driver then return end
 			if not V.may_use(self, name) then return end
 			-- 無人機飛行中（或拿著遙控器）按右鍵：起飛／回到起飛點，不上車
@@ -1472,9 +1481,11 @@ function V.register(kind, def)
 		end,
 		on_step = function(self, dtime)
 			local obj = self.object
-			-- 掛在別的東西上（平板拖車載著）：不自己動，只冒受損的煙
+			-- 掛在別的東西上（平板拖車載著）：不自己動，只冒受損的煙；有人坐著的話 Shift 下車
 			if obj:get_attach() then
 				damage_smoke(self, dtime)
+				local d = self.driver and core.get_player_by_name(self.driver)
+				if d and d:get_player_control().sneak then get_off(self) end
 				return
 			end
 			track_update(self, dtime)

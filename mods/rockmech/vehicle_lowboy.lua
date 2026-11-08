@@ -52,6 +52,7 @@ local function trailer(kind, P)
 		e.on_lowboy = self.uid
 	end
 
+	local put_on          -- 下面定義：把 best 掛上平板（檢查總重、長度）
 	local function load_vehicle(self)
 		local deck = V.to_world(self, {x = 0, y = 0, z = DECK_Z})
 		local best, bd
@@ -65,6 +66,9 @@ local function trailer(kind, P)
 			end
 		end
 		if not best then return S("No vehicle to load within @1 m of the deck", ("%d"):format(LOAD_R)) end
+		return put_on(self, best)
+	end
+	put_on = function(self, best)
 		local d = V.TYPES[best.vkind]
 		local t = V.MASS[best.vkind] or 20
 		local now = total_t(self)
@@ -81,10 +85,10 @@ local function trailer(kind, P)
 		return nil, d.desc
 	end
 
-	-- 卸下最後載上去的那一台：卸在車尾後方
-	local function unload_vehicle(self)
+	-- 卸下一台（i：清單裡第幾台，預設最後載上去的那一台）：卸在車尾後方
+	local function unload_vehicle(self, i)
 		local list = list_of(self)
-		local c = table.remove(list)
+		local c = table.remove(list, i or #list)
 		if not c then return end
 		local e = ent(c)
 		if not e then return end
@@ -96,6 +100,30 @@ local function trailer(kind, P)
 		e.object:set_yaw(self.object:get_yaw())
 		e.object:set_acceleration({x = 0, y = -9.81, z = 0})
 		return d.desc
+	end
+
+	-- 開著車對拖車按右鍵（vehicles.lua）：開上平板；已經在這台平板上就開下來（卸在車尾後方）。人一直坐在車上
+	function def.drive_on(self, e, player)
+		local name = player:get_player_name()
+		local list = list_of(self)
+		for i, c in ipairs(list) do
+			if c.uid == e.uid then
+				local what = unload_vehicle(self, i)
+				if what then rockmech.notify(name, S("[Trailer] Drove @1 off the deck", what)) end
+				V.update_hud(self)
+				return
+			end
+		end
+		if V.TYPES[e.vkind].trailer then return end
+		local deck = V.to_world(self, {x = 0, y = 0, z = DECK_Z})
+		if vector.distance(e.object:get_pos(), deck) > LOAD_R then
+			rockmech.notify(name, S("[Trailer] Get within @1 m of the deck first", ("%d"):format(LOAD_R)))
+			return
+		end
+		local why, what = put_on(self, e)
+		if why then rockmech.notify(name, S("[Trailer] @1", why))
+		else rockmech.notify(name, S("[Trailer] @1 is on the deck: Shift to get out, right-click the trailer to drive off", what)) end
+		V.update_hud(self)
 	end
 
 	function def.action(self, ctx)

@@ -1559,3 +1559,7 @@ Heavy trailer=重型拖車
 No room left on the deck for @1=平板上放不下@1了
 Nothing on the deck=平板上沒有車
 @1 / @2 t=@1 / @2 t
+[Trailer] Drove @1 off the deck=[拖車] @1開下平板了
+[Trailer] Get within @1 m of the deck first=[拖車] 先開到平板 @1 m 內
+[Trailer] @1=[拖車] @1
+[Trailer] @1 is on the deck: Shift to get out, right-click the trailer to drive off=[拖車] @1在平板上了：Shift 下車，對拖車右鍵開下來
