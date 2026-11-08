@@ -479,8 +479,8 @@ end)
 local BOOTHS = {
 	vehicle = {entity = "rockmech:vendor_vehicle", title = S("Equipment Manager"), sells = S("Vehicles · vehicle upgrades"),
 		color = "#80b0ff", tint = "#2050a0", sit = true},
-	-- 土木技師：貨櫃辦公室 2 樓（破碎站、選礦場、輸送帶、料斗、通風）
-	civil = {entity = "rockmech:vendor_civil", title = S("Civil Engineer"), sells = S("Crushers · plants · conveyors · ventilation"),
+	-- 採礦技師：貨櫃辦公室 2 樓（破碎站、選礦場、輸送帶、料斗、通風）
+	civil = {entity = "rockmech:vendor_civil", title = S("Mining Engineer"), sells = S("Crushers · plants · conveyors · ventilation"),
 		color = "#ffd060", tint = "#806010", sit = true},
 	blast = {entity = "rockmech:vendor_blast", title = S("Blasting Supervisor"), sells = S("Drilling · explosives · charging"),
 		color = "#ff8060", tint = "#c03020", sit = false},
@@ -796,8 +796,8 @@ end
 local OFFICE_DX, OFFICE_Z = 27, -10
 rockmech.career_office_dx = OFFICE_DX
 
--- 2 樓的擺設：門在 +dx 那一頭（dx = RX）。土木技師坐在 dx = 1、面向門，前面一排辦公桌（dx = 2），
--- 跟門之間留兩格走道；背後（dx = −1）一面設計圖板，兩邊櫃子。回傳土木技師的位置（本地座標）
+-- 2 樓的擺設：門在 +dx 那一頭（dx = RX）。採礦技師坐在 dx = 1、面向門，前面一排辦公桌（dx = 2），
+-- 跟門之間留兩格走道；背後（dx = −1）一面設計圖板，兩邊櫃子。回傳採礦技師的位置（本地座標）
 local CIVIL_AT = {dx = 1, dz = 0}
 function rockmech.career_office_2f(set)
 	for dz = -1, 1 do set(2, 5, dz, "rockmech:camp_table") end
@@ -806,7 +806,7 @@ function rockmech.career_office_2f(set)
 	for dz = -1, 1 do set(-1, 5, dz, "rockmech:camp_blackboard", 1); set(-1, 6, dz, "rockmech:camp_blackboard", 1) end
 	set(-4, 5, -2, "rockmech:camp_shelf"); set(-4, 6, -2, "rockmech:camp_shelf"); set(-4, 5, 2, "rockmech:camp_shelf")
 end
--- 土木技師的攤位（坐在 2 樓椅子上、面向門）
+-- 採礦技師的攤位（坐在 2 樓椅子上、面向門）
 local function civil_spot(at, y)
 	local p, q = at(CIVIL_AT.dx, 0, CIVIL_AT.dz), at(CIVIL_AT.dx + 1, 0, CIVIL_AT.dz)
 	local d = {x = q.x - p.x, z = q.z - p.z}
@@ -882,7 +882,7 @@ local function build_market(x0)
 		local p = at(bx, 0, 1)
 		list[#list + 1] = {kind = kind, pos = {x = p.x, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = p.z}, yaw = FACE_YAW}
 	end
-	list[#list + 1] = civil_spot(at, y)       -- 土木技師（2 樓的椅子上、面向門）
+	list[#list + 1] = civil_spot(at, y)       -- 採礦技師（2 樓的椅子上、面向門）
 	storage:set_string("stairs4:" .. x0, "1")   -- 新版的樓梯和擺設（不用再補）
 	storage:set_string("yard2:" .. x0, "1")     -- 新的交車區在 camp_area 裡，蓋營地時一起整地
 	storage:set_string(VENDOR_SPOTS, core.serialize(list))

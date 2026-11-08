@@ -72,7 +72,7 @@ config.ores = {
 }
 
 -- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個；
--- shop：哪一攤賣（vehicle 機械設備課長、blast 爆破主任、tools 工具室管理員、civil 土木技師）
+-- shop：哪一攤賣（vehicle 機械設備課長、blast 爆破主任、tools 工具室管理員、civil 採礦技師）
 config.shop = {
 	{key = "pick", shop = "tools", item = "rockmech:pick", label = TR("Pickaxe"), price = 0},
 	{key = "shovel", shop = "tools", item = "rockmech:shovel", label = TR("Shovel"), price = 100},
