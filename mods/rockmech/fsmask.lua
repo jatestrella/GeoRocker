@@ -419,7 +419,65 @@ local function crack_sound(player, a, center, cells)
 	end
 end
 
--- 警戒裂紋標記（1 < FS < max）：裂紋級數變了就換貼圖
+-- 節理滑動（slip、shear）不套裂紋，改成偶爾從臨空的那一面噴出一小撮碎屑和粉塵（FS 越接近 1 越常噴、噴越多）
+local JOINT_KIND = {slip = true, shear = true}
+local SPURT_TICK = 0.5                 -- 每幾秒擲一次
+local SPURT_MAX = 6                    -- 每位玩家每次最多噴幾處
+local function spurt_chance(stage) return 0.03 + 0.03 * stage end      -- 每次擲到的機率：平均十幾秒到幾秒噴一次
+local SIDES = {{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1},
+	{x = 0, y = -1, z = 0}, {x = 0, y = 1, z = 0}}
+local function spurt(name, pos, stage)
+	local node = core.get_node(pos).name
+	if not rockmech.lith_of_node[node] then return end
+	local n
+	for _, d in ipairs(SIDES) do
+		local nd = core.registered_nodes[core.get_node(vector.add(pos, d)).name]
+		if nd and not nd.walkable then n = d; break end
+	end
+	if not n then return end
+	local f = vector.add(pos, vector.multiply(n, 0.52))
+	local sp = 1.2 + 0.4 * stage
+	local spread = {x = n.x == 0 and 0.45 or 0.02, y = n.y == 0 and 0.45 or 0.02, z = n.z == 0 and 0.45 or 0.02}
+	local common = {
+		time = 0.25, playername = name, collisiondetection = true,
+		minpos = vector.subtract(f, spread), maxpos = vector.add(f, spread),
+		minvel = {x = n.x * sp - 0.4, y = n.y * sp + 0.2, z = n.z * sp - 0.4},
+		maxvel = {x = n.x * sp * 1.8 + 0.4, y = n.y * sp * 1.8 + 1.2, z = n.z * sp * 1.8 + 0.4},
+		minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
+	}
+	-- 碎屑（這一格岩石的碎片）
+	local deb = table.copy(common)
+	deb.amount, deb.minexptime, deb.maxexptime, deb.minsize, deb.maxsize = 3 + stage * 2, 0.5, 1.2, 0, 0
+	deb.node = {name = node}
+	core.add_particlespawner(deb)
+	-- 粉塵：慢、輕、往上飄一點
+	local dust = table.copy(common)
+	dust.amount, dust.minexptime, dust.maxexptime, dust.minsize, dust.maxsize = 4 + stage * 2, 0.8, 1.6, 1.5, 3
+	dust.minacc, dust.maxacc = {x = 0, y = -0.3, z = 0}, {x = 0, y = 0.2, z = 0}
+	dust.minvel = {x = n.x * 0.6 - 0.2, y = n.y * 0.6, z = n.z * 0.6 - 0.2}
+	dust.maxvel = {x = n.x * 1.2 + 0.2, y = n.y * 1.2 + 0.4, z = n.z * 1.2 + 0.2}
+	dust.texture = "[fill:4x4:#b8b0a4"
+	dust.collisiondetection = false
+	core.add_particlespawner(dust)
+end
+local spurt_t = 0
+core.register_globalstep(function(dtime)
+	spurt_t = spurt_t + dtime
+	if spurt_t < SPURT_TICK then return end
+	spurt_t = 0
+	for name, a in pairs(active) do
+		local done = 0
+		for _, m in pairs(a.wmarks or {}) do
+			if done >= SPURT_MAX then break end
+			if m.spurt and m.pos and math.random() < spurt_chance(m.spurt) then
+				spurt(name, m.pos, m.spurt)
+				done = done + 1
+			end
+		end
+	end
+end)
+
+-- 警戒裂紋標記（1 < FS < max）：裂紋級數變了就換貼圖；節理滑動改成噴碎屑（上面）
 local function apply_warn(player, a, center, cells)
 	by_distance(cells, center)
 	crack_sound(player, a, center, cells)
@@ -435,8 +493,12 @@ local function apply_warn(player, a, center, cells)
 		local m = a.wmarks[k]
 		if m and m.obj and not m.obj:get_pos() then m.obj = nil end
 		if not m then m = {}; a.wmarks[k] = m end
-		m.kind, m.fs = c.kind, c.fs
-		if not m.obj then
+		m.kind, m.fs, m.pos = c.kind, c.fs, c.pos
+		if JOINT_KIND[c.kind] then
+			if m.obj and m.obj:get_pos() then m.obj:remove() end
+			m.obj, m.stage, m.spurt = nil, nil, stage
+		elseif not m.obj then
+			m.spurt = nil
 			m.obj = core.add_entity(c.pos, "rockmech:fswarn")
 			m.stage = nil
 		end
