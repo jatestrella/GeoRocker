@@ -124,7 +124,7 @@ for _, v in ipairs({{ITEM, "#40e060", false}, {ITEM_OFF, "#e04040", true}}) do
 		node_box = {type = "fixed", fixed = {{-0.3, -0.5, -0.1, 0.3, 0.1, 0.3}, {-0.05, -0.5, 0.3, 0.05, -0.2, 0.4}}},
 		tiles = {SIDE, SIDE, SIDE, SIDE, SIDE, face(v[2])},
 		inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,2:#7a8086^[fill:2x2:7,5:#40e060^[fill:4x1:6,9:#2a2a2a",
-		groups = {cracky = 3, oddly_breakable_by_hand = 2, not_in_creative_inventory = v[3] and 1 or 0},
+		groups = {dig_immediate = 2, not_in_creative_inventory = v[3] and 1 or 0},     -- 徒手、拿什麼都拿得起來
 		drop = ITEM,
 		is_ground_content = false,
 		after_place_node = function(pos, placer)
