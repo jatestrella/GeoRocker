@@ -126,6 +126,7 @@ config.shop = {
 	{key = "schmidt", shop = "geotech", item = "rockmech:schmidt_hammer", label = TR("Schmidt hammer"), price = 1500},
 	{key = "point_load", shop = "geotech", item = "rockmech:point_load", label = TR("Point load tester"), price = 3000},
 	{key = "flatjack", shop = "geotech", item = "rockmech:flatjack", label = TR("Flat jack"), price = 8000},
+	{key = "fea_tablet", shop = "geotech", item = "rockmech:fea_tablet", label = TR("Numerical analysis tablet"), price = 3000},
 	{key = "stress_cell", shop = "geotech", item = "rockmech:stress_cell", label = TR("Borehole stress cell"), price = 12000},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = TR("Timber post"), price = 200, count = 10},
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = TR("Timber plank"), price = 100, count = 10},

@@ -1,5 +1,5 @@
 -- rockmech/mohr.lua
--- Mohr 圓（伺服器畫的 PNG，只傳給看的人）：準心旁的小圖（會「Mohr 圓分析」：只能考試學會）
+-- Mohr 圓的畫圖（伺服器畫的 PNG）：數值分析平板（tablet.lua）用
 --   指著的那一格，應力解的 σ1、σ3 一個圓，加上遊戲用的強度包絡線：完整岩石（虛線）、岩體（紅線，GSI、D）。
 -- Hoek-Brown 換成 τ–σn 的包絡線：Balmaz 的參數式（Hoek 2002）
 --   σ1 = σ3 + σci (mb σ3/σci + s)^a，dσ1/dσ3 = 1 + a mb (mb σ3/σci + s)^(a−1)
