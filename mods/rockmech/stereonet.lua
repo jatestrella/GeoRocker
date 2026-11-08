@@ -54,6 +54,20 @@ local function measure_joints(pos)
 	return out
 end
 
+-- 切過這一格的節理組（索引，由小到大；不加量測誤差）
+function rockmech.joint_sets_at(pos)
+	local sets = rockmech.get_joint_sets()
+	local found, out = {}, {}
+	for _, face in ipairs(joints.FACES) do
+		local fx, fy, fz, axis = joints.face_key(pos.x, pos.y, pos.z, face)
+		for _, it in ipairs(joints.face_info(sets, fx, fy, fz, axis)) do
+			if it.joint and not found[it.set] then found[it.set] = true; out[#out + 1] = it.set end
+		end
+	end
+	table.sort(out)
+	return out
+end
+
 -- 量坡面：周圍 7×7 的地表高度最小平方擬合 y = a·x + b·z + c → 傾角、傾向（往下坡的方向；+x 東、+z 北）
 local function measure_slope(pos)
 	local sx, sz, sxx, szz, sxz, sy, sxy, szy, n = 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -233,8 +247,13 @@ local function measure(itemstack, user, pointed)
 	if #ms == 0 then bubble(user, {S("No joint cuts through this block (intact rock bridge); try another block")}, pos); return itemstack end
 	local sets = rockmech.get_joint_sets()
 	local txt = {}
+	local numbers = rockmech.can_see_q and rockmech.can_see_q(user)
 	for _, m in ipairs(ms) do
 		txt[#txt + 1] = core.colorize(sets[m.s].color or "#ffffff", ("%s  %02.0f° / %03.0f°"):format(sets[m.s].name, m.d, m.a))
+		-- 節理面的狀況：描述（ISRM）；有 Q 法圖表才有 Jr、Ja、φj
+		if rockmech.joint_condition_lines then
+			for _, l in ipairs(rockmech.joint_condition_lines(sets[m.s], numbers)) do txt[#txt + 1] = l end
+		end
 	end
 	txt[#txt + 1] = S("E: write into the field notebook")
 	last[name] = {m = ms}

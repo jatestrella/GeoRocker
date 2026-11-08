@@ -134,6 +134,7 @@ config.shop = {
 	{key = "drone_cmd", shop = "tools", item = "rockmech:drone_cmd", label = TR("Command drone"), price = 5000},
 	{key = "xrf", shop = "tools", item = "rockmech:xrf", label = TR("XRF analyzer"), price = 5000},
 	{key = "gsi_card", shop = "tools", item = "rockmech:gsi_card", label = TR("GSI chart"), price = 1000},
+	{key = "q_chart", shop = "tools", item = "rockmech:q_chart", label = TR("Q-system chart"), price = 1000},
 	{key = "core_drill", shop = "tools", item = "rockmech:core_drill", label = TR("Hand core drill"), price = 3000},
 	{key = "compass", shop = "tools", item = "rockmech:compass", label = TR("Geological compass"), price = 200},
 	{key = "fieldbook", shop = "tools", item = "rockmech:fieldbook", label = TR("Field notebook"), price = 10},

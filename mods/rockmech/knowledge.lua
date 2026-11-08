@@ -96,6 +96,74 @@ core.register_craftitem("rockmech:gsi_card", {
 	end,
 })
 
+-- 岩體分類 Q 法圖表（Barton 1974 的 Jr、Ja 表）：
+--   羅盤量節理時，每組節理面的狀況都會用描述性文字顯示（照 ISRM 的描述：摸起來粗糙／平滑、起伏／平直、壁面蝕變、充填）；
+--   背包裡有 Q 法圖表（或會「岩體分類」：考過、雇了地質學家）才顯示 Jr、Ja 的數字和換算的摩擦角 φj = atan(Jr/Ja)。
+--   拿著圖表右鍵岩面：只看切過這一格的節理面況（不量位態）。
+local Q_CHART = "rockmech:q_chart"
+local JR_TXT = {
+	[4] = S("Discontinuous: the joint ends inside the rock"),
+	[3] = S("Feels rough or irregular; the surface undulates"),
+	[2] = S("Feels smooth; the surface undulates"),
+	[1.5] = S("Feels rough or irregular; the surface is planar"),
+	[1] = S("Feels smooth; the surface is planar"),
+	[0.5] = S("Slickensided and polished; the surface is planar"),
+}
+local JA_TXT = {
+	[0.75] = S("Tightly healed with a hard, non-softening filling (quartz, epidote)"),
+	[1] = S("Fresh walls, only surface staining"),
+	[2] = S("Slightly altered walls: non-softening mineral coating, sandy grains"),
+	[3] = S("Silty or sandy clay coating, a little non-softening clay"),
+	[4] = S("Softening or low-friction clay coating (kaolinite, mica, chlorite, talc)"),
+	[5] = S("Filled with sand and crushed rock, no clay"),
+	[6] = S("Thin filling of stiff, non-softening clay"),
+	[8] = S("Thin filling of softening clay"),
+	[10] = S("Thin filling of swelling clay"),
+	[12] = S("Thick band of stiff clay"),
+	[13] = S("Thick band of softening clay"),
+	[20] = S("Thick band of swelling clay"),
+}
+-- 看不看得到 Q 法的數字：背包裡有圖表，或會岩體分類（考過／雇了地質學家）
+function rockmech.can_see_q(player)
+	if not cfg.career then return true end
+	return player:get_inventory():contains_item("main", Q_CHART) or rockmech.can_see(player:get_player_name(), "rockmass", true)
+end
+-- 一組節理（get_joint_sets 的一筆）面況的幾行字：描述；numbers = true 時加上 Jr、Ja、φj
+function rockmech.joint_condition_lines(js, numbers)
+	local out = {}
+	if js.jr and JR_TXT[js.jr] then out[#out + 1] = "  " .. JR_TXT[js.jr] end
+	if js.ja and JA_TXT[js.ja] then out[#out + 1] = "  " .. JA_TXT[js.ja] end
+	if numbers then
+		out[#out + 1] = js.jr and ("  " .. S("Jr @1  Ja @2 → φj ≈ @3°", ("%g"):format(js.jr), ("%g"):format(js.ja), ("%.0f"):format(js.phi)))
+			or ("  " .. S("φj ≈ @1°", ("%.0f"):format(js.phi or 30)))
+	end
+	return out
+end
+core.register_craftitem(Q_CHART, {
+	description = S("Q-system chart (Jr, Ja)\nWith it, the compass also shows Jr, Ja and the friction angle; right-click a rock face to read its joint surfaces"),
+	short_description = S("Q-system chart"),
+	inventory_image = "[fill:16x16:#00000000^[fill:14x12:1,2:#f4f0e0^[fill:12x1:2,4:#404040^[fill:12x1:2,7:#404040^[fill:12x1:2,10:#404040^[fill:1x9:6,4:#404040^[fill:4x2:2,2:#3a6a9a",
+	stack_max = 1,
+	on_place = function(itemstack, player, pointed)
+		if not (player and player:is_player()) or pointed.type ~= "node" then return itemstack end
+		local pos = pointed.under
+		if not rockmech.lith_of_node[core.get_node(pos).name] then
+			rockmech.info_bubble(player, {S("Nothing to read here")}, pos); return itemstack
+		end
+		local sets = rockmech.get_joint_sets()
+		local hit = rockmech.joint_sets_at and rockmech.joint_sets_at(pos) or {}
+		local lines = {}
+		for _, si in ipairs(hit) do
+			local js = sets[si]
+			lines[#lines + 1] = core.colorize(js.color or "#ffffff", js.name)
+			for _, l in ipairs(rockmech.joint_condition_lines(js, true)) do lines[#lines + 1] = l end
+		end
+		if #lines == 0 then lines[1] = S("No joint cuts through this block (intact rock bridge); try another block") end
+		rockmech.info_bubble(player, lines, pos)
+		return itemstack
+	end,
+})
+
 ---------------------------------------------------------------------------
 -- 雇用地質學家（全組、在線上才倒數）
 ---------------------------------------------------------------------------
