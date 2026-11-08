@@ -806,6 +806,7 @@ local function excavator(kind, P)
 		local got = 0
 		for _, c in ipairs(cells) do
 			if want <= 0 then break end
+			if rockmech.dig_topsoil then rockmech.dig_topsoil(c) end      -- 表土：鏟斗挖鬆了再挖起來
 			local t, base, g = V.take_rubble(c, want)
 			if t > 0 then
 				V.load_put(self, base, t, g)
@@ -1096,7 +1097,7 @@ do
 			{id = "stack", pos = {x = 1.6, y = 1.0, z = -2.5}, size = {x = 0.3, y = 1.0, z = 0.3}, tex = box_tex("#202020")},   -- 排氣管
 		},
 		boom_root = {x = 0.5, y = 0.2, z = 2.0},
-		bucket_rest = {x = 0.5, y = -2.5, z = 6.5},      -- 收起時挖斗放在車頭前方地上
+		bucket_rest = {x = 0.5, y = -2.1, z = 6.5},      -- 收起時挖斗在車頭前方，斗底離地約 10 cm（斗高 2.5 m）
 		boom_len = 8.2, stick_len = 5.0, boom_w = 1.1, stick_w = 0.9,
 		bucket = {x = 2.8, y = 2.0, z = 1.8}, bucket_color = "#4a4a4a",
 		bucket_real = {x = 3.2, y = 2.5, z = 2.8},       -- 200 t 級、約 12 m³：寬 3.2、斗高 2.5、斗深 2.8，接點到齒尖約 2.9 m

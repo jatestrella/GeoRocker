@@ -531,6 +531,14 @@ do
 	end
 end
 
+-- 挖土機的鏟斗挖到表土：變成同樣厚度的鬆土（之後當碎石挖起來）。回傳有沒有換
+function rockmech.dig_topsoil(p)
+	local k = TOPSOIL_K[core.get_node(p).name]
+	if not k then return false end
+	core.swap_node(p, {name = rockmech.rubble_with_level(SOIL, k)})
+	return true
+end
+
 -- 薄的表土上面壓了碎石、鬆土：變成同樣厚度的鬆土，讓上面的往下倒進來合併（collapse.lua granular_settle 呼叫）
 function rockmech.loosen_under(p, name)
 	local k = TOPSOIL_K[name]
