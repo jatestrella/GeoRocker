@@ -132,6 +132,25 @@ describe("config.is_soil", function()
 		assert.is_false(config.is_soil("rockmech:shale", {cracky = 3, stone = 1}, true))
 		assert.is_false(config.is_soil("x:placed", {crumbly = 3}, false))
 	end)
+	it("節理組用 Jr、Ja：φj = atan(Jr/Ja)，不是表格值的取最接近的", function()
+		local cfg, warn = config.load(getter({rockmech_joint_set_1 = "10,135,4,0.7,2,3", rockmech_joint_set_2 = "60,0,4,0.7,1.7,2.6"}))
+		local a, b = cfg.joint_sets[1], cfg.joint_sets[2]
+		assert.are.equal(2, a.jr); assert.are.equal(3, a.ja)
+		assert.near(math.deg(math.atan(2 / 3)), a.phi, 1e-9)
+		assert.are.equal(1.5, b.jr); assert.are.equal(3, b.ja)
+		assert.are.equal(2, #warn)
+		-- 預設的三組都有 Jr、Ja
+		for _, js in ipairs(config.load(getter({})).joint_sets) do
+			assert.near(math.deg(math.atan(js.jr / js.ja)), js.phi, 1e-9)
+		end
+	end)
+
+	it("舊格式（第 5 欄是 φj）照用，沒有 Jr、Ja", function()
+		local js = config.load(getter({rockmech_joint_set_1 = "10,135,4,0.7,30"})).joint_sets[1]
+		assert.are.equal(30, js.phi)
+		assert.is_nil(js.jr)
+	end)
+
 	it("rockmech_strip_soil 預設關閉、可由設定開啟", function()
 		assert.is_false(config.load(function() return nil end).strip_soil)
 		assert.is_true(config.load(function(k) return k == "rockmech_strip_soil" and "true" or nil end).strip_soil)

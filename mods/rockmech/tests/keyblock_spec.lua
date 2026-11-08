@@ -272,6 +272,13 @@ describe("keyblock 應力夾持", function()
 		assert.near(r0.fs + 2 * 50 * TAN30 / (W * s), r.fs, 1e-9)
 		assert.is_true(r.fs > 1)
 	end)
+	it("節理面用自己那一組的 φj（sets[pl.set].tanphi）", function()
+		local pl = planes(nil, nil)
+		pl[1].set = 1
+		local t = math.tan(math.rad(20))
+		local r = keyblock.analyze(100, pl, TAN30, nil, {{tanphi = t}})
+		assert.near(t / math.tan(math.rad(40)), r.fs, 1e-9)
+	end)
 	it("會打開的面不提供夾持：落下模式不受影響", function()
 		-- 只有一個往上傾的頂面（ν 朝上），落下時打開
 		local pl = {{nu = {x = 0, y = 1, z = 0}, area = 4, c = 0, clamp = 1000}}

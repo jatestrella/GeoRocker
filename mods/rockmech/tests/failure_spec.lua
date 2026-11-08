@@ -267,6 +267,9 @@ describe("failure 節理弱面（Jaeger）", function()
 		assert.is_true(tau > 0)
 		assert.near((math.max(0, sn1) + math.max(0, sn2)) / tau, f, 1e-12)
 		assert.is_true(failure.wedge_fs(0, 1, 0.3, 0, n1, n2, l, 0.1, 1) > f)
+		-- 兩個面的 φj 不同：各自的正向力乘各自的 tanφ
+		local f2 = failure.wedge_fs(0, 1, 0.3, 0, n1, n2, l, 0, 1, 0.5)
+		assert.near((math.max(0, sn1) + 0.5 * math.max(0, sn2)) / tau, f2, 1e-12)
 	end)
 
 	it("平滑坡面方向：平直的東壁 = +x；45° 階梯狀坡面 = 對角", function()

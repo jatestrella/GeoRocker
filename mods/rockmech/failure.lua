@@ -426,7 +426,7 @@ function failure.cell_state(g, x, y, z, p)
 			local js = list[k]
 			if not wk.daylight or failure.daylights(js.n_eff, ex_p, ex_n, ez_p, ez_n, e_down, wk.lat_cos, fn) then
 				local sn, tau = failure.plane_stress(sx, sy, sz, sxz, js.n_eff)
-				local f = failure.plane_fs(sn, tau, wk.c, wk.tanphi)
+				local f = failure.plane_fs(sn, tau, wk.c, js.tanphi or wk.tanphi)
 				if f < fs_joint then
 					fs_joint, slip_set, slip_sn, slip_tau = f, js, sn, tau
 				end
@@ -439,7 +439,7 @@ function failure.cell_state(g, x, y, z, p)
 			for _, pr in ipairs(wpairs) do
 				if here[pr.a] and here[pr.b] then
 					local f, sn1, sn2, tau = failure.wedge_fs(sx, sy, sz, sxz, pr.a.n_eff, pr.b.n_eff, pr.l,
-						wk.c, wk.tanphi)
+						wk.c, pr.a.tanphi or wk.tanphi, pr.b.tanphi or wk.tanphi)
 					if f < fs_joint then
 						fs_joint, slip_set, slip_sn, slip_tau = f, pr.a, sn1, tau
 						slip_set2, slip_sn2, slip_line = pr.b, sn2, pr.l
@@ -514,7 +514,8 @@ end
 
 -- 楔形沿交線 l 滑動的安全係數：各面上沿 l 的剪應力相加為驅動，兩面的 c + σn·tanφ 為抵抗。
 -- 回傳 FS, σn1, σn2, τ∥
-function failure.wedge_fs(sx, sy, sz, sxz, n1, n2, l, c, tanphi)
+-- tanphi2：第二個面的摩擦係數（兩組 φj 不同；省略 = 跟第一個面一樣）
+function failure.wedge_fs(sx, sy, sz, sxz, n1, n2, l, c, tanphi, tanphi2)
 	local function comp(n)
 		local tx = sx * n.x + sxz * n.z
 		local ty = sy * n.y
@@ -525,7 +526,7 @@ function failure.wedge_fs(sx, sy, sz, sxz, n1, n2, l, c, tanphi)
 	local sn2, t2 = comp(n2)
 	local tau = t1 + t2
 	if tau <= 0 then return math.huge, sn1, sn2, 0 end
-	return (2 * c + (math.max(0, sn1) + math.max(0, sn2)) * tanphi) / tau, sn1, sn2, tau
+	return (2 * c + math.max(0, sn1) * tanphi + math.max(0, sn2) * (tanphi2 or tanphi)) / tau, sn1, sn2, tau
 end
 
 -- 弱面安全係數 (cj + σn·tanφj) / τ（τ = 0 時為 ∞；σn < 0 時摩擦項取 0）

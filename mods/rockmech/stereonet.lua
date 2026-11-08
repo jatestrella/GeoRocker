@@ -142,10 +142,22 @@ local function draw(d)
 	end
 	c.dot(CX, CY, black, 3)
 	-- 摩擦圓：極點離中心 φj 以內 = 傾角比 φj 緩
-	local phi = cfg.weakness and cfg.weakness.phi or 30
-	local rf = RAD * math.tan(rad(phi) / 2)
-	local red = string.char(220, 60, 60, 255)
-	for t = 0, 360, 1.5 do c.dot(CX + rf * math.sin(rad(t)), CY - rf * math.cos(rad(t)), red, 2) end
+	-- 每組節理的 φj 不同（atan(Jr/Ja)）：每組畫一個，依組上色；φj 相同的只畫一次（紅色）
+	local circles, seen = {}, {}
+	for _, js in ipairs(rockmech.get_joint_sets()) do
+		local phi = js.phi or (cfg.weakness and cfg.weakness.phi) or 30
+		local k = ("%.1f"):format(phi)
+		if seen[k] then seen[k].color = nil else seen[k] = {phi = phi, color = js.color}; circles[#circles + 1] = seen[k] end
+	end
+	for _, cr in ipairs(circles) do
+		local rf = RAD * math.tan(rad(cr.phi) / 2)
+		local col = string.char(220, 60, 60, 255)
+		if cr.color and #circles > 1 then
+			local h = cr.color:gsub("#", "")
+			col = string.char(tonumber(h:sub(1, 2), 16), tonumber(h:sub(3, 4), 16), tonumber(h:sub(5, 6), 16), 255)
+		end
+		for t = 0, 360, 1.5 do c.dot(CX + rf * math.sin(rad(t)), CY - rf * math.cos(rad(t)), col, 2) end
+	end
 	-- 坡面：大圓（粗黑）與極點（方塊）
 	if d.slope and d.slope.d > 0.5 then
 		great_circle(c, d.slope.d, d.slope.a, black, 3)
@@ -204,7 +216,11 @@ local function show(name, d)
 	end
 	lines[#lines + 1] = d.slope and S("Slope: @1°/@2° (thick black line; the square is its pole)", ("%02.0f"):format(d.slope.d), ("%03.0f"):format(d.slope.a))
 		or S("Slope: not measured yet (Shift + E to measure the slope)")
-	lines[#lines + 1] = core.colorize("#ff8080", S("Red circle: friction circle φj = @1°", ("%g"):format(cfg.weakness and cfg.weakness.phi or 30)))
+	local fc = {}
+	for _, js in ipairs(sets) do
+		fc[#fc + 1] = core.colorize(js.color or "#ffffff", ("%s %.0f°"):format(js.name, js.phi or (cfg.weakness and cfg.weakness.phi) or 30))
+	end
+	lines[#lines + 1] = S("Friction circles φj = atan(Jr/Ja): @1", table.concat(fc, "  "))
 	core.dynamic_add_media({filepath = path, to_player = name, ephemeral = true}, function()
 		local out = {"formspec_version[6]size[17,11]",
 			"label[0.4,0.5;" .. core.formspec_escape(S("Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up")) .. "]",

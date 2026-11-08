@@ -464,14 +464,14 @@ end
 
 local function tab_joints()
 	local rows = {{S("Joint set"), S("Input dip / dip direction"), S("Aligned dip / dip direction"), S("Integer normal m"),
-		S("Spacing input → effective"), S("Persistence"), "φj", S("Texture levels")}}
+		S("Spacing input → effective"), S("Persistence"), "Jr / Ja → φj", S("Texture levels")}}
 	local sets = rockmech.get_joint_sets()
 	for _, js in ipairs(sets) do
 		rows[#rows + 1] = {js.name, ("%g° / %g°"):format(js.dip, js.dipdir),
 			("%.1f° / %.1f°"):format(js.dip_eff, js.dipdir_eff),
 			("(%d, %d, %d)"):format(js.mx, js.my, js.mz),
 			("%g → %.2f m"):format(js.spacing, js.spacing_eff),
-			js.persistence, js.phi .. "°", rockmech.jointtex.levels(js)}
+			js.persistence, (js.jr and ("%g / %g → "):format(js.jr, js.ja) or "") .. ("%.1f°"):format(js.phi), rockmech.jointtex.levels(js)}
 	end
 	return table_el(0.3, 0.9, 16.4, 3.5, "rm_t3", "text;text;text;text;text;text,align=right;text,align=right;text,align=right", rows) ..
 		("label[0.3,4.9;%s]"):format(F(S("Coordinates: x = east, y = up, z = north; dip direction is clockwise from north. Joint normals are aligned to the integer lattice so traces stay continuous across blocks.")))

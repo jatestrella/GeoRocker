@@ -1591,3 +1591,5 @@ Horizontal slot: measures vertical stress=水平槽：量垂直應力
 Vertical slot: measures horizontal stress along the wall=垂直槽：量沿岩壁的水平應力
 [Field notebook] Logging @1 (depth @2 m, about @3 s): keep holding right-click on the core box=[野帳本] 判讀 @1（深 @2 m，約 @3 秒）：對著岩芯箱按住右鍵
 You let go of right-click; logging interrupted=放開右鍵了，判讀中斷
+Friction circles φj = atan(Jr/Ja): @1=摩擦圓 φj = atan(Jr/Ja)：@1
+cj @1 MPa, φj = atan(Jr/Ja): @2; @3=cj @1 MPa，φj = atan(Jr/Ja)：@2；@3

@@ -19,8 +19,8 @@ local DIRS = {
 local function daylighting_sets(face_dx, face_dz, angle)
 	local out = {}
 	local lim = math.cos(math.rad(cfg.weakness.lateral_limit))
-	local phi = cfg.weakness.phi
 	for _, js in ipairs(rockmech.get_joint_sets()) do
+		local phi = js.phi or cfg.weakness.phi
 		local n = js.n_eff
 		local h = math.sqrt(n.x * n.x + n.z * n.z)
 		if h > 1e-6 and js.dip_eff < angle and js.dip_eff > phi

@@ -171,16 +171,18 @@ config.zone_order = {"shale", "granite", "sandstone"}
 --   dipdir      傾向 (deg, 由北順時針 0–360)
 --   spacing     間距 (m, ≥ 1)
 --   persistence 延續性 (0–1)
---   phi         節理面摩擦角 φj (deg)
+--   jr, ja      節理面的粗糙度 Jr、蝕變度 Ja（Barton Q 系統的表格值）→ 摩擦角 φj = atan(Jr/Ja)
+--   phi         節理面摩擦角 φj (deg)：由 Jr/Ja 算出；沒給 Jr/Ja 時（舊設定）直接用這個值
 --   color       除錯顯示用顏色
 --   offset      (可選) 平面組相位 (m)。未給時由世界種子決定。
 config.joint_sets = {
+	-- J1：平滑起伏、砂質披覆（Jr 1.5、Ja 3 → 26.6°）；J2：粗糙起伏、砂質披覆（2、3 → 33.7°）；J3：平滑起伏、輕微蝕變（1.5、2 → 36.9°）
 	{id = 1, name = "J1", dip = 10, dipdir = 135, spacing = 4,
-		persistence = 0.95, phi = 25, color = "#ff4040"},
+		persistence = 0.95, jr = 1.5, ja = 3, color = "#ff4040"},
 	{id = 2, name = "J2", dip = 70, dipdir = 40, spacing = 3,
-		persistence = 0.80, phi = 32, color = "#40c0ff"},
+		persistence = 0.80, jr = 2, ja = 3, color = "#40c0ff"},
 	{id = 3, name = "J3", dip = 80, dipdir = 300, spacing = 5,
-		persistence = 0.70, phi = 30, color = "#ffd040"},
+		persistence = 0.70, jr = 1.5, ja = 2, color = "#ffd040"},
 }
 
 -- 設定的預設值（鍵名不含 "rockmech_" 前綴）
@@ -446,7 +448,16 @@ local function parse_bool(s)
 	return nil
 end
 
--- 解析 "dip,dipdir,spacing,persistence,phi"；空字串回傳 nil。
+-- Q 系統表格裡 Jr、Ja 的值（Barton 1974；Jr 0.5–4、Ja 0.75–20）
+config.JR_TABLE = {0.5, 1, 1.5, 2, 3, 4}
+config.JA_TABLE = {0.75, 1, 2, 3, 4, 5, 6, 8, 10, 12, 13, 20}
+local function nearest(tbl, v)
+	local best = tbl[1]
+	for _, t in ipairs(tbl) do if math.abs(t - v) < math.abs(best - v) then best = t end end
+	return best
+end
+
+-- 解析 "dip,dipdir,spacing,persistence,jr,ja"（或舊格式 "dip,dipdir,spacing,persistence,phi"）；空字串回傳 nil。
 function config.parse_joint_set_string(s)
 	if s == nil then return nil end
 	s = tostring(s):gsub("^%s+", ""):gsub("%s+$", "")
@@ -459,11 +470,15 @@ function config.parse_joint_set_string(s)
 		end
 		vals[#vals + 1] = v
 	end
+	if #vals == 6 then
+		return {dip = vals[1], dipdir = vals[2], spacing = vals[3],
+			persistence = vals[4], jr = vals[5], ja = vals[6]}
+	end
 	if #vals ~= 5 then
-		return nil, "需要 5 個欄位 dip,dipdir,spacing,persistence,phi，實得 " .. #vals
+		return nil, "需要 6 個欄位 dip,dipdir,spacing,persistence,jr,ja（或舊的 5 個欄位 …,phi），實得 " .. #vals
 	end
 	return {dip = vals[1], dipdir = vals[2], spacing = vals[3],
-		persistence = vals[4], phi = vals[5]}
+		persistence = vals[4], phi = vals[5], jr = false, ja = false}
 end
 
 -- 檢查並夾限一組節理參數；回傳警告訊息陣列。
@@ -486,6 +501,21 @@ function config.validate_joint_set(js)
 	-- spacing ≥ 1：保證相鄰兩格中心之間最多只穿過同一組的一個平面
 	clamp("spacing", 1, 1e6)
 	clamp("persistence", 0, 1)
+	-- Jr、Ja 取 Q 系統表格裡最接近的值，φj = atan(Jr/Ja)
+	if js.jr and js.ja then
+		for _, f in ipairs({"jr", "ja"}) do
+			local tbl = f == "jr" and config.JR_TABLE or config.JA_TABLE
+			local v = type(js[f]) == "number" and js[f] == js[f] and js[f] or tbl[1]
+			local nv = nearest(tbl, v)
+			if nv ~= js[f] then
+				warn[#warn + 1] = ("%s.%s=%s 不是表格值，改為 %s"):format(js.name, f, tostring(js[f]), nv)
+			end
+			js[f] = nv
+		end
+		js.phi = math.deg(math.atan(js.jr / js.ja))
+	else
+		js.jr, js.ja = nil, nil
+	end
 	clamp("phi", 0, 89)
 	return warn
 end

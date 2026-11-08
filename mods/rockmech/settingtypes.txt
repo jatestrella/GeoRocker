@@ -56,18 +56,20 @@ rockmech_joint_lattice (Joint orientation lattice) int 8 2 16
 # Joint persistence: patch = joints persist in patches about one spacing in size; face = decided face by face (old).
 rockmech_joint_persistence (Joint persistence mode) enum patch patch,face
 
-# Override joint set 1: "dip,dipdir,spacing,persistence,phi"
-# (degrees, degrees clockwise from north, m >= 1, 0-1, degrees).
+# Override joint set 1: "dip,dipdir,spacing,persistence,jr,ja"
+# (degrees, degrees clockwise from north, m >= 1, 0-1, Q-system Jr, Q-system Ja).
+# Friction angle = atan(Jr/Ja); Jr/Ja snap to the nearest Q-system table value.
+# The old 5-field form "...,phi" (friction angle in degrees) still works.
 # Empty = use the default in config.lua.
 rockmech_joint_set_1 (Joint set 1 override) string
 
-# Override joint set 2: "dip,dipdir,spacing,persistence,phi". Empty = default.
+# Override joint set 2: "dip,dipdir,spacing,persistence,jr,ja". Empty = default.
 rockmech_joint_set_2 (Joint set 2 override) string
 
-# Override joint set 3: "dip,dipdir,spacing,persistence,phi". Empty = default.
+# Override joint set 3: "dip,dipdir,spacing,persistence,jr,ja". Empty = default.
 rockmech_joint_set_3 (Joint set 3 override) string
 
-# Additional joint set 4: "dip,dipdir,spacing,persistence,phi". Empty = none. Sets must be consecutive.
+# Additional joint set 4: "dip,dipdir,spacing,persistence,jr,ja". Empty = none. Sets must be consecutive.
 rockmech_joint_set_4 (Joint set 4) string
 
 # Additional joint set 5. Empty = none.
@@ -179,7 +181,7 @@ rockmech_keyblock_enabled (Enable key blocks) bool true
 # Blocks larger than this many nodes are treated as part of the rock mass (not checked).
 rockmech_keyblock_max_cells (Max key block size) int 500 1 5000
 
-# Cohesion (MPa) of the joints bounding a key block (open, persistent joints: usually 0). Friction angle is rockmech_weakness_phi.
+# Cohesion (MPa) of the joints bounding a key block (open, persistent joints: usually 0). Joint faces use their own set's friction angle atan(Jr/Ja).
 rockmech_keyblock_c (Key block joint cohesion) float 0 0 10
 
 # Stress clamping (Unwedge-style field stress with relaxation factor): each joint contact gets a normal force
@@ -222,7 +224,7 @@ rockmech_weakness_enabled (Enable joint slip) bool true
 # Joint cohesion c (MPa), shared by all joint sets.
 rockmech_weakness_c (Joint cohesion) float 0.05 0 100
 
-# Joint friction angle phi (degrees), shared by all joint sets.
+# Friction angle phi (degrees) for faces that are not joints (and joint sets given without Jr/Ja). Joint sets use atan(Jr/Ja).
 rockmech_weakness_phi (Joint friction angle) float 30 0 89
 
 # Kinematic check: a joint must dip toward an exposed side face (or the cell must be exposed below) to slip out.

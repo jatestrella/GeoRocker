@@ -64,8 +64,9 @@ if not world_conf:has("rockmech_joint_lattice") then
 	end
 	for i, js in ipairs(cfg.joint_sets) do
 		if i <= rockmech.config.MAX_SET_OVERRIDES then
-			world_conf:set("rockmech_joint_set_" .. i, ("%g,%g,%g,%g,%g"):format(
-				js.dip, js.dipdir, js.spacing, js.persistence, js.phi))
+			world_conf:set("rockmech_joint_set_" .. i, js.jr and ("%g,%g,%g,%g,%g,%g"):format(
+				js.dip, js.dipdir, js.spacing, js.persistence, js.jr, js.ja)
+				or ("%g,%g,%g,%g,%g"):format(js.dip, js.dipdir, js.spacing, js.persistence, js.phi))
 		end
 	end
 	if world_conf:write() then

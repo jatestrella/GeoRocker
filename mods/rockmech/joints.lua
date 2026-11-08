@@ -155,6 +155,7 @@ function joints.prepare(sets, seed, lattice, persistence_mode)
 		local p = {}
 		for k, v in pairs(js) do p[k] = v end
 		p.index = i
+		p.tanphi = js.phi and math.tan(math.rad(js.phi)) or nil      -- 這一組的摩擦係數（滑動、楔形、關鍵塊體用）
 		p.n = joints.normal(js.dip, js.dipdir)
 		local mx = floor(p.n.x * D + 0.5)
 		local my = floor(p.n.y * D + 0.5)

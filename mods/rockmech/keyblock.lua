@@ -207,8 +207,13 @@ end
 
 -- 運動學與安全係數。回傳 {fs, mode = "fall"|"plane"|"wedge"|nil, dir = m, planes = {k,l}}
 -- S：支護力（support.forces 的 6 桶，可省略）
-function keyblock.analyze(W, planes, tanphi, S)
+-- sets：節理組（有 tanphi 的話，節理面用自己那一組的 φj；省略或非節理面用 tanphi）
+function keyblock.analyze(W, planes, tanphi, S, sets)
 	local gv = {x = 0, y = -1, z = 0}
+	local function tp(pl)
+		local js = sets and pl.set and sets[pl.set]
+		return js and js.tanphi or tanphi
+	end
 	local best = {fs = math.huge}
 	local function sres(m)
 		if not S then return 0 end
@@ -233,12 +238,12 @@ function keyblock.analyze(W, planes, tanphi, S)
 		local s = 0
 		for idx, pl in ipairs(planes) do
 			if idx ~= skip1 and idx ~= skip2 and abs(dot(pl.nu, m)) <= 1e-3 then
-				s = s + pl.c * pl.area + (pl.clamp or 0) * tanphi
+				s = s + pl.c * pl.area + (pl.clamp or 0) * tp(pl)
 			end
 		end
 		return s
 	end
-	local function clamp_of(k) return (planes[k].clamp or 0) * tanphi end
+	local function clamp_of(k) return (planes[k].clamp or 0) * tp(planes[k]) end
 	-- 落下
 	if admissible(gv) then
 		local fs = (parallel_coh(gv) + sres(gv)) / W
@@ -253,7 +258,7 @@ function keyblock.analyze(W, planes, tanphi, S)
 			if tl > 1e-3 then
 				local m = {x = t.x / tl, y = t.y / tl, z = t.z / tl}
 				if admissible(m, k) then
-					local R = W * gn * tanphi + pl.c * pl.area + clamp_of(k) + parallel_coh(m, k) + sres(m)
+					local R = W * gn * tp(pl) + pl.c * pl.area + clamp_of(k) + parallel_coh(m, k) + sres(m)
 					local fs = R / (W * tl)
 					if fs < best.fs then best = {fs = fs, mode = "plane", dir = m, planes = {k}} end
 				end
@@ -277,7 +282,7 @@ function keyblock.analyze(W, planes, tanphi, S)
 						local Na = (fa - ab * fb) / det
 						local Nb = (fb - ab * fa) / det
 						if Na >= 0 and Nb >= 0 then
-							local R = (Na + Nb) * tanphi + planes[k].c * planes[k].area + planes[l].c * planes[l].area
+							local R = Na * tp(planes[k]) + Nb * tp(planes[l]) + planes[k].c * planes[k].area + planes[l].c * planes[l].area
 								+ clamp_of(k) + clamp_of(l) + parallel_coh(line, k, l) + sres(line)
 							local fs = R / (W * gl)
 							if fs < best.fs then best = {fs = fs, mode = "wedge", dir = line, planes = {k, l}} end
@@ -303,10 +308,10 @@ function keyblock.find_blocks(g, p, starts)
 			if b and not done[b] then
 				done[b] = true
 				local W, planes, n_free, S = contacts(ctx, b)
-				local r = keyblock.analyze(W, planes, p.tanphi, S)
+				local r = keyblock.analyze(W, planes, p.tanphi, S, p.joint_sets)
 				if r.fs < 1 and (p.clamp or 0) > 0 then
 					add_clamp(ctx, planes, p.clamp)
-					r = keyblock.analyze(W, planes, p.tanphi, S)
+					r = keyblock.analyze(W, planes, p.tanphi, S, p.joint_sets)
 				end
 				local cells = {}
 				for _, c in ipairs(b.cells) do
@@ -516,10 +521,10 @@ function keyblock.find_masses(g, p, starts)
 							if not (bridged and not p.bridge_c) then
 								stats.evaluated = stats.evaluated + 1
 								local S = g.support and g.support.forces(g, g.support, cells, set)
-								local r = keyblock.analyze(W, planes, p.tanphi, S)
+								local r = keyblock.analyze(W, planes, p.tanphi, S, p.joint_sets)
 								if r.fs < 1 and (p.mass_clamp or 0) > 0 then
 									add_clamp(ctx, planes, p.mass_clamp)
-									r = keyblock.analyze(W, planes, p.tanphi, S)
+									r = keyblock.analyze(W, planes, p.tanphi, S, p.joint_sets)
 								end
 								if r.fs < 1 or p.collect_all then
 									local wc = {}
@@ -557,10 +562,10 @@ function keyblock.analyze_group(g, p, cells)
 		block.set[1 + lx + ly * sy + lz * sz] = true
 	end
 	local W, planes, _, S = contacts(ctx, block)
-	local r = keyblock.analyze(W, planes, p.tanphi, S)
+	local r = keyblock.analyze(W, planes, p.tanphi, S, p.joint_sets)
 	if r.fs < 1 and (p.clamp or 0) > 0 then
 		add_clamp(ctx, planes, p.clamp)
-		r = keyblock.analyze(W, planes, p.tanphi, S)
+		r = keyblock.analyze(W, planes, p.tanphi, S, p.joint_sets)
 	end
 	r.W = W
 	return r

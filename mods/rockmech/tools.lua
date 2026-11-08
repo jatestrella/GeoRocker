@@ -555,7 +555,9 @@ local TOGGLES = {
 		short = S("Joint plane sliding"),
 		info = function()
 			local w = cfg.weakness
-			return S("cj @1 MPa, φj @2° (same for all three sets); @3", ("%g"):format(w.c), ("%g"):format(w.phi),
+			local ph = {}
+			for _, js in ipairs(rockmech.get_joint_sets()) do ph[#ph + 1] = ("%s %.0f°"):format(js.name, js.phi or w.phi) end
+			return S("cj @1 MPa, φj = atan(Jr/Ja): @2; @3", ("%g"):format(w.c), table.concat(ph, ", "),
 				w.daylight and S("must dip toward the free face (lateral limit ±@1°)", ("%g"):format(w.lateral_limit)) or S("no kinematic check"))
 		end,
 		off_note = S("Off: joints do not affect strength (deviatoric failure only)"),
