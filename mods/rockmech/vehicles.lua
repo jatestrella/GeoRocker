@@ -1489,6 +1489,17 @@ local function get_off(self)
 	hud_clear(self, nil)
 end
 
+-- 坐在車上（掛在車上或追蹤相機上）時右鍵不放方塊：開車時手上的東西藏起來了，右鍵常常是作業鍵（怪手）
+local old_item_place = core.item_place
+function core.item_place(itemstack, placer, pointed, ...)
+	if placer and placer.is_player and placer:is_player() then
+		local par = placer:get_attach()
+		local pe = par and par:get_luaentity()
+		if pe and (pe.vkind or pe.vehicle) then return itemstack end
+	end
+	return old_item_place(itemstack, placer, pointed, ...)
+end
+
 -- 註冊一種車：實體 rockmech:<kind> 與物品 rockmech:<kind>_item
 function V.register(kind, def)
 	TYPES[kind] = def
@@ -1565,8 +1576,8 @@ function V.register(kind, def)
 		on_rightclick = function(self, clicker) if rockmech.hand_first and rockmech.hand_first(clicker) then return end
 			if not clicker or not clicker:is_player() then return end
 			local name = clicker:get_player_name()
-			if self.driver == name then get_off(self); return end
-			if self.pass and self.pass[name] then pass_off(self, name); return end
+			-- 坐在這台車上（駕駛、乘客）：右鍵不下車（下車統一用 Shift；怪手的右鍵是作業鍵）
+			if self.driver == name or (self.pass and self.pass[name]) then return end
 			-- 開著別台車對拖車按右鍵：把那台開上平板（已經在這台拖車上就開下來，vehicle_lowboy.lua）
 			if def.drive_on then
 				local par = clicker:get_attach()

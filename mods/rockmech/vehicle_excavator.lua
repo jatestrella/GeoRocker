@@ -554,10 +554,12 @@ local function excavator(kind, P)
 	end
 	function def.keys(self)
 		if self.tool == "breaker" then
-			return {{"E", S("Break rock (block under cursor)"), on = self.dig ~= nil}, {S("Space"), S("Back to bucket")}}
+			return {{S("Right-click") .. " / E", S("Break rock (block under cursor)"), on = self.dig ~= nil}, {S("Space"), S("Back to bucket")}}
 		end
-		return {{"E", S("Dig (where the cursor points)"), on = self.dig ~= nil},
-			{S("Space"), self.breaker and load_total(self) == 0 and S("Switch to breaker") or S("Dump (point at a truck to load it)")}}
+		local full = load_total(self) > 0
+		return {{S("Right-click"), full and S("Dump (point at a truck to load it)") or S("Dig (where the cursor points)"), on = self.dig ~= nil},
+			{"E", S("Dig (where the cursor points)")},
+			{S("Space"), self.breaker and not full and S("Switch to breaker") or S("Dump (point at a truck to load it)")}}
 	end
 	-- 擋人：鏟斗（跟著手臂動；用把鏟斗連同裡面的碎石包起來的方塊，不照迴轉角轉），大車再加上整個車身
 	-- 擋人：只有大車的車身（引擎擋不住走近的玩家）。鏟斗不擋：手臂停在工作的位置（常常在地上、坑裡），
@@ -923,6 +925,13 @@ local function excavator(kind, P)
 
 	function def.action(self, ctx)
 		local ctrl, d, pos = ctx.ctrl, ctx.d, ctx.pos
+		-- 右鍵（作業鍵）：破碎錘 → 敲（同 E）；鏟斗是空的 → 挖（同 E）；鏟斗有料 → 倒（同空白鍵）
+		if ctrl.place or ctrl.RMB then
+			local c2 = {}
+			for k, v in pairs(ctrl) do c2[k] = v end
+			if self.tool ~= "breaker" and load_total(self) > 0 then c2.jump = true else c2.aux1 = true end
+			ctrl = c2
+		end
 		-- 破碎錘（只有人開的時候；操作員照舊用鏟斗）：E 敲碎滑鼠指的那格岩石；空白鍵換回鏟斗
 		if d and self.tool == "breaker" then
 			if ctrl.jump and not self.dig then
