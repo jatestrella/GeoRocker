@@ -242,7 +242,7 @@ local function lift(kind, P)
 		st.mode = "basket"
 		attach_player(self, d)
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
-		d:set_camera({mode = "any"})
+		d:set_camera({mode = st.cam3 and "third" or "first"})
 		V.set_seated(d, true, "stand")
 		d:hud_set_flags({hotbar = true, wielditem = true})      -- 作業籠裡要用工具
 		update_hud(self)
@@ -368,14 +368,24 @@ local function lift(kind, P)
 		end
 		local d = ctx.d
 		st.moving = false
+		if st.mode == "basket" and d then
+			local z = ctx.ctrl.zoom
+			if z and not st.zoom_held then
+				st.cam3 = not st.cam3
+				d:set_camera({mode = st.cam3 and "third" or "first"})
+			end
+			st.zoom_held = z
+		end
 		if st.mode == "basket" and d and P.crane then
 			-- 吊車：WASD 臂尖水平移動；空白鍵／Shift：吊臂模式動臂尖上下、吊索模式收放吊索；Z 切換
 			local c = ctx.ctrl
-			if c.zoom and not st.zoom_held then
+			-- 切換動吊臂／收放吊索：Q（rockmech.lift_q，手上有東西時）或空白鍵＋Shift 一起按（兩個一起按時不上下）
+			local chord = c.jump and c.sneak
+			if chord and not st.chord_held then
 				st.hoist = not st.hoist
 				update_hud(self)
 			end
-			st.zoom_held = c.zoom
+			st.chord_held = chord
 			if c.aux1 then return end
 			local f = (c.up and 1 or 0) - (c.down and 1 or 0)
 			local s = (c.right and 1 or 0) - (c.left and 1 or 0)
@@ -496,7 +506,7 @@ local function lift(kind, P)
 			if P.crane then
 				return {{"WASD", S("Move the boom")},
 					{S("Space") .. " / Shift", st.hoist and S("Basket up / down (rope)") or S("Boom up / down")},
-					{"Z", st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist},
+					{"Q", st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist},
 					{"E", S("Back to the cab")}, {"Shift+E", S("Step out")}}
 			end
 			return {{"WASD", S("Move the basket")}, {S("Space") .. " / Shift", S("Up / down")},
@@ -505,7 +515,36 @@ local function lift(kind, P)
 		return {{"E", st and st.e > 0 and S("Raise the outriggers") or S("Put the outriggers down"), on = st and st.e >= 1},
 			{S("Space"), S("Go to the basket")}}
 	end
+	-- Q：吊車吊籠裡切換動吊臂／收放吊索
+	if P.crane then
+		function def.on_q(self)
+			local st = L(self)
+			if not (st and st.mode == "basket") then return false end
+			st.hoist = not st.hoist
+			update_hud(self)
+			return true
+		end
+	end
 	V.register(kind, def)
+end
+
+-- Q（丟東西）：人在作業籠裡時不丟東西；吊車吊籠裡拿來切換動吊臂／收放吊索。
+-- 空手按 Q 伺服器收不到（引擎不送），空手時用空白鍵＋Shift 一起按
+local function lift_of(player)
+	local parent = player:get_attach()
+	local veh = parent and parent:get_attach()
+	local e = veh and veh:get_luaentity()
+	if e and e.lift and e.driver == player:get_player_name() then return e end
+end
+local old_drop = core.item_drop
+function core.item_drop(itemstack, dropper, pos)
+	local e = dropper and dropper.is_player and dropper:is_player() and lift_of(dropper)
+	if e then
+		local def = V.TYPES[e.vkind]
+		if def.on_q then def.on_q(e) end
+		return itemstack
+	end
+	return old_drop(itemstack, dropper, pos)
 end
 
 -- 高空作業車：伸縮臂 15 m 級（作業高度 15 m：籠底最高離地 13 m、水平 10 m），白車身、橘色臂

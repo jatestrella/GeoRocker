@@ -50,7 +50,7 @@ local function keys_of(self)
 	local out = {}
 	for _, k in ipairs(def.keys and def.keys(self) or {}) do out[#out + 1] = k end
 	if def.hold_controls and def.hold_controls(self) then return out end   -- 按鍵歸車子自己用（作業籠）：不接共用的 Z、Shift
-	if not def.pushed then out[#out + 1] = {"Z", S("Chase camera"), on = self.chase ~= nil} end
+	-- Z（切換視角）是固定的操作，按鍵列不寫
 	out[#out + 1] = {"Shift", def.pushed and S("Let go") or S("Get out")}
 	return out
 end
