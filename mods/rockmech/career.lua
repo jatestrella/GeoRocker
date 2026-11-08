@@ -1042,6 +1042,22 @@ local function camp_area(x0)
 	return {x = x0 - 22, y = -30, z = math.min(TENT_Z - 12, SIGN_Z - 2, -58)}, {x = x0 + OFFICE_DX + 10, y = 40, z = CAMP_Z + 8}   -- 南到交車區（z −54）外面
 end
 
+-- pos 在不在哪一座營地的範圍裡（爆炸不炸營地的建築）
+function rockmech.in_camp(pos)
+	local sites = {}
+	if storage:get_string("career_site") == "2" then sites[#sites + 1] = cfg.career_camp_dx end
+	if rockmech.team_site_x then
+		for i = 1, cfg.career_teams do
+			if storage:get_string("team_site:" .. i) == "1" then sites[#sites + 1] = rockmech.team_site_x(tostring(i)) end
+		end
+	end
+	for _, x0 in ipairs(sites) do
+		local a, b = camp_area(x0)
+		if pos.x >= a.x and pos.x <= b.x and pos.z >= a.z and pos.z <= b.z and pos.y >= a.y and pos.y <= b.y then return true end
+	end
+	return false
+end
+
 -- 在 x0 蓋一座營地（帳篷、供應商、破碎站掛在 owner 的帳戶），地圖生成完才蓋；done(spawn) 拿到營地中心的落腳點
 function rockmech.career_build_camp(owner, x0, done)
 	local a, b = camp_area(x0)

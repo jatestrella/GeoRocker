@@ -47,6 +47,24 @@ local function site_x(t)
 	return (i % 2 == 1 and -k or k) * SPACING + cfg.career_camp_dx     -- 營地在礦帶中心往東 camp_dx
 end
 rockmech.team_site_x = site_x
+
+-- pos 在第幾組的礦帶（第 k 帶：x 在 k·SPACING ± SPACING/2；第 0 帶是出生點、老師組）；不在任何一組的帶裡回傳 nil
+function rockmech.lane_team(pos)
+	local k = math.floor((pos.x + SPACING / 2) / SPACING)
+	local i = k < 0 and (-2 * k - 1) or 2 * k
+	return i <= cfg.career_teams and tostring(i) or nil
+end
+-- 在別組的礦帶裝炸藥無效（炸不到別組的礦區、車、設施）：回傳那一組（不能裝），nil = 可以。老師（/god、rockmech 權限）不受限制
+function rockmech.blast_forbidden(player, pos)
+	if not (player and player.is_player and player:is_player()) then return nil end
+	local name = player:get_player_name()
+	if player:get_meta():get_int("godmode:on") == 1 or core.check_player_privs(name, {rockmech = true}) then return nil end
+	local lane = rockmech.lane_team(pos)
+	if not lane then return nil end
+	local mine = rockmech.team_of and rockmech.team_of(name)
+	if mine and tostring(mine) == lane then return nil end
+	return lane
+end
 local function sx(t) return ("%d"):format(site_x(t)) end      -- 營地 x 的文字（訊息用）
 
 ---------------------------------------------------------------------------

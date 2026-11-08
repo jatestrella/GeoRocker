@@ -470,7 +470,16 @@ end)
 core.register_on_leaveplayer(function(player) drilling[player:get_player_name()] = nil end)
 
 -- 裝藥：pointed 是鑽孔 → 裝進去；已裝藥 → 加一條；沒有鑽孔的實心面 → 貼面裝藥。回傳 true 表示用掉一條
+-- 在別組的礦帶：炸藥無效（team.lua）
+local function forbidden(player, pos)
+	local t = rockmech.blast_forbidden and rockmech.blast_forbidden(player, pos)
+	if t then tell(player, t == "0" and S("This is the teacher's demo area: explosives have no effect here")
+		or S("This is team @1's area: explosives have no effect here", t)) end
+	return t ~= nil
+end
+
 function rockmech.load_charge(under, above, player)
+	if forbidden(player, under) then return false end
 	local node = core.get_node(under)
 	local kind = kind_of(node.name)
 	if kind == HOLE or kind == ANFO_HOLE then
@@ -503,6 +512,7 @@ end
 
 -- 倒 ANFO：只能倒進往下的鑽孔（靠重力）；一袋裝滿整根孔。回傳 true 表示用掉一袋
 function rockmech.pour_anfo(pos, player)
+	if forbidden(player, pos) then return false end
 	local node = core.get_node(pos)
 	local kind = kind_of(node.name)
 	if kind == ANFO_HOLE or kind == ANFO_PRIMED then

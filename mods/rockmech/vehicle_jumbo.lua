@@ -456,7 +456,7 @@ do
 			for _ = 1, n do
 				local hn = rockmech.hole_kind(core.get_node(p).name)
 				if hn == HOLE or hn == "rockmech:charged_hole" then
-					if rockmech.load_charge(p, p, nil) then loaded = loaded + 1 end
+					if rockmech.load_charge(p, p, self.driver and core.get_player_by_name(self.driver)) then loaded = loaded + 1 end
 				end
 			end
 			if d and loaded > 0 and stock(d) ~= math.huge then d:get_inventory():remove_item("main", ItemStack(EMULSION .. " " .. loaded)) end

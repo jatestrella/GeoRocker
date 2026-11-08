@@ -234,6 +234,8 @@ core.register_entity(NPC_TAG, {
 	on_step = function(self)
 		if not self.object:get_attach() then self.object:remove() end
 	end,
+	on_blast = function() return false, false, {} end,      -- 爆炸不炸名牌（不然 NPC 的名字就不見了）
+	on_punch = function() return true end,
 })
 local npc_names = {}
 core.register_on_mods_loaded(function()
@@ -256,6 +258,11 @@ core.register_globalstep(function(dtime)
 			if p then
 				local props = o:get_properties()
 				local tag = npc_tags[o]
+				-- 名牌的字搬到小物件上以後 NPC 自己的是空的：記在 NPC 身上，小物件不見了（被炸、卸載）照這個補回來
+				if props.nametag ~= "" then e.rm_tag_text, e.rm_tag_color = props.nametag, props.nametag_color
+				elseif e.rm_tag_text and not (tag and tag:get_pos()) then
+					props.nametag, props.nametag_color = e.rm_tag_text, e.rm_tag_color
+				end
 				if props.nametag ~= "" then
 					if not (tag and tag:get_pos()) then
 						tag = core.add_entity(p, NPC_TAG)

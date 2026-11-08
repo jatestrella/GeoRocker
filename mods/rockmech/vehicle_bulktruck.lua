@@ -152,13 +152,13 @@ function def.step(self, ctx)
 		return finish(self, S("Out of ANFO (filled @1 holes)", ("%d"):format(pm.done)))
 	end
 	if need_primer then
-		if V.store_count(self, EMULSION) >= 1 and rockmech.load_charge(p, p, nil) then
+		if V.store_count(self, EMULSION) >= 1 and rockmech.load_charge(p, p, self.driver and core.get_player_by_name(self.driver)) then
 			V.store_take(self, EMULSION, 1)
 		else
 			pm.bare = pm.bare + 1
 		end
 	end
-	if need_anfo and rockmech.pour_anfo(p, nil) then V.store_take(self, ANFO, 1) end
+	if need_anfo and rockmech.pour_anfo(p, self.driver and core.get_player_by_name(self.driver)) then V.store_take(self, ANFO, 1) end
 	pm.done = pm.done + 1
 	update_hud(self)
 end

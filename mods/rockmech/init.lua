@@ -163,3 +163,6 @@ if not core.get_modpath("flowers") then
 	core.register_alias("flowers:mushroom_brown", "air")
 	core.register_alias("flowers:mushroom_red", "air")
 end
+
+-- 營地炸不壞：要在所有方塊註冊完之後（最後載入）
+dofile(modpath .. "/campguard.lua")
