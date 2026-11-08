@@ -1,5 +1,5 @@
 -- rockmech/npc_talk.lua
--- NPC 的對話泡泡：右鍵跟 NPC 互動時，頭上（名牌再上面）冒出一句話，只有點的那個人看得到，SHOW 秒後消失。
+-- NPC 的對話泡泡：跟 NPC 互動完（右鍵打開的視窗關掉）時，頭上（名牌再上面）冒出一句話，只有點的那個人看得到，SHOW 秒後消失。
 -- 泡泡是一個看不見的小物件帶名牌（米白底、深色字，太長自動換行），下面一個小三角形當尾巴，指向 NPC。
 -- 台詞在 npc_lines.lua。原本的右鍵功能（開商店、考試…）照舊，泡泡是加上去的。
 
@@ -69,16 +69,40 @@ function rockmech.npc_say(o, player, text)
 end
 
 -- 右鍵：照原本的功能，另外冒泡泡（手上的東西優先時不說話，例如拿著無人機遙控器）
+-- 互動結束後才說：右鍵時打開了視窗（商店、考試…），等那個視窗關掉才冒泡泡（不然被視窗擋住）；沒開視窗就馬上說
+local forms_shown = {}         -- 玩家名 → 顯示過幾次視窗（攔 core.show_formspec 數）
+local pending = {}             -- 玩家名 → {npc, t}：等視窗關掉再說
+local old_show = core.show_formspec
+function core.show_formspec(name, formname, formspec)
+	forms_shown[name] = (forms_shown[name] or 0) + 1
+	return old_show(name, formname, formspec)
+end
+-- 放在最前面（mods 都載入完再插，後註冊的會排在前面）：商店、考試這些視窗的處理會回傳 true，後面的就收不到關視窗
+local function on_close(player, formname, fields)
+	if not fields.quit then return end
+	local name = player:get_player_name()
+	local p = pending[name]
+	if p then
+		pending[name] = nil
+		if p.npc:get_pos() and vector.distance(p.npc:get_pos(), player:get_pos()) < 16 then rockmech.npc_say(p.npc, player) end
+	end
+end
+core.register_on_mods_loaded(function() table.insert(core.registered_on_player_receive_fields, 1, on_close) end)
+core.register_on_leaveplayer(function(player) pending[player:get_player_name()] = nil; forms_shown[player:get_player_name()] = nil end)
+
 core.register_on_mods_loaded(function()
 	for ename in pairs(LINES) do
 		local def = core.registered_entities[ename]
 		if def then
 			local orig = def.on_rightclick
 			def.on_rightclick = function(self, clicker, ...)
+				local name = clicker and clicker:is_player() and clicker:get_player_name()
+				local before = name and forms_shown[name] or 0
 				local r
 				if orig then r = orig(self, clicker, ...) end
-				if clicker and clicker:is_player() and not (rockmech.hand_first and rockmech.hand_first(clicker)) then
-					rockmech.npc_say(self.object, clicker)
+				if name and not (rockmech.hand_first and rockmech.hand_first(clicker)) then
+					if (forms_shown[name] or 0) > before then pending[name] = {npc = self.object}
+					else rockmech.npc_say(self.object, clicker) end
 				end
 				return r
 			end
