@@ -754,8 +754,8 @@ function rockmech.crusher_build(pos, dx, dz, name, node)
 	if rockmech.clear_site and rockmech.facility_cells then rockmech.clear_site(rockmech.facility_cells(node or CRUSHER, pos, dx, dz), pos) end
 	local size = size_for(node or CRUSHER)
 	if not site_ok(pos, dx, dz, size) then return false end
-	-- 進料溜槽朝受料倉（模型的 +Z 是正面；facedir 的方向跟模型反過來）
-	core.set_node(pos, {name = node or CRUSHER, param2 = core.dir_to_facedir({x = -dx, y = 0, z = -dz})})
+	-- 進料溜槽、板式給料機朝受料倉（模型的 +Z 是進料那一側）
+	core.set_node(pos, {name = node or CRUSHER, param2 = core.dir_to_facedir({x = dx, y = 0, z = dz})})
 	dig_hopper(pos, dx, dz, size)
 	local meta = core.get_meta(pos)
 	local acc = rockmech.account_of(name)       -- 分了組就掛在組上，收入進整組的帳戶
@@ -873,7 +873,7 @@ core.register_node(CRUSHER_BIG, big)
 -- 舊的破碎站（蓋的時候還沒有朝向）：轉到受料倉那一邊
 core.register_lbm({
 	label = "rockmech: 破碎站轉向受料倉",
-	name = "rockmech:crusher_face_hopper2",
+	name = "rockmech:crusher_face_hopper3",
 	nodenames = {CRUSHER, CRUSHER_BIG},
 	run_at_every_load = false,
 	action = function(pos, node)
@@ -882,7 +882,7 @@ core.register_lbm({
 		local c = hopper_center(meta)
 		local dx, dz = c.x - pos.x, c.z - pos.z
 		if math.abs(dx) > math.abs(dz) then dx, dz = dx > 0 and 1 or -1, 0 else dx, dz = 0, dz > 0 and 1 or -1 end
-		local p2 = core.dir_to_facedir({x = -dx, y = 0, z = -dz})
+		local p2 = core.dir_to_facedir({x = dx, y = 0, z = dz})
 		if node.param2 ~= p2 then core.swap_node(pos, {name = node.name, param2 = p2}) end
 	end,
 })
