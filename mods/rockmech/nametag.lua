@@ -259,7 +259,13 @@ core.register_globalstep(function(dtime)
 				if props.nametag ~= "" then
 					if not (tag and tag:get_pos()) then
 						tag = core.add_entity(p, NPC_TAG)
-						if tag then tag:set_attach(o, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0}) end
+						if tag then
+							tag:set_attach(o, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+							-- 名牌高度看 NPC 的身高：坐著的（碰撞箱矮）1.1 m，站著的 1.75 m（在頭頂附近）
+							local cb = props.collisionbox
+							local h = (cb and cb[5] or 1.7) >= 1.5 and 1.75 or 1.1
+							tag:set_properties({selectionbox = {-0.01, 0, -0.01, 0.01, h, 0.01}})
+						end
 						npc_tags[o] = tag
 					end
 					if tag then tag:set_properties({nametag = props.nametag, nametag_color = props.nametag_color}) end
