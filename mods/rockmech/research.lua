@@ -87,7 +87,7 @@ end)
 local REPAIR_COST, REPAIR_SECS = 0.2, 5 * 60
 local REPAIR = "repair_job:"         -- repair_job:<帳戶> = {uid, kind, left, total}
 local function price_of(kind)
-	local item = "rockmech:" .. kind .. "_item"
+	local item = kind:find("^rockmech:") and kind or ("rockmech:" .. kind .. "_item")     -- 設施（facilitydamage.lua）的 kind 是方塊名稱
 	for _, it in ipairs(cfg.shop) do if it.item == item then return it.price end end
 	return 10000
 end
@@ -99,6 +99,15 @@ local function damaged_list(acc)
 			local d = core.deserialize(storage:get_string(k))
 			if d and d.owner == acc and (d.hp or 100) < 100 then
 				d.uid = uid
+				out[#out + 1] = d
+			end
+		end
+		-- 受損的設施（facilitydamage.lua 存在 fdmg:<位置>）：uid 用 f:<位置>
+		local fp = k:match("^fdmg:(.+)$")
+		if fp then
+			local d = core.deserialize(storage:get_string(k))
+			if d and d.owner == acc and (d.hp or 100) < 100 then
+				d.uid = "f:" .. fp
 				out[#out + 1] = d
 			end
 		end
@@ -117,7 +126,9 @@ end
 local function set_repair(acc, job) storage:set_string(REPAIR .. acc, job and core.serialize(job) or "") end
 local function vname(kind)
 	local d = rockmech.vehicles and rockmech.vehicles.TYPES[kind]
-	return d and (d.short or d.desc) or kind
+	if d then return d.short or d.desc end
+	local nd = core.registered_nodes[kind]
+	return nd and (nd.short_description or rockmech.desc_short(nd)) or kind
 end
 
 -- 進度條：底色、已完成的部分、百分比與倒數
@@ -174,7 +185,7 @@ local function form(name, who)
 	-- 機械技工：修車
 	if who == "mechanic" then
 		local rj = repair_job(acc)
-		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.5, E(S("Vehicle repair: the team's damaged vehicles (hit by rockfall). Pay to send a mechanic; no need to drive them back")))
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.5, E(S("Repairs: the team's damaged vehicles and facilities. Pay to send a mechanic")))
 		y = y + 1.0
 		if rj then
 			out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.2, E(S("Repairing: @1", vname(rj.kind))))
@@ -208,6 +219,7 @@ local function form(name, who)
 	out[#out + 1] = ("button_exit[6,%g;3,0.8;close;%s]"):format(math.max(y + 0.4, 8.6), E(S("Close")))
 	return table.concat(out)
 end
+rockmech.research_form_test = form      -- 測試用
 
 local function open(player, who)
 	local name = player:get_player_name()
@@ -326,7 +338,13 @@ core.register_globalstep(function(dtime)
 		if rj then
 			any = true
 			rj.left = rj.left - dt
-			if rj.left <= 0 then
+			if rj.left <= 0 and rj.uid:find("^f:") then
+				-- 設施修好
+				set_repair(acc, nil)
+				local p = core.string_to_pos(rj.uid:sub(3))
+				if p and rockmech.facility_repaired then rockmech.facility_repaired(p) end
+				tell(acc, S("@1 repaired; condition back to 100%", vname(rj.kind)))
+			elseif rj.left <= 0 then
 				set_repair(acc, nil)
 				storage:set_string("vhp:" .. rj.uid, "")
 				local V = rockmech.vehicles

@@ -249,6 +249,8 @@ core.register_entity(PART, {
 		physical = false, collide_with_objects = false, pointable = false, static_save = false,
 		visual = "cube", textures = V.box_tex("#808080"), backface_culling = true,
 	},
+	-- 爆炸不打零件（傷害算在車身上：V.register 的 on_blast），不然零件被炸掉、車子缺一塊
+	on_blast = function() return false, false, {} end,
 	-- 沒有掛在載具上的零件自己消失：載具卸載、重新載入或被收起來時，引擎可能先把零件拆下來
 	-- （載具就找不到它們），留在原地像壞掉、重疊的車。每 0.5 s 檢查一次（生成時同一步就掛上去了）
 	on_step = function(self, dtime)
@@ -1419,6 +1421,11 @@ function V.register(kind, def)
 			clicker:set_camera({mode = "first"})
 			set_seated(clicker, true, def.pushed and "stand")
 			update_hud(self)
+		end,
+		-- 爆炸（tnt）：扣耐久度。tnt 的 damage = 4 / 距離 × 半徑；×5 換成 kJ（貼著爆炸約 −60 %、4 m 外約 −15 %）
+		on_blast = function(self, damage)
+			V.damage(self, damage * 5)
+			return false, false, {}
 		end,
 		on_punch = function(self, puncher)
 			if not puncher or not puncher:is_player() or self.driver then return true end

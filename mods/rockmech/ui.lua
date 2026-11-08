@@ -337,7 +337,12 @@ core.register_globalstep(function(dtime)
 			local node = hud_enabled(player) and pos and core.get_node(pos)
 			local rubble = node and (rockmech.is_rubble(node.name) or rockmech.road_level[node.name])
 			local h = huds[name]
-			if rubble or node and rockmech.lith_of_node[node.name] then
+			local fac = node and not rubble and not rockmech.lith_of_node[node.name] and rockmech.facility_info
+				and rockmech.facility_info(pos, node.name)
+			if fac then
+				hud_set(player, fac)                 -- 設施：名稱、耐久度（不用知識能力）
+				huds[name].key = nil
+			elseif rubble or node and rockmech.lith_of_node[node.name] then
 				-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
 				if not h or h.key ~= key or (h.t or 0) > 2 then
 					local lines = rubble and rubble_lines(node, name) or fmt_report_lines(rockmech.stress_report(pos), name)
