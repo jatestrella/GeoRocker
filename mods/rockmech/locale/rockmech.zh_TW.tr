@@ -1391,8 +1391,8 @@ Geological compass@nRight-click a rock face: stress and factor of safety; sneak 
 Back to camp@nHold it and left-click or right-click to return to your team's camp=回營地@n拿在手上按左鍵或右鍵，回到自己組的營地
 Schmidt hammer@nRight-click a rock face: one impact gives one rebound number R, recorded in your field notebook. Take about 10 readings at a spot; the median converts to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=施密特錘@n對岩面右鍵：敲一下得到一個回彈值 R，記進野帳本。同一處敲 10 次左右，取中位數換算單軸抗壓強度（Katz 2000：UCS ≈ 2.21·e^(0.067R)）
 Timber post (diameter @1 cm)@nRight-click a floor: it extends upward until it reaches the roof, up to @2 m@nReaching a rock roof → support: capacity P @= min(crushing, buckling), spread over the 3×3 m² of roof around the post top@n2 m about @3 kN, 4 m about @4 kN, 6 m about @5 kN (longer posts buckle more easily)@nRight-click a wall: placed horizontally as a beam=木柱（直徑 @1 cm）@n對地板按右鍵：往上長到碰到頂板，最長 @2 m@n頂到岩石頂板 → 支撐：承載力 P @= min(壓碎, 挫屈)，分給柱頂周圍 3×3 m² 的頂板@n2 m 約 @3 kN、4 m 約 @4 kN、6 m 約 @5 kN（柱越長越容易挫屈）@n對牆面按右鍵：橫放當樑
-Timber plank (building material, not a support)@nThin board: placed on the ground it is a floor; placed against a ceiling it sits under the ceiling=木板（建材，不算支撐）@n薄木板：對地面放是地板，對頂面放貼在天花板下
-Timber slab (building material, not a support)@nPlaced on a top face it is a lower half block; on a bottom face, an upper half block=木板半格（建材，不算支撐）@n對頂面放是下半格、對底面放是上半格
+Timber plank (building material, not a support)@nThin board: placed on the ground it is a floor; placed against a ceiling it sits under the ceiling=木板（裝飾用，不算支撐，碎石流進來就壓壞）@n薄木板：對地面放是地板，對頂面放貼在天花板下
+Timber slab (building material, not a support)@nPlaced on a top face it is a lower half block; on a bottom face, an upper half block=木板半格（裝飾用，不算支撐，碎石流進來就壓壞）@n對頂面放是下半格、對底面放是上半格
 Geological compass@nRight-click a rock face: stress and factor of safety@nSneak + right-click: full data (lithology, initial stress, joints on all six faces)=地質羅盤@n右鍵岩面：應力與安全係數@n蹲下＋右鍵：完整資料（岩性、初始應力、六面節理）
 Autonomous haulage kit@nHold it and right-click a dump truck or haul truck to install it (one module per vehicle); needed for autonomous driving=自動駕駛模組@n拿著對卡車或礦卡按右鍵安裝（一個模組裝一台），裝了才能用無人駕駛
 Right-click to get in; Space loads the tank with ANFO and emulsion, E fills the downward holes within reach of the boom with ANFO + a primer=右鍵上車；空白鍵 儲槽裝 ANFO 與乳膠炸藥、E 把吊臂範圍內往下的鑽孔灌 ANFO＋起爆藥包
@@ -1414,7 +1414,7 @@ Weather station (Stevenson screen)@nPoint at it to see the current rainfall rate
 Log@nCarry it to a saw bench to saw it into posts or planks=原木@n扛到鋸木台鋸成木柱或木板
 Sapling@nPlant it on a full block of soil; it grows into a tree after a while=樹苗@n種在滿格的土上，過一陣子長成樹
 Axe@nChop any block of a trunk and the whole tree falls into logs=斧頭@n砍樹幹任何一格，整棵樹倒下變成原木
-Wooden wall panel (building material, not a support)@nA thin upright board for building walls=木牆板（建材，不算支撐）@n直立的薄板，做牆壁用
+Wooden wall panel (building material, not a support)@nA thin upright board for building walls=木牆板（裝飾用，不算支撐，碎石流進來就壓壞）@n直立的薄板，做牆壁用
 Topsoil@nSoil with grass and roots: the roots give it cohesion, so it stands even on steep slopes. If dug, undermined, or if an excavated face next to it is too high (above its critical standing height), it turns into loose soil and flows at its angle of repose=表土@n長著草和樹根的土：根系有凝聚力，陡坡上也站得住；被挖、底下被掏空、或旁邊挖開的陡壁太高（超過自立高度），就變成鬆土照安息角流
 Core drill rig (60 m)=岩芯鑽探車（60 m）
 Loadout bin (belt to truck)=裝車料斗（接輸送帶裝車）
@@ -1729,3 +1729,4 @@ Run at or above $/t=運轉價格 $/t
 Set price=設定價格
 Large dump hopper=大型受料斗
 Build it on flat ground: @1×@1 m of level ground=要蓋在平地上：@1×@1 m 的平整地面
+Wooden block=木磚

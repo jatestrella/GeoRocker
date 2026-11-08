@@ -136,7 +136,8 @@ local function compute_landing_y(pos)
     local y = pos.y - 1
     for _ = 1, 64 do
         local n = core.get_node({x=pos.x, y=y, z=pos.z})
-        if n.name ~= "air" then return y + 1 end
+        -- 裝飾木製品（木板、木牆板…）擋不住，會被壓壞（fall_with_slope_settle 移除）
+        if n.name ~= "air" and core.get_item_group(n.name, "rubble_breaks") == 0 then return y + 1 end
         y = y - 1
     end
     return nil
@@ -193,9 +194,13 @@ local NLEV = rockmech.RUBBLE_LEVELS
 
 local function rubble_k(name) return rockmech.rubble_level[name] end
 -- 碎石流得進去的格子：可以穿過的方塊（空氣、草…），但 blocks_rubble 群組的（風管）擋住碎石
+-- 碎石流得進去的格子：不擋路的方塊（空氣、草…），還有裝飾用的木製品（group rubble_breaks：木板、木牆板、樓梯、門…，
+-- 擋不住碎石，碎石流進來就把它壓壞，見 woodwork.lua）
 local function passable(name)
     local d = core.registered_nodes[name]
-    return d ~= nil and d.walkable == false and not (d.groups and d.groups.blocks_rubble)
+    if not d then return false end
+    if d.groups and d.groups.rubble_breaks then return true end
+    return d.walkable == false and not (d.groups and d.groups.blocks_rubble)
 end
 rockmech.rubble_passable = passable
 
@@ -509,6 +514,11 @@ fall_with_slope_settle = function(pos)
             if landing.y >= pos.y then landing = nil; break end
         end
         if landing then
+            -- 掉下去經過的裝飾木製品（木板、木牆板…）被壓壞，碎石才落得到底
+            for y = landing.y, pos.y - 1 do
+                local q = {x = pos.x, y = y, z = pos.z}
+                if core.get_item_group(core.get_node(q).name, "rubble_breaks") > 0 then core.remove_node(q) end
+            end
             reserve_pos(landing)
             local fall_dist = pos.y - landing.y
             local delay = 0.3 + math.sqrt(math.max(1, fall_dist)) * 0.45

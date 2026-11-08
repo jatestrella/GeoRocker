@@ -125,6 +125,24 @@ core.register_node(WALL, {
 	sounds = default.node_sound_wood_defaults(),
 })
 
+-- 裝飾用的木製品：擋不住碎石，碎石流進來（或從上面掉下來）就壓壞，不退還（collapse.lua 的 passable）。
+-- 要擋碎石得用木柱、木樑（木條）或整格的木磚
+local DECOR = {PLANK, SLAB, WALL, "stairs:stair_wood", "stairs:stair_inner_wood", "stairs:stair_outer_wood", "stairs:slab_wood",
+	"default:fence_wood", "default:fence_rail_wood", "default:ladder_wood",
+	"doors:door_wood_a", "doors:door_wood_b", "doors:door_wood_c", "doors:door_wood_d", "doors:trapdoor", "doors:trapdoor_open"}
+for _, name in ipairs(DECOR) do
+	local def = core.registered_nodes[name]
+	if def then
+		local g = table.copy(def.groups or {})
+		g.rubble_breaks = 1
+		core.override_item(name, {groups = g})
+	end
+end
+-- 木磚：整格的木頭方塊（鋸木台用原木鋸），擋得住碎石
+if core.registered_nodes["default:wood"] then
+	core.override_item("default:wood", {description = S("Wooden block"), short_description = S("Wooden block")})
+end
+
 ---------------------------------------------------------------------------
 -- 砍樹：斧頭砍樹幹任何一格，整棵倒下
 ---------------------------------------------------------------------------
@@ -283,6 +301,7 @@ local SAW_RECIPES = {
 	{give = POST, n = 2, label = S("Timber post")},
 	{give = PLANK, n = 4, label = S("Timber plank")},
 	{give = SLAB, n = 8, label = S("Timber slab")},
+	{give = "default:wood", n = 1, label = S("Wooden block")},
 }
 local BENCH_RECIPES = {
 	{give = WALL, n = 4, need = 1, label = S("Wooden wall panel")},
