@@ -20,6 +20,8 @@ local ABILITIES = {
 	{key = "mechanics", label = TR("Rock mechanics"), item = "rockmech:compass"},
 	-- 剝採比（破碎站顯示）：沒有儀器，要進修（教授考試）或研究帳篷研發「採礦規劃」（全組），雇用的地質學家不算
 	{key = "planning", label = TR("Mine planning"), research = "mine_planning"},
+	-- 赤平投影穩定性分析：只能考試學會（買不到、雇地質學家也不算）
+	{key = "kinematics", label = TR("Stereonet kinematic analysis"), exam_only = true},
 }
 local AB = {}
 for _, a in ipairs(ABILITIES) do AB[a.key] = a end
@@ -53,7 +55,7 @@ function rockmech.can_see(name, ability, no_items)
 	local a = AB[ability]
 	if a and a.item and not no_items and player:get_inventory():contains_item("main", a.item) then return true end
 	if a and a.research and rockmech.research_level and rockmech.research_level(name, a.research) >= 1 then return true end
-	if not (a and a.research) and rockmech.account_of and hire_left(rockmech.account_of(name)) > 0 then return true end
+	if not (a and (a.research or a.exam_only)) and rockmech.account_of and hire_left(rockmech.account_of(name)) > 0 then return true end
 	return false
 end
 
@@ -497,7 +499,92 @@ D: 剪脹角
 ANS: A
 ]]
 
-local SUBJECT = {["品位判讀"] = "grade", ["岩體分類"] = "rockmass", ["岩石力學"] = "mechanics", ["採礦規劃"] = "planning"}
+local SUBJECT = {["品位判讀"] = "grade", ["岩體分類"] = "rockmass", ["岩石力學"] = "mechanics", ["採礦規劃"] = "planning",
+	["赤平投影穩定性分析"] = "kinematics"}
+-- 赤平投影穩定性分析的預設題目：questions.txt 沒有這一科時用這些（不改老師的檔案）
+local KIN_BANK = [[
+[赤平投影穩定性分析]
+Q: 運動學分析（kinematic analysis）判斷的是？
+A: 幾何上有沒有可能滑動或傾倒（不算安全係數）
+B: 安全係數
+C: 岩石的單軸抗壓強度
+D: 地下水壓
+ANS: A
+
+Q: Markland 平面滑動的條件之一：節理面的傾角必須？
+A: 大於節理摩擦角、小於坡角
+B: 小於節理摩擦角
+C: 大於坡角
+D: 等於 90°
+ANS: A
+
+Q: 平面滑動時，節理的傾向和坡面的傾向，一般要相差多少以內？
+A: ±20°
+B: ±90°
+C: ±180°
+D: 一定要完全相同
+ANS: A
+
+Q: 極點圖上，摩擦圓「裡面」的極點代表？
+A: 節理面比摩擦角緩，不會平面滑動
+B: 一定會平面滑動
+C: 會傾倒
+D: 會楔形滑動
+ANS: A
+
+Q: 楔形滑動要看的是？
+A: 兩組節理面的交線
+B: 單一節理的極點
+C: 坡面的走向
+D: 岩石的單軸強度
+ANS: A
+
+Q: 楔形可能滑動時，交線的傾伏角必須？
+A: 大於節理摩擦角、小於坡面在交線方向的視傾角
+B: 小於節理摩擦角
+C: 大於坡角
+D: 等於 0°
+ANS: A
+
+Q: 會造成傾倒破壞的節理，傾向和坡面的傾向？
+A: 大致相反（節理傾入坡內）
+B: 相同
+C: 互相垂直
+D: 沒有關係
+ANS: A
+
+Q: Goodman 的傾倒條件：節理傾角 δ 要大於？
+A: 90° − 坡角 + φj
+B: 坡角
+C: φj
+D: 90° + 坡角
+ANS: A
+
+Q: 坡角 60°、節理摩擦角 30°，傾入坡內的節理至少要多陡才可能傾倒？
+NUM: 60
+TOL: 0
+UNIT: °
+
+Q: 節理傾角 40°、傾向跟坡面相同，坡角 55°、φj 30°，會不會平面滑動？
+A: 可能（30° < 40° < 55°）
+B: 不可能，節理太緩
+C: 不可能，節理太陡
+ANS: A
+
+Q: 坡面傾向 120°、坡角 60°，一組節理傾向 300°、傾角 80°、φj 30°，最可能的破壞模式？
+A: 傾倒
+B: 平面滑動
+C: 楔形滑動
+D: 不會破壞
+ANS: A
+
+Q: 赤平投影分析節理，一般用哪一種投影？
+A: 下半球的等角（Wulff）或等面積（Schmidt）投影
+B: 上半球透視投影
+C: 麥卡托投影
+D: 正射投影
+ANS: A
+]]
 -- 採礦規劃的預設題目：舊世界的 questions.txt 沒有這一科時用這些（不改老師的檔案）
 local PLANNING_BANK = [[
 [採礦規劃]
@@ -579,7 +666,8 @@ local function load_bank()
 		if w then w:write(text); w:close() end
 	end
 	if not text:find("[採礦規劃]", 1, true) then text = text .. "\n" .. PLANNING_BANK end
-	local bank = {grade = {}, rockmass = {}, mechanics = {}, planning = {}}
+	if not text:find("[赤平投影穩定性分析]", 1, true) then text = text .. "\n" .. KIN_BANK end
+	local bank = {grade = {}, rockmass = {}, mechanics = {}, planning = {}, kinematics = {}}
 	local subj, q
 	local function finish()
 		if q and subj and q.text and (q.num or (#q.opts >= 2 and q.ans)) then table.insert(bank[subj], q) end
@@ -766,7 +854,7 @@ local function ability_status(name, key)
 	if a.research and rockmech.research_level and rockmech.research_level(name, a.research) >= 1 then
 		src[#src + 1] = S("Researched at the research lab (whole team)")
 	end
-	local left = (not a.research) and rockmech.account_of and hire_left(rockmech.account_of(name)) or 0
+	local left = (not a.research and not a.exam_only) and rockmech.account_of and hire_left(rockmech.account_of(name)) or 0
 	if left > 0 then src[#src + 1] = S("Hired geologist (@1 left)", mmss(left)) end
 	if meta:get_int("godmode:on") == 1 then src[#src + 1] = "/god" end
 	return #src > 0, table.concat(src, S(", "))
@@ -936,6 +1024,7 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 		grade = S("Buy an XRF analyzer, hire a geologist, or take the professor's exam"),
 		rockmass = S("Buy a GSI chart, hire a geologist, or take the professor's exam"),
 		mechanics = S("Buy a geological compass, hire a geologist, or take the professor's exam"),
+		kinematics = S("Only by passing the professor's exam (cannot be bought or hired)"),
 	}
 	sfinv.register_page("rockmech:profile", {
 		title = S("Profile"),

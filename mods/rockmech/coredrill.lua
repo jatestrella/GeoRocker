@@ -1010,7 +1010,7 @@ local function stereo_page(out, st)
 	local function row(color, text)
 		if color then out[#out + 1] = ("box[%g,%g;0.25,0.25;%s]"):format(LX, y - 0.12, color) end
 		out[#out + 1] = ("label[%g,%g;%s]"):format(LX + 0.4, y, ink(text))
-		y = y + 0.42
+		y = y + 0.4
 	end
 	if #sv.info.means == 0 then row(nil, S("No joint readings yet (compass: right-click a rock face, then E)")) end
 	for _, m in ipairs(sv.info.means) do
@@ -1021,8 +1021,14 @@ local function stereo_page(out, st)
 	local sl = sv.info.slope
 	row("#202020", sl and S("Slope: @1°/@2° (thick black line; the square is its pole)", ("%02.0f"):format(sl.d), ("%03.0f"):format(sl.a))
 		or S("Slope: not measured yet (Shift + E to measure the slope)"))
-	if #sv.info.means > 0 then row(nil, S("Circles: friction circle of each measured set, in its colour (φj = atan(Jr/Ja))")) end
-	row(nil, S("Markland: pole outside the circle, same side as the slope pole, flatter than the slope → may slide"))
+	if sv.info.kin then
+		-- 會赤平投影穩定性分析：可能的破壞模式（顏色跟圖上的危險區一樣）
+		if not sl then row(nil, S("Measure the slope first to see the failure modes"))
+		else for _, v in ipairs(sv.info.kin) do row(v.color, v.text) end end
+	else
+		if #sv.info.means > 0 then row(nil, S("Circles: friction circle of each measured set, in its colour (φj = atan(Jr/Ja))")) end
+		row(nil, S("Markland: pole outside the circle, same side as the slope pole, flatter than the slope → may slide"))
+	end
 	out[#out + 1] = "style[clear_stereo;bgcolor=#00000000;border=false;textcolor=#8a3a30]"
 	out[#out + 1] = ("button[%g,%g;2.6,0.5;clear_stereo;%s]"):format(LX - 0.1, PY + PH - 0.6, core.formspec_escape(S("Tear out this page")))
 end
