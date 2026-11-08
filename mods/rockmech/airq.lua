@@ -128,15 +128,20 @@ local storage = core.get_mod_storage()
 local fans = core.deserialize(storage:get_string("airq_fans")) or {}
 local function save_fans() storage:set_string("airq_fans", core.serialize(fans)) end
 
--- 從風機沿著風管走到最遠的那節：回傳路線上的格子（從風機那端到風管口）、風管長度（m）
-local function duct_path(fp)
+-- 從風機的一面（side：正面出風口或背面進風口）沿著風管走到最遠的那節：
+-- 回傳路線上的格子（從風機那端到風管口）、風管長度（m）、風管口、開口方向；那一面沒接風管回傳 nil
+local function duct_path(fp, side)
+	local s0 = vector.add(fp, side)
+	if core.get_node(s0).name ~= DUCT then return nil end
 	local start = core.pos_to_string(fp)
 	local prev, dist = {[start] = false}, {[start] = 0}
 	local queue, head = {fp}, 1
 	local far, far_d, n = nil, -1, 0
 	while head <= #queue and n < MAX_DUCT do
 		local p = queue[head]; head = head + 1
-		for _, d in ipairs(A.DIRS) do
+		local dirs = A.DIRS
+		if head == 2 then dirs = {{side.x, side.y, side.z}} end      -- 從風機出發只走那一面
+		for _, d in ipairs(dirs) do
 			local q = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
 			local qs = core.pos_to_string(q)
 			if prev[qs] == nil and core.get_node(q).name == DUCT then
@@ -161,14 +166,8 @@ local function duct_path(fp)
 		local k = A.key(x, y, z)
 		if k ~= last then cells[#cells + 1] = {x, y, z}; last = k end
 	end
-	-- 風管口（最遠那節）和它開口的方向、接在風機旁邊的第一節
-	local tip, tip_dir, first
-	if far and #chain >= 2 then
-		tip = chain[1]
-		tip_dir = vector.subtract(chain[1], chain[2])
-		first = chain[#chain - 1]
-	end
-	return cells, math.max(0, far_d), tip, tip_dir, first
+	-- 風管口（最遠那節）和它開口的方向
+	return {path = cells, len = far_d, tip = chain[1], tip_dir = vector.subtract(chain[1], chain[2])}
 end
 
 local fan_cache = {}
@@ -178,30 +177,33 @@ local function player_near(p, r)
 	end
 	return false
 end
--- 粒子：風機的進風口把外面的空氣吸進去；風管口往外吹
+-- 粒子：開口 at、朝外的方向 d；blow = 往外吹，否則從外面吸進來
 local AIR_TEX = "[fill:4x4:#e8ecee^[opacity:120"
-local function fan_particles(p, c)
-	local o = c.out             -- 進風口朝外的方向（接風管那一邊的對面）
-	if player_near(p, 40) then
-		-- 從進風口前方約 1.8 m 一帶往風機飄進去
-		local m = vector.add(p, vector.multiply(o, 1.8))
-		local sp = vector.multiply(o, -2.5)
-		core.add_particlespawner({amount = 14, time = STEP, glow = 2,
-			minpos = vector.subtract(m, 0.6), maxpos = vector.add(m, 0.6),
-			minvel = vector.add(sp, {x = -0.15, y = -0.15, z = -0.15}), maxvel = vector.add(sp, {x = 0.15, y = 0.15, z = 0.15}),
-			minexptime = 0.5, maxexptime = 0.6, minsize = 1, maxsize = 2, texture = AIR_TEX})
-	end
-	if c.tip and player_near(c.tip, 40) then
-		-- 風管口往外吹
-		local d = c.tip_dir
-		local m = vector.add(c.tip, vector.multiply(d, 0.55))
+local function air_particles(at, d, blow)
+	if not player_near(at, 40) then return end
+	if blow then
+		local m = vector.add(at, vector.multiply(d, 0.55))
 		local spread = {x = 0.3 - math.abs(d.x) * 0.3, y = 0.3 - math.abs(d.y) * 0.3, z = 0.3 - math.abs(d.z) * 0.3}
 		core.add_particlespawner({amount = 18, time = STEP, glow = 2,
 			minpos = vector.subtract(m, spread), maxpos = vector.add(m, spread),
 			minvel = vector.add(vector.multiply(d, 4), {x = -0.3, y = -0.2, z = -0.3}),
 			maxvel = vector.add(vector.multiply(d, 6), {x = 0.3, y = 0.4, z = 0.3}),
 			minexptime = 0.4, maxexptime = 0.9, minsize = 1.5, maxsize = 3, texture = AIR_TEX})
+	else
+		-- 從開口前方約 1.8 m 一帶往開口飄進去
+		local m = vector.add(at, vector.multiply(d, 1.8))
+		local sp = vector.multiply(d, -2.5)
+		core.add_particlespawner({amount = 14, time = STEP, glow = 2,
+			minpos = vector.subtract(m, 0.6), maxpos = vector.add(m, 0.6),
+			minvel = vector.add(sp, {x = -0.15, y = -0.15, z = -0.15}), maxvel = vector.add(sp, {x = 0.15, y = 0.15, z = 0.15}),
+			minexptime = 0.5, maxexptime = 0.6, minsize = 1, maxsize = 2, texture = AIR_TEX})
 	end
+end
+-- 風機：正面出風、背面進風。正面接風管 = 壓入式（風管口吹出來），背面接風管 = 抽出式（風管口吸進去）；
+-- 沒接風管的那一面就是風機本身在吹、吸
+local function fan_particles(p, c)
+	if c.front then air_particles(c.front.tip, c.front.tip_dir, true) else air_particles(p, c.fdir, true) end
+	if c.back then air_particles(c.back.tip, c.back.tip_dir, false) else air_particles(p, vector.multiply(c.fdir, -1), false) end
 end
 local function active_fans()
 	local list, t = {}, now()
@@ -213,22 +215,26 @@ local function active_fans()
 			local meta = core.get_meta(p)
 			local on = meta:get_int("off") == 0
 			if not c or t - c.t > 5 then
-				local cells, len, tip, tip_dir, first = duct_path(p)
-				-- 進風口：接風管那一邊的對面；沒接風管就是正面（facedir 的反方向）
-				local out = first and vector.subtract(p, first) or vector.multiply(core.facedir_to_dir(node.param2), -1)
-				c = {t = t, path = cells, len = len, tip = tip, tip_dir = tip_dir, out = out}
+				-- 正面（出風口）＝ facedir 的反方向（放的時候朝著放的人），背面（進風口）＝ facedir
+				local back = core.facedir_to_dir(node.param2)
+				local fdir = vector.multiply(back, -1)
+				c = {t = t, fdir = fdir, front = duct_path(p, fdir), back = duct_path(p, back)}
 				fan_cache[ps] = c
 			end
-			local info = S("Ventilation fan @1 m³/s", tostring(FAN_Q)) .. "\n" .. S("Duct @1 m", tostring(c.len))
-				.. "\n" .. (on and S("Fan running") or S("Fan off"))
+			local info = S("Ventilation fan @1 m³/s", tostring(FAN_Q))
+			if c.front then info = info .. "\n" .. S("Forcing duct @1 m", tostring(c.front.len)) end
+			if c.back then info = info .. "\n" .. S("Exhaust duct @1 m", tostring(c.back.len)) end
+			info = info .. "\n" .. (on and S("Fan running") or S("Fan off"))
 			if meta:get_string("infotext") ~= info then meta:set_string("infotext", info) end
 			if on then
 				-- 壓入式：隧道裡的空氣從風管口那頭往風機那頭（洞口）流，路線倒過來
-				if #c.path > 0 then
+				if c.front then
 					local rev = {}
-					for i = #c.path, 1, -1 do rev[#rev + 1] = c.path[i] end
+					for i = #c.front.path, 1, -1 do rev[#rev + 1] = c.front.path[i] end
 					list[#list + 1] = {path = rev, q = FAN_Q}
 				end
+				-- 抽出式：隧道裡的空氣往風管口流，從風管口吸走
+				if c.back then list[#list + 1] = {path = c.back.path, q = FAN_Q} end
 				fan_particles(p, c)
 			end
 		elseif node then
@@ -339,6 +345,8 @@ core.register_craftitem(DETECTOR, {
 })
 
 local grill = "[fill:16x16:#4a5a48^[fill:14x14:1,1:#202020^[fill:12x2:2,7:#9a9a9a^[fill:2x12:7,2:#9a9a9a^[fill:4x4:6,6:#c8c8c8"
+-- 背面進風口：護網（細格子）
+local intake = "[fill:16x16:#4a5a48^[fill:14x14:1,1:#2a2a2a^[fill:14x1:1,4:#7a7a7a^[fill:14x1:1,8:#7a7a7a^[fill:14x1:1,12:#7a7a7a^[fill:1x14:4,1:#7a7a7a^[fill:1x14:8,1:#7a7a7a^[fill:1x14:12,1:#7a7a7a"
 local fan_side = "[fill:16x16:#4a5a48^[fill:16x2:0,0:#3a4838^[fill:16x2:0,14:#3a4838"
 core.register_node(FAN, {
 	description = S("Ventilation fan"),
@@ -347,7 +355,7 @@ core.register_node(FAN, {
 		{-0.45, -0.45, -0.5, 0.45, 0.45, 0.5},
 		{-0.5, -0.5, -0.3, 0.5, -0.4, 0.3},
 	}},
-	tiles = {fan_side, fan_side, fan_side, fan_side, grill, grill},
+	tiles = {fan_side, fan_side, fan_side, fan_side, intake, grill},      -- +Z 背面進風、−Z 正面出風
 	inventory_image = grill, wield_image = grill,
 	groups = {dig_immediate = 2},
 	sounds = default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil,
@@ -361,7 +369,8 @@ core.register_node(FAN, {
 		return itemstack
 	end,
 	on_construct = function(pos)
-		fans[core.pos_to_string(pos)] = true; save_fans()
+		local ps = core.pos_to_string(pos)
+		fans[ps], fan_cache[ps] = true, nil; save_fans()
 		core.get_meta(pos):set_string("infotext", S("Ventilation fan @1 m³/s", tostring(FAN_Q)))
 	end,
 	after_destruct = function(pos)
