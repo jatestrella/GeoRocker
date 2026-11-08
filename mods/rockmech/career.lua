@@ -796,6 +796,34 @@ end
 local OFFICE_DX, OFFICE_Z = 27, -10
 rockmech.career_office_dx = OFFICE_DX
 
+-- 2 樓的擺設：門在 +dx 那一頭（dx = RX）。土木技師坐在 dx = 1、面向門，前面一排辦公桌（dx = 2），
+-- 跟門之間留兩格走道；背後（dx = −1）一面設計圖板，兩邊櫃子。回傳土木技師的位置（本地座標）
+local CIVIL_AT = {dx = 1, dz = 0}
+function rockmech.career_office_2f(set)
+	for dz = -1, 1 do set(2, 5, dz, "rockmech:camp_table") end
+	set(2, 6, 0, "rockmech:camp_papers"); set(2, 6, -1, "rockmech:camp_helmets")
+	set(1, 5, 0, "rockmech:camp_chair", 1)                         -- 椅子轉向門
+	for dz = -1, 1 do set(-1, 5, dz, "rockmech:camp_blackboard", 1); set(-1, 6, dz, "rockmech:camp_blackboard", 1) end
+	set(-4, 5, -2, "rockmech:camp_shelf"); set(-4, 6, -2, "rockmech:camp_shelf"); set(-4, 5, 2, "rockmech:camp_shelf")
+end
+-- 土木技師的攤位（坐在 2 樓椅子上、面向門）
+local function civil_spot(at, y)
+	local p, q = at(CIVIL_AT.dx, 0, CIVIL_AT.dz), at(CIVIL_AT.dx + 1, 0, CIVIL_AT.dz)
+	local d = {x = q.x - p.x, z = q.z - p.z}
+	return {kind = "civil", pos = {x = p.x, y = y + 5.05, z = p.z}, yaw = math.atan2 and math.atan2(-d.x, d.z) or math.atan(-d.x, d.z)}
+end
+rockmech.career_civil_spot = civil_spot
+
+-- 2 樓門外的鋼樓梯：平台（h 4，頂面跟 2 樓地板同高）＋四階樓梯從地面往 −dz 爬，最上面那階頂面跟平台一樣高
+function rockmech.career_office_stairs(set, RX)
+	set(RX + 1, 4, 0, "rockmech:office_post")                        -- 平台
+	for i = 1, 4 do
+		set(RX + 1, 5 - i, i, "stairs:stair_steelblock", 2)          -- 往 −dz 爬
+		for h = 5 - i + 1, 7 do set(RX + 1, h, i, "air") end
+	end
+	set(RX + 1, 1, 5, "air"); set(RX + 1, 2, 5, "air")
+end
+
 local function build_market(x0)
 	local cx, cz = x0 + OFFICE_DX, OFFICE_Z
 	local y = ground_y(cx, cz) or 0
@@ -823,23 +851,14 @@ local function build_market(x0)
 			set(dx, 8, dz, "rockmech:office_roof")
 		end
 	end
-	-- 2 樓：前後兩排窗、天花板燈；土木技師坐在辦公桌後面（面向正面），背後一面設計圖板、兩個櫃子
+	-- 2 樓：前後兩排窗、天花板燈、辦公桌（面向門）
 	for _, dx in ipairs({-4, -3, -2, 2, 3, 4}) do set(dx, 6, RZ, "default:glass"); set(dx, 6, -RZ, "default:glass") end
 	set(0, 7, 0, "rockmech:camp_lamp"); set(-4, 7, 0, "rockmech:camp_lamp"); set(4, 7, 0, "rockmech:camp_lamp")
-	for dx = -1, 1 do set(dx, 5, 1, "rockmech:camp_table") end
-	set(0, 6, 1, "rockmech:camp_papers"); set(-1, 6, 1, "rockmech:camp_helmets")
-	set(0, 5, 0, "rockmech:camp_chair")
-	for dx = -1, 1 do set(dx, 5, -2, "rockmech:camp_blackboard"); set(dx, 6, -2, "rockmech:camp_blackboard") end
-	set(-3, 5, -2, "rockmech:camp_shelf"); set(-3, 6, -2, "rockmech:camp_shelf"); set(3, 5, -2, "rockmech:camp_shelf")
+	rockmech.career_office_2f(set)
 	-- 2 樓的門在 1 樓門的正上方；門外一座鋼樓梯：從地面沿著牆外往門那邊爬，頂上一塊平台
 	set(RX, 5, 0, "doors:door_wood_a", 3)
 	set(RX, 6, 0, "doors:hidden", 3)
-	set(RX + 1, 4, 0, "rockmech:office_post")                        -- 平台
-	for i = 1, 3 do
-		set(RX + 1, 4 - i, i, "stairs:stair_steelblock", 2)          -- 往 −dz 爬
-		for h = 4 - i + 1, 7 do set(RX + 1, h, i, "air") end
-	end
-	set(RX + 1, 1, 4, "air"); set(RX + 1, 2, 4, "air")
+	rockmech.career_office_stairs(set, RX)
 	for kind, bx in pairs(BOOTH_X) do
 		-- 正面：攤主前面的櫃台窗口（3 寬、h 2–3，h 1 的牆當櫃台），外面一片遮陽棚
 		for dx = -1, 1 do
@@ -863,8 +882,9 @@ local function build_market(x0)
 		local p = at(bx, 0, 1)
 		list[#list + 1] = {kind = kind, pos = {x = p.x, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = p.z}, yaw = FACE_YAW}
 	end
-	local pc = at(0, 0, 0)
-	list[#list + 1] = {kind = "civil", pos = {x = pc.x, y = y + 5.05, z = pc.z}, yaw = FACE_YAW}       -- 土木技師（2 樓的椅子上）
+	list[#list + 1] = civil_spot(at, y)       -- 土木技師（2 樓的椅子上、面向門）
+	storage:set_string("stairs4:" .. x0, "1")   -- 新版的樓梯和擺設（不用再補）
+	storage:set_string("yard2:" .. x0, "1")     -- 新的交車區在 camp_area 裡，蓋營地時一起整地
 	storage:set_string(VENDOR_SPOTS, core.serialize(list))
 end
 
@@ -1007,7 +1027,7 @@ end
 
 -- 營地要用到的範圍
 local function camp_area(x0)
-	return {x = x0 - 22, y = -30, z = math.min(TENT_Z - 12, SIGN_Z - 2)}, {x = x0 + OFFICE_DX + 10, y = 40, z = CAMP_Z + 8}
+	return {x = x0 - 22, y = -30, z = math.min(TENT_Z - 12, SIGN_Z - 2, -58)}, {x = x0 + OFFICE_DX + 10, y = 40, z = CAMP_Z + 8}   -- 南到交車區（z −54）外面
 end
 
 -- 在 x0 蓋一座營地（帳篷、供應商、破碎站掛在 owner 的帳戶），地圖生成完才蓋；done(spawn) 拿到營地中心的落腳點
@@ -1100,6 +1120,60 @@ core.register_on_leaveplayer(function(player)
 	if held[name] and held[name]:get_pos() then held[name]:remove() end
 	held[name] = nil
 end)
+
+-- 已經蓋好、有 2 樓的營地：樓梯補成四階（舊版只有三階，最後一階差 1 m 爬不上去）
+local function fix_stairs(x0)
+	local cx, cz = x0 + OFFICE_DX, OFFICE_Z
+	local y
+	for yy = -30, 40 do
+		if core.get_node({x = cx, y = yy, z = cz}).name == "rockmech:office_floor" then y = yy; break end
+	end
+	storage:set_string("stairs4:" .. x0, "1")
+	if not y or core.get_node({x = cx, y = y + 4, z = cz}).name ~= "rockmech:office_floor" then return end   -- 沒有 2 樓
+	local set, at = rockmech.career_placer(cx, cz, y)
+	rockmech.career_office_stairs(set, MARKET_RX)
+	-- 2 樓的擺設換成面向門：先清空室內（燈留著），再擺
+	for dx = -MARKET_RX + 1, MARKET_RX - 1 do for dz = -MARKET_RZ + 1, MARKET_RZ - 1 do
+		for h = 5, 6 do set(dx, h, dz, "air") end
+	end end
+	rockmech.career_office_2f(set)
+	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
+	local spot = rockmech.career_civil_spot(at, y)
+	for i, sp in ipairs(list) do
+		if sp.kind == "civil" and math.abs(sp.pos.x - spot.pos.x) < 8 and math.abs(sp.pos.z - spot.pos.z) < 8 then list[i] = spot end
+	end
+	storage:set_string(VENDOR_SPOTS, core.serialize(list))
+	if rockmech.career_reset_vendors then rockmech.career_reset_vendors() end
+	core.log("action", ("[rockmech] 營地 x = %d 的 2 樓：樓梯補成四階、辦公桌面向門"):format(x0))
+end
+if cfg.career then
+	core.after(3, function()
+		local sites = {}
+		if storage:get_string("career_site") == "2" then sites[#sites + 1] = cfg.career_camp_dx end
+		if rockmech.team_site_x then
+			for i = 1, cfg.career_teams do
+				if storage:get_string("team_site:" .. i) == "1" then sites[#sites + 1] = rockmech.team_site_x(tostring(i)) end
+			end
+		end
+		for _, x0 in ipairs(sites) do
+			if storage:get_string("stairs4:" .. x0) == "" or storage:get_string("yard2:" .. x0) == "" then
+				local a, b = camp_area(x0)
+				core.emerge_area(a, b, function(_, _, rem)
+					if rem > 0 then return end
+					if storage:get_string("stairs4:" .. x0) == "" then fix_stairs(x0) end
+					-- 交車區搬到南邊（delivery.lua 的 YARD：x0+10..x0+36、z −54..−36）：舊營地當初沒整到那裡，補整一次
+					if storage:get_string("yard2:" .. x0) == "" then
+						storage:set_string("yard2:" .. x0, "1")
+						if rockmech.level_camp_soil then
+							rockmech.level_camp_soil({x = x0 + 9, z = -55}, {x = x0 + 37, z = -35}, math.floor(cfg.surface_y or 0))
+							core.log("action", ("[rockmech] 營地 x = %d 的新交車區整地"):format(x0))
+						end
+					end
+				end)
+			end
+		end
+	end)
+end
 
 -- 已經蓋好的營地：組號看板從礦帶裡（舊位置）搬到南邊的走廊
 if cfg.career then

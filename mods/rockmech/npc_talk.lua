@@ -7,7 +7,7 @@ local LINES = dofile(rockmech.modpath .. "/npc_lines.lua")
 local BUBBLE = "rockmech:npc_bubble"
 local SHOW = 5               -- 泡泡顯示幾秒
 local WRAP = 14              -- 每行幾個字（中文；英文照字元數 ×2）
-local HEIGHT = 2.35          -- 尾巴在 NPC 腳底上方幾公尺（名牌在 1.9 m 左右）
+local HEIGHT = 1.65          -- 尾巴在 NPC 腳底上方幾公尺（名牌在 1.2 m 左右）
 local CREAM = "#f4f0e0"
 
 -- 尾巴：往下指的小三角形

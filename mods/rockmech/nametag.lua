@@ -209,7 +209,7 @@ local NPC_NEAR = 10
 core.register_entity(NPC_TAG, {
 	initial_properties = {
 		visual = "sprite", textures = {"blank.png"}, visual_size = {x = 0.01, y = 0.01},
-		selectionbox = {-0.01, 0, -0.01, 0.01, 1.8, 0.01}, collisionbox = {0, 0, 0, 0, 0, 0},
+		selectionbox = {-0.01, 0, -0.01, 0.01, 1.1, 0.01}, collisionbox = {0, 0, 0, 0, 0, 0},
 		physical = false, pointable = false, static_save = false,
 		nametag = "", nametag_color = "#ffffff", nametag_bgcolor = "#00000060",
 	},
