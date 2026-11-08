@@ -192,10 +192,12 @@ local GRAN_MAX_CHAIN = 48
 local NLEV = rockmech.RUBBLE_LEVELS
 
 local function rubble_k(name) return rockmech.rubble_level[name] end
+-- 碎石流得進去的格子：可以穿過的方塊（空氣、草…），但 blocks_rubble 群組的（風管）擋住碎石
 local function passable(name)
     local d = core.registered_nodes[name]
-    return d ~= nil and d.walkable == false
+    return d ~= nil and d.walkable == false and not (d.groups and d.groups.blocks_rubble)
 end
+rockmech.rubble_passable = passable
 
 -- 碎石欄的頂格：從 p 往上走到最上面一格碎石。回傳位置、名稱；p 不是碎石回傳 nil
 local function rubble_top(p)

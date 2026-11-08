@@ -667,6 +667,7 @@ end
 -- placed（可選）：收集倒下的格子，不立即做安息角流動（推土機推著的那堆）。回傳倒不下的級數
 local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
 	g = g or 0
+	local passable = rockmech.rubble_passable or passable      -- 碎石：風管這類擋碎石的方塊不能倒進去
 	local y = ytop
 	for _ = 1, 8 do
 		if not passable(core.get_node({x = x, y = y - 1, z = z}).name) then break end

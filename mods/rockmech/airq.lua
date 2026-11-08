@@ -393,7 +393,7 @@ core.register_node(DUCT, {
 	},
 	connects_to = {DUCT, FAN},
 	tiles = {duct_tex},
-	groups = {dig_immediate = 3},
+	groups = {dig_immediate = 3, blocks_rubble = 1},       -- 人、車可以穿過，碎石流不進來（不會把風管吃掉）
 	after_place_node = function(pos) for ps in pairs(fan_cache) do fan_cache[ps].t = 0 end end,
 	after_destruct = function() for ps in pairs(fan_cache) do fan_cache[ps].t = 0 end end,
 })
