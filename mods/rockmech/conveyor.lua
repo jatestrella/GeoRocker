@@ -59,10 +59,14 @@ local function top_of(h) return (h + 1) / 8 - 0.5 end
 --   ""：直的（兩側框架）；cl／cr：轉彎，料從左／右邊進來（那側打開、後端封起來）；
 --   ml／mr：直的、左／右邊另外有一條從側面併進來（那側打開）
 local SHAPES = {"", "cl", "cr", "ml", "mr"}
-local function boxes(h, loaded, sh)
+-- 支腳：""：正下方是實心方塊，腳到這格底；"l"：正下方是空的或碎石、再下面 1 m 內有東西，腳伸到下一格底（插進碎石裡）；
+-- "n"：下面 1 m 內什麼都沒有，不畫腳（不要懸空的短腳）
+local LEGS = {"", "l", "n"}
+local function boxes(h, loaded, sh, leg)
 	local top, b = top_of(h), {}
+	local floor = leg == "l" and -1.5 or -0.5
 	local function add(x0, y0, z0, x1, y1, z1)
-		y0 = math.max(-0.5, y0)
+		y0 = math.max(floor, y0)
 		if y1 > y0 then b[#b + 1] = {x0, y0, z0, x1, y1, z1} end
 	end
 	local open_l, open_r = sh == "cl" or sh == "ml", sh == "cr" or sh == "mr"
@@ -70,9 +74,9 @@ local function boxes(h, loaded, sh)
 	if not open_l then add(-0.5, top - 0.25, -0.5, -0.42, top + 0.12, 0.5) end   -- 兩側框架
 	if not open_r then add(0.42, top - 0.25, -0.5, 0.5, top + 0.12, 0.5) end
 	if sh == "cl" or sh == "cr" then add(-0.5, top - 0.25, -0.5, 0.5, top + 0.12, -0.42) end   -- 轉彎：後端封起來
-	if top - 0.25 > -0.5 then                               -- 支腳
-		add(-0.48, -0.5, -0.06, -0.4, top - 0.25, 0.06)
-		add(0.4, -0.5, -0.06, 0.48, top - 0.25, 0.06)
+	if leg ~= "n" and top - 0.25 > floor then               -- 支腳
+		add(-0.48, floor, -0.06, -0.4, top - 0.25, 0.06)
+		add(0.4, floor, -0.06, 0.48, top - 0.25, 0.06)
 	end
 	if loaded then                                          -- 輸送帶上的料：從進料的那一側走到前端
 		local y0, y1 = top, top + 0.14
@@ -84,6 +88,20 @@ local function boxes(h, loaded, sh)
 end
 
 local reverse_line          -- 下面定義（整條反向）
+-- 支腳的樣子：看正下方和再下面一格
+local function solid_at(p)
+	local nm = core.get_node(p).name
+	if nm == "air" or nm == "ignore" then return false end
+	local d = core.registered_nodes[nm]
+	return d ~= nil and d.walkable ~= false
+end
+local function leg_of(p)
+	local b1 = {x = p.x, y = p.y - 1, z = p.z}
+	if rockmech.rubble_level and rockmech.rubble_level[core.get_node(b1).name] then return "l" end
+	if solid_at(b1) then return "" end
+	if solid_at({x = p.x, y = p.y - 2, z = p.z}) then return "l" end
+	return "n"
+end
 local cells = {}            -- 位置 hash → 位置（目前知道的輸送帶格）
 local loads = {}            -- 位置 hash → {{b = 碎石種類, k = 級數, g = 品位 param2}, ...}（空的不存）
 local dirty = false
@@ -123,8 +141,10 @@ for h = 0, 7 do
 	for _, st in ipairs({"", "w", "o"}) do
 	NAME[h][st] = {}
 	for _, sh in ipairs(SHAPES) do
-		local name = "rockmech:belt_" .. h .. (st ~= "" and ("_" .. st) or "") .. (sh ~= "" and ("_" .. sh) or "")
-		NAME[h][st][sh], BELT_H[name], BELT_ST[name], BELT_SH[name] = name, h, st, sh
+	NAME[h][st][sh] = {}
+	for _, leg in ipairs(LEGS) do
+		local name = "rockmech:belt_" .. h .. (st ~= "" and ("_" .. st) or "") .. (sh ~= "" and ("_" .. sh) or "") .. (leg ~= "" and ("_" .. leg) or "")
+		NAME[h][st][sh][leg], BELT_H[name], BELT_ST[name], BELT_SH[name] = name, h, st, sh
 		local ore = main_ore()
 		local top = st == "" and RUBBER or V.rubble_tex(st == "o" and ore and ore.rubble or rockmech.RUBBLE)
 		local sel = {-0.5, -0.5, -0.5, 0.5, top_of(h) + 0.12, 0.5}
@@ -134,7 +154,7 @@ for h = 0, 7 do
 			paramtype = "light",
 			paramtype2 = "4dir",
 			sunlight_propagates = true,
-			node_box = {type = "fixed", fixed = boxes(h, st ~= "", sh)},
+			node_box = {type = "fixed", fixed = boxes(h, st ~= "", sh, leg)},
 			selection_box = {type = "fixed", fixed = sel},
 			collision_box = {type = "fixed", fixed = sel},
 			tiles = {top, FRAME, FRAME, FRAME, FRAME, FRAME},
@@ -158,6 +178,7 @@ for h = 0, 7 do
 				loads[hh], dirty = nil, true
 			end,
 		})
+	end
 	end
 	end
 end
@@ -437,7 +458,7 @@ local function tick()
 	local v, np = cfg.conveyor_speed, 0
 	for h, n in pairs(nodes) do
 		local st, sh = want_state(loads[h]), shape_of(h, n, feeds[h])
-		local want = NAME[BELT_H[n.name]][st][sh]
+		local want = NAME[BELT_H[n.name]][st][sh][leg_of(cells[h])]
 		if n.name ~= want then core.swap_node(cells[h], {name = want, param2 = n.param2}) end
 		if st ~= "" and np < PARTICLE_MAX and near_player(cells[h]) then
 			np = np + 1
@@ -597,7 +618,7 @@ core.register_craftitem(ITEM, {
 				return false
 			end
 			if core.is_protected(q, name) then core.record_protection_violation(q, name); return false end
-			core.set_node(q, {name = NAME[h][""][""], param2 = core.dir_to_fourdir(pd)})
+			core.set_node(q, {name = NAME[h][""][""][leg_of(q)], param2 = core.dir_to_fourdir(pd)})
 			if rockmech.account_of then core.get_meta(q):set_string("owner", rockmech.account_of(name)) end   -- 研究加成照這一組
 			if not core.is_creative_enabled(name) then itemstack:take_item() end
 			return true
