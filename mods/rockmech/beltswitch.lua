@@ -1,6 +1,6 @@
 -- rockmech/beltswitch.lua
--- 輸送帶控制箱：放在輸送帶旁邊（同一層的前後左右），控制它貼著的那幾格輸送帶。
---   運轉：照常走。停止：那一格不動也不吸料，料過不去，上游跟著塞住停下（下游照常把料送完）。
+-- 輸送帶控制箱：放在輸送帶旁邊（前後左右，同一層或高低差一格），控制貼著的輸送帶所在的那一整條。
+--   運轉：照常走。停止：整條（上游、下游接著的都算）不動、不吸料、不倒出去。
 --   依礦價：今天的礦價 ≥ 設定的價格才運轉，不然停止。
 --   用法例：輸送帶從高處倒料堆成料堆，另一條埋在料堆底下的輸送帶吸料出去，出口接控制箱，
 --   價格低時囤著、價格好時自動送去破碎站賣（輸送帶埋在料堆下面照樣會從頭頂吸料，見 conveyor.lua）。
@@ -34,14 +34,17 @@ end
 local stopped = {}
 function rockmech.belt_stopped() return stopped end
 
-local SIDES = {{x = 1, z = 0}, {x = -1, z = 0}, {x = 0, z = 1}, {x = 0, z = -1}}
+local SIDES = {}
+for dy = -1, 1 do
+	for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do SIDES[#SIDES + 1] = {x = d[1], y = dy, z = d[2]} end
+end
 local function refresh()
 	stopped = {}
 	for ps, s in pairs(list) do
 		local p = core.string_to_pos(ps)
 		local on = running(s)
 		if p and not on then
-			for _, d in ipairs(SIDES) do stopped[core.hash_node_position({x = p.x + d.x, y = p.y, z = p.z + d.z})] = true end
+			for _, d in ipairs(SIDES) do stopped[core.hash_node_position({x = p.x + d.x, y = p.y + d.y, z = p.z + d.z})] = true end
 		end
 		-- 燈號：載入了才換
 		local n = p and core.get_node_or_nil(p)

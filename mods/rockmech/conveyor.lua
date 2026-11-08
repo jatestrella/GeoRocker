@@ -411,7 +411,36 @@ end
 
 local function tick()
 	local nodes = {}
-	local stop = rockmech.belt_stopped and rockmech.belt_stopped() or {}   -- 控制箱停住的格（beltswitch.lua）
+	-- 控制箱（beltswitch.lua）：貼著的輸送帶所在的那一整條（上游、下游接著的都算）全部停住：不吸料、不走、不倒出去
+	local seeds = rockmech.belt_stopped and rockmech.belt_stopped() or {}
+	local stop = {}
+	if next(seeds) then
+		local nxt, rev = {}, {}
+		for h, p in pairs(cells) do
+			local n, is = belt_at(p)
+			if n and is then
+				local q = next_of(p, n)
+				if q then
+					local hq = core.hash_node_position(q)
+					nxt[h] = hq
+					rev[hq] = rev[hq] or {}
+					table.insert(rev[hq], h)
+				end
+			end
+		end
+		local todo = {}
+		for h in pairs(seeds) do
+			if cells[h] then stop[h] = true; todo[#todo + 1] = h end
+		end
+		while #todo > 0 do
+			local h = table.remove(todo)
+			local nb = {nxt[h]}
+			for _, r in ipairs(rev[h] or {}) do nb[#nb + 1] = r end
+			for _, x in ipairs(nb) do
+				if not stop[x] and cells[x] then stop[x] = true; todo[#todo + 1] = x end
+			end
+		end
+	end
 	-- 1. 裝料：每格正上方那一格的碎石
 	for h, p in pairs(cells) do
 		local n, is = belt_at(p)
@@ -437,7 +466,7 @@ local function tick()
 			while h and nodes[h] and not done[h] and not seen[h] do
 				seen[h] = true
 				chain[#chain + 1] = h
-				if stop[h] then h = nil; break end      -- 停住的格：不往前送，上游送到這裡就塞住
+				if stop[h] then h = nil; break end      -- 停住的那一條：不往前送
 				local q, d, w = next_of(cells[h], nodes[h])
 				if q then
 					local hq = core.hash_node_position(q)
