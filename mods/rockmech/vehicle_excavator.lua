@@ -215,7 +215,7 @@ end
 --   boom_root、bucket_rest（上部結構座標）、boom_len、stick_len、boom_w、stick_w；bucket（挖斗大小）、bucket_color
 --   bucket_real（鏟斗真實尺寸：寬、斗高、斗深；斗裡碎石的大小也照這個算）
 --   dig_r（挖、倒在目標周圍幾格）、dig_reach（從相機量）、lift（抬到目標上方）、swing_rate（rad/s）、dump_reach
---   bucket_box（擋人：鏟斗外包的半寬、下、上）、body_box（擋人：車身，大車引擎擋不住走近的玩家）
+--   body_box（擋人：車身，大車引擎擋不住走近的玩家）
 local function excavator(kind, P)
 	local def = P.def
 	local BOOM_ROOT, BUCKET_REST = P.boom_root, P.bucket_rest
@@ -559,17 +559,11 @@ local function excavator(kind, P)
 		return {{"E", S("Dig (where the cursor points)"), on = self.dig ~= nil},
 			{S("Space"), self.breaker and load_total(self) == 0 and S("Switch to breaker") or S("Dump (point at a truck to load it)")}}
 	end
-
 	-- 擋人：鏟斗（跟著手臂動；用把鏟斗連同裡面的碎石包起來的方塊，不照迴轉角轉），大車再加上整個車身
-	local bb = P.bucket_box
+	-- 擋人：只有大車的車身（引擎擋不住走近的玩家）。鏟斗不擋：手臂停在工作的位置（常常在地上、坑裡），
+	-- 擋人範圍旁邊推不出去時會把人放到鏟斗頂上、每一步重放一次，人就卡在半空中
 	function def.overhangs_now(self)
-		local list = {}
-		if P.body_box then list[1] = P.body_box end
-		local b = self.bucket_at
-		if b then
-			list[#list + 1] = {x0 = b.x - bb.r, x1 = b.x + bb.r, z0 = b.z - bb.r, z1 = b.z + bb.r, y0 = b.y - bb.down, y1 = b.y + bb.up}
-		end
-		return #list > 0 and list or nil
+		return P.body_box and {P.body_box} or nil
 	end
 
 	function def.on_load(self, data)
@@ -1079,7 +1073,7 @@ do
 		op_seat = {x = -0.3, y = 0.0, z = -0.2},          -- 駕駛室裡（上部結構座標）
 		bucket_real = {x = 1.25, y = 1.1, z = 1.4},      -- 20 t 級、約 1 m³：寬 1.25、斗高 1.1、斗深 1.4，接點到齒尖約 1.45 m
 		dig_r = 1, dig_reach = 10, lift = 2.0, swing_rate = 1.5, dump_reach = 6,
-		bucket_box = {r = 0.7, down = 0.45, up = 0.9},
+
 	})
 end
 
@@ -1120,7 +1114,7 @@ do
 		breaker_power = 4,                               -- 破碎錘打擊能量約是 20 t 級的 4 倍：同樣的岩石 1/4 時間
 		bucket_real = {x = 3.2, y = 2.5, z = 2.8},       -- 200 t 級、約 12 m³：寬 3.2、斗高 2.5、斗深 2.8，接點到齒尖約 2.9 m
 		dig_r = 2, dig_reach = 18, lift = 3.5, swing_rate = 0.8, dump_reach = 9,
-		bucket_box = {r = 1.6, down = 1.1, up = 2.4},
+
 		body_box = {x0 = -3.5, x1 = 3.5, z0 = -3.5, z1 = 3.5, y0 = -3.5, y1 = 3.0},
 	})
 end
