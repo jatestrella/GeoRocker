@@ -269,15 +269,22 @@ local function remove_parts(self)
 	end
 	self.part_list = nil
 end
--- 履帶滾動：履帶零件（貼圖是 V.track_tex 裡的）側面、頂面有一條白線，跟著那一側履帶走的距離往前、往後移。
+-- 履帶滾動：履帶零件（貼圖是 V.track_tex 裡的）側面、頂面有灰色細線，跟著那一側履帶走的距離往前、往後移。
 -- 轉彎時左右兩條速度不同（原地迴轉時方向相反）。一圈 TRACK_FRAMES 格，車子動了才換貼圖
-V.track_tex = {[V.TRACK] = true}
+V.track_tex = {[V.TRACK] = 3}
 local TRACK_FRAMES = 16
+-- V.track_tex[貼圖] = 線條數（true 當 1 條），等距排開
 local function track_frames(base)
 	local side, top = {}, {}
+	local n = tonumber(V.track_tex[base]) or 1
 	for k = 0, TRACK_FRAMES - 1 do
-		side[k] = base .. ("^[fill:1x16:%d,0:#e8e8e8"):format(k)        -- 側面：橫軸是車身前後
-		top[k] = base .. ("^[fill:16x1:0,%d:#e8e8e8"):format(15 - k)     -- 頂面：縱軸是車身前後
+		local sd, tp = base, base
+		for j = 0, n - 1 do
+			local x = (k + math.floor(j * 16 / n)) % 16
+			sd = sd .. ("^[fill:1x16:%d,0:#6e6e6e"):format(x)        -- 側面：橫軸是車身前後
+			tp = tp .. ("^[fill:16x1:0,%d:#6e6e6e"):format(15 - x)   -- 頂面：縱軸是車身前後
+		end
+		side[k], top[k] = sd, tp
 	end
 	return side, top
 end

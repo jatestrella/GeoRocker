@@ -920,7 +920,7 @@ do
 	local grille = ("[fill:16x16:%s^[fill:12x6:2,5:#2a2a2a^[fill:12x1:2,7:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)
 	local BIG_TRACK = "[fill:16x16:#262626^[fill:16x2:0,0:#454545^[fill:16x2:0,14:#454545^[fill:2x12:2,2:#363636^[fill:2x12:7,2:#363636^[fill:2x12:12,2:#363636"
 	local trk = {BIG_TRACK, BIG_TRACK, BIG_TRACK, BIG_TRACK, BIG_TRACK, BIG_TRACK}
-	V.track_tex[BIG_TRACK] = true
+	V.track_tex[BIG_TRACK] = 4
 	excavator("excavator_big", {
 		def = def,
 		body = {
