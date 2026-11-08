@@ -16,7 +16,7 @@ local deposit_column, update_hud = V.deposit_column, V.update_hud
 local collapse = rockmech.collapse
 
 local def = {desc = S("Bulldozer"), short = S("Dozer"), color = "#e8c828", cap = 0, speed = 2.5,
-	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0, mirror = {x = 1.0, y = 1.4, z = -0.2},
+	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.15, mirror = {x = 1.0, y = 1.4, z = -0.2},
 	seat = {x = 0, y = 0.0, z = -1.0},        -- 駕駛艙中間
 	tilt = {front = 1.3, rear = -2.1, side_z = -0.4, side_x = 1.1}, max_grade = math.rad(30),   -- 履帶推土機
 	exhaust = {x = 0.5, y = 1.1, z = 1.0},   -- 排氣管口（排煙，vehicles.lua 的 V.exhaust）

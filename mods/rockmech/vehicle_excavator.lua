@@ -1045,7 +1045,7 @@ end
 do
 	-- 履帶很慢（真實約 3–5 km/h）：長距離用平板拖車載（vehicle_lowboy.lua）
 	local def = {desc = S("Excavator"), color = "#e0a020", cap = 4 * NLEV, speed = 1.4,
-		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4},
+		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.6, mirror = {x = 1.15, y = 1.3, z = 0.4},
 		seat = {x = -0.3, y = 0.0, z = -0.2},     -- 駕駛室偏左（駕駛室靠近迴轉軸，上部結構轉了也差不多在裡面）
 		tilt = {front = 1.3, rear = -1.3, side_z = 0, side_x = 1.25}, max_grade = math.rad(35),   -- 履帶挖土機約 70%
 		item_desc = S("Right-click to get in; E digs, Space dumps")}
