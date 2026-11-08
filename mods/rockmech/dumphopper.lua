@@ -2,8 +2,8 @@
 -- 受料斗（dump hopper）：裝車料斗反過來用。4×4、高 2 m 的鋼斗，頂上是格柵。
 --   進料：卡車、怪手在格柵 SNAP m 內倒料，自動對準倒在格柵上（vehicles.lua 的 V.dump_to_ground 問 rockmech.dump_hopper_cells），
 --         格柵上的碎石每一步吃進斗裡，斗滿了就堆在格柵上等。
---   出料：放的時候面對的那一邊、中間那格是出料口；那裡接一條輸送帶的起點，斗裡的料照輸送帶的運量放上去
---         （先放最多的那一種，礦石碎石保留品位）。
+--   出料：四邊外面任何一格接一條朝外走的輸送帶就是出料口，斗裡的料照輸送帶的運量放上去
+--         （先放最多的那一種，礦石碎石保留品位）。第一條接上的鎖住，其他方向接了也不出料；敲掉它才能改接別邊。
 --   放的人（分了組就是整組）擁有；挖控制箱拆掉整座，斗裡的料沒了。
 
 local S = rockmech.S
@@ -19,16 +19,42 @@ local STEP = 1
 
 local function tell(name, msg) if name then rockmech.notify(name, S("[Dump hopper]") .. " " .. msg) end end
 
--- 4×4 的範圍：控制箱 pos 在 (0, 0)，往 −1..+2 延伸；出料方向 (dx, dz)
+-- 4×4 的範圍：控制箱 pos 在 (0, 0)，往 −1..+2 延伸
 local function cells_of(pos)
 	local c = {}
 	for x = pos.x - 1, pos.x + 2 do for z = pos.z - 1, pos.z + 2 do c[#c + 1] = {x = x, z = z} end end
 	return c
 end
-local function outlet(pos, dx, dz)
-	local x = dx > 0 and pos.x + 3 or dx < 0 and pos.x - 2 or pos.x
-	local z = dz > 0 and pos.z + 3 or dz < 0 and pos.z - 2 or pos.z
-	return {x = x, y = pos.y, z = z}
+local function belt_dir(p)
+	local n = core.get_node(p)
+	if not n.name:find("^rockmech:belt_%d") then return nil end
+	return core.fourdir_to_dir(n.param2 % 4)
+end
+-- 四邊外面的格子，每格配上朝外的方向
+local function rim(pos)
+	local r = {}
+	for i = -1, 2 do
+		r[#r + 1] = {p = {x = pos.x - 2, y = pos.y, z = pos.z + i}, d = {x = -1, z = 0}}
+		r[#r + 1] = {p = {x = pos.x + 3, y = pos.y, z = pos.z + i}, d = {x = 1, z = 0}}
+		r[#r + 1] = {p = {x = pos.x + i, y = pos.y, z = pos.z - 2}, d = {x = 0, z = -1}}
+		r[#r + 1] = {p = {x = pos.x + i, y = pos.y, z = pos.z + 3}, d = {x = 0, z = 1}}
+	end
+	return r
+end
+-- 出料口：鎖住的那條還在就用它；沒有就找第一條接上（朝外走）的輸送帶鎖住
+local function outlet(pos, meta)
+	local cur = core.string_to_pos(meta:get_string("out"))
+	if cur then
+		if belt_dir(cur) then return cur end
+		meta:set_string("out", "")
+	end
+	for _, c in ipairs(rim(pos)) do
+		local d = belt_dir(c.p)
+		if d and d.x == c.d.x and d.z == c.d.z then
+			meta:set_string("out", core.pos_to_string(c.p))
+			return c.p
+		end
+	end
 end
 
 local function bin_of(meta) return core.deserialize(meta:get_string("bin")) or {} end
@@ -44,7 +70,6 @@ local function info(meta, bin)
 		.. S("Stock @1 / @2 m³", ("%.1f"):format(total(bin) / NLEV), tostring(CAP)))
 end
 
-local function is_belt(p) return core.get_node(p).name:find("^rockmech:belt_%d") ~= nil end
 
 local function step(pos)
 	local meta = core.get_meta(pos)
@@ -70,8 +95,8 @@ local function step(pos)
 	end
 	if inflow > 0 then rockmech.collapse.rubble_sound({x = pos.x + 0.5, y = top, z = pos.z + 0.5}, inflow) end
 	-- 2. 出料：出料口有輸送帶就放上去
-	local out = outlet(pos, meta:get_int("dx"), meta:get_int("dz"))
-	if is_belt(out) and rockmech.belt_put then
+	local out = outlet(pos, meta)
+	if out and rockmech.belt_put then
 		local best, bl
 		for base, v in pairs(bin) do if v.lv >= 1 and (not bl or v.lv > bl) then best, bl = base, v.lv end end
 		if best then
@@ -146,7 +171,7 @@ local function site_ok(pos)
 	return true
 end
 
-local function build(pos, dx, dz, owner)
+local function build(pos, owner)
 	local ps = core.pos_to_string(pos)
 	for _, c in ipairs(cells_of(pos)) do
 		if not (c.x == pos.x and c.z == pos.z) then core.set_node({x = c.x, y = pos.y, z = c.z}, {name = WALL}) end
@@ -157,8 +182,6 @@ local function build(pos, dx, dz, owner)
 	core.set_node(pos, {name = ITEM})
 	local meta = core.get_meta(pos)
 	meta:set_string("owner", owner)
-	meta:set_int("dx", dx)
-	meta:set_int("dz", dz)
 	core.get_node_timer(pos):start(STEP)
 	step(pos)
 end
@@ -193,9 +216,6 @@ core.register_node(ITEM, {
 		if pointed.type ~= "node" or not placer then return itemstack end
 		local name = placer:get_player_name()
 		local pos = vector.copy(pointed.above)
-		local look = placer:get_look_dir()
-		local dx, dz = 0, 0
-		if math.abs(look.x) > math.abs(look.z) then dx = look.x > 0 and 1 or -1 else dz = look.z > 0 and 1 or -1 end
 		if rockmech.clear_site then
 			local sc = {}
 			for _, c in ipairs(cells_of(pos)) do sc[#sc + 1] = {c.x, c.z} end
@@ -209,7 +229,7 @@ core.register_node(ITEM, {
 		for _, c in ipairs(cells_of(pos)) do sc[#sc + 1] = {c.x, c.z} end
 		local who = rockmech.cells_blocked and rockmech.cells_blocked(sc, pos.y - 1, pos.y + 2, placer)
 		if who then tell(name, S("There is @1 in the construction area: move it first", who)); return itemstack end
-		build(pos, dx, dz, rockmech.account_of and rockmech.account_of(name) or name)
+		build(pos, rockmech.account_of and rockmech.account_of(name) or name)
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack
 	end,
