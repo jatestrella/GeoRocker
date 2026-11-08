@@ -1072,7 +1072,7 @@ do
 			-- 後側：比駕駛艙矮的引擎室（兩側百葉）、排氣管
 			{id = "engine", pos = {x = 0, y = 0.0, z = -1.1}, size = {x = 2.0, y = 1.0, z = 0.8},
 				tex = {("[fill:16x16:%s"):format(def.color), "[fill:16x16:#2a2a2a", grille_s, grille_s,
-					("[fill:16x16:%s"):format(def.color), ("[fill:16x16:%s"):format(def.color)}},
+					("[fill:16x16:%s"):format(def.color), ("[fill:128x64:%s^rockmech_tgs_decal.png"):format(def.color)}},   -- 後面：TGS 標誌
 			{id = "stack", pos = {x = 0.6, y = 0.85, z = -1.2}, size = {x = 0.14, y = 0.7, z = 0.14}, tex = box_tex("#202020")},   -- 排氣管
 		},
 		boom_root = {x = 0.55, y = 0.3, z = 0.7},        -- 駕駛艙前方（駕駛的右手邊）
@@ -1111,7 +1111,8 @@ do
 		},
 		house = {
 			{id = "house", pos = {x = 0, y = -0.6, z = -0.8}, size = {x = 5.4, y = 2.2, z = 6.0}, tex = {y, "[fill:16x16:#2a2a2a", grille, grille, y, y}},
-			{id = "cw", pos = {x = 0, y = -0.9, z = -4.1}, size = {x = 5.0, y = 1.6, z = 0.8}, tex = box_tex("#b88a10")},   -- 配重
+			{id = "cw", pos = {x = 0, y = -0.9, z = -4.1}, size = {x = 5.0, y = 1.6, z = 0.8},
+				tex = (function() local t = box_tex("#b88a10"); t[6] = "[fill:192x64:#b88a10^rockmech_tgs_decal_wide.png"; return t end)()},   -- 配重；後面 TGS 標誌
 			{id = "cab", pos = {x = -1.6, y = 1.6, z = 1.4}, size = {x = 2.0, y = 2.2, z = 1.8}, tex = cab_tex(c, 9, true), alpha = true},
 			{id = "stack", pos = {x = 1.6, y = 1.0, z = -2.5}, size = {x = 0.3, y = 1.0, z = 0.3}, tex = box_tex("#202020")},   -- 排氣管
 		},
