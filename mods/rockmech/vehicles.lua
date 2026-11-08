@@ -387,8 +387,8 @@ local function spawn_parts(self, parts)
 		end
 		if o then
 			o:set_properties({visual_size = pt.size, textures = pt.tex})
-			-- 駕駛室：車窗半透明，看得到裡面的人
-			if pt.alpha then o:set_properties({use_texture_alpha = true, backface_culling = false}) end
+			-- 駕駛室：車窗半透明，看得到裡面的人。只畫外面那一面（背面不畫）：坐在駕駛室裡往外看不會被自己的車身擋住
+			if pt.alpha then o:set_properties({use_texture_alpha = true, backface_culling = true}) end
 			o:set_attach(self.object, "", {x = pt.pos.x * 10, y = pt.pos.y * 10, z = pt.pos.z * 10}, pt.rot or {x = 0, y = 0, z = 0})
 			if pt.id then self.parts[pt.id] = o end
 			self.part_list[#self.part_list + 1] = o

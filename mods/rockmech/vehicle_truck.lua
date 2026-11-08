@@ -232,7 +232,8 @@ do
 	}
 	for _, d in ipairs(truck.doors) do
 		body[#body + 1] = {id = d.id, pos = {x = d.hinge.x, y = d.hinge.y, z = d.hinge.z - d.w / 2}, size = {x = 0.05, y = 1.3, z = d.w},
-			alpha = true, tex = {door_tex, door_tex, door_tex, door_tex, door_tex, door_tex}}
+			-- 朝駕駛室裡面那一面透明（坐在裡面不會被門擋住視野）；六面順序：上、下、+X、−X、+Z、−Z
+			alpha = true, tex = {door_tex, door_tex, d.side < 0 and V.CLEAR or door_tex, d.side > 0 and V.CLEAR or door_tex, door_tex, door_tex}}
 	end
 	-- 前軸單輪、後兩軸雙輪（較寬），外緣在車斗外側
 	for _, w in ipairs({{x = -1.15, z = 0.5, wd = 0.35}, {x = 1.15, z = 0.5, wd = 0.35},
