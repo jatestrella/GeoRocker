@@ -230,11 +230,39 @@ local function excavator(kind, P)
 	local HAMMER_REST = {x = BUCKET_REST.x, y = BUCKET_REST.y - P.bucket.y / 2 + HAMMER.y + CHISEL.y, z = BUCKET_REST.z}
 	local function rest(self) return self.tool == "breaker" and HAMMER_REST or BUCKET_REST end
 	parts[#parts + 1] = {id = "boom", pos = BUCKET_REST, size = {x = P.boom_w, y = BOOM_LEN, z = P.boom_w}, tex = box_tex(def.color)}
-	parts[#parts + 1] = {id = "stick", pos = BUCKET_REST, size = {x = P.stick_w, y = STICK_LEN, z = P.stick_w}, tex = box_tex(def.color)}
+	-- 小臂：跟大臂的接點在小臂上端約 1/5 處（接點以上 STICK_TAIL 是給小臂油壓缸推的尾巴），接點到鏟斗仍是 STICK_LEN
+	local STICK_TAIL = STICK_LEN / 4
+	parts[#parts + 1] = {id = "stick", pos = BUCKET_REST, size = {x = P.stick_w, y = STICK_LEN + STICK_TAIL, z = P.stick_w}, tex = box_tex(def.color)}
 	-- 鏟斗裡的碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
 	parts[#parts + 1] = {id = "fill", pos = BUCKET_REST, size = {x = P.fill_w, y = 0.2, z = P.fill_l}, tex = box_tex("#6a6058")}
 	def.parts = parts
 
+	-- 油壓缸（大臂缸、小臂缸、鏟斗缸）：缸筒從一端、活塞桿從另一端，長度都固定，各自朝對方伸過去，
+	-- 兩段重疊多少跟著手臂姿勢變，看起來就是在伸縮。長度在下面掃過整個工作範圍後決定
+	local CYL_KEYS = {"boom", "arm", "bkt"}
+	local CYL = {}
+	local function unit(v) local l = vector.length(v); return l > 1e-6 and vector.divide(v, l) or nil end
+	local function perp(dir, ref)         -- ref 垂直於 dir 的分量（單位向量）
+		return unit(vector.subtract(ref, vector.multiply(dir, vector.dot(ref, dir))))
+	end
+	local UP = {x = 0, y = 1, z = 0}
+	-- 三支缸的兩端（車身座標）；base 是大臂缸在上部結構上的固定點
+	local function cyl_points(vr, ve, vb, base)
+		local bd = unit(vector.subtract(ve, vr)) or UP
+		local nb = perp(bd, UP) or {x = 0, y = 0, z = 1}                  -- 大臂上方
+		local u = unit(vector.subtract(vb, ve)) or {x = 0, y = -1, z = 0}
+		local out = perp(u, vector.subtract(ve, vr))                       -- 小臂外側（離大臂那邊）
+		out = out and vector.multiply(out, 1) or nb
+		local tail = vector.subtract(ve, vector.multiply(u, STICK_TAIL * 0.9))
+		local boom_mid = vector.add(vr, vector.multiply(bd, BOOM_LEN * 0.45))
+		return {
+			boom = {base, vector.subtract(boom_mid, vector.multiply(nb, P.boom_w * 0.6))},
+			arm = {vector.add(vector.add(vr, vector.multiply(bd, BOOM_LEN * 0.4)), vector.multiply(nb, P.boom_w * 0.9)), tail},
+			bkt = {vector.add(vector.add(ve, vector.multiply(u, STICK_LEN * 0.1)), vector.multiply(out, P.stick_w * 0.8)),
+				vector.add(vector.add(ve, vector.multiply(u, STICK_LEN * 0.85)), vector.multiply(out, P.stick_w * 0.8))},
+		}
+	end
+	local CYL_BASE = {x = BOOM_ROOT.x, y = BOOM_ROOT.y - BOOM_LEN * 0.2, z = BOOM_ROOT.z + BOOM_LEN * 0.05}
 	-- 挖斗位置 b（上部結構座標）→ 實際搆得到的挖斗位置、手肘位置。
 	-- 手臂兩節長度固定：手肘由餘弦定理求出（手肘朝上），長方體沿各節方向旋轉（seg_attach）
 	local function arm_solve(b)
@@ -254,6 +282,30 @@ local function excavator(kind, P)
 		local elbow = {x = BOOM_ROOT.x + BOOM_LEN * math.cos(ang) * hx, y = BOOM_ROOT.y + BOOM_LEN * math.sin(ang),
 			z = BOOM_ROOT.z + BOOM_LEN * math.cos(ang) * hz}
 		return b, elbow
+	end
+
+	-- 掃過工作範圍（上部結構座標、不迴轉）：每支缸兩端距離的最長、最短 → 缸筒、活塞桿長度
+	do
+		local lo, hi = {}, {}
+		for f = 0, 20 do
+			for h = -20, 20 do
+				local b = {x = BOOM_ROOT.x, y = BOOM_ROOT.y + h / 20 * ARM_REACH, z = BOOM_ROOT.z + f / 20 * ARM_REACH}
+				local bb, el = arm_solve(b)
+				local pts = cyl_points(BOOM_ROOT, el, bb, CYL_BASE)
+				for _, k in ipairs(CYL_KEYS) do
+					local d = vector.distance(pts[k][1], pts[k][2])
+					lo[k], hi[k] = math.min(lo[k] or d, d), math.max(hi[k] or d, d)
+				end
+			end
+		end
+		for _, k in ipairs(CYL_KEYS) do
+			-- 最長時兩段剛好接上；最短時缸筒不超過另一端太多
+			local L = math.max(hi[k] / 2 + 0.05, math.min(lo[k], hi[k] * 0.6))
+			local w = (k == "bkt" and P.stick_w or P.boom_w) * 0.42
+			CYL[k] = L
+			parts[#parts + 1] = {id = "cb_" .. k, pos = BUCKET_REST, size = {x = w, y = L, z = w}, tex = box_tex(def.color)}
+			parts[#parts + 1] = {id = "cr_" .. k, pos = BUCKET_REST, size = {x = w * 0.55, y = L, z = w * 0.55}, tex = box_tex("#c8ccd0")}
+		end
 	end
 
 	-- 鏟斗裡的碎石（parts.fill）：跟著載量改高度與貼圖，擺在挖斗上面
@@ -307,7 +359,20 @@ local function excavator(kind, P)
 		place_fill(self, vb, psi)
 		self.bucket_at = vb
 		seg_attach(self, ps.boom, vr, ve)
-		seg_attach(self, ps.stick, ve, vb)
+		local su = vector.normalize(vector.subtract(vb, ve))
+		seg_attach(self, ps.stick, vector.subtract(ve, vector.multiply(su, STICK_TAIL)), vb)
+		local pts = cyl_points(vr, ve, vb, h2v(CYL_BASE, psi))
+		for _, k in ipairs(CYL_KEYS) do
+			local a, c = pts[k][1], pts[k][2]
+			local dir = unit(vector.subtract(c, a))
+			if dir then
+				local L = CYL[k]
+				-- 兩端比缸筒還近：缸筒往後退（縮進車身／手臂裡），不刺穿另一端
+				local a0 = vector.distance(a, c) < L and vector.subtract(c, vector.multiply(dir, L)) or a
+				seg_attach(self, ps["cb_" .. k], a0, vector.add(a0, vector.multiply(dir, L)))
+				seg_attach(self, ps["cr_" .. k], vector.subtract(c, vector.multiply(dir, L)), c)
+			end
+		end
 	end
 
 	-- 目標（車身座標）→ 上部結構要轉的角度、目標在上部結構座標、離動臂根部的距離
