@@ -2,7 +2,7 @@
 -- 受料斗（dump hopper）：裝車料斗反過來用。4×4、高 2 m 的鋼斗，頂上是格柵。
 --   進料：卡車、怪手在格柵 SNAP m 內倒料，自動對準倒在格柵上（vehicles.lua 的 V.dump_to_ground 問 rockmech.dump_hopper_cells），
 --         格柵上的碎石每一步吃進斗裡，斗滿了就堆在格柵上等。
---   出料：四邊外面任何一格（跟斗底同高或低一格）接一條輸送帶就是出料口（往外、往旁邊走都可以，往斗裡走的不算），
+--   出料：四邊外面任何一格（斗身旁邊或低一格）接一條輸送帶就是出料口（往外、往旁邊走都可以，往斗裡走的不算），
 --         斗裡的料照輸送帶的運量放上去
 --         （先放最多的那一種，礦石碎石保留品位）。第一條接上的鎖住，其他方向接了也不出料；敲掉它才能改接別邊。
 --   放的人（分了組就是整組）擁有；挖控制箱拆掉整座，斗裡的料沒了。
@@ -31,10 +31,10 @@ local function belt_dir(p)
 	if not n.name:find("^rockmech:belt_%d") then return nil end
 	return core.fourdir_to_dir(n.param2 % 4)
 end
--- 四邊外面的格子（跟斗底同高、低一格），每格配上朝外的方向
+-- 四邊外面的格子（斗身兩層、低一格），每格配上朝外的方向
 local function rim(pos)
 	local r = {}
-	for _, y in ipairs({pos.y, pos.y - 1}) do
+	for _, y in ipairs({pos.y, pos.y + 1, pos.y - 1}) do
 		for i = -1, 2 do
 			r[#r + 1] = {p = {x = pos.x - 2, y = y, z = pos.z + i}, d = {x = -1, z = 0}}
 			r[#r + 1] = {p = {x = pos.x + 3, y = y, z = pos.z + i}, d = {x = 1, z = 0}}
