@@ -318,7 +318,6 @@ local function saw_form(player)
 		out[#out + 1] = ("button[1.5,%g;5,0.8;r_%d;%s]"):format(1.7 + (i - 1) * 1.0, i,
 			core.formspec_escape(S("1 log → @1 ×@2", r.label, tostring(r.n))))
 	end
-	out[#out + 1] = "button_exit[7,4.7;2.5,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"
 	return table.concat(out)
 end
 local function bench_form(player)
@@ -333,7 +332,6 @@ local function bench_form(player)
 		out[#out + 1] = ("button[%g,%g;5,0.8;r_%d;%s]"):format(x + 1, y, i,
 			core.formspec_escape(S("@1 planks → @2 ×@3", tostring(r.need), r.label, tostring(r.n))))
 	end
-	out[#out + 1] = "button_exit[10,7.1;2.5,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"
 	return table.concat(out)
 end
 

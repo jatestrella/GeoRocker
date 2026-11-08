@@ -568,7 +568,6 @@ local function formspec(pos, viewer)
 			("%.0f"):format(meta:get_float("total_f")), ("%.0f"):format(meta:get_float("total_m"))))),
 		("label[0.5,4.2;%s]"):format(core.formspec_escape(S("Funds (@1): $@2", rockmech.account_label(meta:get_string("owner")),
 			("%.0f"):format(rockmech.money(meta:get_string("owner")))))),
-		"button_exit[3,4.8;3,0.8;ok;" .. core.formspec_escape(S("Close")) .. "]",
 		(function()
 			-- 剝採比：要有採礦規劃能力（knowledge.lua）
 			if viewer and rockmech.can_see and not rockmech.can_see(viewer, "planning") then

@@ -85,7 +85,6 @@ local function op_form(self)
 		("dropdown[0.5,2.2;3,0.8;cutoff;%s;%d;false]"):format(table.concat(items, ","), sel),
 		("button[0.5,3.4;3.4,0.8;off;%s]"):format(E(S("Step down (so a player can drive)"))),
 		("button[4.05,3.4;3.4,0.8;rest;%s]"):format(E(S("Rest at base"))),
-		("button_exit[7.6,3.4;3.4,0.8;close;%s]"):format(E(S("Close"))),
 		paid and ("label[0.5,4.6;%s]label[0.5,5.1;%s]"):format(
 			E(S("Daily wage $@1 (one trading day = @2 min), deducted pro rata while team members are online",
 				("%g"):format(rockmech.operator_wage()), tostring(math.floor(rockmech.cfg.price_period / 60 + 0.5)))),

@@ -264,9 +264,7 @@ local function form(name, who)
 		out[#out + 1] = fs
 		y = y + 0.4 + h
 	end
-	local by = math.max(y + 0.4, 8.6)
-	out[#out + 1] = ("button_exit[6,%g;3,0.8;close;%s]"):format(by, E(S("Close")))
-	out[1] = ("formspec_version[6]size[15,%g]"):format(by + 1.3)     -- 高度跟著內容
+	out[1] = ("formspec_version[6]size[15,%g]"):format(y + 0.6)     -- 高度跟著內容；沒有關閉鈕，點畫面外就關
 	return table.concat(out)
 end
 rockmech.research_form_test = form      -- 測試用

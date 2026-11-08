@@ -895,7 +895,6 @@ local function formspec(self, name)
 		"button[0.5,5.9;3.9,0.8;go;" .. FE(S("Leave now (don't wait to be full)")) .. "]",
 		"button[4.6,5.9;3.9,0.8;reset;" .. FE(S("Reset dump area")) .. "]",
 		"button[0.5,6.8;3.9,0.8;line;" .. FE(S("Show/hide route")) .. "]",
-		"button_exit[4.6,6.8;3.9,0.8;ok;" .. FE(S("Close")) .. "]",
 		("button[0.5,7.7;8,0.8;bind;%s]"):format(FE(a.bound and S("Unbind excavator")
 			or S("Bind the nearest excavator (the loading point follows it)"))),
 		"button[0.5,8.6;2.6,0.8;save;" .. FE(S("Save route")) .. "]",

@@ -195,7 +195,7 @@ local function formspec(pos)
 	local parts = info(meta)
 	local stopped = meta:get_int("stopped") == 1
 	return table.concat({
-		"formspec_version[6]size[9,5.4]",
+		"formspec_version[6]size[9,4.5]",
 		("label[0.5,0.6;%s]"):format(core.formspec_escape(stopped and S("Ore plant (coal preparation plant)   Stopped")
 			or S("Ore plant (coal preparation plant)   Running"))),
 		("button[6,0.2;2.6,0.8;toggle;%s]"):format(core.formspec_escape(stopped and S("Start") or S("Stop"))),
@@ -206,7 +206,6 @@ local function formspec(pos)
 		("label[0.5,2.5;%s]"):format(core.formspec_escape(parts[1])),
 		("label[0.5,3.1;%s]"):format(core.formspec_escape(parts[2])),
 		("label[0.5,3.7;%s]"):format(core.formspec_escape(S("When a truck or haul truck stands still within @1 m of a loading boom, the boom swings over and loads it", ("%g"):format(cfg.plant_reach)))),
-		"button_exit[3,4.3;3,0.8;ok;" .. core.formspec_escape(S("Close")) .. "]",
 	})
 end
 

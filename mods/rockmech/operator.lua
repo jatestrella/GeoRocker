@@ -136,7 +136,6 @@ local function npc_form(ex)
 		("label[0.5,1.2;%s]"):format(E(S("Wages are still paid while waiting"))),
 		("button[0.5,2;3.2,0.8;up;%s]"):format(E(S("Get in and work"))),
 		("button[3.9,2;3.2,0.8;rest;%s]"):format(E(S("Rest at base"))),
-		("button_exit[7.3,2;3.2,0.8;close;%s]"):format(E(S("Close"))),
 	})
 end
 local npc_editing = {}
@@ -303,7 +302,6 @@ local function rest_form(name, acc)
 	else
 		out[#out + 1] = ("label[0.5,2.3;%s]"):format(E(S("This is another team's camp")))
 	end
-	out[#out + 1] = ("button_exit[7.3,2;3.2,0.8;close;%s]"):format(E(S("Close")))
 	return table.concat(out)
 end
 

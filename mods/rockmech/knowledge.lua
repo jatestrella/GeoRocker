@@ -996,7 +996,7 @@ local function prof_form(name)
 	local player = core.get_player_by_name(name)
 	local TW = 3.4
 	local rows = math.ceil(#ABILITIES / 4)
-	local out = {("formspec_version[6]size[14.4,%g]"):format(1.8 + rows * 3.4 + 1.4),
+	local out = {("formspec_version[6]size[14.4,%g]"):format(1.8 + rows * 3.4 + 0.4),
 		("label[0.5,0.6;%s]"):format(E(S("University professor: training exams")))}
 	local y, col = 1.3, 0
 	for _, a in ipairs(ABILITIES) do
@@ -1014,7 +1014,6 @@ local function prof_form(name)
 		col = col + 1
 		if col >= 4 then col = 0; y = y + 3.4 end
 	end
-	out[#out + 1] = ("button_exit[5.7,%g;3,0.8;close;%s]"):format(1.3 + rows * 3.4 + 0.2, E(S("Close")))
 	return table.concat(out)
 end
 core.register_on_player_receive_fields(function(player, formname, fields)

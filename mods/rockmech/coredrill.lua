@@ -128,7 +128,7 @@ local function log_form(name, bh, rm, gr)
 	if rm == nil then rm = see(name, "rockmass") end
 	if gr == nil then gr = see(name, "grade") end
 	local title = (bh.name and bh.name ~= "") and S("@1 (BH-@2)", label_of(bh), tostring(bh.n)) or label_of(bh)
-	local out = {"formspec_version[6]size[15,12.4]",
+	local out = {"formspec_version[6]size[15,11.4]",
 		("label[0.5,0.6;%s]"):format(core.formspec_escape(bh.stop
 			and S("@1   Collar (@2, @3, @4)   Depth @5 m (@6)", title, tostring(bh.pos.x), tostring(bh.pos.y), tostring(bh.pos.z), tostring(bh.depth), bh.stop)
 			or S("@1   Collar (@2, @3, @4)   Depth @5 m", title, tostring(bh.pos.x), tostring(bh.pos.y), tostring(bh.pos.z), tostring(bh.depth)))),
@@ -168,7 +168,6 @@ local function log_form(name, bh, rm, gr)
 		out[#out + 1] = ("scrollbar[14.4,%g;0.4,%g;vertical;bh_scroll;0]"):format(TOP, VIEW)
 		out[#out + 1] = ("label[0.5,%g;%s]"):format(TOP + VIEW + 0.4, core.formspec_escape(S("Use the mouse wheel or the scrollbar on the right to scroll down")))
 	end
-	out[#out + 1] = ("button_exit[6,%g;3,0.8;ok;%s]"):format(TOP + VIEW + 0.3, core.formspec_escape(S("Close")))
 	return table.concat(out)
 end
 
@@ -240,7 +239,6 @@ function rockmech.borehole_name_form(player, pos)
 	else
 		out[#out + 1] = "label[0.5,2.4;" .. core.formspec_escape(S("Another team's borehole; you cannot rename it")) .. "]"
 	end
-	out[#out + 1] = "button_exit[5.5,3.6;4,0.8;close;" .. core.formspec_escape(S("Close")) .. "]"
 	core.show_formspec(name, NAME_FORM, table.concat(out))
 end
 core.register_on_player_receive_fields(function(player, formname, fields)
@@ -670,7 +668,6 @@ local function corebox_form(name, bh, acc, pos)
 		out[#out + 1] = ("scrollbar[19.75,%g;0.45,%g;vertical;cb_scroll;%d]"):format(TOP - 0.1, VIEW + 0.2, st.scroll or 0)
 	end
 	if st.last then out[#out + 1] = ("label[0.5,%g;%s]"):format(bottom + 0.1, esc(st.last)) end
-	out[#out + 1] = ("button_exit[16.7,%g;3,0.8;close;%s]"):format(bottom, esc(S("Close")))
 	return table.concat(out)
 end
 

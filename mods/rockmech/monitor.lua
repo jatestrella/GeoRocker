@@ -114,7 +114,6 @@ local function form(pos)
 		out[#out + 1] = "label[0.4,7.2;" .. core.formspec_escape(S("mm (vertical axis) / one reading per stress solve (horizontal axis). Be careful if readings keep growing; after support is installed they should level off")) .. "]"
 	end
 	out[#out + 1] = "button[0.4,7.6;3,0.6;reset;" .. core.formspec_escape(S("Reset to zero")) .. "]"
-	out[#out + 1] = "button_exit[8.6,7.6;3,0.6;close;" .. core.formspec_escape(S("Close")) .. "]"
 	return table.concat(out)
 end
 
