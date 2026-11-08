@@ -1,8 +1,9 @@
 -- 開始畫面：先是標題畫面（背景插圖、標題、開始遊戲／加入連線／操作說明／設定／離開），點進去才是各頁。
 -- 進了世界就直接玩，遊戲裡不再跳標題畫面（mm_title 只剩圖）。打包時（make_package.ps1）放到 builtin/mainmenu/init.lua，取代 Luanti 的主選單（沒有公開伺服器清單）。
---   選地圖：standalone/maps/<id>/ 一張地圖一個資料夾：map.conf（title、description、mode = solo|class、order）、
+--   開始遊戲：左邊開新遊戲（隨機地圖、自範本建立地圖、自訂地圖），右邊既有存檔（繼續、刪除）；存檔可以有很多個、自己取名。
+--     地圖範本：standalone/maps/<id>/ 一個資料夾：map.conf（title、description、mode = solo|class、order）、
 --     rockmech.conf（世界設定，建新遊戲時複製進世界資料夾）、其他檔案（例如 students.csv）也一起複製。
---     每張地圖一個世界（worlds/map_<id>）：「繼續遊戲」進去、「新遊戲」刪掉重建。
+--     世界資料夾 worlds/gr_<日期時間>，名稱和來源記在裡面的 georocker.conf。
 --     solo：單機（世界設定 rockmech_solo = true，沒有老師功能）。
 --     random = true：每次新遊戲用新的種子，rockmech.conf 只放 rockmech_solo，地質由地圖產生器擲（mods/rockmech/worldgen.lua）。
 --     custom = true：地圖頁多一組地質選項（地層、地形、0–100 的滑桿、種子），寫成 rockmech_gen_* 給地圖產生器。
@@ -73,11 +74,40 @@ local function maps()
 	return out
 end
 
-local function world_name(m) return "map_" .. m.id end
-local function find_world(m)
+-- 存檔：本遊戲的世界。世界資料夾的 georocker.conf 記它的名稱（title，資料夾名是英數字）、
+-- 從哪張地圖來（map）、mode（solo|class）、kind（隨機地圖、自訂地圖、範本名稱）。
+-- 舊版一張地圖一個世界（map_<id>）也列出來
+local function map_by_id(id)
+	for _, m in ipairs(maps()) do if m.id == id then return m end end
+end
+local function saves()
+	local out = {}
 	for i, w in ipairs(core.get_worlds()) do
-		if w.name == world_name(m) and w.gameid == GAME then return i, w end
+		if w.gameid == GAME then
+			local c = Settings(w.path .. DS .. "georocker.conf")
+			local sv = {index = i, folder = w.name, path = w.path, title = c:get("title"), mode = c:get("mode"), kind = c:get("kind") or ""}
+			if not sv.mode then
+				local m = map_by_id(w.name:match("^map_(.+)$") or "")
+				sv.mode, sv.kind = m and m.mode or "solo", m and m.title or ""
+			end
+			sv.title = sv.title or w.name
+			out[#out + 1] = sv
+		end
 	end
+	table.sort(out, function(a, b) return a.title:lower() < b.title:lower() end)
+	return out
+end
+local function title_used(t)
+	for _, sv in ipairs(saves()) do if sv.title == t then return true end end
+	return false
+end
+local function unique_title(base)
+	local t, k = base, 1
+	while title_used(t) do k = k + 1; t = base .. " " .. k end
+	return t
+end
+local function world_index(folder)
+	for i, w in ipairs(core.get_worlds()) do if w.name == folder and w.gameid == GAME then return i, w end end
 end
 
 local function copy_file(src, dst)
@@ -92,10 +122,12 @@ local function copy_file(src, dst)
 	return true
 end
 
-local function new_world(m)
-	local i = find_world(m)
-	if i then core.delete_world(i) end
-	-- 隨機地圖（map.conf random = true）：每次新遊戲換一個種子，地圖產生器（worldgen.lua）依種子擲地質
+-- 從地圖 m 建立一個新存檔，名稱 title（空白就自動取 kind 加編號）。回傳 存檔 或 nil, 錯誤訊息
+local function create_save(m, title, kind)
+	title = (title or ""):match("^%s*(.-)%s*$")
+	if title == "" then title = unique_title(kind) end
+	if title_used(title) then return nil, "已經有叫「" .. title .. "」的存檔，換個名字" end
+	-- 隨機地圖、自訂地圖：每次新的（或指定的）種子，地圖產生器（worldgen.lua）依種子擲地質
 	local mg = MAPGEN
 	if m.random or m.custom then
 		mg = {}
@@ -104,32 +136,40 @@ local function new_world(m)
 		local sd = m.custom and gen.seed:match("^%s*(.-)%s*$") or ""
 		mg.fixed_map_seed = sd ~= "" and sd or tostring(math.random(1, 2000000000))
 	end
-	local err = core.create_world(world_name(m), GAME, mg)
-	if err then return err end
-	local _, w = find_world(m)
-	if not w then return "建立世界失敗" end
+	local folder = "gr_" .. os.date("%Y%m%d_%H%M%S")
+	while world_index(folder) do folder = folder .. "x" end
+	local err = core.create_world(folder, GAME, mg)
+	if err then return nil, err end
+	local _, w = world_index(folder)
+	if not w then return nil, "建立世界失敗" end
 	-- 地圖資料夾裡除了 map.conf 都複製進世界（rockmech.conf、students.csv…）
 	for _, f in ipairs(list_dir(m.dir, false)) do
-		if f ~= "map.conf" and not copy_file(m.dir .. DS .. f, w.path .. DS .. f) then return "複製 " .. f .. " 失敗" end
+		if f ~= "map.conf" and not copy_file(m.dir .. DS .. f, w.path .. DS .. f) then return nil, "複製 " .. f .. " 失敗" end
 	end
 	if m.custom then
 		local c = Settings(w.path .. DS .. "rockmech.conf")
 		c:set("rockmech_gen_strata", GEN_STRATA[gen.strata][1])
 		c:set("rockmech_gen_terrain", GEN_TERRAIN[gen.terrain][1])
 		for _, sl in ipairs(GEN_SLIDERS) do c:set("rockmech_gen_" .. sl[1], tostring(gen[sl[1]])) end
-		if not c:write() then return "寫入地質選項失敗" end
+		if not c:write() then return nil, "寫入地質選項失敗" end
 	end
-	return nil
+	local c = Settings(w.path .. DS .. "georocker.conf")
+	c:set("title", title)
+	c:set("map", m.id)
+	c:set("mode", m.mode)
+	c:set("kind", kind)
+	c:write()
+	for _, sv in ipairs(saves()) do if sv.folder == folder then return sv end end
+	return nil, "建立世界失敗"
 end
 
-local function start_world(m, fields)
-	local i = find_world(m)
-	if not i then state.msg = "這張地圖還沒有存檔，請按「新遊戲」"; return end
+local function start_world(sv, fields)
+	if not sv then state.msg = "請先選一個存檔"; return end
 	core.settings:set("creative_mode", "false")
 	core.settings:set("enable_damage", "true")
-	gamedata.selected_world = i
+	gamedata.selected_world = sv.index
 	gamedata.address = ""
-	if m.mode == "class" then
+	if sv.mode == "class" then
 		-- 開伺服器：名稱就是管理員（老師）
 		local name = (fields and fields.host_name or core.settings:get("name") or ""):match("^%s*(.-)%s*$")
 		if not name:match("^[%w_%-]+$") or #name > 20 then state.msg = "名稱只能用英文字母、數字、- 和 _（最多 20 字）"; return end
@@ -151,6 +191,19 @@ local function start_world(m, fields)
 		gamedata.singleplayer = true
 	end
 	core.start()
+end
+local function host_fields(fs, y)
+	fs[#fs + 1] = ("field[0.5,%g;4.2,0.8;host_name;%s;%s]"):format(y + 0.4, F("你的名稱（老師帳號）"), F(core.settings:get("name") or ""))
+	fs[#fs + 1] = ("pwdfield[4.9,%g;4.2,0.8;host_pass;%s]"):format(y + 0.4, F("密碼（可以空白）"))
+	fs[#fs + 1] = ("field[9.3,%g;4.2,0.8;host_port;%s;%s]"):format(y + 0.4, F("埠（學生連線用）"), F(core.settings:get("port") or "30000"))
+	return y + 1.6
+end
+local function random_map() for _, m in ipairs(maps()) do if m.random then return m end end end
+local function custom_map() for _, m in ipairs(maps()) do if m.custom then return m end end end
+local function templates()
+	local out = {}
+	for _, m in ipairs(maps()) do if not (m.random or m.custom) then out[#out + 1] = m end end
+	return out
 end
 
 -- 記住密碼：明碼存在這台電腦的 minetest.conf（standalone_pass_<位址>_<帳號>），勾選框 standalone_remember
@@ -246,70 +299,90 @@ local function formspec()
 		fs[#fs + 1] = ("button[7.1,%g;5,0.9;back;%s]"):format(TH - 1.35, F("返回"))
 		return table.concat(fs)
 	end
-	local list = maps()
-	local cm = state.page == "map" and list[state.map] and list[state.map].custom
+	local cm = state.page == "new_custom"
 	local PH = cm and 15 or 10.5
 	local fs = {("formspec_version[6]size[14,%g]bgcolor[#00000000;true]"):format(PH), ("box[0,0;14,%g;#000000b0]"):format(PH)}
 	header(fs)
 	if state.page == "main" then
-		fs[#fs + 1] = "label[0.5,2.1;" .. F("選地圖") .. "]"
-		local y = 2.4
-		for i, m in ipairs(list) do
-			local has = find_world(m) ~= nil
-			fs[#fs + 1] = ("button[0.5,%g;6,0.9;map_%d;%s]"):format(y, i, F(m.title))
-			fs[#fs + 1] = ("textarea[6.8,%g;6.7,1.1;;;%s]"):format(y - 0.05, F(m.description .. (has and "　（有存檔）" or "")))
-			y = y + 1.25
-		end
-		y = math.max(y + 0.2, 5.4)
-		fs[#fs + 1] = ("button[4.9,%g;4.2,0.9;back;%s]"):format(y, F("返回"))
-	elseif state.page == "map" and list[state.map] then
-		local m = list[state.map]
-		local has = find_world(m) ~= nil
-		fs[#fs + 1] = ("label[0.5,2.1;%s]"):format(F(m.title))
-		fs[#fs + 1] = ("textarea[0.5,2.4;13,1.2;;;%s]"):format(F(m.description))
-		local y = 3.8
-		if m.custom then
-			-- 地質選項
-			local function dd(x, name, label, opts, idx)
-				local t = {}
-				for _, o in ipairs(opts) do t[#t + 1] = F(o[2]) end
-				fs[#fs + 1] = ("label[%g,%g;%s]"):format(x, y, F(label))
-				fs[#fs + 1] = ("dropdown[%g,%g;4.2,0.7;%s;%s;%d;true]"):format(x + 2, y - 0.35, name, table.concat(t, ","), idx)
+		-- 左邊：開新遊戲的三種方式；右邊：既有存檔
+		fs[#fs + 1] = "label[0.5,2.1;" .. F("開新遊戲") .. "]"
+		fs[#fs + 1] = "button[0.5,2.5;5,0.9;go_random;" .. F("隨機地圖") .. "]"
+		fs[#fs + 1] = "button[0.5,3.6;5,0.9;go_template;" .. F("自範本建立地圖") .. "]"
+		fs[#fs + 1] = "button[0.5,4.7;5,0.9;go_custom;" .. F("自訂地圖") .. "]"
+		fs[#fs + 1] = "button[0.5,6.4;5,0.9;back;" .. F("返回") .. "]"
+		local list = saves()
+		fs[#fs + 1] = "label[6.2,2.1;" .. F("既有存檔") .. "]"
+		local items = {}
+		for _, sv in ipairs(list) do items[#items + 1] = F(("%s　（%s）"):format(sv.title, sv.kind)) end
+		if #items == 0 then items[1] = F("（還沒有存檔）") end
+		local sel = state.sel and list[state.sel] and state.sel or 0
+		fs[#fs + 1] = ("textlist[6.2,2.5;7.3,%g;saves;%s;%d;false]"):format(list[sel] and list[sel].mode == "class" and 2.6 or 4.2, table.concat(items, ","), sel)
+		local sv = list[sel]
+		if sv then
+			local y = 7.0
+			if sv.mode == "class" then
+				fs[#fs + 1] = ("field[6.2,5.6;3.6,0.8;host_name;%s;%s]"):format(F("你的名稱（老師）"), F(core.settings:get("name") or ""))
+				fs[#fs + 1] = ("pwdfield[9.9,5.6;3.6,0.8;host_pass;%s]"):format(F("密碼（可以空白）"))
+				fs[#fs + 1] = ("field[6.2,6.8;3.6,0.8;host_port;%s;%s]"):format(F("埠"), F(core.settings:get("port") or "30000"))
+				fs[#fs + 1] = ("button[9.9,6.8;3.6,0.8;open_dir;%s]"):format(F("打開存檔資料夾"))
+				y = 7.8
 			end
-			dd(0.5, "g_strata", "地層", GEN_STRATA, gen.strata)
-			dd(7.1, "g_terrain", "地形", GEN_TERRAIN, gen.terrain)
-			y = y + 0.9
-			fs[#fs + 1] = "scrollbaroptions[min=0;max=100;smallstep=1;largestep=10]"
-			for _, sl in ipairs(GEN_SLIDERS) do
-				fs[#fs + 1] = ("label[0.5,%g;%s]"):format(y, F(sl[2]))
-				fs[#fs + 1] = ("scrollbar[3.4,%g;7.2,0.45;horizontal;g_%s;%d]"):format(y - 0.22, sl[1], gen[sl[1]])
-				fs[#fs + 1] = ("label[10.9,%g;%s]"):format(y, F(("%d　%s"):format(gen[sl[1]], sl[3](gen[sl[1]]))))
-				y = y + 0.7
+			fs[#fs + 1] = ("button[6.2,%g;3.6,0.9;continue;%s]"):format(y, F(sv.mode == "class" and "開伺服器上課" or "繼續遊戲"))
+			fs[#fs + 1] = ("button[9.9,%g;3.6,0.9;delete;%s]"):format(y, F(state.confirm and "確定刪除" or "刪除"))
+			if state.confirm then
+				fs[#fs + 1] = ("label[6.2,%g;%s]"):format(y + 1.2, F("「" .. sv.title .. "」會永久刪掉，再按一次確定"))
 			end
-			fs[#fs + 1] = ("field[0.5,%g;6.4,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子（空白＝隨機；同一個種子同一套地質）"), F(gen.seed))
-			fs[#fs + 1] = "field_close_on_enter[g_seed;false]"
-			fs[#fs + 1] = ("button[7.1,%g;6.4,0.8;g_random;%s]"):format(y + 0.4, F("全部隨機"))
-			y = y + 1.6
 		end
-		if m.mode == "class" then
-			fs[#fs + 1] = ("field[0.5,%g;4.2,0.8;host_name;%s;%s]"):format(y + 0.4, F("你的名稱（老師帳號）"), F(core.settings:get("name") or ""))
-			fs[#fs + 1] = ("pwdfield[4.9,%g;4.2,0.8;host_pass;%s]"):format(y + 0.4, F("密碼（可以空白）"))
-			fs[#fs + 1] = ("field[9.3,%g;4.2,0.8;host_port;%s;%s]"):format(y + 0.4, F("埠（學生連線用）"), F(core.settings:get("port") or "30000"))
-			y = y + 1.6
+	elseif state.page == "new_random" or state.page == "new_template" or state.page == "new_custom" then
+		local m
+		if state.page == "new_random" then m = random_map()
+		elseif state.page == "new_custom" then m = custom_map()
+		else m = templates()[state.tpl or 0] end
+		local y
+		if state.page == "new_template" and not m then
+			-- 範本清單
+			fs[#fs + 1] = "label[0.5,2.1;" .. F("自範本建立地圖：選一個範本") .. "]"
+			y = 2.4
+			for i, t in ipairs(templates()) do
+				fs[#fs + 1] = ("button[0.5,%g;5,0.9;tpl_%d;%s]"):format(y, i, F(t.title))
+				fs[#fs + 1] = ("textarea[5.8,%g;7.7,1.1;;;%s]"):format(y - 0.05, F(t.description))
+				y = y + 1.25
+			end
+			fs[#fs + 1] = ("button[0.5,%g;5,0.9;back_main;%s]"):format(math.max(y + 0.2, 6.4), F("返回"))
+		elseif m then
+			fs[#fs + 1] = ("label[0.5,2.1;%s]"):format(F(state.page == "new_random" and "隨機地圖" or state.page == "new_custom" and "自訂地圖" or m.title))
+			fs[#fs + 1] = ("textarea[0.5,2.4;13,1.2;;;%s]"):format(F(m.description))
+			y = 3.8
+			if m.custom then
+				-- 地質選項
+				local function dd(x, name, label, opts, idx)
+					local t = {}
+					for _, o in ipairs(opts) do t[#t + 1] = F(o[2]) end
+					fs[#fs + 1] = ("label[%g,%g;%s]"):format(x, y, F(label))
+					fs[#fs + 1] = ("dropdown[%g,%g;4.2,0.7;%s;%s;%d;true]"):format(x + 2, y - 0.35, name, table.concat(t, ","), idx)
+				end
+				dd(0.5, "g_strata", "地層", GEN_STRATA, gen.strata)
+				dd(7.1, "g_terrain", "地形", GEN_TERRAIN, gen.terrain)
+				y = y + 0.9
+				fs[#fs + 1] = "scrollbaroptions[min=0;max=100;smallstep=1;largestep=10]"
+				for _, sl in ipairs(GEN_SLIDERS) do
+					fs[#fs + 1] = ("label[0.5,%g;%s]"):format(y, F(sl[2]))
+					fs[#fs + 1] = ("scrollbar[3.4,%g;7.2,0.45;horizontal;g_%s;%d]"):format(y - 0.22, sl[1], gen[sl[1]])
+					fs[#fs + 1] = ("label[10.9,%g;%s]"):format(y, F(("%d　%s"):format(gen[sl[1]], sl[3](gen[sl[1]]))))
+					y = y + 0.7
+				end
+				fs[#fs + 1] = ("field[0.5,%g;6.4,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子（空白＝隨機；同一個種子同一套地質）"), F(gen.seed))
+				fs[#fs + 1] = "field_close_on_enter[g_seed;false]"
+				fs[#fs + 1] = ("button[7.1,%g;6.4,0.8;g_random;%s]"):format(y + 0.4, F("全部隨機"))
+				y = y + 1.6
+			end
+			fs[#fs + 1] = ("field[0.5,%g;6.4,0.8;new_title;%s;%s]"):format(y + 0.4, F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
+			fs[#fs + 1] = "field_close_on_enter[new_title;false]"
+			y = y + 1.4
+			if m.mode == "class" then y = host_fields(fs, y) end
+			fs[#fs + 1] = ("button[0.5,%g;6.4,0.9;create;%s]"):format(y, F(m.mode == "class" and "建立並開伺服器" or "建立並開始"))
+			fs[#fs + 1] = ("button[7.1,%g;6.4,0.9;%s;%s]"):format(y, state.page == "new_template" and "back_tpl" or "back_main", F("返回"))
 		end
-		if has then fs[#fs + 1] = ("button[0.5,%g;6.4,0.9;continue;%s]"):format(y, F(m.mode == "class" and "繼續上課（開伺服器）" or "繼續遊戲")) end
-		fs[#fs + 1] = ("button[%g,%g;6.4,0.9;new;%s]"):format(has and 7.1 or 0.5, y,
-			F(state.confirm and "確定：刪掉舊存檔、重新開始" or (m.mode == "class" and "新課堂（開伺服器）" or "新遊戲")))
-		y = y + 1.2
-		if state.confirm then
-			fs[#fs + 1] = ("label[0.5,%g;%s]"):format(y, F("新遊戲會刪掉這張地圖現在的存檔，再按一次確定"))
-			y = y + 0.6
-		end
-		if has and m.mode == "class" then
-			fs[#fs + 1] = ("button[0.5,%g;6.4,0.9;open_dir;%s]"):format(y, F("打開地圖資料夾（編輯學生名單）"))
-			y = y + 1.2
-		end
-		fs[#fs + 1] = ("button[0.5,%g;6.4,0.9;back_maps;%s]"):format(y, F("返回"))
 	elseif state.page == "join" then
 		fs[#fs + 1] = "label[0.5,2.1;" .. F("加入連線：輸入老師給的位址和你的帳號密碼") .. "]"
 		fs[#fs + 1] = ("field[0.5,3.0;8.5,0.8;j_addr;%s;%s]"):format(F("位址（IP）"), F(core.settings:get("address") or ""))
@@ -339,9 +412,8 @@ end
 local function refresh() core.update_formspec(formspec()) end
 
 core.button_handler = function(fields)
-	local list = maps()
-	local m = list[state.map or 0]
 	if fields.quit then core.close(); return true end
+	if fields.new_title then state.new_title = fields.new_title end
 	-- 自訂煤礦的選項（每次送出都記下來，種子欄位也是）
 	if fields.g_seed then gen.seed = fields.g_seed end
 	if fields.g_strata then gen.strata = tonumber(fields.g_strata) or gen.strata end
@@ -355,15 +427,49 @@ core.button_handler = function(fields)
 	end
 	if fields.g_random then gen_randomize() end
 	for k in pairs(fields) do
-		local i = tonumber(k:match("^map_(%d+)$"))
-		if i and list[i] then state.page, state.map, state.confirm, state.msg = "map", i, false, nil end
+		local i = tonumber(k:match("^tpl_(%d+)$"))
+		if i and templates()[i] then state.tpl, state.msg = i, nil end
+	end
+	if fields.saves then
+		local e = core.explode_textlist_event(fields.saves)
+		if e.type == "CHG" or e.type == "DCL" then
+			state.sel, state.confirm, state.msg = e.index, false, nil
+			local sv = saves()[e.index]
+			if e.type == "DCL" and sv and sv.mode ~= "class" then start_world(sv, fields) end
+		end
+	end
+	if fields.go_random then state.page, state.new_title, state.msg = "new_random", "", nil
+	elseif fields.go_template then state.page, state.tpl, state.new_title, state.msg = "new_template", nil, "", nil
+	elseif fields.go_custom then state.page, state.new_title, state.msg = "new_custom", "", nil
+	elseif fields.back_main then state.page, state.msg = "main", nil
+	elseif fields.back_tpl then state.tpl, state.msg = nil, nil
+	elseif fields.create then
+		local m = state.page == "new_random" and random_map() or state.page == "new_custom" and custom_map()
+			or state.page == "new_template" and templates()[state.tpl or 0]
+		if m then
+			local kind = state.page == "new_random" and "隨機地圖" or state.page == "new_custom" and "自訂地圖" or m.title
+			local sv, err = create_save(m, state.new_title, kind)
+			if sv then
+				state.page, state.sel, state.msg = "main", nil, nil
+				for i, x in ipairs(saves()) do if x.folder == sv.folder then state.sel = i end end
+				start_world(sv, fields)
+			else state.msg = err end
+		end
+	elseif fields.delete then
+		local sv = saves()[state.sel or 0]
+		if sv then
+			if not state.confirm then state.confirm = true
+			else
+				state.confirm = false
+				core.delete_world(sv.index)
+				state.sel, state.msg = nil, "已刪除「" .. sv.title .. "」"
+			end
+		end
 	end
 	if fields.play then
-		state.page, state.confirm, state.msg = "main", false, nil
+		state.page, state.confirm, state.msg, state.sel = "main", false, nil, nil
 	elseif fields.help then
 		state.page, state.msg = "help", nil
-	elseif fields.back_maps then
-		state.page, state.confirm, state.msg = "main", false, nil
 	elseif fields.back then
 		state.page, state.confirm, state.msg = "title", false, nil
 	elseif fields.join_page then
@@ -372,20 +478,12 @@ core.button_handler = function(fields)
 		state.page, state.msg = "settings", nil
 	elseif fields.connect or (fields.key_enter and state.page == "join") then
 		join(fields)
-	elseif fields.continue and m then
+	elseif fields.continue then
 		state.confirm = false
-		start_world(m, fields)
-	elseif fields.new and m then
-		if find_world(m) and not state.confirm then
-			state.confirm = true
-		else
-			state.confirm = false
-			local err = new_world(m)
-			if err then state.msg = err else start_world(m, fields) end
-		end
-	elseif fields.open_dir and m then
-		local _, w = find_world(m)
-		if w then core.open_dir(w.path) end
+		start_world(saves()[state.sel or 0], fields)
+	elseif fields.open_dir then
+		local sv = saves()[state.sel or 0]
+		if sv then core.open_dir(sv.path) end
 	elseif fields.vol then
 		local e = core.explode_scrollbar_event(fields.vol)
 		if e.type == "CHG" then core.settings:set("sound_volume", tostring(e.value / 100)) end
@@ -403,7 +501,7 @@ end
 
 core.event_handler = function(event)
 	if event == "MenuQuit" then
-		if state.page == "map" then state.page, state.confirm = "main", false; refresh()
+		if state.page:find("^new_") then state.page, state.confirm = "main", false; refresh()
 		elseif state.page ~= "title" then state.page, state.confirm = "title", false; refresh()
 		else core.close() end
 	end
@@ -428,9 +526,9 @@ if auto and auto ~= "" and not gamedata.autotested then
 	gamedata.autotested = true
 	for _, m in ipairs(maps()) do
 		if m.id == auto then
-			local err = new_world(m)
-			if err then core.log("error", "[standalone] " .. err)
-			else start_world(m, {host_name = core.settings:get("name") or "teacher", host_pass = "", host_port = core.settings:get("port") or "30010"}) end
+			local sv, err = create_save(m, "autotest " .. m.id, m.title)
+			if not sv then core.log("error", "[standalone] " .. err)
+			else start_world(sv, {host_name = core.settings:get("name") or "teacher", host_pass = "", host_port = core.settings:get("port") or "30010"}) end
 		end
 	end
 end
