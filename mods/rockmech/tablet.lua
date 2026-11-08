@@ -85,7 +85,22 @@ end
 ---------------------------------------------------------------------------
 local function big_remove(player, w)
 	for _, id in ipairs(w.big_huds or {}) do player:hud_remove(id) end
-	w.big_huds, w.big_key = nil, nil
+	w.big_huds, w.big_key, w.big_sig = nil, nil, nil
+end
+-- 畫面內容的指紋：指著哪一格、應力（到 0.01 MPa）、GSI。重算之後指紋一樣就不重畫（換手上的貼圖會重播拿起來的動畫，看起來在抖）
+local function sig_of(key, st)
+	return st and ("%s|%.2f|%.2f|%d"):format(key, st.s1, st.s3, st.rm.gsi) or key
+end
+-- 正面看的時候藏起手（按住右鍵時遊戲程式會一直重播「使用」的揮手動畫，伺服器關不掉）；放下時恢復原本的樣子
+local function hide_hand(player, w)
+	if w.hand_was ~= nil then return end
+	w.hand_was = player:hud_get_flags().wielditem ~= false
+	player:hud_set_flags({wielditem = false})
+end
+local function show_hand(player, w)
+	if w.hand_was == nil then return end
+	if w.hand_was then player:hud_set_flags({wielditem = true}) end
+	w.hand_was = nil
 end
 local function big_show(player, w, st, key)
 	local name = player:get_player_name()
@@ -96,7 +111,9 @@ local function big_show(player, w, st, key)
 		w.big_huds[#w.big_huds + 1] = id
 	end
 	local function place(fname, ax)
+		local keep = w.big_sig
 		big_remove(player, w)
+		w.big_sig = keep
 		w.big_huds, w.big_key = {}, key
 		local lines = st and detail_lines(st) or {{nil, S("Point the tablet at rock")}}
 		local panel_h = (fname and BH + 40 or 0) + 30 + #lines * 24 + 20
@@ -153,7 +170,7 @@ core.register_globalstep(function(dtime)
 		local name = player:get_player_name()
 		local w = watch[name]
 		if player:get_wielded_item():get_name() ~= TABLET then
-			if w then big_remove(player, w); watch[name] = nil end
+			if w then big_remove(player, w); show_hand(player, w); watch[name] = nil end
 		else
 			if not w then w = {t = 0}; watch[name] = w end
 			w.t = w.t + dt
@@ -166,9 +183,13 @@ core.register_globalstep(function(dtime)
 			-- 手上的螢幕
 			if fresh and not w.busy then
 				w.key, w.t = key, 0
-				st = rock and state_at(pos)
-				if not st then set_screen(player, nil)
+				st = rock and state_at(pos) or nil
+				local sg = sig_of(key, st)
+				if sg == w.sig then
+					-- 跟上次一樣：不動
+				elseif not st then w.sig = sg; set_screen(player, nil)
 				else
+					w.sig = sg
 					rockmech.info_bubble(player, {numbers(st)}, pos)
 					if can_mohr(name) then
 						w.busy = true
@@ -187,15 +208,21 @@ core.register_globalstep(function(dtime)
 			local hold = player:get_player_control().place
 			if hold and not player:get_attach() then
 				w.big_on = true
+				hide_hand(player, w)
 				w.big_t = (w.big_t or 0) + dt
 				if (w.big_key ~= key or w.big_t > REFRESH) and not w.big_busy then
 					w.big_t = 0
-					if st == nil and rock then st = state_at(pos) end
-					big_show(player, w, st or nil, key)
+					if st == nil and rock then st = state_at(pos) or nil end
+					local sg = sig_of(key, st)
+					if sg ~= w.big_sig then
+						w.big_sig = sg
+						big_show(player, w, st, key)
+					end
 				end
 			elseif w.big_on then
 				w.big_on = false
 				big_remove(player, w)
+				show_hand(player, w)
 			end
 		end
 	end
