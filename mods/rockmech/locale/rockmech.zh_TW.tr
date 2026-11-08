@@ -1641,7 +1641,6 @@ Flat jack@nRight-click a rock wall to measure, E to write it into the field note
 Borehole stress cell@nRight-click a drill hole: in-situ stresses at the bottom of the hole; E writes it into the field notebook=孔內應力計@n右鍵鑽孔：量孔底的地應力；E 記進野帳本
 Measure something first=先量一筆
 Numerical analysis tablet=數值分析平板
-Numerical analysis tablet@nHold it to see the stress of the rock you point at; right-click for a full view=數值分析平板@n拿在手上：看指著的岩石的應力；右鍵：大畫面
 Numerical model: σ1 @1  σ3 @2 MPa=數值模型：σ1 @1　σ3 @2 MPa
 Point the tablet at rock=平板要對著岩石
 @1, GSI @2=@1，GSI @2
@@ -1649,3 +1648,4 @@ Rock mass: σ1 at failure @1 MPa, strength / stress @2=岩體：破壞時 σ1 @1
 Intact rock: σ1 at failure @1 MPa=完整岩石：破壞時 σ1 @1 MPa
 Learn "Mohr circle analysis" from the professor to see the Mohr circle=跟教授考過「Mohr 圓分析」才看得到 Mohr 圓
 σn (MPa)=σn（MPa）
+Numerical analysis tablet@nHold it to see the stress of the rock you point at; hold right-click to look at it up close=數值分析平板@n拿在手上：看指著的岩石的應力；按住右鍵：舉起來正面看
