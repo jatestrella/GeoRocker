@@ -493,6 +493,18 @@ rockmech.career_npcs = BOOTHS
 rockmech.career_tent_z = TENT_Z
 rockmech.career_vendor_spots = VENDOR_SPOTS
 
+-- 這一攤賣不賣 it：照 config.shop 的 shop；世界裡還沒有土木技師（舊營地沒有 2 樓）時，他的東西由機械設備課長賣
+local function civil_exists()
+	for _, sp in ipairs(core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}) do
+		if sp.kind == "civil" then return true end
+	end
+	return false
+end
+local function sells(kind, it)
+	if not kind or it.shop == kind then return true end
+	return kind == "vehicle" and it.shop == "civil" and not civil_exists()
+end
+
 local function shop_form(name, kind)
 	local booth = BOOTHS[kind]
 	local who = booth and booth.title or S("Supplier")
@@ -504,7 +516,7 @@ local function shop_form(name, kind)
 	local out = {"formspec_version[6]size[13.5,13.2]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local col, row = 0, 0
 	for i, it in ipairs(cfg.shop) do
-		if not kind or it.shop == kind then
+		if sells(kind, it) then
 			local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
 			local price = it.price == 0 and S("Free") or ("$%d"):format(it.price)
 			out[#out + 1] = ("item_image[%g,%g;0.8,0.8;%s]"):format(x, y, it.item)
@@ -523,7 +535,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local kind = shop_kind[name]
 	for key in pairs(fields) do
 		local it = cfg.shop[tonumber(key:match("^buy_(%d+)$"))]
-		if it and (not kind or it.shop == kind) then
+		if it and sells(kind, it) then
 			-- 大東西不進背包（delivery.lua）：車停到營地的交車區，設施給施工單
 			local vkind = rockmech.vehicle_kind_of_item and rockmech.vehicle_kind_of_item(it.item)
 			local order = rockmech.order_of_item and rockmech.order_of_item(it.item)
