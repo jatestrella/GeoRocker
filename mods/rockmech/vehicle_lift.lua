@@ -176,6 +176,7 @@ local function lift(kind, P)
 		local psi, tip, rope
 		if P.crane then
 			local B
+			local _
 			psi, tip, rope, _, B = solve_c(st.T, st.rope)
 			if not psi then st.T, st.rope = vector.copy(T_REST), ROPE_REST; psi, tip, rope, _, B = solve_c(st.T, st.rope) end
 			st.B = B

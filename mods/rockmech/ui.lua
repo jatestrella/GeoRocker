@@ -297,8 +297,7 @@ local function mini_set(player, rep, text)
 	local s1, s3 = fc and fc.s1 or s.s1, fc and fc.s3 or s.s3
 	local rm = s.rm
 	local key = ("%.2f/%.2f/%s/%d"):format(s1, s3, rep.lith.name, rm.gsi)
-	local w = text_size(text)
-	local off = {x = 26 + w + 16 + 6, y = -18}
+	local off = {x = text and (26 + text_size(text) + 16 + 6) or 26, y = -18}    -- 泡泡沒有文字（其他能力都不會）就放在泡泡的位置
 	local m = minis[name] or {}
 	minis[name] = m
 	if m.hud then player:hud_change(m.hud, "offset", off) end
@@ -320,7 +319,7 @@ local function mini_set(player, rep, text)
 	end)
 end
 
-local function hud_remove(player)
+local function text_remove(player)
 	local name = player:get_player_name()
 	local h = huds[name]
 	if h then
@@ -328,8 +327,12 @@ local function hud_remove(player)
 		player:hud_remove(h.txt)
 		huds[name] = nil
 	end
+end
+local function hud_remove(player)
+	text_remove(player)
 	mini_remove(player)
 end
+local last = {}        -- 玩家名稱 → {key（指著哪一格）, t}：被動顯示多久重算一次
 
 -- 儀器的結果：顯示在泡泡裡（pos：指著的那一格，視線移開就收掉；nil：只看時間）
 function rockmech.info_bubble(player, text, pos)
@@ -384,25 +387,31 @@ core.register_globalstep(function(dtime)
 			if fac then
 				hud_set(player, fac)                 -- 設施：名稱、耐久度（不用知識能力）
 				huds[name].key = nil
+				mini_remove(player)
+				last[name] = nil
 			elseif rubble or node and rockmech.lith_of_node[node.name] then
 				-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
-				if not h or h.key ~= key or (h.t or 0) > 2 then
+				local l = last[name]
+				if not l or l.key ~= key or l.t > 2 then
+					last[name] = {key = key, t = 0}
 					local rep = not rubble and rockmech.stress_report(pos)
 					local lines = rubble and rubble_lines(node, name) or fmt_report_lines(rep, name)
-					if #lines > 0 then
-						local text = table.concat(lines, "\n")
+					local text = #lines > 0 and table.concat(lines, "\n") or nil
+					if text then
 						hud_set(player, text)
 						huds[name].key, huds[name].t = key, 0
-						if rep and rockmech.can_see and rockmech.can_see(name, "mohr", true) then mini_set(player, rep, text)
-						else mini_remove(player) end
 					else
-						hud_remove(player)
+						text_remove(player)
 					end
+					-- Mohr 小圖：會 Mohr 圓分析就顯示（不管會不會其他能力）
+					if rep and rockmech.can_see and rockmech.can_see(name, "mohr", true) then mini_set(player, rep, text)
+					else mini_remove(player) end
 				else
-					h.t = (h.t or 0) + dt
+					l.t = l.t + dt
 				end
 			else
 				hud_remove(player)
+				last[name] = nil
 			end
 		end
 	end
@@ -411,6 +420,7 @@ end)
 core.register_on_leaveplayer(function(player)
 	huds[player:get_player_name()] = nil
 	minis[player:get_player_name()] = nil
+	last[player:get_player_name()] = nil
 	active[player:get_player_name()] = nil
 end)
 

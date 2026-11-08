@@ -422,17 +422,30 @@ end
 -- 節理滑動（slip、shear）不套裂紋，改成偶爾從臨空的那一面噴出一小撮碎屑和粉塵（FS 越接近 1 越常噴、噴越多）
 local JOINT_KIND = {slip = true, shear = true}
 local SPURT_TICK = 0.5                 -- 每幾秒擲一次
-local SPURT_MAX = 6                    -- 每位玩家每次最多噴幾處
-local function spurt_chance(stage) return 0.03 + 0.03 * stage end      -- 每次擲到的機率：平均十幾秒到幾秒噴一次
+local SPURT_MAX = 2                    -- 每位玩家每次最多噴幾處
+local function spurt_chance(stage) return 0.006 + 0.008 * stage end    -- 每次擲到的機率：一格平均一分多鐘到十幾秒噴一次
 local SIDES = {{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1},
 	{x = 0, y = -1, z = 0}, {x = 0, y = 1, z = 0}}
 local function spurt(name, pos, stage)
 	local node = core.get_node(pos).name
 	if not rockmech.lith_of_node[node] then return end
+	local player = core.get_player_by_name(name)
+	if not player then return end
+	local eye = vector.add(player:get_pos(), {x = 0, y = player:get_properties().eye_height or 1.5, z = 0})
+	-- 噴的那一面：外面是空氣、而且玩家看得到（中間沒有岩層、煤層或其他東西擋住）
 	local n
 	for _, d in ipairs(SIDES) do
-		local nd = core.registered_nodes[core.get_node(vector.add(pos, d)).name]
-		if nd and not nd.walkable then n = d; break end
+		if core.get_node(vector.add(pos, d)).name == "air" then
+			local face = vector.add(pos, vector.multiply(d, 0.51))
+			local seen = true
+			for pt in core.raycast(eye, face, false, false) do
+				if pt.type == "node" and not vector.equals(pt.under, pos) then
+					local nd = core.registered_nodes[core.get_node(pt.under).name]
+					if nd and nd.walkable ~= false then seen = false; break end
+				end
+			end
+			if seen then n = d; break end
+		end
 	end
 	if not n then return end
 	local f = vector.add(pos, vector.multiply(n, 0.52))
