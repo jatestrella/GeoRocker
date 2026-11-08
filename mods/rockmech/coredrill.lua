@@ -1021,7 +1021,7 @@ local function stereo_page(out, st)
 	local sl = sv.info.slope
 	row("#202020", sl and S("Slope: @1°/@2° (thick black line; the square is its pole)", ("%02.0f"):format(sl.d), ("%03.0f"):format(sl.a))
 		or S("Slope: not measured yet (Shift + E to measure the slope)"))
-	row(nil, S("Circles: friction circle of each set (φj = atan(Jr/Ja))"))
+	if #sv.info.means > 0 then row(nil, S("Circles: friction circle of each measured set, in its colour (φj = atan(Jr/Ja))")) end
 	row(nil, S("Markland: pole outside the circle, same side as the slope pole, flatter than the slope → may slide"))
 	out[#out + 1] = "style[clear_stereo;bgcolor=#00000000;border=false;textcolor=#8a3a30]"
 	out[#out + 1] = ("button[%g,%g;2.6,0.5;clear_stereo;%s]"):format(LX - 0.1, PY + PH - 0.6, core.formspec_escape(S("Tear out this page")))

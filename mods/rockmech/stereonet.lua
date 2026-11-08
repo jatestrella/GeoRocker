@@ -155,21 +155,27 @@ local function draw(d)
 	end
 	c.dot(CX, CY, black, 3)
 	-- 摩擦圓：極點離中心 φj 以內 = 傾角比 φj 緩
-	-- 每組節理的 φj 不同（atan(Jr/Ja)）：每組畫一個，依組上色；φj 相同的只畫一次（紅色）
-	local circles, seen = {}, {}
-	for _, js in ipairs(rockmech.get_joint_sets()) do
-		local phi = js.phi or (cfg.weakness and cfg.weakness.phi) or 30
-		local k = ("%.1f"):format(phi)
-		if seen[k] then seen[k].color = nil else seen[k] = {phi = phi, color = js.color}; circles[#circles + 1] = seen[k] end
+	-- 只畫有量到的節理組，顏色跟那一組的極點一樣；φj 相同的幾組共用一個圓，虛線輪流用各組的顏色
+	local sets = rockmech.get_joint_sets()
+	local have = {}
+	for _, m in ipairs(d.m or {}) do have[m.s] = true end
+	local circles, by_phi = {}, {}
+	for i, js in ipairs(sets) do
+		if have[i] then
+			local phi = js.phi or (cfg.weakness and cfg.weakness.phi) or 30
+			local k = ("%.1f"):format(phi)
+			if not by_phi[k] then by_phi[k] = {phi = phi, cols = {}}; circles[#circles + 1] = by_phi[k] end
+			local h = (js.color or "#dc3c3c"):gsub("#", "")
+			local cols = by_phi[k].cols
+			cols[#cols + 1] = string.char(tonumber(h:sub(1, 2), 16), tonumber(h:sub(3, 4), 16), tonumber(h:sub(5, 6), 16), 255)
+		end
 	end
 	for _, cr in ipairs(circles) do
 		local rf = RAD * math.tan(rad(cr.phi) / 2)
-		local col = string.char(220, 60, 60, 255)
-		if cr.color and #circles > 1 then
-			local h = cr.color:gsub("#", "")
-			col = string.char(tonumber(h:sub(1, 2), 16), tonumber(h:sub(3, 4), 16), tonumber(h:sub(5, 6), 16), 255)
+		for t = 0, 359, 1.5 do
+			local col = cr.cols[math.floor(t / 12) % #cr.cols + 1]       -- 每 12° 換一個顏色
+			c.dot(CX + rf * math.sin(rad(t)), CY - rf * math.cos(rad(t)), col, 2)
 		end
-		for t = 0, 360, 1.5 do c.dot(CX + rf * math.sin(rad(t)), CY - rf * math.cos(rad(t)), col, 2) end
 	end
 	-- 坡面：大圓（粗黑）與極點（方塊）
 	if d.slope and d.slope.d > 0.5 then

@@ -1595,7 +1595,7 @@ Stereonet=赤平投影
 Stereonet (lower hemisphere, equal-angle)=赤平投影（下半球、等角）
 Drawing…=繪製中…
 No joint readings yet (compass: right-click a rock face, then E)=還沒有節理紀錄（羅盤右鍵岩面，再按 E 記下來）
-Circles: friction circle of each set (φj @= atan(Jr/Ja))=圓圈：各組的摩擦圓（φj @= atan(Jr/Ja)）
+Circles: friction circle of each measured set, in its colour (φj @= atan(Jr/Ja))=圓圈：有量到的節理組的摩擦圓，顏色跟該組相同（φj @= atan(Jr/Ja)）
 Markland: pole outside the circle, same side as the slope pole, flatter than the slope → may slide=Markland：極點在摩擦圓外、跟坡面極點同側、比坡面緩 → 可能滑動
 Written into the field notebook (@1 joint readings; see the stereonet tab)=記進野帳本了（共 @1 筆節理；在「赤平投影」分頁看圖）
 Discontinuous: the joint ends inside the rock=不連續：節理在岩石裡就斷了
