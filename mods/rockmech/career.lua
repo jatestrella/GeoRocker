@@ -596,7 +596,7 @@ core.register_entity(VENDOR, {
 	initial_properties = {
 		physical = true, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
 		visual = "mesh", mesh = "character.b3d", textures = {"character.png"},
-		nametag = S("Supplier (right-click)"), nametag_color = "#ffe080", static_save = true,
+		nametag = S("Supplier"), nametag_color = "#ffe080", static_save = true,
 	},
 	on_activate = function(self)
 		if math.abs(self.object:get_pos().z - TENT_Z) > 3 then self.object:remove(); return end     -- 舊版位置的 NPC

@@ -196,7 +196,7 @@ core.register_entity(NPC, {
 	initial_properties = {
 		physical = true, collide_with_objects = false, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
 		visual = "mesh", mesh = "character.b3d", textures = {rockmech.npc_skin("operator")},
-		nametag = S("Excavator operator (right-click)"), nametag_color = "#ffe080", static_save = false, stepheight = 0.6,
+		nametag = S("Excavator operator"), nametag_color = "#ffe080", static_save = false, stepheight = 0.6,
 	},
 	on_activate = function(self)
 		self.object:set_armor_groups({immortal = 1})
@@ -422,7 +422,7 @@ core.register_globalstep(function(dtime)
 		local first = list[1]
 		if first and first:get_pos() then
 			rockmech.npc_set_tag(first, total > SEATS and S("Operators resting: @1 (those who don't fit on the bench are in the office)", tostring(total))
-				or S("Operators resting: @1 (right-click)", tostring(total)))
+				or S("Operators resting: @1", tostring(total)))
 		end
 	end
 end)
