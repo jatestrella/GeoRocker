@@ -692,7 +692,7 @@ function rockmech.crusher_build(pos, dx, dz, name, node)
 	-- 範圍內不滿一格的土石先清掉（woodwork.lua）：不然機身架在薄片上
 	if rockmech.clear_site and rockmech.facility_cells then rockmech.clear_site(rockmech.facility_cells(node or CRUSHER, pos, dx, dz), pos) end
 	if not site_ok(pos, dx, dz) then return false end
-	core.set_node(pos, {name = node or CRUSHER})
+	core.set_node(pos, {name = node or CRUSHER, param2 = core.dir_to_facedir({x = dx, y = 0, z = dz})})   -- 進料溜槽朝受料倉
 	dig_hopper(pos, dx, dz)
 	local meta = core.get_meta(pos)
 	local acc = rockmech.account_of(name)       -- 分了組就掛在組上，收入進整組的帳戶
@@ -704,7 +704,21 @@ function rockmech.crusher_build(pos, dx, dz, name, node)
 	return true
 end
 
-local BODY = "[fill:16x16:#b08a20^[fill:16x2:0,0:#303030^[fill:16x2:0,14:#303030"
+-- 外觀：模型 models/rockmech_crusher(_big).obj（devtools/make_crusher_mesh.py 產生）：鋼構底座、格柵平台、
+-- 顎式破碎機、兩側飛輪、馬達、出料皮帶、扶手、朝受料倉的進料溜槽；大型的加控制室和二級破碎頂座。
+-- tiles 照模型材質的順序：鋼構、機身、平台、飛輪、馬達、皮帶、欄杆、溜槽（、控制室）
+local function tile(t) return {name = t, backface_culling = false} end
+local T_FRAME = tile("[fill:16x16:#3a3e44^[fill:16x1:0,15:#2a2e34^[fill:1x16:15,0:#2a2e34")
+local T_DECK = tile("[fill:16x16:#5c6064^[fill:16x1:0,3:#3a3c40^[fill:16x1:0,7:#3a3c40^[fill:16x1:0,11:#3a3c40^[fill:16x1:0,15:#3a3c40"
+	.. "^[fill:1x16:3,0:#3a3c40^[fill:1x16:7,0:#3a3c40^[fill:1x16:11,0:#3a3c40^[fill:1x16:15,0:#3a3c40")
+local T_WHEEL = tile("[fill:16x16:#2a2a2a^[fill:16x2:0,7:#5a5a5a^[fill:2x16:7,0:#5a5a5a^[fill:16x1:0,0:#4a4a4a")
+local T_MOTOR = tile("[fill:16x16:#3a6aa0^[fill:16x1:0,3:#2a5080^[fill:16x1:0,7:#2a5080^[fill:16x1:0,11:#2a5080")
+local T_BELT = tile("[fill:16x16:#1e1e1e^[fill:16x1:0,4:#3a3a3a^[fill:16x1:0,12:#3a3a3a")
+local T_RAIL = tile("[fill:16x16:#f0c020")
+local T_CHUTE = tile("[fill:16x16:#7a7468^[fill:16x1:0,8:#6a6458^[fill:3x2:4,3:#8a8478^[fill:2x3:11,10:#6a6458")
+local T_CABIN = tile("[fill:16x16:#e8e8e0^[fill:10x6:3,3:#9fd0ff^[fill:16x1:0,15:#a8a8a0")
+local BODY = "[fill:16x16:#d8a820^[fill:16x1:0,15:#a88010^[fill:1x16:15,0:#a88010^[fill:2x2:2,2:#a88010^[fill:2x2:12,2:#a88010"
+local BOX = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}}
 
 core.register_node(GRATE, {
 	description = S("Crusher grate"),
@@ -717,10 +731,12 @@ core.register_node(GRATE, {
 local crusher_def = {
 	description = S("Crusher\nRight-click on flat ground to build"),
 	short_description = S("Crusher"),
-	drawtype = "nodebox",
+	drawtype = "mesh",
+	mesh = "rockmech_crusher.obj",
 	paramtype = "light",
-	node_box = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}},
-	tiles = {BODY},
+	paramtype2 = "facedir",
+	selection_box = BOX, collision_box = BOX,
+	tiles = {T_FRAME, tile(BODY), T_DECK, T_WHEEL, T_MOTOR, T_BELT, T_RAIL, T_CHUTE},
 	inventory_image = "rockmech_icon_crusher.png",      -- devtools/make_icons.py
 	groups = {cracky = 2},
 	is_ground_content = false,
@@ -762,12 +778,32 @@ local crusher_def = {
 core.register_node(CRUSHER, crusher_def)
 -- 大型破碎站：一樣的機身大小和受料倉，處理能力大好幾倍（深灰機身、黃黑警示條）
 local big = table.copy(crusher_def)
-local BIG_BODY = "[fill:16x16:#4a5058^[fill:16x2:0,0:#f0c020^[fill:16x2:0,14:#f0c020^[fill:2x2:2,0:#202020^[fill:2x2:8,0:#202020^[fill:2x2:14,0:#202020"
+local BIG_BODY = "[fill:16x16:#4a5058^[fill:16x2:0,0:#f0c020^[fill:2x2:2,0:#202020^[fill:2x2:8,0:#202020^[fill:2x2:14,0:#202020^[fill:16x1:0,15:#3a4048"
 big.description = S("Large crusher\nRight-click on flat ground to build")
 big.short_description = S("Large crusher")
-big.tiles, big.inventory_image = {BIG_BODY}, "rockmech_icon_crusher_big.png"
-big.node_box = {type = "fixed", fixed = {{-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}, {-0.6, 2.4, -0.6, 0.6, 2.9, 0.6}}}
+big.inventory_image = "rockmech_icon_crusher_big.png"
+big.mesh = "rockmech_crusher_big.obj"
+big.tiles = {T_FRAME, tile(BIG_BODY), T_DECK, T_WHEEL, T_MOTOR, T_BELT, T_RAIL, T_CHUTE, T_CABIN}
+local BIG_BOX = {type = "fixed", fixed = {{-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}, {-0.6, 2.4, -0.6, 0.6, 2.9, 0.6}}}
+big.selection_box, big.collision_box = BIG_BOX, BIG_BOX
 core.register_node(CRUSHER_BIG, big)
+
+-- 舊的破碎站（蓋的時候還沒有朝向）：轉到受料倉那一邊
+core.register_lbm({
+	label = "rockmech: 破碎站轉向受料倉",
+	name = "rockmech:crusher_face_hopper",
+	nodenames = {CRUSHER, CRUSHER_BIG},
+	run_at_every_load = false,
+	action = function(pos, node)
+		local meta = core.get_meta(pos)
+		if meta:get_string("gx") == "" then return end
+		local c = hopper_center(meta)
+		local dx, dz = c.x - pos.x, c.z - pos.z
+		if math.abs(dx) > math.abs(dz) then dx, dz = dx > 0 and 1 or -1, 0 else dx, dz = 0, dz > 0 and 1 or -1 end
+		local p2 = core.dir_to_facedir({x = dx, y = 0, z = dz})
+		if node.param2 ~= p2 then core.swap_node(pos, {name = node.name, param2 = p2}) end
+	end,
+})
 
 -- 舊版小倉擴建成現在的大小：舊格柵回填成下面的岩石，再照新尺寸挖（倉裡的碎石留著，疊到新的倉底）
 local function enlarge(pos)
