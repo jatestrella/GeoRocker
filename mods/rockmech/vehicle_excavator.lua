@@ -866,7 +866,16 @@ local function excavator(kind, P)
 				self.curl = 0
 			end
 			dg.from = dg.from or hold(self)
-			if t < ph[1] then
+			-- 倒：從停的位置直接移到倒料點、翻斗倒掉、就停在那裡（不先抬到上方、倒完也不抬起來）
+			local stop = dg.mode == "dump" and to or above
+			if dg.mode == "dump" then
+				if t < ph[1] then
+					b = lerp(dg.from, to, t / ph[1])
+					self.swing = lerp_angle(dg.psi0, dg.psi, t / ph[1])
+				else
+					b = to; self.swing = dg.psi
+				end
+			elseif t < ph[1] then
 				b = lerp(dg.from, above, t / ph[1])
 				self.swing = lerp_angle(dg.psi0, dg.psi, t / ph[1])
 			elseif t < ph[1] + ph[2] then b = lerp(above, to, (t - ph[1]) / ph[2]); self.swing = dg.psi
@@ -879,8 +888,8 @@ local function excavator(kind, P)
 				self.dig = nil
 				self.swing = dg.psi
 				self.hammer_dir = nil
-				self.arm_h = above
-				place_arm(self, above)
+				self.arm_h = stop
+				place_arm(self, stop)
 			end
 		end
 		if self.op and self.op.on and not ctx.d then operate(self, ctx) end
