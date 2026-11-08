@@ -282,6 +282,8 @@ local function excavator(kind, P)
 	parts[#parts + 1] = {id = "chisel", pos = BUCKET_REST, size = CHISEL, tex = box_tex("#b8bcc2")}
 	local HAMMER_REST = {x = BUCKET_REST.x, y = BUCKET_REST.y - P.bucket.y / 2 + HAMMER.y + CHISEL.y, z = BUCKET_REST.z}
 	local function rest(self) return self.tool == "breaker" and HAMMER_REST or BUCKET_REST end
+	-- 手臂停在哪（上部結構座標）：挖完、倒完就停在那裡，下一個動作從這裡開始；還沒動過就是收起的位置
+	local function hold(self) return self.arm_h or rest(self) end
 	parts[#parts + 1] = {id = "boom", pos = BUCKET_REST, size = {x = P.boom_w, y = BOOM_LEN, z = P.boom_w}, tex = box_tex(def.color)}
 	-- 小臂：跟大臂的接點在小臂上端約 1/5 處（接點以上 STICK_TAIL 是給小臂油壓缸推的尾巴），接點到鏟斗仍是 STICK_LEN
 	local STICK_TAIL = STICK_LEN / 4
@@ -577,7 +579,7 @@ local function excavator(kind, P)
 				or {visual_size = BK[1][3], textures = BK[1][5]})
 		end
 		if ps.chisel then ps.chisel:set_properties({is_visible = hammer}) end
-		place_arm(self, rest(self))
+		place_arm(self, hold(self))
 	end
 	function def.on_spawn(self) place_arm(self, rest(self)); op_show(self); show_tool(self) end
 	-- 油壓破碎錘改裝套件（vehicles.lua：拿著套件對怪手右鍵）
@@ -863,23 +865,22 @@ local function excavator(kind, P)
 			else
 				self.curl = 0
 			end
+			dg.from = dg.from or hold(self)
 			if t < ph[1] then
-				b = lerp(rest(self), above, t / ph[1])
+				b = lerp(dg.from, above, t / ph[1])
 				self.swing = lerp_angle(dg.psi0, dg.psi, t / ph[1])
 			elseif t < ph[1] + ph[2] then b = lerp(above, to, (t - ph[1]) / ph[2]); self.swing = dg.psi
 			elseif t < ph[1] + ph[2] + ph[3] then b = lerp(to, above, (t - ph[1] - ph[2]) / ph[3]); self.swing = dg.psi
 			else
-				local u = math.min(1, (t - ph[1] - ph[2] - ph[3]) / ph[4])
-				b = lerp(above, rest(self), u)
-				local back = (dg.mode == "dump" or self.follow) and dg.psi or 0
-				self.swing = lerp_angle(dg.psi, back, u)
+				b = above; self.swing = dg.psi          -- 做完：手臂停在目標上方，不收回
 			end
 			place_arm(self, b)
 			if t >= DIG_TOTAL then
 				self.dig = nil
-				self.swing = (dg.mode == "dump" or self.follow) and dg.psi or 0
+				self.swing = dg.psi
 				self.hammer_dir = nil
-				place_arm(self, rest(self))
+				self.arm_h = above
+				place_arm(self, above)
 			end
 		end
 		if self.op and self.op.on and not ctx.d then operate(self, ctx) end
@@ -895,7 +896,7 @@ local function excavator(kind, P)
 			if math.abs(diff) > 1e-3 then
 				local st = P.swing_rate * ctx.dtime
 				self.swing = cur + math.max(-st, math.min(st, diff))
-				place_arm(self, rest(self))
+				place_arm(self, hold(self))
 				if math.abs(diff) > 0.02 then self.swing_t = 0.5 end
 			end
 		end
