@@ -230,7 +230,7 @@ do
 				boom_to_hole(self, i, b.hole)
 			end
 			if b.hole then
-				b.t = b.t + ctx.dtime
+				b.t = b.t + ctx.dtime * rockmech.eff_dig_mult(self.owner)
 				local h = b.hole
 				dust(face_point(h.above, h.under, 0.45), ctx.dtime)
 				if b.t >= HOLE_TIME then

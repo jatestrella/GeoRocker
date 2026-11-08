@@ -1307,7 +1307,7 @@ core.register_globalstep(function(dtime)
 			if why then
 				finish(name, d, why)
 			else
-				d.t = d.t + dtime
+				d.t = d.t + dtime * rockmech.eff_dig_mult(name)
 				-- 孔口冒岩粉
 				local m = vector.add(d.collar, vector.multiply(d.dir, 0.5))         -- 孔口（岩面上）
 				core.add_particlespawner({amount = 3, time = 0.1, minpos = {x = m.x - 0.1, y = m.y, z = m.z - 0.1},

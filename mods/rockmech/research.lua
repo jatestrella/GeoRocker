@@ -34,15 +34,15 @@ local ITEMS = {
 	{key = "maintenance", who = "mechanic", label = TR("Regular maintenance"), max = 5, base = 20000, minutes = 10,
 		desc = TR("The team's vehicles move 5% faster"),
 		value = function(acc) return ("×%.2f"):format(rockmech.eff_vehicle_mult(acc)) end},
-	{key = "mine_planning", who = "geologist", label = TR("Mine planning"), max = 1, base = 30000, minutes = 10,
-		desc = TR("The whole team can see the stripping ratio"),
-		value = function(acc) return rockmech.research_level(acc, "mine_planning") >= 1 and S("Learned") or S("Not yet") end},
 	{key = "ore_recovery", who = "geologist", label = TR("Grade control"), max = 5, base = 25000, minutes = 10,
 		desc = TR("Recovery of ore sold at the crushing station +1%"),
 		value = function(acc)
 			for _, ore in pairs(cfg.ores) do return ("%.0f%%"):format(rockmech.eff_ore_recovery(acc, ore) * 100) end
 			return "—"
 		end},
+	{key = "skilled_miner", who = "geologist", label = TR("Skilled miner"), max = 5, base = 25000, minutes = 10,
+		desc = TR("Digging and drilling 10% faster"),
+		value = function(acc) return ("×%.1f"):format(rockmech.eff_dig_mult(acc)) end},
 }
 -- 研發面板的圖示：設施的圖示＋角落的小徽章（綠加號：提升、紅減號：減少、黃箭頭：加快）
 local BADGE = {
@@ -58,10 +58,8 @@ local ICON = {
 	crusher_rate = function() return badged("rockmech_icon_crusher.png", "up") end,
 	conveyor_rate = function() return badged("rockmech_icon_belt.png", "up") end,
 	maintenance = function() return badged(item_img("rockmech:truck_item"), "up") end,
-	-- 剝採比：長條圖（廢石灰、礦石黑）
-	mine_planning = function() return "[fill:16x16:#f4f0e0^[fill:14x1:1,14:#404040^[fill:1x13:1,1:#404040"
-		.. "^[fill:3x9:3,5:#9a9890^[fill:3x4:6,10:#2a2a2a^[fill:3x11:9,3:#9a9890^[fill:3x5:12,9:#2a2a2a" end,
 	ore_recovery = function() return badged(item_img("rockmech:xrf"), "plus") end,
+	skilled_miner = function() return badged(item_img("rockmech:rock_drill"), "up") end,
 }
 
 local BY_KEY = {}

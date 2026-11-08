@@ -135,7 +135,7 @@ end
 function def.step(self, ctx)
 	local b = self.boring
 	if not b then return end
-	b.t = b.t + ctx.dtime
+	b.t = b.t + ctx.dtime * rockmech.eff_dig_mult(self.owner)
 	local total = b.depth * SEC_PER_M
 	if b.up then
 		-- 鑽好了：迴轉頭沿桅桿升回頂端（抽出鑽桿，比鑽的時候快）

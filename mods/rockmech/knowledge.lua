@@ -18,8 +18,8 @@ local ABILITIES = {
 	{key = "grade", label = TR("Grade assessment"), item = "rockmech:xrf"},
 	{key = "rockmass", label = TR("Rock mass classification"), item = "rockmech:gsi_card"},
 	{key = "mechanics", label = TR("Rock mechanics"), item = "rockmech:compass"},
-	-- 剝採比（破碎站顯示）：沒有儀器，要進修（教授考試）或研究帳篷研發「採礦規劃」（全組），雇用的地質學家不算
-	{key = "planning", label = TR("Mine planning"), research = "mine_planning"},
+	-- 剝採比（破碎站顯示）：只能教授考試學會，研發和雇人都不行
+	{key = "planning", label = TR("Mine planning"), exam_only = true},
 	-- 赤平投影穩定性分析：只能考試學會（買不到、雇地質學家也不算）
 	{key = "kinematics", label = TR("Stereonet kinematic analysis"), exam_only = true},
 	-- Mohr 圓分析：準心旁顯示那一格的 Mohr 圓和強度包絡線；只能考試學會

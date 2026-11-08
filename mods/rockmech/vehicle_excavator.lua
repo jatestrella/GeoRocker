@@ -966,7 +966,7 @@ local function excavator(kind, P)
 					else
 						local ucs = (rockmech.cfg.lithologies[lith.name] or {}).ucs or 30
 						self.dig = {t = 0, mode = "break", target = target, to = th, psi = psi, psi0 = self.swing or 0,
-							need = ucs * rockmech.cfg.breaker_rate / (P.breaker_power or 1), hold = 0}   -- 大的破碎錘打擊能量大，敲得快
+							need = ucs * rockmech.cfg.breaker_rate / (P.breaker_power or 1) / rockmech.eff_dig_mult(self.owner), hold = 0}   -- 大的破碎錘打擊能量大，敲得快
 						self.msg = S("Breaking rock (UCS @1 MPa, about @2 s)", ("%d"):format(ucs), ("%.1f"):format(self.dig.need))
 					end
 				end

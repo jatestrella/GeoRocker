@@ -412,6 +412,42 @@ core.register_tool(PICK, {
 	on_secondary_use = place_air,
 })
 
+-- 熟練礦工（研發）：每秒看一次手上的十字鎬／鏟子，等級變了就改寫這一把的挖掘時間（存在物品 meta）
+local function scaled_caps(item, m)
+	local caps = core.registered_tools[item].tool_capabilities
+	local out = table.copy(caps)
+	for _, g in pairs(out.groupcaps) do
+		for k, t in pairs(g.times) do g.times[k] = t / m end
+	end
+	return out
+end
+local miner_t = 0
+core.register_globalstep(function(dtime)
+	miner_t = miner_t + dtime
+	if miner_t < 1 then return end
+	miner_t = 0
+	if not rockmech.eff_dig_mult then return end
+	for _, p in ipairs(core.get_connected_players()) do
+		local st = p:get_wielded_item()
+		local item = st:get_name()
+		if item == PICK or item == SHOVEL then
+			local m = rockmech.eff_dig_mult(p:get_player_name())
+			local meta = st:get_meta()
+			local tag = ("%.2f"):format(m)
+			if meta:get_string("dig_mult") ~= (m == 1 and "" or tag) then
+				if m == 1 then
+					meta:set_string("dig_mult", "")
+					meta:set_tool_capabilities(nil)
+				else
+					meta:set_string("dig_mult", tag)
+					meta:set_tool_capabilities(scaled_caps(item, m))
+				end
+				p:set_wielded_item(st)
+			end
+		end
+	end
+end)
+
 core.register_tool(SHOVEL, {
 	description = S("Shovel\nRight-click: put down what you carry"),
 	short_description = S("Shovel"),

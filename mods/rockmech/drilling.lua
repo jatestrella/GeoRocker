@@ -421,7 +421,7 @@ core.register_globalstep(function(dtime)
 			end
 			if deep then
 				-- 加深鑽孔
-				st.t = st.t + dtime
+				st.t = st.t + dtime * rockmech.eff_dig_mult(name)
 				local frac = math.min(1, st.t / bcfg.drill_time)
 				local bars = math.floor(frac * 10 + 0.5)
 				drill_hud(pl, st, S("Deepening @1 → @2 m @3", tostring(deep), tostring(deep + 1), ("■"):rep(bars) .. ("□"):rep(10 - bars)))
@@ -441,7 +441,7 @@ core.register_globalstep(function(dtime)
 				-- 鑽不了（碎石、孔口被擋住）：什麼都不顯示
 				if st.hud then pl:hud_remove(st.hud); st.hud = nil end
 			else
-				st.t = st.t + dtime
+				st.t = st.t + dtime * rockmech.eff_dig_mult(name)
 				local frac = math.min(1, st.t / bcfg.drill_time)
 				local bars = math.floor(frac * 10 + 0.5)
 				drill_hud(pl, st, S("Drilling @1", ("■"):rep(bars) .. ("□"):rep(10 - bars)))

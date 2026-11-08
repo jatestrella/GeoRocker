@@ -136,7 +136,8 @@ function rockmech.eff_plant_recovery(owner) return math.min(1, cfg.plant_recover
 function rockmech.eff_plant_misplaced(owner) return math.max(0, cfg.plant_misplaced - 0.02 * rockmech.research_level(owner, "plant_misplaced")) end
 function rockmech.eff_crusher_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "crusher_rate") end
 function rockmech.eff_conveyor_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "conveyor_rate") end
-function rockmech.eff_vehicle_mult(owner) return 1 + 0.05 * rockmech.research_level(owner, "maintenance") end   -- 定期保養：車速
+function rockmech.eff_vehicle_mult(owner) return 1 + 0.05 * rockmech.research_level(owner, "maintenance") end
+function rockmech.eff_dig_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "skilled_miner") end   -- 熟練礦工：挖礦、鑽孔速度   -- 定期保養：車速
 function rockmech.eff_ore_recovery(owner, ore) return math.min(1, ore.recovery + 0.01 * rockmech.research_level(owner, "ore_recovery")) end
 
 local money_hud = {}        -- 玩家名稱 → HUD id
