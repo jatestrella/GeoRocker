@@ -827,7 +827,7 @@ function rockmech.knowledge_exam(player, ab)
 	end
 	local wait = meta:get_int(COOL .. ab) - os.time()
 	if wait > 0 then
-		rockmech.notify(name, S("[Training] You have to wait @1 before retaking \"@2\"", mmss(wait), S(AB[ab].label)))
+		rockmech.notify(name, S("Go and study! Come back for the exam in @1 min", ("%d"):format(math.ceil(wait / 60))))
 		return
 	end
 	local pool = BANK[ab]
@@ -968,24 +968,48 @@ local PROF_FORM = "rockmech:professor"
 local PROF_DX, PROF_Z = 15, -28   -- 講堂中心：研究帳篷（營地中心往東 23、寬 ±3）的西邊，同一排、面向北，中間留 2 格
 local OLD_PROF_DX = 11            -- 舊版講堂的位置（擋路）：已經蓋在這裡的搬過來
 
+-- 考試面板：一科一個圖示，下面科目名稱；滑鼠移上去看說明，點一下開始考試
+local function chart_icon() return "[fill:16x16:#f4f0e0^[fill:14x1:1,14:#404040^[fill:1x13:1,1:#404040"
+	.. "^[fill:3x9:3,5:#9a9890^[fill:3x4:6,10:#2a2a2a^[fill:3x11:9,3:#9a9890^[fill:3x5:12,9:#2a2a2a" end
+local function item_img(n) local d = core.registered_items[n]; return d and d.inventory_image or "blank.png" end
+local EXAM_ICON = {
+	grade = function() return item_img("rockmech:xrf") end,
+	rockmass = function() return item_img("rockmech:gsi_card") end,
+	mechanics = function() return item_img("rockmech:compass") end,
+	planning = chart_icon,
+	kinematics = function() return "[fill:16x16:#00000000^[fill:14x14:1,1:#f4f0e0^[fill:1x1:6,1:#202020^[fill:1x1:7,1:#202020^[fill:1x1:8,1:#202020^[fill:1x1:9,1:#202020^[fill:1x1:4,2:#202020^[fill:1x1:5,2:#202020^[fill:1x1:10,2:#202020^[fill:1x1:11,2:#202020^[fill:1x1:3,3:#202020^[fill:1x1:12,3:#202020^[fill:1x1:2,4:#202020^[fill:1x1:13,4:#202020^[fill:1x1:2,5:#202020^[fill:1x1:13,5:#202020^[fill:1x1:1,6:#202020^[fill:1x1:14,6:#202020^[fill:1x1:1,7:#202020^[fill:1x1:14,7:#202020^[fill:1x1:1,8:#202020^[fill:1x1:14,8:#202020^[fill:1x1:1,9:#202020^[fill:1x1:14,9:#202020^[fill:1x1:2,10:#202020^[fill:1x1:13,10:#202020^[fill:1x1:2,11:#202020^[fill:1x1:13,11:#202020^[fill:1x1:3,12:#202020^[fill:1x1:12,12:#202020^[fill:1x1:4,13:#202020^[fill:1x1:5,13:#202020^[fill:1x1:10,13:#202020^[fill:1x1:11,13:#202020^[fill:1x1:6,14:#202020^[fill:1x1:7,14:#202020^[fill:1x1:8,14:#202020^[fill:1x1:9,14:#202020^[fill:3x3:4,5:#d050c0^[fill:3x2:9,10:#7a5ad8^[fill:2x3:10,4:#40a050^[fill:1x1:8,8:#202020" end,
+	mohr = function() return "[fill:16x16:#f4f0e0^[fill:14x1:1,13:#404040^[fill:1x12:2,2:#404040^[fill:1x1:7,9:#1f5fbf^[fill:1x1:8,9:#1f5fbf^[fill:1x1:9,9:#1f5fbf^[fill:1x1:10,9:#1f5fbf^[fill:1x1:6,10:#1f5fbf^[fill:1x1:11,10:#1f5fbf^[fill:1x1:5,11:#1f5fbf^[fill:1x1:12,11:#1f5fbf^[fill:1x1:5,12:#1f5fbf^[fill:1x1:12,12:#1f5fbf^[fill:1x1:3,12:#d03030^[fill:1x1:4,11:#d03030^[fill:1x1:5,10:#d03030^[fill:1x1:6,10:#d03030^[fill:1x1:7,9:#d03030^[fill:1x1:8,8:#d03030^[fill:1x1:9,8:#d03030^[fill:1x1:10,7:#d03030^[fill:1x1:11,6:#d03030^[fill:1x1:12,5:#d03030^[fill:1x1:13,4:#d03030^[fill:1x1:14,4:#d03030" end,
+}
+local EXAM_WHAT = {
+	grade = TR("Shows grades"),
+	rockmass = TR("Shows lithology, GSI and overburden"),
+	mechanics = TR("Shows stress, factor of safety and cracks"),
+	planning = TR("Shows the stripping ratio at the crushing station"),
+	kinematics = TR("Failure zones and possible failure modes on the stereonet"),
+	mohr = TR("Mohr circle on the numerical analysis tablet"),
+}
 local function prof_form(name)
 	local player = core.get_player_by_name(name)
-	local out = {("formspec_version[6]size[13,%g]"):format(3.6 + #ABILITIES * 1.1),
-		("label[0.5,0.6;%s]"):format(E(S("University professor: training exams"))),
-		("label[0.5,1.2;%s]"):format(E(S("Each subject draws @1 questions from the bank; get @2 right to learn it for good. If you fail, wait @3 minutes before retaking the same subject.",
-			tostring(EXAM_N), tostring(EXAM_PASS), ("%d"):format(EXAM_COOLDOWN / 60))))}
-	local y = 2.0
+	local TW = 3.4
+	local rows = math.ceil(#ABILITIES / 4)
+	local out = {("formspec_version[6]size[14.4,%g]"):format(1.8 + rows * 3.4 + 0.4),
+		("label[0.5,0.6;%s]"):format(E(S("University professor: training exams")))}
+	local y, col = 1.3, 0
 	for _, a in ipairs(ABILITIES) do
-		local status
-		if player and player:get_meta():get_string(KNOW .. a.key) == "1" then status = S("Already learned")
-		elseif player and cooldown_left(player, a.key) > 0 then status = S("Retake in @1", mmss(cooldown_left(player, a.key)))
-		else status = S("@1 questions in the bank", tostring(#BANK[a.key])) end
-		out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, E(S(a.label)))
-		out[#out + 1] = ("label[3.5,%g;%s]"):format(y + 0.4, core.formspec_escape(status))
-		out[#out + 1] = ("button[9.4,%g;3,0.8;study_%s;%s]"):format(y, a.key, E(S("Take exam")))
-		y = y + 1.1
+		local learned = player and player:get_meta():get_string(KNOW .. a.key) == "1"
+		local cd = player and cooldown_left(player, a.key) or 0
+		local x = 0.5 + col * TW
+		out[#out + 1] = ("box[%g,%g;%g,3.0;%s]"):format(x - 0.1, y - 0.1, TW - 0.3, learned and "#2f5a2f" or "#2a2e34")
+		out[#out + 1] = ("box[%g,%g;%g,2.8;#1e2228]"):format(x, y, TW - 0.5)
+		local icon = EXAM_ICON[a.key] and EXAM_ICON[a.key]() or "blank.png"
+		out[#out + 1] = ("image_button[%g,%g;1.8,1.8;%s;study_%s;]"):format(x + (TW - 0.5 - 1.8) / 2, y + 0.15, E(icon), a.key)
+		out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.15, y + 2.3, E(S(a.label)))
+		local tip = {S(a.label), EXAM_WHAT[a.key] and S(EXAM_WHAT[a.key]) or ""}
+		tip[#tip + 1] = learned and S("Already learned") or cd > 0 and S("Retake in @1", mmss(cd)) or S("Click to take the exam")
+		out[#out + 1] = ("tooltip[study_%s;%s;#101418;#ffffff]"):format(a.key, E(table.concat(tip, "\n")))
+		col = col + 1
+		if col >= 4 then col = 0; y = y + 3.4 end
 	end
-	out[#out + 1] = ("button_exit[5,%g;3,0.8;close;%s]"):format(y + 0.4, E(S("Close")))
 	return table.concat(out)
 end
 core.register_on_player_receive_fields(function(player, formname, fields)
