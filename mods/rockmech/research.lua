@@ -168,14 +168,11 @@ local function form(name, who)
 	local head = rockmech.team_of(name) and S("@1  Team @2 funds: @3", S(npc.title), tostring(rockmech.team_of(name)), money_text(rockmech.money(name)))
 		or S("@1  Funds: @2", S(npc.title), money_text(rockmech.money(name)))
 	local out = {"formspec_version[6]size[15,13]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
-	local status
 	if job then
 		local it = BY_KEY[job.key]
-		status = S("Researching: @1 Lv@2 (progresses only while team members are online)", it and S(it.label) or job.key, tostring(job.level))
-	else
-		status = S("@1 has no research in progress. Each researcher works on one item at a time; different researchers can work at the same time.", S(npc.title))
+		out[#out + 1] = ("label[0.5,1.2;%s]"):format(core.formspec_escape(
+			S("Researching: @1 Lv@2 (progresses only while team members are online)", it and S(it.label) or job.key, tostring(job.level))))
 	end
-	out[#out + 1] = ("label[0.5,1.2;%s]"):format(core.formspec_escape(status))
 	-- 研發項目：一個項目一個圖示，下面名稱和等級格子；滑鼠移上去看說明，點一下開始研發
 	local y = 2.0
 	local col = 0
