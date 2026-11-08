@@ -83,23 +83,32 @@ end
 local bubbles = {}       -- NPC 物件 → {玩家名 → {泡泡, 框}}
 local last = {}          -- NPC 物件 → 上一句的序號（不連續說同一句）
 
+-- 從台詞裡挑一句（還沒翻譯）；chatter_p：講廢話的機率
+local function pick(o, chatter_p)
+	local e = o:get_luaentity()
+	local list = e and LINES[e.name]
+	if not list or #list == 0 then return end
+	if math.random() < chatter_p then
+		list = table.copy(LINES.chatter)
+		for _, t in ipairs(LINES.own_chatter[e.name] or {}) do list[#list + 1] = t; list[#list + 1] = t end   -- 自己的廢話機會多一點
+	end
+	local i = math.random(#list)
+	if #list > 1 and i == last[o] then i = i % #list + 1 end
+	last[o] = i
+	return list[i]
+end
+local function translate(player, str)
+	local info = core.get_player_information(player:get_player_name())
+	return core.get_translated_string(info and info.lang_code ~= "" and info.lang_code or "zh_TW", str)
+end
+
 -- NPC（物件 o）對玩家說一句（text 已經翻譯過的字串，或 nil = 從台詞裡挑）
 function rockmech.npc_say(o, player, text)
 	local name = player:get_player_name()
-	local e = o:get_luaentity()
 	if not text then
-		local list = e and LINES[e.name]
-		if not list or #list == 0 then return end
-		-- 偶爾講廢話
-		if math.random() < CHATTER_P then
-			list = table.copy(LINES.chatter)
-			for _, t in ipairs(LINES.own_chatter[e.name] or {}) do list[#list + 1] = t; list[#list + 1] = t end   -- 自己的廢話機會多一點
-		end
-		local i = math.random(#list)
-		if #list > 1 and i == last[o] then i = i % #list + 1 end
-		last[o] = i
-		local info = core.get_player_information(name)
-		text = core.get_translated_string(info and info.lang_code ~= "" and info.lang_code or "zh_TW", list[i])
+		local str = pick(o, CHATTER_P)
+		if not str then return end
+		text = translate(player, str)
 	end
 	bubbles[o] = bubbles[o] or {}
 	for _, old in ipairs(bubbles[o][name] or {}) do
@@ -154,6 +163,41 @@ core.register_on_mods_loaded(function()
 				return r
 			end
 		end
+	end
+end)
+
+-- 沒事自己蹦一句：附近（IDLE_R 內）有玩家時，每隻 NPC 每 1～3 分鐘說一句（多半是廢話），附近的人都看得到同一句
+local IDLE_R, IDLE_MIN, IDLE_MAX, IDLE_CHATTER = 12, 60, 180, 0.6
+local idle_next = {}     -- NPC 物件 → 下次說話的時間
+local idle_t = 0
+core.register_globalstep(function(dtime)
+	idle_t = idle_t + dtime
+	if idle_t < 2 then return end
+	idle_t = 0
+	local now = core.get_us_time() / 1e6
+	local seen = {}
+	for _, pl in ipairs(core.get_connected_players()) do
+		for _, o in ipairs(core.get_objects_inside_radius(pl:get_pos(), IDLE_R)) do
+			local e = not seen[o] and o:get_luaentity()
+			if e and LINES[e.name] and core.registered_entities[e.name] then
+				seen[o] = true
+				if not idle_next[o] then
+					idle_next[o] = now + math.random(IDLE_MIN, IDLE_MAX)
+				elseif now >= idle_next[o] then
+					idle_next[o] = now + math.random(IDLE_MIN, IDLE_MAX)
+					local str = pick(o, IDLE_CHATTER)
+					if str then
+						for _, p2 in ipairs(core.get_connected_players()) do
+							if vector.distance(p2:get_pos(), o:get_pos()) <= IDLE_R then rockmech.npc_say(o, p2, translate(p2, str)) end
+						end
+					end
+				end
+			end
+		end
+	end
+	-- 附近沒人的 NPC 重新計時（玩家走近才開始算）
+	for o in pairs(idle_next) do
+		if not seen[o] then idle_next[o] = nil end
 	end
 end)
 
