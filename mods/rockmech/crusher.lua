@@ -137,6 +137,16 @@ function rockmech.eff_plant_misplaced(owner) return math.max(0, cfg.plant_mispla
 function rockmech.eff_crusher_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "crusher_rate") end
 function rockmech.eff_conveyor_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "conveyor_rate") end
 function rockmech.eff_vehicle_mult(owner) return 1 + 0.05 * rockmech.research_level(owner, "maintenance") end
+function rockmech.eff_blast_mult(owner) return 1 + 0.05 * rockmech.research_level(owner, "blast_design") end   -- 爆破設計：破碎半徑
+function rockmech.eff_support_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "support_method") end -- 支撐工法：岩栓、噴凝土強度
+function rockmech.eff_fuel_mult(owner) return 1 - 0.05 * rockmech.research_level(owner, "eco_driving") end      -- 省油駕駛：油耗
+-- 某個位置的支護算哪一組的研發：上課世界照礦帶；其他世界（單人）照線上第一位玩家
+function rockmech.support_mult_at(pos)
+	local lane = not core.is_singleplayer() and rockmech.lane_team and rockmech.lane_team(pos)
+	if lane then return rockmech.eff_support_mult("team:" .. lane) end
+	local p = core.get_connected_players()[1]
+	return p and rockmech.eff_support_mult(p:get_player_name()) or 1
+end
 function rockmech.eff_dig_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "skilled_miner") end   -- 熟練礦工：挖礦、鑽孔速度   -- 定期保養：車速
 function rockmech.eff_ore_recovery(owner, ore) return math.min(1, ore.recovery + 0.01 * rockmech.research_level(owner, "ore_recovery")) end
 

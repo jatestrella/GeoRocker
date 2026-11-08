@@ -46,7 +46,10 @@ local function bolt_len(pos)
 	return v > 0 and v or rockmech.cfg.blast.hole_depth
 end
 -- 長度 L 的錨定力 (kN)：min(握裹力 × L, 鋼材降伏)
-local function capacity(L) return math.min(scfg.bolt_grip * L, scfg.bolt_yield) end
+local function capacity(L, pos)
+	local k = pos and rockmech.support_mult_at and rockmech.support_mult_at(pos) or 1    -- 支撐工法（研發）
+	return math.min(scfg.bolt_grip * L, scfg.bolt_yield) * k
+end
 local function along(pos, param2, s)
 	return vector.add(pos, vector.multiply(core.wallmounted_to_dir(param2), s))
 end
@@ -65,8 +68,8 @@ local function rods_update(pos, node)
 		meta:set_int("eff", eff + 1)
 		meta:set_string("infotext", eff < n
 			and S("Rock bolt (length @1 m, cut at @2 m: only the first @3 m is still anchored in rock, anchorage capacity @4 kN)",
-				("%g"):format(bolt_len(pos)), ("%d"):format(eff), ("%d"):format(eff), ("%d"):format(math.floor(capacity(eff))))
-			or S("Rock bolt (length @1 m, anchorage capacity @2 kN)", ("%g"):format(bolt_len(pos)), ("%d"):format(math.floor(capacity(bolt_len(pos))))))
+				("%g"):format(bolt_len(pos)), ("%d"):format(eff), ("%d"):format(eff), ("%d"):format(math.floor(capacity(eff, pos))))
+			or S("Rock bolt (length @1 m, anchorage capacity @2 kN)", ("%g"):format(bolt_len(pos)), ("%d"):format(math.floor(capacity(bolt_len(pos), pos)))))
 	end
 	for s = 1, n do
 		local c = along(pos, node.param2, s)
@@ -253,7 +256,7 @@ core.register_craftitem(BOLT_ITEM, {
 		local meta = core.get_meta(p)
 		local len = meta:get_float("depth")
 		if len <= 0 then len = rockmech.cfg.blast.hole_depth end
-		meta:set_string("infotext", S("Rock bolt (length @1 m, anchorage capacity @2 kN)", ("%g"):format(len), ("%d"):format(math.floor(capacity(len)))))
+		meta:set_string("infotext", S("Rock bolt (length @1 m, anchorage capacity @2 kN)", ("%g"):format(len), ("%d"):format(math.floor(capacity(len, p)))))
 		if not creative(placer) then itemstack:take_item() end
 		resolve(p)
 		return itemstack

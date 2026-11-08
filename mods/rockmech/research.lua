@@ -34,12 +34,21 @@ local ITEMS = {
 	{key = "maintenance", who = "mechanic", label = TR("Regular maintenance"), max = 5, base = 20000, minutes = 10,
 		desc = TR("The team's vehicles move 5% faster"),
 		value = function(acc) return ("×%.2f"):format(rockmech.eff_vehicle_mult(acc)) end},
+	{key = "eco_driving", who = "mechanic", label = TR("Eco driving"), max = 5, base = 20000, minutes = 10,
+		desc = TR("The team's vehicles use 5% less fuel"),
+		value = function(acc) return ("×%.2f"):format(rockmech.eff_fuel_mult(acc)) end},
 	{key = "ore_recovery", who = "geologist", label = TR("Grade control"), max = 5, base = 25000, minutes = 10,
 		desc = TR("Recovery of ore sold at the crushing station +1%"),
 		value = function(acc)
 			for _, ore in pairs(cfg.ores) do return ("%.0f%%"):format(rockmech.eff_ore_recovery(acc, ore) * 100) end
 			return "—"
 		end},
+	{key = "blast_design", who = "geologist", label = TR("Blast design"), max = 4, base = 25000, minutes = 10,
+		desc = TR("Blast breakage radius +5%"),
+		value = function(acc) return ("×%.2f"):format(rockmech.eff_blast_mult(acc)) end},
+	{key = "support_method", who = "geologist", label = TR("Support method"), max = 5, base = 25000, minutes = 10,
+		desc = TR("Rock bolt and shotcrete strength +10%"),
+		value = function(acc) return ("×%.1f"):format(rockmech.eff_support_mult(acc)) end},
 	{key = "skilled_miner", who = "geologist", label = TR("Skilled miner"), max = 5, base = 25000, minutes = 10,
 		desc = TR("Digging and drilling 10% faster"),
 		value = function(acc) return ("×%.1f"):format(rockmech.eff_dig_mult(acc)) end},
@@ -59,6 +68,9 @@ local ICON = {
 	conveyor_rate = function() return badged("rockmech_icon_belt.png", "up") end,
 	maintenance = function() return badged(item_img("rockmech:truck_item"), "up") end,
 	ore_recovery = function() return badged(item_img("rockmech:xrf"), "plus") end,
+	eco_driving = function() return badged(item_img("rockmech:truck_item"), "minus") end,
+	blast_design = function() return badged(item_img("rockmech:detonator"), "plus") end,
+	support_method = function() return badged(item_img("rockmech:rock_bolt"), "plus") end,
 	skilled_miner = function() return badged(item_img("rockmech:rock_drill"), "up") end,
 }
 

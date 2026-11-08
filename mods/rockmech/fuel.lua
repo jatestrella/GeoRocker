@@ -42,6 +42,7 @@ local pending = {}          -- 帳戶 → 還沒扣錢的公升數
 function rockmech.fuel_step(self, kind, working, dtime)
 	local lh = rate(self, kind, working)
 	if lh <= 0 then return end
+	if rockmech.eff_fuel_mult and self.owner and self.owner ~= "" then lh = lh * rockmech.eff_fuel_mult(self.owner) end   -- 省油駕駛（研發）
 	local l = lh * dtime / 3600
 	-- 廢氣（airq.lua）：從車頂附近冒出來
 	if rockmech.airq_diesel then

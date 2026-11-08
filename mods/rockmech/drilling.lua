@@ -142,6 +142,9 @@ local function detonate(pos)
 	local meta = core.get_meta(pos)
 	local dir = core.wallmounted_to_dir(node.param2)
 	local depth = hole_len(pos)
+	-- 爆破設計（研發）：裝藥那個人的組，破碎半徑加大
+	local by = meta:get_string("by")
+	local bm = (by ~= "" and rockmech.eff_blast_mult) and rockmech.eff_blast_mult(by) or 1
 	if kind == ANFO_HOLE or kind == ANFO_PRIMED then
 		if kind == ANFO_HOLE then
 			-- 拒爆：ANFO 沒有起爆藥包炸不響，留在孔裡
@@ -153,7 +156,7 @@ local function detonate(pos)
 		-- 柱狀裝藥：孔口留填塞，往下每 1.5 m 一段；夾制／自由面整根孔一起算。
 		-- 底板：孔底那一格以下不破碎（實際台階孔會超鑽到底板以下，炸完底板就在孔底附近）
 		local floor_y = math.floor(pos.y - depth + 0.5)
-		local R = bcfg.anfo_radius
+		local R = bcfg.anfo_radius * bm
 		local bottom = vector.add(pos, vector.multiply(dir, depth))
 		local B = burden(bottom, dir, R, depth)
 		local f = bcfg.confine_factor * (B and (1 + bcfg.free_face_k * (1 - B / R)) or 1)
@@ -186,7 +189,7 @@ local function detonate(pos)
 		return
 	end
 	local n = math.max(1, meta:get_int("n"))
-	local R = bcfg.charge_radius * n ^ (1 / 3)
+	local R = bcfg.charge_radius * n ^ (1 / 3) * bm
 	-- wallmounted 的方向指向貼著的岩面。孔內：孔底（從岩面往裡孔深 depth 格）；貼面：岩面上（半格）
 	local center
 	if kind == CHARGED then
@@ -478,8 +481,12 @@ local function forbidden(player, pos)
 	return t ~= nil
 end
 
+local function mark(pos, player)
+	if player and player.is_player and player:is_player() then core.get_meta(pos):set_string("by", player:get_player_name()) end
+end
 function rockmech.load_charge(under, above, player)
 	if forbidden(player, under) then return false end
+	mark(under, player)
 	local node = core.get_node(under)
 	local kind = kind_of(node.name)
 	if kind == HOLE or kind == ANFO_HOLE then
@@ -505,6 +512,7 @@ function rockmech.load_charge(under, above, player)
 	if not (nd and nd.walkable ~= false) or core.get_node(above).name ~= "air" then return false end
 	core.set_node(above, {name = SURFACE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
 	core.get_meta(above):set_int("n", 1)
+	mark(above, player)
 	set_info(above)
 	tell(player, S("No drill hole: surface charge, power only ×@1 (drill a hole with the rock drill first)", ("%.1f"):format(bcfg.surface_factor)))
 	return true
@@ -528,6 +536,7 @@ function rockmech.pour_anfo(pos, player)
 		return false
 	end
 	local meta = core.get_meta(pos)
+	mark(pos, player)
 	-- 空孔 → 只有 ANFO；先放了乳膠炸藥的孔 → 那條就是起爆藥包
 	become(pos, node, kind == HOLE and ANFO_HOLE or ANFO_PRIMED)
 	if kind == HOLE then meta:set_int("n", 0) end

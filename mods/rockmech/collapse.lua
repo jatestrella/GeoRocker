@@ -692,8 +692,10 @@ function collapse.read_grid(minp, maxp, no_overburden)
         local sc = cfg.support
         -- 岩栓長度 = 孔深（裝岩栓的鑽孔 meta depth，沒有就是 hole_depth）
         local hd = cfg.blast.hole_depth
+        -- 支撐工法（研發）：這個礦帶那一組的等級，岩栓、噴凝土強度一起放大
+        local k = rockmech.support_mult_at and rockmech.support_mult_at({x = (minp.x + maxp.x) / 2, y = minp.y, z = (minp.z + maxp.z) / 2}) or 1
         g.support = rockmech.support.scan(g, rockmech.support_ids,
-            {p_sc = sc.shotcrete_p, grip = sc.bolt_grip, yield = sc.bolt_yield, L = hd, N = cfg.model_scale,
+            {p_sc = sc.shotcrete_p * k, grip = sc.bolt_grip * k, yield = sc.bolt_yield * k, L = hd, N = cfg.model_scale,
              bolt_len = function(x, y, z)
                 local v = core.get_meta({x = x, y = y, z = z}):get_float("depth")
                 return v > 0 and v or hd

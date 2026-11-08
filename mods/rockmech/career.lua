@@ -971,7 +971,7 @@ core.register_globalstep(function(dtime)
 end)
 
 -- 組號看板：營地南邊的走廊上（煤層在 z < 走廊z − 漸變長/2 就沒有了，看板放在那之外，不擋往南採礦的路），
--- 面向南邊的走廊，白底大數字（3×5 點陣放大 2 倍）；背面是木板
+-- 白底大數字（3×5 點陣放大 2 倍），南北兩面都有
 local SIGN_Z = -48          -- 看板正面的 z（背面在北邊一格）
 local OLD_SIGN_Z = TENT_Z - 6   -- 舊版的看板位置（礦帶裡）
 local DIGITS = {
@@ -1001,7 +1001,7 @@ local function build_sign(x0, text)
 	for x = x1, x2 do
 		for yy = y + 3, top do
 			core.set_node({x = x, y = yy, z = zf}, {name = "rockmech:sign_board"})
-			core.set_node({x = x, y = yy, z = zf + 1}, {name = "rockmech:sign_back"})
+			core.set_node({x = x, y = yy, z = zf + 1}, {name = "rockmech:sign_board"})
 		end
 	end
 	-- 從南邊看過來：往北看時東（+x）在右手邊，所以第 c 欄就是 x 由小到大，不會左右顛倒
@@ -1010,6 +1010,8 @@ local function build_sign(x0, text)
 			if glyph[r + 1]:sub(c + 1, c + 1) == "1" then
 				for dx = 0, 1 do for dy = 0, 1 do
 					core.set_node({x = x1 + 1 + 2 * c + dx, y = top - 1 - 2 * r - dy, z = zf}, {name = "rockmech:sign_digit"})
+					-- 背面（從北邊看）：東西相反
+					core.set_node({x = x2 - 1 - 2 * c - dx, y = top - 1 - 2 * r - dy, z = zf + 1}, {name = "rockmech:sign_digit"})
 				end end
 			end
 		end
@@ -1033,7 +1035,7 @@ local function remove_old_sign(x0)
 end
 -- 已經蓋好的營地：看板搬到走廊（每座營地做一次）
 function rockmech.career_move_sign(x0, team)
-	storage:set_string("sign2:" .. x0, "1")
+	storage:set_string("sign3:" .. x0, "1")
 	remove_old_sign(x0)
 	build_sign(x0, team)
 	core.log("action", ("[rockmech] 營地 x = %d 的組號看板搬到 z = %d"):format(x0, SIGN_Z))
@@ -1055,7 +1057,7 @@ local function build_camp_now(owner, x0)
 		local a, b = rockmech.career_area(x0 or 0)
 		rockmech.level_camp_soil(a, b, math.floor(cfg.surface_y or 0))
 	end
-	storage:set_string("sign2:" .. x0, "1")
+	storage:set_string("sign3:" .. x0, "1")
 	x0 = x0 or 0
 	storage:set_string("camp_layout2:" .. x0, "1")       -- 新配置（建築在破碎站那一排、面向西）
 	build_market(x0)
@@ -1267,7 +1269,7 @@ if cfg.career then
 	end)
 end
 
--- 已經蓋好的營地：組號看板從礦帶裡（舊位置）搬到南邊的走廊
+-- 已經蓋好的營地：組號看板從礦帶裡（舊位置）搬到南邊的走廊；sign3：重蓋成兩面都有數字
 if cfg.career then
 	core.after(2.5, function()
 		local sites = {}
@@ -1279,11 +1281,11 @@ if cfg.career then
 			end
 		end
 		for _, s in ipairs(sites) do
-			if storage:get_string("sign2:" .. s.x0) == "" then
+			if storage:get_string("sign3:" .. s.x0) == "" then
 				local a, b = camp_area(s.x0)
 				core.emerge_area(a, b, function(_, _, rem)
 					if rem > 0 then return end
-					if storage:get_string("sign2:" .. s.x0) == "" then rockmech.career_move_sign(s.x0, s.t) end
+					if storage:get_string("sign3:" .. s.x0) == "" then rockmech.career_move_sign(s.x0, s.t) end
 				end)
 			end
 		end
