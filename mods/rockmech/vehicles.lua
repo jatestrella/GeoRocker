@@ -1331,38 +1331,6 @@ local function drop_chase(self)
 end
 V.drop_chase = drop_chase
 
--- 車門（def.doors = {{id, hinge（鉸鏈：車門前緣、車身座標）, w（寬）, side（−1 左門、1 右門）}...}）：
--- 上下車時門打開再關上（只是外觀，不用多按）。門的零件在 def.parts 裡（同一個 id，放在關著的位置）
-local DOOR_OPEN, DOOR_T, DOOR_HOLD = math.rad(70), 0.25, 0.35
-local function place_door(self, d, ang)
-	local o = self.parts and self.parts[d.id]
-	if not o then return end
-	local psi = d.side < 0 and ang or -ang                  -- 左門往 −x 開、右門往 +x 開
-	local c = vector.add(d.hinge, h2v({x = 0, y = 0, z = -d.w / 2}, psi))
-	o:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, {x = 0, y = math.deg(psi), z = 0})
-end
-function V.door_swing(self, i)
-	local def = TYPES[self.vkind]
-	local d = def.doors and def.doors[i or 1]
-	if not d then return end
-	self.door_anim = self.door_anim or {}
-	local token = {}
-	self.door_anim[i or 1] = token
-	local t0 = core.get_us_time() / 1e6
-	local function tick()
-		if not self.object:get_pos() or self.door_anim[i or 1] ~= token then return end
-		local t = core.get_us_time() / 1e6 - t0
-		local a
-		if t < DOOR_T then a = DOOR_OPEN * t / DOOR_T
-		elseif t < DOOR_T + DOOR_HOLD then a = DOOR_OPEN
-		elseif t < 2 * DOOR_T + DOOR_HOLD then a = DOOR_OPEN * (1 - (t - DOOR_T - DOOR_HOLD) / DOOR_T)
-		else place_door(self, d, 0); return end
-		place_door(self, d, a)
-		core.after(0.04, tick)
-	end
-	tick()
-end
-
 -- 下車的位置：車外站得下人的地方（不能放進車身、伸出去的車斗或岩石、碎石裡，會卡住）：
 -- 左側、右側（車身中段、靠後）、車尾後、車頭前，依序選第一個空的；腳底在地面上（或高一格）。side：先試哪一側（1 右）
 local function outside_spot(self, side)
@@ -1386,7 +1354,7 @@ local function outside_spot(self, side)
 	return {x = p.x, y = p.y + (def.top or def.half) + 0.1, z = p.z}      -- 四周都被擋住：站到車頂上
 end
 
--- 乘客（def.passengers = {{x, y, z, front = 前排？, door = 車門序號}...}）：有人在開的車，別人右鍵坐上空的乘客座；
+-- 乘客（def.passengers = {{x, y, z, front = 前排？}...}）：有人在開的車，別人右鍵坐上空的乘客座；
 -- Shift 或再右鍵一次下車。self.pass：玩家名 → 座位序號（不存檔：重新載入時乘客已經下車了）
 local function pass_seat_eye(def, s)
 	return {x = 0, y = (def.eye_up - EYE_HEIGHT - s.y) * 10, z = (s.front and (def.eye_fwd - s.z) or 0) * 10}
@@ -1417,7 +1385,6 @@ local function pass_on(self, player, side)
 			player:set_camera({mode = "first"})
 			set_seated(player, true)
 			self.pass[name] = i
-			if s.door then V.door_swing(self, s.door) end
 			return true
 		end
 	end
@@ -1435,7 +1402,6 @@ local function pass_off(self, name)
 	p:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 	p:set_camera({mode = "any"})
 	set_seated(p, false)
-	if s and s.door then V.door_swing(self, s.door) end
 	local spot = outside_spot(self, s and s.x > 0 and 1 or -1)
 	core.after(0.1, function() if p:get_pos() then p:set_pos(spot) end end)
 end
@@ -1457,7 +1423,6 @@ local function get_off(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
 	drop_chase(self)
 	if d then
-		V.door_swing(self, 1)
 		d:set_detach()
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		d:set_camera({mode = "any"})
@@ -1622,7 +1587,6 @@ function V.register(kind, def)
 			clicker:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
 			clicker:set_camera({mode = "first"})
 			set_seated(clicker, true, def.pushed and "stand")
-			V.door_swing(self, 1)
 			update_hud(self)
 		end,
 		-- 爆炸（tnt）：扣耐久度。tnt 的 damage = 4 / 距離 × 半徑；×5 換成 kJ（貼著爆炸約 −60 %、4 m 外約 −15 %）
