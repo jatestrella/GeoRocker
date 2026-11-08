@@ -398,7 +398,8 @@ local function spawn_parts(self, parts)
 				o:set_properties({use_texture_alpha = true, backface_culling = true})
 				local a = core.add_entity(self.object:get_pos(), PART)
 				if a then
-					a:set_properties({visual_size = vector.multiply(pt.size, 0.98), textures = pt.tex,
+					-- 掛在別的物件上時，上層的大小會套到下層（這裡的 0.98 是相對上層的倍數）
+					a:set_properties({visual_size = {x = 0.98, y = 0.98, z = 0.98}, textures = pt.tex,
 						use_texture_alpha = true, backface_culling = false})
 					a:set_attach(o, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 					self.inner_list = self.inner_list or {}
