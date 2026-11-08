@@ -5,6 +5,7 @@
 --     每張地圖一個世界（worlds/map_<id>）：「繼續遊戲」進去、「新遊戲」刪掉重建。
 --     solo：單機（世界設定 rockmech_solo = true，沒有老師功能）。
 --     random = true：每次新遊戲用新的種子，rockmech.conf 只放 rockmech_solo，地質由地圖產生器擲（mods/rockmech/worldgen.lua）。
+--     custom = true：地圖頁多一組地質選項（地層、地形、0–100 的滑桿、種子），寫成 rockmech_gen_* 給地圖產生器。
 --     class：在這台電腦開伺服器，開的人（名稱）是管理員＝老師；學生用「加入連線」連進來。
 --   加入連線：輸入位址、埠、帳號、密碼，連到別人開的伺服器（課堂）。
 --   設定：音量、全螢幕。
@@ -25,6 +26,24 @@ local MAPGEN = {
 }
 
 local state = {page = "title", map = nil, msg = nil, confirm = false}
+
+-- 自訂煤礦的地質選項（mods/rockmech/worldgen.lua 的 rockmech_gen_*）。滑桿 0–100，旁邊顯示換算的實際值
+local GEN_STRATA = {{"single", "單一煤層"}, {"inter", "砂頁岩煤互層"}}
+local GEN_TERRAIN = {{"hills", "丘陵"}, {"cuesta", "單面山"}}
+local GEN_SLIDERS = {
+	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end},
+	{"seams", "煤層數（互層）", function(v) return ("%d 層"):format(1 + math.floor(4 * v / 100 + 0.5)) end},
+	{"depth", "主煤層深度", function(v) return ("%d m"):format(math.floor(5 + 35 * v / 100 + 0.5)) end},
+	{"dip", "地層傾角", function(v) return ("%d°"):format(math.floor(40 * v / 100 + 0.5)) end},
+	{"thickvar", "厚度變化", function(v) return ("±%d%%"):format(math.floor(60 * v / 100 + 0.5)) end},
+	{"fold", "褶皺", function(v) return ("振幅 %d m"):format(math.floor(25 * v / 100 + 0.5)) end},
+}
+local gen = {strata = 2, terrain = 1, relief = 50, seams = 50, depth = 40, dip = 40, thickvar = 30, fold = 30, seed = ""}
+local function gen_randomize()
+	math.randomseed(os.time())
+	gen.strata, gen.terrain = math.random(1, 2), math.random(1, 2)
+	for _, sl in ipairs(GEN_SLIDERS) do gen[sl[1]] = math.random(0, 100) end
+end
 
 local function game_info()
 	for _, g in ipairs(core.get_games()) do
@@ -47,7 +66,8 @@ local function maps()
 		local dir = base .. DS .. id
 		local s = Settings(dir .. DS .. "map.conf")
 		out[#out + 1] = {id = id, dir = dir, title = s:get("title") or id, description = s:get("description") or "",
-			mode = s:get("mode") or "solo", order = tonumber(s:get("order") or "") or 99, random = s:get("random") == "true"}
+			mode = s:get("mode") or "solo", order = tonumber(s:get("order") or "") or 99, random = s:get("random") == "true",
+			custom = s:get("custom") == "true"}
 	end
 	table.sort(out, function(a, b) return a.order < b.order end)
 	return out
@@ -77,11 +97,12 @@ local function new_world(m)
 	if i then core.delete_world(i) end
 	-- 隨機地圖（map.conf random = true）：每次新遊戲換一個種子，地圖產生器（worldgen.lua）依種子擲地質
 	local mg = MAPGEN
-	if m.random then
+	if m.random or m.custom then
 		mg = {}
 		for k, v in pairs(MAPGEN) do mg[k] = v end
 		math.randomseed(os.time())
-		mg.fixed_map_seed = tostring(math.random(1, 2000000000))
+		local sd = m.custom and gen.seed:match("^%s*(.-)%s*$") or ""
+		mg.fixed_map_seed = sd ~= "" and sd or tostring(math.random(1, 2000000000))
 	end
 	local err = core.create_world(world_name(m), GAME, mg)
 	if err then return err end
@@ -90,6 +111,13 @@ local function new_world(m)
 	-- 地圖資料夾裡除了 map.conf 都複製進世界（rockmech.conf、students.csv…）
 	for _, f in ipairs(list_dir(m.dir, false)) do
 		if f ~= "map.conf" and not copy_file(m.dir .. DS .. f, w.path .. DS .. f) then return "複製 " .. f .. " 失敗" end
+	end
+	if m.custom then
+		local c = Settings(w.path .. DS .. "rockmech.conf")
+		c:set("rockmech_gen_strata", GEN_STRATA[gen.strata][1])
+		c:set("rockmech_gen_terrain", GEN_TERRAIN[gen.terrain][1])
+		for _, sl in ipairs(GEN_SLIDERS) do c:set("rockmech_gen_" .. sl[1], tostring(gen[sl[1]])) end
+		if not c:write() then return "寫入地質選項失敗" end
 	end
 	return nil
 end
@@ -218,9 +246,11 @@ local function formspec()
 		fs[#fs + 1] = ("button[7.1,%g;5,0.9;back;%s]"):format(TH - 1.35, F("返回"))
 		return table.concat(fs)
 	end
-	local fs = {"formspec_version[6]size[14,10.5]bgcolor[#00000000;true]", "box[0,0;14,10.5;#000000b0]"}
-	header(fs)
 	local list = maps()
+	local cm = state.page == "map" and list[state.map] and list[state.map].custom
+	local PH = cm and 15 or 10.5
+	local fs = {("formspec_version[6]size[14,%g]bgcolor[#00000000;true]"):format(PH), ("box[0,0;14,%g;#000000b0]"):format(PH)}
+	header(fs)
 	if state.page == "main" then
 		fs[#fs + 1] = "label[0.5,2.1;" .. F("選地圖") .. "]"
 		local y = 2.4
@@ -238,6 +268,29 @@ local function formspec()
 		fs[#fs + 1] = ("label[0.5,2.1;%s]"):format(F(m.title))
 		fs[#fs + 1] = ("textarea[0.5,2.4;13,1.2;;;%s]"):format(F(m.description))
 		local y = 3.8
+		if m.custom then
+			-- 地質選項
+			local function dd(x, name, label, opts, idx)
+				local t = {}
+				for _, o in ipairs(opts) do t[#t + 1] = F(o[2]) end
+				fs[#fs + 1] = ("label[%g,%g;%s]"):format(x, y, F(label))
+				fs[#fs + 1] = ("dropdown[%g,%g;4.2,0.7;%s;%s;%d;true]"):format(x + 2, y - 0.35, name, table.concat(t, ","), idx)
+			end
+			dd(0.5, "g_strata", "地層", GEN_STRATA, gen.strata)
+			dd(7.1, "g_terrain", "地形", GEN_TERRAIN, gen.terrain)
+			y = y + 0.9
+			fs[#fs + 1] = "scrollbaroptions[min=0;max=100;smallstep=1;largestep=10]"
+			for _, sl in ipairs(GEN_SLIDERS) do
+				fs[#fs + 1] = ("label[0.5,%g;%s]"):format(y, F(sl[2]))
+				fs[#fs + 1] = ("scrollbar[3.4,%g;7.2,0.45;horizontal;g_%s;%d]"):format(y - 0.22, sl[1], gen[sl[1]])
+				fs[#fs + 1] = ("label[10.9,%g;%s]"):format(y, F(("%d　%s"):format(gen[sl[1]], sl[3](gen[sl[1]]))))
+				y = y + 0.7
+			end
+			fs[#fs + 1] = ("field[0.5,%g;6.4,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子（空白＝隨機；同一個種子同一套地質）"), F(gen.seed))
+			fs[#fs + 1] = "field_close_on_enter[g_seed;false]"
+			fs[#fs + 1] = ("button[7.1,%g;6.4,0.8;g_random;%s]"):format(y + 0.4, F("全部隨機"))
+			y = y + 1.6
+		end
 		if m.mode == "class" then
 			fs[#fs + 1] = ("field[0.5,%g;4.2,0.8;host_name;%s;%s]"):format(y + 0.4, F("你的名稱（老師帳號）"), F(core.settings:get("name") or ""))
 			fs[#fs + 1] = ("pwdfield[4.9,%g;4.2,0.8;host_pass;%s]"):format(y + 0.4, F("密碼（可以空白）"))
@@ -278,7 +331,7 @@ local function formspec()
 		fs[#fs + 1] = "button[3.8,5.8;6.4,0.9;back;" .. F("返回") .. "]"
 	end
 	if state.msg then
-		fs[#fs + 1] = ("textarea[0.5,8.9;13,1.4;;;%s]"):format(F(state.msg))
+		fs[#fs + 1] = ("textarea[0.5,%g;13,1.4;;;%s]"):format(PH - 1.6, F(state.msg))
 	end
 	return table.concat(fs)
 end
@@ -289,6 +342,18 @@ core.button_handler = function(fields)
 	local list = maps()
 	local m = list[state.map or 0]
 	if fields.quit then core.close(); return true end
+	-- 自訂煤礦的選項（每次送出都記下來，種子欄位也是）
+	if fields.g_seed then gen.seed = fields.g_seed end
+	if fields.g_strata then gen.strata = tonumber(fields.g_strata) or gen.strata end
+	if fields.g_terrain then gen.terrain = tonumber(fields.g_terrain) or gen.terrain end
+	for _, sl in ipairs(GEN_SLIDERS) do
+		local v = fields["g_" .. sl[1]]
+		if v then
+			local e = core.explode_scrollbar_event(v)
+			if e.type == "CHG" then gen[sl[1]] = e.value end
+		end
+	end
+	if fields.g_random then gen_randomize() end
 	for k in pairs(fields) do
 		local i = tonumber(k:match("^map_(%d+)$"))
 		if i and list[i] then state.page, state.map, state.confirm, state.msg = "map", i, false, nil end

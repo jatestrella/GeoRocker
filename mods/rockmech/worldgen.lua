@@ -1,14 +1,19 @@
 -- rockmech/worldgen.lua
--- 地圖產生器：主選單新開的世界第一次啟動時（世界資料夾還沒有 rockmech.conf），擲一套地質寫進 rockmech.conf，
--- 每個新世界都不一樣。已經有 rockmech.conf 的世界（上課伺服器、手寫的教學圖）完全不動。
--- 全域設定 rockmech_world_generator = false 可以關掉（新世界就照全域預設）。
--- 地形也換成上課的圖那一套（平地加緩丘、沒有湖和洞穴），主選單選什麼地形產生器都一樣。
--- 擲的東西（範圍限制在教學上合理、挖得到煤的區間）：
---   圍岩：頁岩或砂岩（煤系是沉積岩，不擲花崗岩），GSI 40–65
---   煤層：傾角 10–35°、傾向任意、真厚度 4–12 m、出生點底下 8–25 m 深（往上傾的方向會露頭）
---   節理：第 1 組是層理（跟煤層同位態），第 2、3 組陡傾（60–85°）、走向大致互相垂直；間距 2–5 m；Jr、Ja 取 Q 法表格值
---   現地應力：K_Hmax 1.0–2.0、K_hmin 0.6–1.0（不超過 K_Hmax）、σHmax 方位 0–179°
--- 地質不直接顯示（學生要自己鑽岩心、量節理）；老師用 /rockmech_geology 查（rockmech 權限）。
+-- 地圖產生器：新世界第一次啟動時（世界資料夾的 rockmech.conf 還沒有地質設定），擲一套地質寫進 rockmech.conf，
+-- 每個新世界都不一樣（同一個種子同一套）。已經有地質設定的世界（上課伺服器、手寫的教學圖）完全不動。
+-- 全域設定 rockmech_world_generator = false 可以關掉。
+-- GeoRocker 開始畫面的「自訂煤礦」把滑桿（0–100）寫成 rockmech_gen_*，沒寫的就隨機：
+--   gen_strata   single（圍岩夾一層煤）或 inter（砂頁岩煤互層）
+--   gen_seams    煤層數 1–5（互層）
+--   gen_depth    主煤層頂在出生點底下 5–40 m
+--   gen_dip      地層傾角 0–40°（傾向隨機）
+--   gen_thickvar 每層厚度沿層面的變化 0–60 %（薄的會尖滅）
+--   gen_fold     褶皺振幅 0–25 m（波長 150–300 m，軸向大致沿走向）
+--   gen_terrain  hills（丘陵）或 cuesta（單面山：順向坡＋陡崖，傾角大就是豬背嶺）
+--   gen_relief   地形起伏 0–40 m（出生點附近 60 m 內是平地，給營地）
+-- 其他：節理第 1 組是層面（地層的平均位態），第 2、3 組陡傾、走向大致互相垂直，Jr、Ja 取 Q 法表格值；
+-- 各岩性的 GSI；現地應力 K_Hmax、K_hmin、σHmax 方位。
+-- 地質不直接顯示（要自己鑽岩心、量節理）；老師用 /rockmech_geology 查（單機版看不到，直接看世界資料夾的 rockmech.conf）。
 -- init.lua 在讀設定之前呼叫 generate(world_conf)。
 
 local M = {}
@@ -18,23 +23,78 @@ local function range(r, a, b) return a + (b - a) * r:next(0, 10000) / 10000 end
 local function round(v, step) step = step or 1; return math.floor(v / step + 0.5) * step end
 
 function M.generate(world_conf)
-	-- 已經有地質設定的世界不動（單機版開始畫面的「隨機煤礦」只放 rockmech_solo，地質還是由這裡擲）
 	if world_conf:has("rockmech_joint_lattice") or world_conf:has("rockmech_zone_order") or world_conf:has("rockmech_generated") then
 		return false
 	end
-	local on = core.settings:get_bool("rockmech_world_generator", true)
-	if not on then return false end
+	if not core.settings:get_bool("rockmech_world_generator", true) then return false end
 	local seed_str = core.get_mapgen_setting("seed") or ""
 	if seed_str == "" then seed_str = tostring(os.time()) end
-	local seed = (tonumber(seed_str) or os.time()) % 2147483647        -- 世界種子很大（存成字串），取餘數給亂數
+	local seed = (tonumber(seed_str) or os.time()) % 2147483647
 	local r = PcgRandom(math.floor(seed))
+	-- 滑桿 0..1；沒設定就隨機
+	local function frac(k)
+		local v = tonumber(world_conf:get("rockmech_gen_" .. k) or "")
+		if v then return math.max(0, math.min(100, v)) / 100 end
+		return r:next(0, 1000) / 1000
+	end
+	local function choice(k, t)
+		local v = world_conf:get("rockmech_gen_" .. k)
+		for _, c in ipairs(t) do if c == v then return v end end
+		return pick(r, t)
+	end
 
-	local lith = pick(r, {"shale", "sandstone"})
-	local gsi = round(range(r, 40, 65))
-	local dip = round(range(r, 10, 35))
+	local mode = choice("strata", {"single", "inter"})
+	local terrain = choice("terrain", {"hills", "cuesta"})
+	local dip = round(40 * frac("dip"))
 	local dipdir = r:next(0, 359)
-	local thick = round(range(r, 4, 12))
-	local depth = round(range(r, 8, 25))
+	local depth = round(5 + 35 * frac("depth"))
+	local var = round(0.6 * frac("thickvar"), 0.01)
+	local foldA = round(25 * frac("fold"))
+	local relief = round(40 * frac("relief"))
+	local nseam = mode == "single" and 1 or (1 + math.floor(4 * frac("seams") + 0.5))
+
+	-- 柱狀圖（由上往下）
+	local beds = {}
+	local function add(lith, t)
+		local last = beds[#beds]
+		if last and last[1] == lith then last[2] = last[2] + round(t, 0.5)      -- 同一種岩性相鄰：併成一層
+		else beds[#beds + 1] = {lith, round(t, 0.5)} end
+	end
+	local host = pick(r, {"shale", "sandstone"})
+	local main_top            -- 主煤層頂離柱狀圖頂面的真厚度
+	local function sum() local d = 0 for _, b in ipairs(beds) do d = d + b[2] end return d end
+	if mode == "single" then
+		add(host, 40)
+		main_top = sum()
+		add("coal", range(r, 4, 12))
+		add(host, 250)
+	else
+		-- 沉積旋迴：砂岩 → 頁岩 →（煤）→ 頁岩；主煤層是其中一層，比較厚
+		local main = r:next(1, nseam)
+		local function cycle(coal_t)
+			add("sandstone", range(r, 4, 12))
+			add("shale", range(r, 1, 4))
+			if coal_t then add("coal", coal_t) end
+			add("shale", range(r, 1, 3))
+		end
+		cycle(nil)                               -- 最上面一個沒有煤的旋迴
+		for k = 1, nseam do
+			if k > 1 and r:next(1, 3) == 1 then cycle(nil) end      -- 偶爾夾一個沒有煤的旋迴
+			if k == main then
+				add("sandstone", range(r, 4, 12)); add("shale", range(r, 1, 4))
+				main_top = sum()
+				add("coal", range(r, 5, 10)); add("shale", range(r, 1, 3))
+			else
+				cycle(range(r, 0.5, 2.5))
+			end
+		end
+		while sum() < main_top + 250 do cycle(nil) end
+	end
+	local cosd = math.cos(math.rad(dip))
+	local y0 = -depth + main_top / cosd          -- 主煤層頂在出生點 (0, 0) 底下 depth m
+	local parts = {}
+	for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) end
+
 	local d2 = r:next(0, 359)
 	local d3 = (d2 + 90 + r:next(-15, 15)) % 360
 	local function sp() return round(range(r, 2, 5), 0.5) end
@@ -50,9 +110,16 @@ function M.generate(world_conf)
 	set("only_lithologies", "true")
 	set("lith_mode", "zones")
 	set("zone_width", 100000)
-	set("zone_order", lith)
-	set("gsi_" .. lith, gsi)
-	-- 第 1 組：層理（跟煤層同位態，煤質軟、填充物多）；第 2、3 組：陡傾的節理
+	set("zone_order", mode == "single" and host or "shale")
+	set("strata", table.concat(parts, ","))
+	set("strata_attitude", ("%d,%d,%g"):format(dip, dipdir, round(y0, 0.1)))
+	if foldA > 0 then set("strata_fold", ("%d,%d,%d"):format(foldA, r:next(150, 300), (dipdir + 90 + r:next(-20, 20)) % 360)) end
+	if var > 0 then set("strata_var", ("%g,%d"):format(var, r:next(60, 140))) end
+	if relief > 0 then set("terrain", ("%s,%d,%d"):format(terrain, relief, terrain == "cuesta" and 120 or 60)) end
+	set("gsi_sandstone", round(range(r, 45, 70)))
+	set("gsi_shale", round(range(r, 35, 60)))
+	set("gsi_coal", round(range(r, 30, 50)))
+	-- 第 1 組：層面（地層的平均位態，煤質軟、填充物多）；第 2、3 組：陡傾的節理
 	set("joint_set_1", ("%d,%d,%g,0.7,1.5,3"):format(dip, dipdir, sp()))
 	set("joint_set_2", ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), d2, sp(), jr(), ja()))
 	set("joint_set_3", ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), d3, sp(), jr(), ja()))
@@ -66,17 +133,15 @@ function M.generate(world_conf)
 	set("model_scale", 1)
 	set("weakness_c", 0)
 	set("weakness_max_spacing", 1.5)
-	set("coal_seam", ("%d,%d,%d,%d"):format(dip, dipdir, thick, -depth))
 	set("career", "true")
 	set("solo", "true")            -- 個人遊戲：沒有老師、分組、名牌（team.lua、knowledge.lua）
 	world_conf:write()
-	-- 地形照上課的圖：平地加緩丘，沒有湖、海、洞穴（主選單選的地形產生器換掉；只有新世界第一次載入時改得動）
+	-- 引擎的地形：平地（起伏由 rockmech_terrain 自己造），沒有湖、海、洞穴
 	local mg = {mg_name = "flat", mg_flags = "nocaves, nodungeons, light, nodecorations, nobiomes, noores",
-		mgflat_spflags = "nolakes, hills, nocaverns", mgflat_ground_level = "0", mgflat_hill_threshold = "0.35",
-		mgflat_hill_steepness = "64", water_level = "-31000"}
+		mgflat_spflags = "nolakes, nohills, nocaverns", mgflat_ground_level = "0", water_level = "-31000"}
 	for k, v in pairs(mg) do core.set_mapgen_setting(k, v, true) end
-	core.log("action", ("[rockmech] 地圖產生器：種子 %s → %s GSI %d、煤層 %d°/%03d° 厚 %d m 深 %d m"):format(
-		seed_str, lith, gsi, dip, dipdir, thick, depth))
+	core.log("action", ("[rockmech] 地圖產生器：種子 %s → %s %d 層煤、傾角 %d°/%03d°、主煤層深 %d m、褶皺 %d m、厚度變化 %d%%、%s %d m"):format(
+		seed_str, mode, nseam, dip, dipdir, depth, foldA, math.floor(var * 100 + 0.5), terrain, relief))
 	return true
 end
 
@@ -90,10 +155,27 @@ function M.register_command()
 			-- 直接讀這個世界的 rockmech.conf（產生器寫的，或手寫的）
 			local w = Settings(core.get_worldpath() .. "/rockmech.conf")
 			local function g(k) local v = w:get("rockmech_" .. k); return v and v ~= "" and v or "-" end
-			local lith = g("zone_order")
-			local key = lith:match("^[^,]+")
-			local L = rockmech.cfg.lithologies[key]
-			local out = {S("Host rock: @1", L and S(L.description) or lith) .. "  GSI " .. g("gsi_" .. key)}
+			local out = {}
+			if g("strata") ~= "-" then
+				-- 柱狀圖：列到最後一層煤再多兩層，煤層用 [ ] 標出來
+				local col, last_coal = {}, 0
+				local function name(k) local L = rockmech.cfg.lithologies[k]; return L and S(L.description) or k end
+				for lith, t in g("strata"):gmatch("([%a_]+):([%d.]+)") do
+					col[#col + 1] = lith == "coal" and ("[" .. t .. " m " .. name(lith) .. "]") or (t .. " m " .. name(lith))
+					if lith == "coal" then last_coal = #col end
+				end
+				for k = #col, last_coal + 3, -1 do col[k] = nil end
+				out[#out + 1] = S("Strata (top down): @1", table.concat(col, ", ") .. " …")
+				out[#out + 1] = ("GSI  %s %s  %s %s  %s %s"):format(name("sandstone"), g("gsi_sandstone"), name("shale"), g("gsi_shale"), name("coal"), g("gsi_coal"))
+				out[#out + 1] = S("Attitude dip/dip direction, top at (0,0): @1", g("strata_attitude"))
+				out[#out + 1] = S("Fold amplitude,wavelength,axis: @1   thickness variation,scale: @2   terrain: @3", g("strata_fold"), g("strata_var"), g("terrain"))
+			end
+			if g("strata") == "-" then
+				local lith = g("zone_order")
+				local key = lith:match("^[^,]+")
+				local L = rockmech.cfg.lithologies[key]
+				out[#out + 1] = S("Host rock: @1", L and S(L.description) or lith) .. "  GSI " .. g("gsi_" .. key)
+			end
 			local cs = g("coal_seam")
 			local dip, dd, t, y0 = cs:match("^([%d.]+),([%d.]+),([%d.]+),(%-?[%d.]+)")
 			if dip then out[#out + 1] = S("Coal seam: dip @1°, dip direction @2°, thickness @3 m, @4 m below spawn", dip, dd, t, tostring(-tonumber(y0))) end

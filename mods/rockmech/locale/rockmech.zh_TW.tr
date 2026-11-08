@@ -1736,3 +1736,6 @@ Show this world's geology (teacher)=顯示這個世界的地質（老師用）
 Host rock: @1=圍岩：@1
 Coal seam: dip @1°, dip direction @2°, thickness @3 m, @4 m below spawn=煤層：傾角 @1°、傾向 @2°、厚 @3 m、出生點底下 @4 m
 Generated from seed @1=由種子 @1 產生
+Strata (top down): @1=柱狀圖（由上往下）：@1
+Attitude dip/dip direction, top at (0,0): @1=位態 傾角,傾向,(0,0) 頂面高程：@1
+Fold amplitude,wavelength,axis: @1   thickness variation,scale: @2   terrain: @3=褶皺 振幅,波長,軸向：@1　厚度變化,尺度：@2　地形：@3

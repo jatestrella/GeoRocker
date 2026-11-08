@@ -110,6 +110,7 @@ end
 
 -- 某位置的岩性名稱（依 cfg.lith_mode）
 function stress.lith_key_at(cfg, x, y, z)
+	if cfg.strata and z then return (stress.strata_at(cfg.strata, x, y, z)) end
 	if cfg.coal_seam and z and stress.in_seam(cfg.coal_seam, x, y, z) then return "coal" end
 	if cfg.lith_mode == "zones" then
 		return stress.zone_at_x(cfg, x)
@@ -209,6 +210,86 @@ function stress.lane_terrain(cfg, x, z)
 	return h * zf, hill * zf
 end
 
+---------------------------------------------------------------------------
+-- 地層柱狀圖（cfg.strata，地圖產生器）：由上往下一層一層（岩性、真厚度），整套往傾向傾斜、可以褶皺、每層厚度沿層面變化。
+-- 地下一點的岩性 = 它離柱狀圖頂面多深（垂直層面量）落在哪一層
+---------------------------------------------------------------------------
+
+-- 柱狀圖頂面在 (x, z) 的高程
+function stress.strata_ref_y(S, x, z)
+	local y = S.y0 - S.tan_dip * (x * S.sin_dd + z * S.cos_dd)
+	local f = S.fold
+	if f then y = y + f.A * math.sin(2 * math.pi * (x * f.cx + z * f.cz) / f.L) end
+	return y
+end
+-- (x, z) 這一欄每層的底（離頂面的真厚度累計，m）
+function stress.strata_column(S, x, z)
+	local out, d = {}, 0
+	local v = S.var
+	for i, b in ipairs(S.beds) do
+		local m = 1
+		if v then m = math.max(0, 1 + v.f * (2 * fbm(x / v.scale + i * 3.7, z / v.scale, 50 + i) - 1)) end
+		d = d + b.t * m
+		out[i] = d
+	end
+	return out
+end
+-- 岩性、第幾層、在這層裡的位置（0 頂 … 1 底）。col：strata_column 的結果（同一欄重複用）
+function stress.strata_at(S, x, y, z, col)
+	col = col or stress.strata_column(S, x, z)
+	local d = (stress.strata_ref_y(S, x, z) - y) * S.cos_dip
+	if d < 0 then return S.beds[1].lith, 1, 0 end           -- 柱狀圖頂面以上：最上面那層往上延伸
+	local prev = 0
+	for i, bot in ipairs(col) do
+		if d < bot then return S.beds[i].lith, i, bot > prev and (d - prev) / (bot - prev) or 0.5 end
+		prev = bot
+	end
+	return S.beds[#S.beds].lith, #S.beds, 0.5
+end
+-- 互層裡的煤品位：煤層中央最好，靠頂底板變差，再加緩慢的橫向變化（同 seam_grade）
+function stress.strata_grade(x, z, frac)
+	local d = 2 * frac - 1
+	local g = 228 - 75 * d * d + 7 * math.sin(x / 37) + 7 * math.sin(z / 29)
+	return math.max(1, math.min(255, math.floor(g + 0.5)))
+end
+
+-- 自由地形（cfg.terrain，非礦帶世界）：(x, z) 這一欄比 surface_y 高出幾公尺（≥ 0），第二個值同第一個（礦區山丘：表土鋪薄，看得到岩層）
+--   hills：雜訊起伏的丘陵，約一半是平地；cuesta：單面山。沿傾向鋸齒狀：順著層面的緩坡（坡度＝岩層傾角）＋朝上傾方向的陡崖，
+--   陡崖沿走向蜿蜒；傾角大就成了豬背嶺。每一座的順向坡比前一座年輕（地層往傾向一直往下）
+local CUESTA_SCARP = math.tan(math.rad(55))
+function stress.free_terrain(cfg, x, z)
+	local T = cfg.terrain
+	local H = T.h
+	local h
+	if T.mode == "cuesta" and cfg.strata then
+		local S = cfg.strata
+		local u = x * S.sin_dd + z * S.cos_dd              -- 沿傾向
+		local w = x * S.cos_dd - z * S.sin_dd              -- 沿走向
+		local tan = math.max(math.tan(math.rad(4)), S.tan_dip)
+		local ld = math.min(300, H / tan)                  -- 順向坡長
+		local ls = H / CUESTA_SCARP                        -- 陡崖寬
+		local P = ld + ls
+		u = u + P * 0.35 * (fbm(w / T.scale, 0.5, 71) - 0.5) * 2      -- 陡崖沿走向蜿蜒
+		local s = u % P
+		if s < ls then h = H * smooth(s / ls) else h = H * (1 - (s - ls) / ld) end
+		h = h * (0.75 + 0.25 * fbm(w / (T.scale * 2), u / (T.scale * 2), 73)) + 1.5 * (fbm(x / 9, z / 9, 75) - 0.5)
+	else
+		local n = fbm(x / T.scale, z / T.scale, 61)
+		h = H * smooth((n - 0.3) / 0.5) + 1.5 * (fbm(x / 9, z / 9, 75) - 0.5)
+	end
+	-- 出生點附近（營地）平地：60 m 內不起伏，100 m 以外完全起伏
+	local rr = math.sqrt(x * x + z * z)
+	h = math.max(0, h) * smooth((rr - 60) / 40)
+	return h, h
+end
+-- 有沒有公式地形（礦帶或自由地形）；有的話 (x, z) 比 surface_y 高幾公尺
+function stress.has_terrain(cfg) return cfg.lane_terrain ~= nil or cfg.terrain ~= nil end
+function stress.terrain_rise(cfg, x, z)
+	if cfg.lane_terrain then return stress.lane_terrain(cfg, x, z) end
+	if cfg.terrain then return stress.free_terrain(cfg, x, z) end
+	return 0, 0
+end
+
 -- 煤的品位（param2 1..255，煤佔的比例）：煤層中央最好，靠頂底板變差（夾雜質），再加緩慢的橫向變化
 function stress.seam_grade(s, x, y, z)
 	local _, lx = stress.seam_lane(s, x)
@@ -304,7 +385,7 @@ function stress.natural_soil(cfg, x, z, rise, rise_at, ore_top)
 	local function noise_t(lo, hi) return math.floor(NL * (lo + (hi - lo) * fbm(x / 14, z / 14, 41)) + 0.5) end
 	if rise >= SOILC.min_rise then
 		local tot, hill = 0, 0
-		if cfg.lane_terrain then tot, hill = stress.lane_terrain(cfg, x, z) end
+		if stress.has_terrain(cfg) then tot, hill = stress.terrain_rise(cfg, x, z) end
 		local of = stress.outcrop_factor(cfg, x, z)          -- 露頭：不鋪或漸薄，也不種樹
 		local tree = of >= 1 and stress.tree_at(x, z)
 		if (hill or 0) > 0 and hill >= tot - 0.5 then        -- 礦區山丘（不是交界山脊）：鋪薄一點，看得到煤層

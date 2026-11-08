@@ -93,6 +93,8 @@ end
 
 local data, p2data = {}, {}
 local seam, pit = cfg.coal_seam, cfg.open_pit
+local strata = cfg.strata          -- 地層柱狀圖（地圖產生器）：有它就照柱狀圖，不看 coal_seam
+if strata then seam = nil end
 local c_road = {}
 for k = 1, 7 do c_road[k] = core.get_content_id("rockmech:rubble_l" .. k .. "_c") end   -- 壓實的碎石（nodes.lua）
 
@@ -140,7 +142,7 @@ local function lay_topsoil(area, minp, maxp)
 	local R = #SC.apron
 	for x = minp.x - R, maxp.x + R do for z = minp.z - R, maxp.z + R do
 		local r
-		if cfg.lane_terrain then r = math.floor(stress.lane_terrain(cfg, x, z) + 0.5)
+		if stress.has_terrain(cfg) then r = math.floor(stress.terrain_rise(cfg, x, z) + 0.5)
 		elseif x >= minp.x and x <= maxp.x and z >= minp.z and z <= maxp.z then
 			local t = top_of(x, z)
 			r = t and t - sy or 0
@@ -225,7 +227,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 	local emin, emax = vm:get_emerged_area()
 	local area = VoxelArea(emin, emax)
 	vm:get_data(data)
-	if seam or pit then vm:get_param2_data(p2data) end
+	if seam or pit or strata then vm:get_param2_data(p2data) end
 
 	-- 每個 y 的目標 content id
 	local layer = stress.layer_table(cfg, minp.y, maxp.y)
@@ -246,18 +248,23 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 
 	local t0 = os.clock()
 	local changed, n, stripped = false, 0, 0
-	-- 礦帶地形：地面以上的山丘先填成 stone，下面的迴圈再換成岩性（含節理與煤層）
-	if cfg.lane_terrain then
+	-- 礦帶地形、自由地形：地面以上的山丘先填成 stone，下面的迴圈再換成岩性（含節理與煤層）
+	if stress.has_terrain(cfg) then
 		local sy = math.floor(cfg.surface_y)
 		for z = minp.z, maxp.z do
 			for x = minp.x, maxp.x do
-				local top = sy + math.floor(stress.lane_terrain(cfg, x, z) + 0.5)
+				local top = sy + math.floor(stress.terrain_rise(cfg, x, z) + 0.5)
 				for y = math.max(minp.y, sy + 1), math.min(maxp.y, top) do
 					local vi = area:index(x, y, z)
 					if data[vi] == c_air then data[vi] = c_stone; stripped = stripped + 1 end
 				end
 			end
 		end
+	end
+	-- 柱狀圖：每一欄的各層厚度先算好（同一欄重複用）
+	local cols = {}
+	if strata then
+		for z = minp.z, maxp.z do for x = minp.x, maxp.x do cols[x .. "," .. z] = stress.strata_column(strata, x, z) end end
 	end
 	for z = minp.z, maxp.z do
 		for y = minp.y, maxp.y do
@@ -270,12 +277,19 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 						cv, pv = var_x[x], plane_x[x]
 					end
 					local coal = seam and stress.in_seam(seam, x, y, z)
+					local sfrac
+					if strata then
+						local key, _, fr = stress.strata_at(strata, x, y, z, cols[x .. "," .. z])
+						cv, pv = c_var[key], c_plane[key]
+						if key == "coal" then sfrac = fr end
+					end
 					if plane then
 						data[vi] = (coal and c_plane.coal or pv)[suffix(cell_traces(joints, sets, x, y, z, MAXL))]
 					else
 						data[vi] = (coal and c_var.coal or cv)[use_joints and cell_mask(sets, x, y, z) or 0]
 					end
-					if coal then p2data[vi] = stress.seam_grade(seam, x, y, z) end
+					if coal then p2data[vi] = stress.seam_grade(seam, x, y, z)
+					elseif sfrac then p2data[vi] = stress.strata_grade(x, z, sfrac) end
 					changed = true
 					n = n + 1
 				end
@@ -296,7 +310,14 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 				-- 鄰近 chunk 寫進邊緣的其他天然方塊（礦石、凍土、冰…）→ 該位置的岩性
 				local p = area:position(i)
 				local key = stress.lith_key_at(cfg, p.x, p.y, p.z)
-				if key == "coal" then p2data[i] = stress.seam_grade(seam, p.x, p.y, p.z) end
+				if key == "coal" then
+					if strata then
+						local _, _, fr = stress.strata_at(strata, p.x, p.y, p.z)
+						p2data[i] = stress.strata_grade(p.x, p.z, fr)
+					else
+						p2data[i] = stress.seam_grade(seam, p.x, p.y, p.z)
+					end
+				end
 				if plane then
 					data[i] = c_plane[key][suffix(cell_traces(joints, sets, p.x, p.y, p.z, MAXL))]
 				else

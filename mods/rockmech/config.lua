@@ -586,6 +586,38 @@ function config.load(get)
 			end
 		end
 	end
+	-- 地層柱狀圖（地圖產生器 worldgen.lua 寫的；有它就不看 coal_seam）：
+	--   rockmech_strata = 岩性:厚度,岩性:厚度,…（由上往下，真厚度 m）
+	--   rockmech_strata_attitude = 傾角,傾向,y0：柱狀圖頂面在 (0, 0) 的高程 y0，整套往傾向傾斜
+	--   rockmech_strata_fold = 振幅,波長,軸向方位（m、m、度；褶皺：層面上下起伏，起伏方向垂直軸向）
+	--   rockmech_strata_var = 變化比例,尺度（每層厚度 × (1 ± 比例)，沿層面緩慢變化；薄的會尖滅）
+	local st = get("rockmech_strata")
+	if st and st ~= "" then
+		local beds = {}
+		for lith, t in tostring(st):gmatch("([%a_]+)%s*:%s*([%d.]+)") do
+			if cfg.lithologies[lith] then beds[#beds + 1] = {lith = lith, t = tonumber(t)}
+			else warnings[#warnings + 1] = "rockmech_strata: 沒有岩性 " .. lith .. "（忽略）" end
+		end
+		local att = numbers("rockmech_strata_attitude", 3)
+		if #beds > 0 and att then
+			local dip, dd = math.rad(att[1]), math.rad(att[2])
+			cfg.strata = {beds = beds, y0 = att[3], dip_deg = att[1], dipdir_deg = att[2],
+				tan_dip = math.tan(dip), cos_dip = math.cos(dip), sin_dd = math.sin(dd), cos_dd = math.cos(dd)}
+			local f = numbers("rockmech_strata_fold", 3)
+			if f and f[1] > 0 and f[2] > 0 then
+				local az = math.rad(f[3])       -- 軸向；起伏沿垂直軸向的方向
+				cfg.strata.fold = {A = f[1], L = f[2], cx = math.cos(az), cz = -math.sin(az)}
+			end
+			local v = numbers("rockmech_strata_var", 2)
+			if v and v[1] > 0 then cfg.strata.var = {f = math.min(0.95, v[1]), scale = math.max(10, v[2])} end
+		end
+	end
+	-- 自由地形（非礦帶世界）：rockmech_terrain = 樣式,高度,尺度；樣式 hills（丘陵）或 cuesta（單面山，要有柱狀圖）
+	local tr = get("rockmech_terrain")
+	if tr and tr ~= "" and not cfg.lane_terrain then
+		local mode, h, sc = tostring(tr):match("^%s*(%a+)%s*,%s*([%d.]+)%s*,%s*([%d.]+)")
+		if mode and tonumber(h) > 0 then cfg.terrain = {mode = mode, h = tonumber(h), scale = math.max(10, tonumber(sc))} end
+	end
 	local pit = numbers("rockmech_open_pit", 6)
 	if pit then
 		cfg.open_pit = {x0 = pit[1], z0 = pit[2], R = pit[3], D = pit[4], H = pit[5], W = pit[6],
