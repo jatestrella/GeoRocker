@@ -40,7 +40,8 @@ do
 	local y = ("[fill:16x16:%s"):format(c)
 	local grille = ("[fill:16x16:%s^[fill:12x9:2,4:#2a2a2a^[fill:12x1:2,6:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)
 	local win = V.cab_glass(c, 2, 2, 12, 8) .. "^[fill:16x2:0,14:#2a2a2a"
-	local side = V.cab_glass(c, 3, 2, 10, 8) .. "^[fill:16x2:0,14:#2a2a2a"
+	local side = V.cab_side(c, {win = {x = 3, y = 2, w = 10, h = 8}, clear = true, sill = "#2a2a2a", doors = {{x = 2, y = 1, w = 12, h = 12.8}}})
+	local side_l = V.flip_side(side)
 	local blade = "[fill:16x16:#4a4a4a^[fill:16x2:0,14:#b0b0b0^[fill:16x1:0,0:#3a3a3a"
 	local steel = box_tex("#3a3a3a")
 	def.parts = {
@@ -49,7 +50,7 @@ do
 		{pos = {x = 0, y = -0.75, z = -0.4}, size = {x = 1.5, y = 0.7, z = 3.6}, tex = box_tex("#3a3a3a")},       -- 車架
 		{pos = {x = 0, y = -0.05, z = 0.7}, size = {x = 1.6, y = 1.0, z = 1.6}, tex = {y, y, y, y, grille, y}},    -- 引擎蓋
 		{pos = {x = 0, y = 0.55, z = -0.9}, size = {x = 1.8, y = 1.9, z = 1.6}, alpha = true,                     -- 駕駛艙
-			tex = {y, "[fill:16x16:#2a2a2a", side, side, win, y}},
+			tex = {y, "[fill:16x16:#2a2a2a", side, side_l, win, y}},
 		{pos = {x = 0, y = -0.6, z = -2.15}, size = {x = 1.6, y = 0.8, z = 0.7}, tex = box_tex("#b89a18")},      -- 車尾配重
 		{pos = {x = 0.5, y = 0.75, z = 1.0}, size = {x = 0.12, y = 0.6, z = 0.12}, tex = box_tex("#202020")},     -- 排氣管
 		{id = "blade", pos = {x = 0, y = -0.95, z = 2.15}, size = {x = 3.0, y = 1.1, z = 0.3}, tex = {blade, blade, blade, blade, blade, blade}},

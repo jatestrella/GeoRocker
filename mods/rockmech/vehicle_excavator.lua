@@ -205,9 +205,9 @@ local function cab_tex(c, win_w, clear)
 	local ww = win_w or 6
 	local win = clear and (V.cab_glass(c, 2, 2, 12, 7) .. "^[fill:16x2:0,14:#2a2a2a")
 		or ("[fill:16x16:%s^[fill:12x7:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = clear and (V.cab_glass(c, 14 - ww, 2, ww, 6) .. "^[fill:16x2:0,14:#2a2a2a")
-		or ("[fill:16x16:%s^[fill:%dx6:%d,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c, ww, 14 - ww)
-	return {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", side, side, win, ("[fill:16x16:%s"):format(c)}
+	local side = V.cab_side(c, {win = {x = 14 - ww, y = 2, w = ww, h = 6}, clear = clear, sill = "#2a2a2a",
+		doors = {{x = 13 - ww, y = 1, w = ww + 2.5, h = 12.8}}})
+	return {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", side, V.flip_side(side), win, ("[fill:16x16:%s"):format(c)}
 end
 
 -- P：def 的欄位（desc、color、cap、speed、half…）之外：

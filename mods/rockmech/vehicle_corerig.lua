@@ -34,7 +34,8 @@ do
 	local c = def.color
 	local o = ("[fill:16x16:%s^[fill:16x2:0,11:#2f5f9f"):format(c)
 	local win = ("[fill:16x16:%s^[fill:12x9:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = ("[fill:16x16:%s^[fill:10x8:3,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local side = V.cab_side(c, {win = {x = 3, y = 2, w = 10, h = 8}, sill = "#2a2a2a", doors = {{x = 2, y = 1, w = 12, h = 12.8}}})
+	local side_l = V.flip_side(side)
 	local grille = ("[fill:16x16:%s^[fill:12x8:2,4:#2a2a2a^[fill:12x1:2,6:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)
 	local mast = "[fill:16x16:#2f5f9f^[fill:4x16:6,0:#4a7abf^[fill:16x1:0,3:#e8e8e0^[fill:16x1:0,11:#e8e8e0"
 	local rods = "[fill:16x16:#8a8e92^[fill:16x1:0,4:#6a6e72^[fill:16x1:0,10:#6a6e72"
@@ -44,7 +45,7 @@ do
 		{pos = {x = -1.1, y = -1.0, z = -0.6}, size = {x = 0.7, y = 1.0, z = 4.2}, tex = trk},
 		{pos = {x = 1.1, y = -1.0, z = -0.6}, size = {x = 0.7, y = 1.0, z = 4.2}, tex = trk},
 		{pos = {x = 0, y = -0.35, z = -0.7}, size = {x = 2.2, y = 0.5, z = 4.4}, tex = box_tex("#3a3a3a")},   -- 甲板
-		{pos = {x = -0.5, y = 0.6, z = 0.2}, size = {x = 1.2, y = 1.5, z = 1.4}, tex = {o, "[fill:16x16:#2a2a2a", side, side, win, o}},   -- 駕駛室
+		{pos = {x = -0.5, y = 0.6, z = 0.2}, size = {x = 1.2, y = 1.5, z = 1.4}, tex = {o, "[fill:16x16:#2a2a2a", side, side_l, win, o}},   -- 駕駛室
 		{pos = {x = 0.4, y = 0.45, z = -1.9}, size = {x = 1.8, y = 1.4, z = 2.0}, tex = {o, o, grille, grille, o, o}},   -- 動力箱
 		{pos = {x = 0.9, y = 0.0, z = -0.5}, size = {x = 0.6, y = 0.9, z = 1.6}, tex = {rods, rods, rods, rods, rods, rods}},   -- 鑽桿架
 		{pos = {x = 0, y = -0.2, z = 1.75}, size = {x = 0.6, y = 0.5, z = 1.0}, tex = box_tex("#2f5f9f")},   -- 桅桿臂

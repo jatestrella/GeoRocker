@@ -32,14 +32,15 @@ local y = ("[fill:16x16:%s"):format(c)
 local grille = ("[fill:16x16:#2a2a2a^[fill:14x10:1,2:#3a3a3a^[fill:14x1:1,4:#555555^[fill:14x1:1,7:#555555^[fill:14x1:1,10:#555555"
 	.. "^[fill:3x2:1,13:#f0e070^[fill:3x2:12,13:#f0e070")
 local win = V.cab_glass(c, 2, 2, 12, 7) .. "^[fill:16x2:0,14:#2a2a2a"
-local side = V.cab_glass(c, 4, 2, 9, 7) .. "^[fill:16x2:0,14:#2a2a2a"
+local side = V.cab_side(c, {win = {x = 4, y = 2, w = 9, h = 7}, clear = true, sill = "#2a2a2a", doors = {{x = 3, y = 1, w = 11, h = 12.8}}})
+local side_l = V.flip_side(side)
 local wheel = {TREAD, TREAD, WHEEL, WHEEL, TREAD, TREAD}   -- 上下前後是胎面，左右兩側是輪圈
 local body = {
 	{pos = {x = 0, y = -1.2, z = -2.2}, size = {x = 1.6, y = 0.8, z = 9.0}, tex = box_tex("#2a2a2a")},     -- 車架
 	{pos = {x = 0, y = -0.6, z = 1.5}, size = {x = 2.6, y = 1.8, z = 1.8}, tex = {y, y, y, y, grille, y}},   -- 引擎與水箱
 	{pos = {x = 0, y = 0.4, z = 1.5}, size = {x = 4.9, y = 0.2, z = 1.8}, tex = box_tex("#4a4a4a")},       -- 平台
 	{pos = {x = -1.45, y = 1.2, z = 1.4}, size = {x = 1.8, y = 1.4, z = 1.6}, alpha = true,               -- 駕駛室（左側）
-		tex = {y, "[fill:16x16:#2a2a2a", side, side, win, y}},
+		tex = {y, "[fill:16x16:#2a2a2a", side, side_l, win, y}},
 	{pos = {x = 1.25, y = 0.95, z = 2.35}, size = {x = 2.3, y = 0.06, z = 0.06}, tex = box_tex("#f0f0f0")}, -- 平台欄杆
 	{pos = {x = 1.25, y = 0.75, z = 0.65}, size = {x = 2.3, y = 0.06, z = 0.06}, tex = box_tex("#f0f0f0")},
 }

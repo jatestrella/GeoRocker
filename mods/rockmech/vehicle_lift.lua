@@ -48,7 +48,8 @@ local function lift(kind, P)
 	-- 底盤（跟卡車一樣：駕駛室在 z −0.5..1.5，車尾到 z −5.5）
 	local c = def.color
 	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)
-	local cab_side = ("[fill:16x16:%s^[fill:6x6:8,2:#9fd0ff"):format(c)
+	local cab_side = V.cab_side(c, {win = {x = 8, y = 2, w = 6, h = 6}, doors = {{x = 6.5, y = 1, w = 8.5, h = 12.5}}})
+	local cab_side_l = V.flip_side(cab_side)
 	local wheel = {V.TREAD, V.TREAD, V.WHEEL, V.WHEEL, V.TREAD, V.TREAD}
 	local parts = {
 		{pos = {x = 0, y = -0.55, z = -2.0}, size = {x = 2.0, y = 0.3, z = 7.0}, tex = box_tex("#2a2a2a")},     -- 底盤
@@ -61,7 +62,7 @@ local function lift(kind, P)
 				("[fill:16x16:%s"):format(c),
 				"[fill:16x16:#e8c020^[fill:3x16:0,0:#202020^[fill:3x16:6,0:#202020^[fill:3x16:12,0:#202020^[fill:4x3:1,2:#c02020^[fill:4x3:11,2:#c02020"}},
 		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0},
-			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side, cab_front, ("[fill:16x16:%s"):format(c)}},
+			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side_l, cab_front, ("[fill:16x16:%s"):format(c)}},
 	}
 	for _, w in ipairs({{x = -1.15, z = 0.5, wd = 0.35}, {x = 1.15, z = 0.5, wd = 0.35},
 			{x = -1.1, z = -3.6, wd = 0.6}, {x = 1.1, z = -3.6, wd = 0.6}, {x = -1.1, z = -4.8, wd = 0.6}, {x = 1.1, z = -4.8, wd = 0.6}}) do
