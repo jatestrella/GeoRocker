@@ -1462,3 +1462,11 @@ Point load tester@nRight-click a core box on the ground: 3 tests per core run, r
 Schmidt hammer@nLeft-click a rock face: 10 impacts give the rebound number R, converted to uniaxial compressive strength (Katz 2000: UCS ≈ 2.21·e^(0.067R))=施密特錘@n對岩面左鍵：敲 10 次讀回彈值 R，換算單軸抗壓強度（Katz 2000：UCS ≈ 2.21·e^(0.067R)）
 The rock here=這裡的岩石
 [Schmidt hammer] @1 @2: rebound @3 → median R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa=[施密特錘] @1 @2：回彈值 @3 → 中位數 R @= @4 → UCS ≈ 2.21·e^(0.067R) @= @5 MPa
+Ventilation fan @1 m³/s=抽風機 @1 m³/s
+Duct @1 m=風管 @1 m
+CO @1 ppm=CO @1 ppm
+The air is bad: headache and dizziness=空氣很差：頭痛、頭暈
+Gas detector@nWorks from your inventory=氣體偵測器@n放在背包裡就有作用
+Gas detector=氣體偵測器
+Ventilation fan=抽風機
+Ventilation duct=風管

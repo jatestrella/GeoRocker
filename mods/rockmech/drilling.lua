@@ -162,11 +162,15 @@ local function detonate(pos)
 		core.remove_node(pos)
 		local t = 0.5 + bcfg.anfo_stemming + 0.75
 		local last
+		local segs = 0
 		repeat
 			last = vector.add(pos, vector.multiply(dir, math.min(t, depth)))
 			rockmech.blast_charge(last, R * f, floor_y, 1.0)      -- 台階生產爆破：擾動 D = 1.0
 			t = t + 1.5
+			segs = segs + 1
 		until t > depth + 0.5
+		-- 炮煙（airq.lua）：每段 1.5 m 的 ANFO
+		if rockmech.airq_blast then rockmech.airq_blast(pos, segs * 1.5 * rockmech.airq_kg.anfo_per_m) end
 		R = R * f + depth
 		local center = last
 		local r = math.ceil(R) + 1
@@ -199,6 +203,7 @@ local function detonate(pos)
 		R = R * bcfg.surface_factor
 	end
 	core.remove_node(pos)
+	if rockmech.airq_blast then rockmech.airq_blast(center, n * rockmech.airq_kg.emulsion) end   -- 炮煙（airq.lua）
 	-- 擾動 D：每孔 1 條（控制爆破、平滑爆破）0.5；2 條以上或貼面裝藥 0.8（Hoek 2002）
 	rockmech.blast_charge(center, R, nil, (kind == CHARGED and n <= 1) and 0.5 or 0.8)
 	-- 爆破直接改地圖、不會觸發貼壁方塊掉落：後面的岩石沒了的鑽孔、裝藥一起消失

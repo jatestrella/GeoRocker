@@ -26,6 +26,7 @@ local SPECS = {
 	"support_spec.lua",
 	"fem_spec.lua",
 	"mix_spec.lua",
+	"airflow_spec.lua",
 }
 
 for _, f in ipairs(SPECS) do

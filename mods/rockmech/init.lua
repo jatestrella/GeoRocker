@@ -33,6 +33,7 @@ rockmech.overhang = dofile(modpath .. "/overhang.lua")
 rockmech.keyblock = dofile(modpath .. "/keyblock.lua")
 rockmech.granular = dofile(modpath .. "/granular.lua")
 rockmech.blast = dofile(modpath .. "/blast.lua")
+rockmech.airflow = dofile(modpath .. "/airflow.lua")   -- 空氣品質（純函式；引擎那邊在 airq.lua）
 rockmech.rockmass = dofile(modpath .. "/rockmass.lua")
 
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
@@ -138,6 +139,7 @@ dofile(modpath .. "/monitor.lua")
 dofile(modpath .. "/testing.lua")
 dofile(modpath .. "/stereonet.lua")
 dofile(modpath .. "/fuel.lua")
+dofile(modpath .. "/airq.lua")         -- 空氣品質：柴油廢氣、炮煙、通風、氣體偵測器
 dofile(modpath .. "/knowledge.lua")
 dofile(modpath .. "/coredrill.lua")
 dofile(modpath .. "/worldtools.lua")

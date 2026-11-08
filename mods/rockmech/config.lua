@@ -123,6 +123,9 @@ config.shop = {
 	{key = "core_drill", shop = "tools", item = "rockmech:core_drill", label = TR("Hand core drill"), price = 3000},
 	{key = "compass", shop = "tools", item = "rockmech:compass", label = TR("Geological compass"), price = 200},
 	{key = "fieldbook", shop = "tools", item = "rockmech:fieldbook", label = TR("Field notebook"), price = 10},
+	{key = "gas_detector", shop = "tools", item = "rockmech:gas_detector", label = TR("Gas detector"), price = 800},
+	{key = "vent_fan", shop = "vehicle", item = "rockmech:vent_fan", label = TR("Ventilation fan"), price = 8000},
+	{key = "vent_duct", shop = "vehicle", item = "rockmech:vent_duct", label = TR("Ventilation duct"), price = 500, count = 10},
 	{key = "locker", shop = "tools", item = "rockmech:locker", label = TR("Locker"), price = 200},
 }
 

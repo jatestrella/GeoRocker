@@ -43,6 +43,12 @@ function rockmech.fuel_step(self, kind, working, dtime)
 	local lh = rate(self, kind, working)
 	if lh <= 0 then return end
 	local l = lh * dtime / 3600
+	-- 廢氣（airq.lua）：從車頂附近冒出來
+	if rockmech.airq_diesel then
+		local p = self.object:get_pos()
+		local def = V.TYPES[kind]
+		if p then rockmech.airq_diesel({x = p.x, y = p.y + (def and (def.top or def.half) or 1), z = p.z}, l) end
+	end
 	local day = rockmech.market_day and rockmech.market_day() or 0
 	if self.fuel_day ~= day then self.fuel_day, self.fuel_l = day, 0 end
 	self.fuel_l = (self.fuel_l or 0) + l
