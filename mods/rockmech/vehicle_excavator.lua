@@ -885,6 +885,7 @@ do
 		tilt = {front = 1.3, rear = -1.3, side_z = 0, side_x = 1.25}, max_grade = math.rad(35),   -- 履帶挖土機約 70%
 		item_desc = S("Right-click to get in; E digs, Space dumps")}
 	def.inv_image = excavator_icon(def.color, false)
+	local grille_s = ("[fill:16x16:%s^[fill:10x6:3,4:#2a2a2a^[fill:10x1:3,6:#4a4a4a^[fill:10x1:3,8:#4a4a4a"):format(def.color)
 	excavator("excavator", {
 		def = def,
 		body = {
@@ -893,7 +894,12 @@ do
 			{pos = {x = 0, y = -1.0, z = 0}, size = {x = 2.0, y = 1.0, z = 2.6}, tex = box_tex("#3a3a3a")},
 		},
 		house = {
-			{id = "cab", pos = {x = 0, y = 0.5, z = -0.5}, size = {x = 2.0, y = 2.0, z = 2.0}, tex = cab_tex(def.color)},
+			{id = "cab", pos = {x = 0, y = 0.5, z = -0.1}, size = {x = 2.0, y = 2.0, z = 1.2}, tex = cab_tex(def.color, 10)},
+			-- 後側：比駕駛艙矮的引擎室（兩側百葉）、排氣管
+			{id = "engine", pos = {x = 0, y = 0.0, z = -1.1}, size = {x = 2.0, y = 1.0, z = 0.8},
+				tex = {("[fill:16x16:%s"):format(def.color), "[fill:16x16:#2a2a2a", grille_s, grille_s,
+					("[fill:16x16:%s"):format(def.color), ("[fill:16x16:%s"):format(def.color)}},
+			{id = "stack", pos = {x = 0.6, y = 0.85, z = -1.2}, size = {x = 0.14, y = 0.7, z = 0.14}, tex = box_tex("#202020")},   -- 排氣管
 		},
 		boom_root = {x = 0.55, y = 0.3, z = 0.7},        -- 駕駛艙前方（駕駛的右手邊）
 		bucket_rest = {x = 0.55, y = -0.9, z = 2.6},     -- 收起時挖斗在車頭前方約 1.1 m
