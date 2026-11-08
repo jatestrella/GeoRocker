@@ -220,7 +220,56 @@ local function excavator(kind, P)
 	local parts = {}
 	for _, p in ipairs(P.body) do parts[#parts + 1] = p end
 	for _, p in ipairs(P.house) do parts[#parts + 1] = p end
-	parts[#parts + 1] = {id = "bucket", pos = BUCKET_REST, size = P.bucket, tex = box_tex(P.bucket_color)}
+	-- 鏟斗：側面看是 J 形的殼（前壁、底板、往駕駛那側翹起的斗唇）＋兩片側板＋斗齒。
+	-- 下面的座標是「平端」姿勢（開口朝上）的鏟斗座標，中心在小臂尖端；挖、倒時整組繞橫軸翻（self.curl）
+	local BW, BH, BD = P.bucket.x, P.bucket.y, P.bucket.z
+	local BT = BH * 0.09                                   -- 鋼板厚度
+	local lip_a, lip_c = {y = -BH / 2, z = -BD / 4}, {y = -BH * 0.12, z = -BD / 2}
+	local lip_len = math.sqrt((lip_c.y - lip_a.y) ^ 2 + (lip_c.z - lip_a.z) ^ 2)
+	local lip_pitch = atan2(lip_c.z - lip_a.z, lip_c.y - lip_a.y)
+	local lip_dir = {y = (lip_c.y - lip_a.y) / lip_len, z = (lip_c.z - lip_a.z) / lip_len}
+	local bc = P.bucket_color
+	local shell = ("[fill:16x16:%s^[fill:16x1:0,0:#2a2a2a^[fill:16x1:0,15:#2a2a2a^[fill:1x16:0,0:#2a2a2a^[fill:1x16:15,0:#2a2a2a"):format(bc)
+	local side = ("[fill:16x16:%s^[fill:16x2:0,0:#303030^[fill:2x16:0,0:#303030^[fill:2x16:14,0:#303030^[fill:10x2:3,9:#3c3c3c"):format(bc)
+	local steel = "[fill:16x16:#9a9ea4^[fill:16x3:0,13:#c8ccd0"
+	-- {id, 鏟斗座標的中心, 大小, 自己的俯仰（rad）, 貼圖}
+	local BK = {
+		{"bucket", {x = 0, y = -BH / 2 + BT / 2, z = BD / 8}, {x = BW, y = BT, z = BD * 0.75}, 0, {shell, shell, shell, shell, shell, shell}},
+		{"bk_front", {x = 0, y = 0, z = BD / 2 - BT / 2}, {x = BW, y = BH, z = BT}, 0, {shell, shell, shell, shell, shell, shell}},
+		{"bk_lip", {x = 0, y = (lip_a.y + lip_c.y) / 2, z = (lip_a.z + lip_c.z) / 2}, {x = BW, y = lip_len, z = BT}, lip_pitch, {shell, shell, shell, shell, shell, shell}},
+		{"bk_sl", {x = -BW / 2 + BT / 2, y = 0, z = 0}, {x = BT, y = BH, z = BD}, 0, {side, side, side, side, side, side}},
+		{"bk_sr", {x = BW / 2 - BT / 2, y = 0, z = 0}, {x = BT, y = BH, z = BD}, 0, {side, side, side, side, side, side}},
+		-- 頂上的耳板（跟小臂接的地方）
+		{"bk_ear", {x = 0, y = BH / 2 + BT, z = BD / 4}, {x = BW * 0.3, y = BT * 2, z = BD * 0.4}, 0, box_tex("#303030")},
+	}
+	local NT = BW > 2 and 6 or 5
+	local TL = BH * 0.22
+	for i = 1, NT do
+		local x = -BW / 2 + BW * (i - 0.5) / NT
+		BK[#BK + 1] = {"bk_t" .. i, {x = x, y = lip_c.y + lip_dir.y * TL / 2, z = lip_c.z + lip_dir.z * TL / 2},
+			{x = BW / NT * 0.45, y = TL, z = BT * 1.6}, lip_pitch, {steel, steel, steel, steel, steel, steel}}
+	end
+	for _, k in ipairs(BK) do
+		parts[#parts + 1] = {id = k[1], pos = BUCKET_REST, size = k[3], tex = k[5]}
+	end
+	-- 翻斗角度（rad，繞鏟斗的橫軸；0 = 平端、開口朝上；負的往外翻：挖之前張開、倒的時候開口朝下）
+	local CURL_OPEN, CURL_DUMP = math.rad(-165), math.rad(-140)
+	local function rot_x(o, th)
+		local c, sn = math.cos(th), math.sin(th)
+		return {x = o.x, y = o.y * c - o.z * sn, z = o.y * sn + o.z * c}
+	end
+	local function place_bucket(self, vb, psi, hide)
+		local ps, th = self.parts, self.curl or 0
+		for i, k in ipairs(BK) do
+			local o = ps[k[1]]
+			if o and i > 1 then o:set_properties({is_visible = not hide}) end
+			if o and not hide then
+				local c = vector.add(vb, h2v(rot_x(k[2], th), psi))
+				o:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10},
+					{x = math.deg(th + k[4]), y = math.deg(psi), z = 0})
+			end
+		end
+	end
 	-- 破碎錘：換掉鏟斗時，鏟斗那個零件變成細長的錘身，下面再伸出一根鋼鑿（平常藏起來）
 	local HAMMER = {x = P.bucket.x * 0.36, y = P.bucket.y * 1.6, z = P.bucket.z * 0.62}
 	local CHISEL = {x = P.bucket.x * 0.09, y = P.bucket.y * 0.75, z = P.bucket.x * 0.09}
@@ -326,7 +375,10 @@ local function excavator(kind, P)
 				o:set_properties({is_visible = false})
 			end
 		end
-		o:set_attach(self.object, "", {x = b.x * 10, y = (b.y + P.fill_dy + h / 2) * 10, z = b.z * 10}, {x = 0, y = math.deg(psi or 0), z = 0})
+		-- 碎石放在斗裡（底板上），跟著鏟斗翻
+		local th = self.curl or 0
+		local c = vector.add(b, h2v(rot_x({x = 0, y = -BH / 2 + BT + h / 2, z = BD * 0.1}, th), psi or 0))
+		o:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, {x = math.deg(th), y = math.deg(psi or 0), z = 0})
 	end
 
 	-- 挖斗放在 b（上部結構座標）；上部結構迴轉 self.swing
@@ -351,10 +403,11 @@ local function excavator(kind, P)
 			local dir = self.hammer_dir or {x = 0, y = -1, z = 0}
 			local mid = vector.add(vb, vector.multiply(dir, HAMMER.y))
 			local tip = vector.add(mid, vector.multiply(dir, CHISEL.y))
+			place_bucket(self, vb, psi, true)
 			seg_attach(self, ps.bucket, vb, mid)
 			seg_attach(self, ps.chisel, mid, tip)
 		else
-			if ps.bucket then ps.bucket:set_attach(self.object, "", {x = vb.x * 10, y = vb.y * 10, z = vb.z * 10}, rot) end
+			place_bucket(self, vb, psi, false)
 		end
 		place_fill(self, vb, psi)
 		self.bucket_at = vb
@@ -502,7 +555,7 @@ local function excavator(kind, P)
 		local hammer = self.tool == "breaker"
 		if ps.bucket then
 			ps.bucket:set_properties(hammer and {visual_size = HAMMER, textures = HAMMER_TEX}
-				or {visual_size = P.bucket, textures = box_tex(P.bucket_color)})
+				or {visual_size = BK[1][3], textures = BK[1][5]})
 		end
 		if ps.chisel then ps.chisel:set_properties({is_visible = hammer}) end
 		place_arm(self, rest(self))
@@ -782,6 +835,15 @@ local function excavator(kind, P)
 			local above = {x = to.x, y = to.y + P.lift, z = to.z}
 			local t, ph = dg.t, DIG_PHASES
 			local b
+			-- 翻斗：挖 → 抬起時張開、插下去時往駕駛這邊捲（舀起來）；倒 → 到了目標上方往外翻、開口朝下，抬起時收回
+			local p1, p2, p3 = ph[1], ph[1] + ph[2], ph[1] + ph[2] + ph[3]
+			if dg.mode == "dig" then
+				self.curl = t < p1 and CURL_OPEN * t / p1 or t < p2 and CURL_OPEN * (1 - (t - p1) / ph[2]) or 0
+			elseif dg.mode == "dump" then
+				self.curl = t < p1 and 0 or t < p2 and CURL_DUMP * (t - p1) / ph[2] or t < p3 and CURL_DUMP * (1 - (t - p2) / ph[3]) or 0
+			else
+				self.curl = 0
+			end
 			if t < ph[1] then
 				b = lerp(rest(self), above, t / ph[1])
 				self.swing = lerp_angle(dg.psi0, dg.psi, t / ph[1])
