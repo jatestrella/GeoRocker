@@ -164,29 +164,6 @@ core.register_craftitem(RADIO, {
 })
 
 -- 操作員坐在駕駛座上：一個坐姿的人（從車窗看得到）
-local CAB_NPC = "rockmech:cab_npc"
-core.register_entity(CAB_NPC, {
-	initial_properties = {visual = "mesh", mesh = "character.b3d", textures = {"character.png"},
-		physical = false, pointable = false, static_save = false, collisionbox = {0, 0, 0, 0, 0, 0}},
-	on_activate = function(self) self.object:set_animation({x = 81, y = 160}, 30) end,
-	on_step = function(self) if not self.object:get_attach() then self.object:remove() end end,
-})
-local function op_figure(self, on)
-	local d = rockmech.vehicles.TYPES[self.vkind]
-	if on and d.seat then
-		if not (self.op_fig and self.op_fig:get_pos()) then
-			local o = core.add_entity(self.object:get_pos(), CAB_NPC)
-			if o then
-				o:set_properties({textures = {rockmech.npc_skin and rockmech.npc_skin("operator") or "character.png"}})
-				o:set_attach(self.object, "", rockmech.vehicles.seat_pos(d), {x = 0, y = 0, z = 0})
-				self.op_fig = o
-			end
-		end
-	elseif self.op_fig then
-		if self.op_fig:get_pos() then self.op_fig:remove() end
-		self.op_fig = nil
-	end
-end
 local function op_show(self)
 	local op = self.op
 	if op and op.on then
@@ -194,7 +171,7 @@ local function op_show(self)
 	else
 		rockmech.vehicles.nametag(self, "")
 	end
-	op_figure(self, op and op.on)
+	rockmech.vehicles.cab_figure(self)
 end
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= OP_ITEM then return end
@@ -225,9 +202,11 @@ end)
 
 -- clear：車窗半透明（看得到裡面的人；駕駛室要 alpha = true）
 local function cab_tex(c, win_w, clear)
-	local g = clear and "#9fd0ff60" or "#9fd0ff"
-	local win = ("[fill:16x16:%s^[fill:12x7:2,2:%s^[fill:16x2:0,14:#2a2a2a"):format(c, g)
-	local side = ("[fill:16x16:%s^[fill:%dx6:%d,2:%s^[fill:16x2:0,14:#2a2a2a"):format(c, win_w or 6, 14 - (win_w or 6), g)
+	local ww = win_w or 6
+	local win = clear and (V.cab_glass(c, 2, 2, 12, 7) .. "^[fill:16x2:0,14:#2a2a2a")
+		or ("[fill:16x16:%s^[fill:12x7:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local side = clear and (V.cab_glass(c, 14 - ww, 2, ww, 6) .. "^[fill:16x2:0,14:#2a2a2a")
+		or ("[fill:16x16:%s^[fill:%dx6:%d,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c, ww, 14 - ww)
 	return {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", side, side, win, ("[fill:16x16:%s"):format(c)}
 end
 
@@ -323,6 +302,14 @@ local function excavator(kind, P)
 	parts[#parts + 1] = {id = "fill", pos = BUCKET_REST, size = {x = FILL_W, y = 0.2, z = FILL_L}, tex = box_tex("#6a6058")}
 	def.parts = parts
 	-- 冒煙：排氣管（上部結構的 "stack" 零件）頂端，跟著迴轉
+	-- 駕駛座的人偶（操作員、開追蹤相機的駕駛）：駕駛室裡，跟著上部結構轉
+	if P.op_seat then
+		function def.figure_pos(self) return h2v(P.op_seat, self.swing or 0) end
+		function def.figure_yaw(self) return self.swing or 0 end
+	end
+	function def.figure_skin(self)
+		if self.op and self.op.on then return rockmech.npc_skin and rockmech.npc_skin("operator") or "character.png" end
+	end
 	for _, hp in ipairs(P.house) do
 		if hp.id == "stack" then
 			local top = {x = hp.pos.x, y = hp.pos.y + hp.size.y / 2 + 0.05, z = hp.pos.z}
@@ -1089,6 +1076,7 @@ do
 		bucket_rest = {x = 0.55, y = -0.9, z = 2.6},     -- 收起時挖斗在車頭前方約 1.1 m
 		boom_len = 3.6, stick_len = 3.0, boom_w = 0.5, stick_w = 0.4,
 		bucket = {x = 1.3, y = 0.8, z = 0.7}, bucket_color = "#505050",
+		op_seat = {x = -0.3, y = 0.0, z = -0.2},          -- 駕駛室裡（上部結構座標）
 		bucket_real = {x = 1.25, y = 1.1, z = 1.4},      -- 20 t 級、約 1 m³：寬 1.25、斗高 1.1、斗深 1.4，接點到齒尖約 1.45 m
 		dig_r = 1, dig_reach = 10, lift = 2.0, swing_rate = 1.5, dump_reach = 6,
 		bucket_box = {r = 0.7, down = 0.45, up = 0.9},
@@ -1121,13 +1109,14 @@ do
 		house = {
 			{id = "house", pos = {x = 0, y = -0.6, z = -0.8}, size = {x = 5.4, y = 2.2, z = 6.0}, tex = {y, "[fill:16x16:#2a2a2a", grille, grille, y, y}},
 			{id = "cw", pos = {x = 0, y = -0.9, z = -4.1}, size = {x = 5.0, y = 1.6, z = 0.8}, tex = box_tex("#b88a10")},   -- 配重
-			{id = "cab", pos = {x = -1.6, y = 1.6, z = 1.4}, size = {x = 2.0, y = 2.2, z = 1.8}, tex = cab_tex(c, 9)},
+			{id = "cab", pos = {x = -1.6, y = 1.6, z = 1.4}, size = {x = 2.0, y = 2.2, z = 1.8}, tex = cab_tex(c, 9, true), alpha = true},
 			{id = "stack", pos = {x = 1.6, y = 1.0, z = -2.5}, size = {x = 0.3, y = 1.0, z = 0.3}, tex = box_tex("#202020")},   -- 排氣管
 		},
 		boom_root = {x = 0.5, y = 0.2, z = 2.0},
 		bucket_rest = {x = 0.5, y = -2.1, z = 6.5},      -- 收起時挖斗在車頭前方，斗底離地約 10 cm（斗高 2.5 m）
 		boom_len = 8.2, stick_len = 5.0, boom_w = 1.1, stick_w = 0.9,
 		bucket = {x = 2.8, y = 2.0, z = 1.8}, bucket_color = "#4a4a4a",
+		op_seat = {x = -1.6, y = 0.6, z = 1.3},           -- 左前方的駕駛室裡
 		breaker_power = 4,                               -- 破碎錘打擊能量約是 20 t 級的 4 倍：同樣的岩石 1/4 時間
 		bucket_real = {x = 3.2, y = 2.5, z = 2.8},       -- 200 t 級、約 12 m³：寬 3.2、斗高 2.5、斗深 2.8，接點到齒尖約 2.9 m
 		dig_r = 2, dig_reach = 18, lift = 3.5, swing_rate = 0.8, dump_reach = 9,

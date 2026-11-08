@@ -31,8 +31,8 @@ local c = def.color
 local y = ("[fill:16x16:%s"):format(c)
 local grille = ("[fill:16x16:#2a2a2a^[fill:14x10:1,2:#3a3a3a^[fill:14x1:1,4:#555555^[fill:14x1:1,7:#555555^[fill:14x1:1,10:#555555"
 	.. "^[fill:3x2:1,13:#f0e070^[fill:3x2:12,13:#f0e070")
-local win = ("[fill:16x16:%s^[fill:12x7:2,2:#9fd0ff60^[fill:16x2:0,14:#2a2a2a"):format(c)
-local side = ("[fill:16x16:%s^[fill:9x7:4,2:#9fd0ff60^[fill:16x2:0,14:#2a2a2a"):format(c)
+local win = V.cab_glass(c, 2, 2, 12, 7) .. "^[fill:16x2:0,14:#2a2a2a"
+local side = V.cab_glass(c, 4, 2, 9, 7) .. "^[fill:16x2:0,14:#2a2a2a"
 local wheel = {TREAD, TREAD, WHEEL, WHEEL, TREAD, TREAD}   -- 上下前後是胎面，左右兩側是輪圈
 local body = {
 	{pos = {x = 0, y = -1.2, z = -2.2}, size = {x = 1.6, y = 0.8, z = 9.0}, tex = box_tex("#2a2a2a")},     -- 車架

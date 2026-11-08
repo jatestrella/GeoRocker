@@ -39,8 +39,8 @@ do
 	local TRACK = V.TRACK
 	local y = ("[fill:16x16:%s"):format(c)
 	local grille = ("[fill:16x16:%s^[fill:12x9:2,4:#2a2a2a^[fill:12x1:2,6:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)
-	local win = ("[fill:16x16:%s^[fill:12x8:2,2:#9fd0ff60^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = ("[fill:16x16:%s^[fill:10x8:3,2:#9fd0ff60^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local win = V.cab_glass(c, 2, 2, 12, 8) .. "^[fill:16x2:0,14:#2a2a2a"
+	local side = V.cab_glass(c, 3, 2, 10, 8) .. "^[fill:16x2:0,14:#2a2a2a"
 	local blade = "[fill:16x16:#4a4a4a^[fill:16x2:0,14:#b0b0b0^[fill:16x1:0,0:#3a3a3a"
 	local steel = box_tex("#3a3a3a")
 	def.parts = {

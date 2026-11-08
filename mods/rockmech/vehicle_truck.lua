@@ -215,8 +215,8 @@ do   -- 圖示：車斗、駕駛室、三軸
 end
 do
 	local c = truck.color
-	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff60^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)
-	local cab_side = ("[fill:16x16:%s^[fill:6x6:8,2:#9fd0ff60"):format(c)
+	local cab_front = V.cab_glass(c, 2, 2, 12, 6) .. "^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"
+	local cab_side = V.cab_glass(c, 8, 2, 6, 6)
 	local wheel = {TREAD, TREAD, WHEEL, WHEEL, TREAD, TREAD}   -- 上下前後是胎面，左右兩側是輪圈
 	local body = {
 		{pos = {x = 0, y = -0.55, z = -2.0}, size = {x = 1.6, y = 0.3, z = 6.6}, tex = box_tex("#2a2a2a")},   -- 底盤

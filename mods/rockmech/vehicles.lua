@@ -187,6 +187,57 @@ local function eye_offset(def)
 end
 
 -- 貼圖（[fill 組合）。cube 的六面：上、下、+X、−X、+Z（車頭：yaw 0 朝 +Z）、−Z
+-- 有車窗的面：底色是半透明的玻璃，四周疊上不透明的車身（在不透明的底上疊半透明的藍，結果還是不透明）。
+-- 窗戶在 (x, y) 大小 w×h（16×16 的格子）；駕駛室零件要 alpha = true
+function V.cab_glass(c, x, y, w, h)
+	local t = {"[fill:16x16:#9fd0ff60"}
+	if y > 0 then t[#t + 1] = ("[fill:16x%d:0,0:%s"):format(y, c) end
+	if y + h < 16 then t[#t + 1] = ("[fill:16x%d:0,%d:%s"):format(16 - y - h, y + h, c) end
+	if x > 0 then t[#t + 1] = ("[fill:%dx%d:0,%d:%s"):format(x, h, y, c) end
+	if x + w < 16 then t[#t + 1] = ("[fill:%dx%d:%d,%d:%s"):format(16 - x - w, h, x + w, y, c) end
+	return table.concat(t, "^")
+end
+
+-- 駕駛座上的人偶（坐姿）：駕駛開追蹤相機時（人掛在相機上，不在座位）穿駕駛的造型；
+-- 有操作員在作業時穿操作員的造型（def.figure_skin）。位置 def.figure_pos(self) 或 def.seat；def.figure_yaw(self)：跟著上部結構轉
+local CAB_NPC = "rockmech:cab_npc"
+core.register_entity(CAB_NPC, {
+	initial_properties = {visual = "mesh", mesh = "character.b3d", textures = {"character.png"},
+		physical = false, pointable = false, static_save = false, collisionbox = {0, 0, 0, 0, 0, 0}},
+	on_activate = function(self) self.object:set_animation({x = 81, y = 160}, 30) end,
+	on_step = function(self) if not self.object:get_attach() then self.object:remove() end end,
+})
+function V.cab_figure(self)
+	local def = TYPES[self.vkind]
+	local pos = def.figure_pos and def.figure_pos(self) or def.seat
+	local tex
+	if pos then
+		local d = self.driver and self.chase and core.get_player_by_name(self.driver)
+		if d then tex = (d:get_properties().textures or {})[1] end
+		if not tex and def.figure_skin then tex = def.figure_skin(self) end
+	end
+	local f = self.cab_fig
+	if not tex then
+		if f then
+			if f:get_pos() then f:remove() end
+			self.cab_fig, self.cab_fig_key = nil, nil
+		end
+		return
+	end
+	if not (f and f:get_pos()) then
+		f = core.add_entity(self.object:get_pos(), CAB_NPC)
+		if not f then return end
+		self.cab_fig, self.cab_fig_key, self.cab_fig_tex = f, nil, nil
+	end
+	if self.cab_fig_tex ~= tex then f:set_properties({textures = {tex}}); self.cab_fig_tex = tex end
+	local yaw = def.figure_yaw and def.figure_yaw(self) or 0
+	local key = ("%.2f,%.2f,%.2f,%.2f"):format(pos.x, pos.y, pos.z, yaw)
+	if self.cab_fig_key ~= key then
+		f:set_attach(self.object, "", {x = pos.x * 10, y = pos.y * 10, z = pos.z * 10}, {x = 0, y = math.deg(yaw), z = 0})
+		self.cab_fig_key = key
+	end
+end
+
 function V.box_tex(c, front)
 	local t = ("[fill:16x16:%s"):format(c)
 	return {t, t, t, t, front or t, t}
@@ -1258,11 +1309,25 @@ function V.seat_driver(self, player)
 	player:set_camera({mode = "first"})
 	set_seated(player, true)
 end
+-- 追蹤相機時人掛在車子後上方的相機點上：身體、名牌藏起來（駕駛座上另外有一個人偶，V.cab_figure），不然別人看到人飄在空中
+local function chase_hide(self, d, on)
+	if not d then return end
+	if on and not self.chase_vs then
+		self.chase_vs = d:get_properties().visual_size
+		d:set_properties({visual_size = {x = 0, y = 0, z = 0}})
+		if rockmech.nametag_hide then rockmech.nametag_hide(d:get_player_name(), true) end
+	elseif not on and self.chase_vs then
+		d:set_properties({visual_size = self.chase_vs})
+		self.chase_vs = nil
+		if rockmech.nametag_hide then rockmech.nametag_hide(d:get_player_name(), false) end
+	end
+end
 local function drop_chase(self)
 	if self.chase then
 		if self.chase:get_pos() then self.chase:remove() end
 		self.chase = nil
 	end
+	chase_hide(self, self.driver and core.get_player_by_name(self.driver), false)
 end
 V.drop_chase = drop_chase
 
@@ -1496,6 +1561,8 @@ function V.register(kind, def)
 				return
 			end
 			track_update(self, dtime)
+			self.t_fig = (self.t_fig or 0) + dtime
+			if self.t_fig >= 0.2 then self.t_fig = 0; V.cab_figure(self) end
 			local pos = obj:get_pos()
 			local yaw = obj:get_yaw()
 			local vel = obj:get_velocity()
@@ -1654,6 +1721,7 @@ function V.register(kind, def)
 						if c then
 							c:get_luaentity().vehicle = self
 							self.chase = c
+							chase_hide(self, d, true)
 							d:set_detach()
 							d:set_attach(c, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 							d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
