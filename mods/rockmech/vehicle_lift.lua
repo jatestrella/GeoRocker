@@ -586,7 +586,7 @@ local function lift(kind, P)
 			local k = {{"WASD", P.crane and S("Move the boom") or S("Move the basket")}}
 			if P.crane then
 				k[#k + 1] = {S("Space") .. " / Shift", st.hoist and S("Basket up / down (rope)") or S("Boom up / down")}
-				k[#k + 1] = {"Q", st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist}
+				k[#k + 1] = {S("Q (hold the control box)"), st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist}
 			else
 				k[#k + 1] = {S("Space") .. " / Shift", S("Up / down")}
 			end
@@ -598,7 +598,7 @@ local function lift(kind, P)
 			if P.crane then
 				return {{"WASD", S("Move the boom")},
 					{S("Space") .. " / Shift", st.hoist and S("Basket up / down (rope)") or S("Boom up / down")},
-					{"Q", st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist},
+					{S("Q (hold the control box)"), st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist},
 					{"E", S("Back to the cab")}, {"Shift+E", S("Step out")}}
 			end
 			return {{"WASD", S("Move the basket")}, {S("Space") .. " / Shift", S("Up / down")},
@@ -629,8 +629,9 @@ local function lift_of(player)
 	local e = pe and (pe.lift and pe or pe.vehicle)
 	if e and e.lift then return e, e.driver == player:get_player_name() end
 end
--- Q 只有手上拿著東西時伺服器才收得到（引擎把 Q 當成丟東西）：操作吊車吊籠時手上是空的，就放一個吊籠操作盒，
--- 按 Q 不會丟出去、只切換動吊臂／收放吊索；不在操作了就收走
+-- Q 只有手上拿著東西時伺服器才收得到（引擎把 Q 當成丟東西）。操作吊車吊籠時給一個吊籠操作盒（手上空著就放手上，
+-- 不然放背包）：拿著它按 Q 切換動吊臂／收放吊索，它不會被丟出去；拿著別的東西按 Q 照常丟（吊籠裡也能丟東西）。
+-- 不在操作了就收走
 local REMOTE = "rockmech:crane_remote"
 local function q_press(dropper)
 	local e, is_driver = lift_of(dropper)
@@ -641,11 +642,6 @@ local function q_press(dropper)
 	local def = V.TYPES[e.vkind]
 	if is_driver and def.on_q then def.on_q(e) end
 	return true
-end
-local old_drop = core.item_drop
-function core.item_drop(itemstack, dropper, pos)
-	if dropper and dropper.is_player and dropper:is_player() and q_press(dropper) then return itemstack end
-	return old_drop(itemstack, dropper, pos)
 end
 core.register_craftitem(REMOTE, {
 	description = S("Basket control box\nQ switches between moving the boom and the rope"),
@@ -669,7 +665,10 @@ core.register_globalstep(function(dtime)
 		local operating = st and is_driver and V.TYPES[e.vkind].on_q and (st.mode == "basket" or st.mode == "op")
 		local inv = pl:get_inventory()
 		if operating then
-			if pl:get_wielded_item():is_empty() then pl:set_wielded_item(ItemStack(REMOTE)) end
+			if not inv:contains_item("main", REMOTE) then
+				if pl:get_wielded_item():is_empty() then pl:set_wielded_item(ItemStack(REMOTE))
+				else inv:add_item("main", ItemStack(REMOTE)) end
+			end
 		elseif inv:contains_item("main", REMOTE) then
 			for i, it in ipairs(inv:get_list("main") or {}) do
 				if it:get_name() == REMOTE then inv:set_stack("main", i, ItemStack("")) end
