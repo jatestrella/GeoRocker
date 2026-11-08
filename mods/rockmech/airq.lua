@@ -161,10 +161,47 @@ local function duct_path(fp)
 		local k = A.key(x, y, z)
 		if k ~= last then cells[#cells + 1] = {x, y, z}; last = k end
 	end
-	return cells, math.max(0, far_d)
+	-- 風管口（最遠那節）和它開口的方向、接在風機旁邊的第一節
+	local tip, tip_dir, first
+	if far and #chain >= 2 then
+		tip = chain[1]
+		tip_dir = vector.subtract(chain[1], chain[2])
+		first = chain[#chain - 1]
+	end
+	return cells, math.max(0, far_d), tip, tip_dir, first
 end
 
 local fan_cache = {}
+local function player_near(p, r)
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), p) < r then return true end
+	end
+	return false
+end
+-- 粒子：風機出風口往外吹；風管口的空氣往管子裡吸
+local AIR_TEX = "[fill:4x4:#e8ecee^[opacity:120"
+local function fan_particles(p, c)
+	local o = c.out
+	if player_near(p, 40) then
+		local m = vector.add(p, vector.multiply(o, 0.55))
+		local spread = {x = 0.3 - math.abs(o.x) * 0.3, y = 0.3 - math.abs(o.y) * 0.3, z = 0.3 - math.abs(o.z) * 0.3}
+		core.add_particlespawner({amount = 18, time = STEP, glow = 2,
+			minpos = vector.subtract(m, spread), maxpos = vector.add(m, spread),
+			minvel = vector.add(vector.multiply(o, 4), {x = -0.3, y = -0.2, z = -0.3}),
+			maxvel = vector.add(vector.multiply(o, 6), {x = 0.3, y = 0.4, z = 0.3}),
+			minexptime = 0.4, maxexptime = 0.9, minsize = 1.5, maxsize = 3, texture = AIR_TEX})
+	end
+	if c.tip and player_near(c.tip, 40) then
+		-- 從開口前方約 1.8 m 一帶往開口飄進去
+		local d = c.tip_dir
+		local m = vector.add(c.tip, vector.multiply(d, 1.8))
+		local sp = vector.multiply(d, -2.5)
+		core.add_particlespawner({amount = 14, time = STEP, glow = 2,
+			minpos = vector.subtract(m, 0.6), maxpos = vector.add(m, 0.6),
+			minvel = vector.add(sp, {x = -0.15, y = -0.15, z = -0.15}), maxvel = vector.add(sp, {x = 0.15, y = 0.15, z = 0.15}),
+			minexptime = 0.5, maxexptime = 0.6, minsize = 1, maxsize = 2, texture = AIR_TEX})
+	end
+end
 local function active_fans()
 	local list, t = {}, now()
 	for ps in pairs(fans) do
@@ -172,15 +209,22 @@ local function active_fans()
 		local node = core.get_node_or_nil(p)
 		if node and node.name == FAN then
 			local c = fan_cache[ps]
+			local meta = core.get_meta(p)
+			local on = meta:get_int("off") == 0
 			if not c or t - c.t > 5 then
-				local cells, len = duct_path(p)
-				c = {t = t, path = cells, len = len}
+				local cells, len, tip, tip_dir, first = duct_path(p)
+				-- 出風口：接風管那一邊的對面；沒接風管就從正面（facedir 的反方向）吹
+				local out = first and vector.subtract(p, first) or vector.multiply(core.facedir_to_dir(node.param2), -1)
+				c = {t = t, path = cells, len = len, tip = tip, tip_dir = tip_dir, out = out}
 				fan_cache[ps] = c
-				local meta = core.get_meta(p)
-				local info = S("Ventilation fan @1 m³/s", tostring(FAN_Q)) .. "\n" .. S("Duct @1 m", tostring(len))
-				if meta:get_string("infotext") ~= info then meta:set_string("infotext", info) end
 			end
-			if #c.path > 0 then list[#list + 1] = {path = c.path, q = FAN_Q} end
+			local info = S("Ventilation fan @1 m³/s", tostring(FAN_Q)) .. "\n" .. S("Duct @1 m", tostring(c.len))
+				.. "\n" .. (on and S("Fan running") or S("Fan off"))
+			if meta:get_string("infotext") ~= info then meta:set_string("infotext", info) end
+			if on then
+				if #c.path > 0 then list[#list + 1] = {path = c.path, q = FAN_Q} end
+				fan_particles(p, c)
+			end
 		elseif node then
 			fans[ps] = nil; fan_cache[ps] = nil; save_fans()
 		end
@@ -301,6 +345,15 @@ core.register_node(FAN, {
 	inventory_image = grill, wield_image = grill,
 	groups = {dig_immediate = 2},
 	sounds = default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil,
+	-- 右鍵：開、關；手上拿著方塊（例如風管）時照常放方塊
+	on_rightclick = function(pos, node, clicker, itemstack, pointed)
+		local w = itemstack and itemstack:get_name() or ""
+		if core.registered_nodes[w] then return (core.item_place_node(itemstack, clicker, pointed)) end
+		local meta = core.get_meta(pos)
+		meta:set_int("off", meta:get_int("off") == 0 and 1 or 0)
+		core.sound_play("default_dig_metal", {pos = pos, gain = 0.4, max_hear_distance = 12}, true)
+		return itemstack
+	end,
 	on_construct = function(pos)
 		fans[core.pos_to_string(pos)] = true; save_fans()
 		core.get_meta(pos):set_string("infotext", S("Ventilation fan @1 m³/s", tostring(FAN_Q)))
