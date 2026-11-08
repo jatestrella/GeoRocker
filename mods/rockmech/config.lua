@@ -89,6 +89,8 @@ config.shop = {
 	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = TR("ANFO bulk truck"), price = 40000},
 	{key = "charger", shop = "blast", item = "rockmech:charger_item", label = TR("Charging unit"), price = 40000},
 	{key = "corerig", shop = "vehicle", item = "rockmech:corerig_item", label = TR("Core drill rig"), price = 45000},
+	{key = "aerial", shop = "vehicle", item = "rockmech:aerial_item", label = TR("Aerial work platform"), price = 60000},
+	{key = "crane", shop = "vehicle", item = "rockmech:crane_item", label = TR("Crane"), price = 80000},
 	{key = "drillrig", shop = "blast", item = "rockmech:drillrig_item", label = TR("Surface drill rig"), price = 50000},
 	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = TR("Drill jumbo"), price = 60000},
 	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = TR("Haul truck"), price = 150000},
@@ -132,7 +134,8 @@ config.shop = {
 
 -- 引擎額定功率（kW，fuel.lua 算油耗）：沒列的車不耗油（手推車靠人推）
 config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, lowboy = 400, dozer = 250,
-	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500}
+	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500,
+	aerial = 150, crane = 250}
 
 -- 破碎站的收入：噸數 ×（品位 × 回收率 × 價格 − 處理費）。ore = nil 是廢石，只付處理費
 function config.crush_income(tons, grade, ore, fee)

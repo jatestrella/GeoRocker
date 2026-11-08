@@ -1238,12 +1238,22 @@ local function set_seated(player, on, pose)
 	player_api.set_animation(player, on and (pose or "sit") or "stand")
 end
 
+V.set_seated = set_seated
+-- 駕駛坐回駕駛座（作業籠收回時用）
+function V.seat_driver(self, player)
+	local def = TYPES[self.vkind]
+	player:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+	player:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
+	player:set_camera({mode = "first"})
+	set_seated(player, true)
+end
 local function drop_chase(self)
 	if self.chase then
 		if self.chase:get_pos() then self.chase:remove() end
 		self.chase = nil
 	end
 end
+V.drop_chase = drop_chase
 
 local function get_off(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
@@ -1512,7 +1522,9 @@ function V.register(kind, def)
 			-- self.autopilot：沒有駕駛時的控制輸入（測試、指令用），格式同 get_player_control
 			local ctrl = d and d:get_player_control() or self.autopilot or {}
 			local driven = d or self.autopilot
-			if driven then
+			-- def.hold_controls(self) 回傳 true：按鍵由這台車自己用（例如作業籠裡 WASD 移動作業籠），不開車、Shift 不下車
+			local held = def.hold_controls and def.hold_controls(self)
+			if driven and not held then
 				if d and ctrl.sneak then get_off(self); return end
 				fwd = (ctrl.up and 1 or 0) - (ctrl.down and 1 or 0)
 				if def.pushed then fwd = -fwd end
@@ -1603,7 +1615,7 @@ function V.register(kind, def)
 			end
 			-- Z（zoom 鍵）：切換追蹤相機（駕駛掛到車子後上方的點上）／車頂第一人稱
 			if d then
-				if ctrl.zoom and not self.zoom_held and not def.pushed then
+				if ctrl.zoom and not self.zoom_held and not def.pushed and not held then
 					if self.chase then
 						drop_chase(self)
 						d:set_detach()
@@ -1672,3 +1684,4 @@ dofile(rockmech.modpath .. "/vehicle_suv.lua")
 dofile(rockmech.modpath .. "/vehicle_miner.lua")
 dofile(rockmech.modpath .. "/vehicle_lowboy.lua")
 dofile(rockmech.modpath .. "/vehicle_corerig.lua")
+dofile(rockmech.modpath .. "/vehicle_lift.lua")      -- 高空作業車、吊車（作業籠）
