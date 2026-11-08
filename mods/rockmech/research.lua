@@ -376,13 +376,14 @@ end
 -- 研究帳篷：貨櫃辦公室南邊、跟它和破碎站排成一排，面向西（礦區那邊），7×7 的帳篷，白底藍條棚布
 ---------------------------------------------------------------------------
 
-local RES_Z = -16           -- 帳篷中心的 z（貨櫃辦公室在 z −6..6）；x 跟貨櫃辦公室一樣
+-- 帳篷中心：L 形的轉角（貨櫃辦公室在東邊 z −16..−4 面向西；帳篷在它南邊、面向北，講堂在帳篷西邊）
+local RES_DX, RES_Z = 23, -28
 core.register_node("rockmech:tent_canvas_research", {
 	description = S("Tent canvas"), is_ground_content = false, groups = {not_in_creative_inventory = 1},
 	tiles = {"[fill:16x16:#eef2f4^[fill:16x2:0,5:#2f6fbf^[fill:16x2:0,12:#2f6fbf"},
 })
 
--- 擺設：{dx, dz, 高度層, 節點}（帳篷的本地座標：dz 朝正面、dx 往右；career_placer 轉成面向西）
+-- 擺設：{dx, dz, 高度層, 節點}（帳篷的本地座標：dz 朝正面、dx 往右；career_placer 轉成面向北）
 local PROPS = {
 	-- 機械技工（西半邊）：工作台、工具箱、木箱、油桶
 	{-2, 1, 1, "table"}, {-1, 1, 1, "table"}, {-2, 1, 2, "toolbox"}, {-3, -2, 1, "crate"}, {-3, -2, 2, "crate"},
@@ -402,9 +403,9 @@ end
 local function flag_of(x0) return "research_site:" .. x0 end
 function rockmech.career_build_research(x0)
 	storage:set_string(flag_of(x0), "1")       -- 這座營地蓋過研究帳篷了（下面補蓋時看這個）
-	local cx, cz = x0 + rockmech.career_office_dx, RES_Z
+	local cx, cz = x0 + RES_DX, RES_Z
 	local y = ground_y(cx, cz) or 0
-	local set, at = rockmech.career_placer(cx, cz, y)
+	local set, at, yaw = rockmech.career_placer(cx, cz, y, "north")
 	for _, s in ipairs({{-3, -3}, {3, -3}, {-3, 3}, {3, 3}}) do
 		for h = 1, 3 do set(s[1], h, s[2], "rockmech:tent_pole") end
 	end
@@ -416,8 +417,8 @@ function rockmech.career_build_research(x0)
 	local key = rockmech.career_vendor_spots
 	local list = core.deserialize(storage:get_string(key)) or {}
 	local m, g = at(-2, 0, 0), at(2, 0, 0)
-	list[#list + 1] = {kind = "mechanic", pos = {x = m.x, y = y + 0.5, z = m.z}, yaw = math.pi / 2}
-	list[#list + 1] = {kind = "geologist", pos = {x = g.x, y = y + 1.05, z = g.z}, yaw = math.pi / 2}
+	list[#list + 1] = {kind = "mechanic", pos = {x = m.x, y = y + 0.5, z = m.z}, yaw = yaw}
+	list[#list + 1] = {kind = "geologist", pos = {x = g.x, y = y + 1.05, z = g.z}, yaw = yaw}
 	storage:set_string(key, core.serialize(list))
 end
 

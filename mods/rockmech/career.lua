@@ -774,15 +774,23 @@ for kind, c in pairs(AWNING) do
 			{-0.5, -0.05, 0.3, 0.5, 0.1, 0.5}}}})
 end
 
--- 營地的建築都面向西（礦區那邊），跟破碎站排成一排：建築的本地座標 dx 沿長邊（往右）、dz 朝正面，
--- 轉成世界座標：正面 +dz → 西（−x），右手 +dx → 北（+z）。facedir 的方塊跟著轉 90°（+3），攤主的 yaw = π/2
+-- 營地排成 L 形：東邊一排面向西（礦區那邊）——貨櫃辦公室、長椅；南邊一排面向北（朝營地中間的空地）——研究帳篷、講堂。
+-- 建築的本地座標 dx 沿長邊（往右）、dz 朝正面，轉成世界座標：
+--   face = "west"（預設）：正面 +dz → 西（−x），右手 +dx → 北（+z）；facedir 的方塊 +3，人的 yaw = π/2
+--   face = "north"：正面 +dz → 北（+z），右手 +dx → 東（+x）；facedir 不轉，人的 yaw = 0
 local FACE_YAW = math.pi / 2
-function rockmech.career_placer(cx, cz, y)
-	local function at(dx, h, dz) return {x = cx - dz, y = y + h, z = cz + dx} end
-	local function set(dx, h, dz, node, p2) core.set_node(at(dx, h, dz), {name = node, param2 = ((p2 or 0) + 3) % 4}) end
-	return set, at
+function rockmech.career_placer(cx, cz, y, face)
+	local north = face == "north"
+	local function at(dx, h, dz)
+		if north then return {x = cx + dx, y = y + h, z = cz + dz} end
+		return {x = cx - dz, y = y + h, z = cz + dx}
+	end
+	local rot = north and 0 or 3
+	local function set(dx, h, dz, node, p2) core.set_node(at(dx, h, dz), {name = node, param2 = ((p2 or 0) + rot) % 4}) end
+	return set, at, north and 0 or FACE_YAW
 end
-local OFFICE_DX, OFFICE_Z = 27, 0          -- 貨櫃辦公室中心：營地中心往東、南北位置（破碎站在往東 CRUSHER_X、z = CAMP_Z）
+-- 貨櫃辦公室中心：營地中心往東、南北位置（破碎站在往東 CRUSHER_X、z = CAMP_Z；辦公室往南讓開，卡車在受料倉前掉頭倒車）
+local OFFICE_DX, OFFICE_Z = 27, -10
 rockmech.career_office_dx = OFFICE_DX
 
 local function build_market(x0)

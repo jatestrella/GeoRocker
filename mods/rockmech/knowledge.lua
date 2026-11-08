@@ -704,7 +704,7 @@ core.register_node("rockmech:camp_lectern", {
 
 local PROF = "rockmech:npc_professor"
 local PROF_FORM = "rockmech:professor"
-local PROF_Z = -26          -- 講堂中心的 z（研究帳篷在 z −19..−13）；x 跟貨櫃辦公室一樣
+local PROF_DX, PROF_Z = 11, -28   -- 講堂中心：研究帳篷（營地中心往東 23）的西邊，同一排、面向北
 
 local function prof_form(name)
 	local player = core.get_player_by_name(name)
@@ -752,19 +752,19 @@ core.register_entity(PROF, {
 })
 if rockmech.career_npcs then rockmech.career_npcs.professor = {entity = PROF, sit = false} end
 
--- 講堂：教授站在講桌後、背後一排黑板，前面兩排學生椅（面向教授）；整個面向西（礦區那邊），跟研究帳篷排成一排
+-- 講堂：教授站在講桌後、背後一排黑板，前面兩排學生椅（面向教授）；面向北（營地中間的空地），跟研究帳篷排成一排
 local function prof_flag(x0) return "professor_site:" .. x0 end
 function rockmech.career_build_professor(x0)
 	if not rockmech.career_placer then return end
 	storage:set_string(prof_flag(x0), "1")
-	local cx, cz = x0 + (rockmech.career_office_dx or 27), PROF_Z
+	local cx, cz = x0 + PROF_DX, PROF_Z
 	local y
 	for yy = 40, -30, -1 do
 		local n = core.get_node({x = cx, y = yy, z = cz}).name
 		if n ~= "air" and n ~= "ignore" then y = yy; break end
 	end
 	y = y or 0
-	local set, at = rockmech.career_placer(cx, cz, y)
+	local set, at, yaw = rockmech.career_placer(cx, cz, y, "north")
 	for dx = -2, 2 do
 		set(dx, 1, -2, "rockmech:camp_blackboard"); set(dx, 2, -2, "rockmech:camp_blackboard")
 	end
@@ -775,7 +775,7 @@ function rockmech.career_build_professor(x0)
 	local key = rockmech.career_vendor_spots
 	local list = core.deserialize(storage:get_string(key)) or {}
 	local pp = at(0, 0, 0)
-	list[#list + 1] = {kind = "professor", pos = {x = pp.x, y = y + 0.5, z = pp.z}, yaw = math.pi / 2}
+	list[#list + 1] = {kind = "professor", pos = {x = pp.x, y = y + 0.5, z = pp.z}, yaw = yaw}
 	storage:set_string(key, core.serialize(list))
 end
 
@@ -791,7 +791,7 @@ if cfg.career then
 		end
 		for _, x0 in ipairs(sites) do
 			if storage:get_string(prof_flag(x0)) == "" then
-				local cx = x0 + (rockmech.career_office_dx or 27)
+				local cx = x0 + PROF_DX
 				core.emerge_area({x = cx - 8, y = -30, z = PROF_Z - 8}, {x = cx + 8, y = 40, z = PROF_Z + 8}, function(_, _, rem)
 					if rem > 0 then return end
 					if storage:get_string(prof_flag(x0)) == "" then

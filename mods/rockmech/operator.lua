@@ -427,14 +427,14 @@ core.register_globalstep(function(dtime)
 	end
 end)
 
--- 在營地蓋長椅：貨櫃辦公室南邊（辦公室中心往南 9 m），4 個座位排成東西向，臉朝北
+-- 在營地蓋長椅：貨櫃辦公室南邊（辦公室中心 z −10 往南 9 m），4 個座位排成東西向，臉朝北
 local function ground_y(x, z)
 	for y = 40, -30, -1 do
 		local n = core.get_node({x = x, y = y, z = z}).name
 		if n ~= "air" and n ~= "ignore" then return y end
 	end
 end
-local BENCH_Z = -9
+local BENCH_Z = -19
 local function flag_of(x0) return "opbench_site:" .. x0 end
 function rockmech.career_build_opbench(x0, acc)
 	storage:set_string(flag_of(x0), "1")
