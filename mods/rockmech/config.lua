@@ -85,6 +85,7 @@ config.shop = {
 	{key = "plant", shop = "civil", item = "rockmech:plant", label = TR("Ore plant"), price = 30000},
 	{key = "belt", shop = "civil", item = "rockmech:belt", label = TR("Conveyor belt"), price = 1000, count = 10},
 	{key = "lowboy", shop = "vehicle", item = "rockmech:lowboy_item", label = TR("Lowboy trailer"), price = 40000},
+	{key = "heavyhaul", shop = "vehicle", item = "rockmech:heavyhaul_item", label = TR("Heavy haul trailer"), price = 120000},
 	{key = "dozer", shop = "vehicle", item = "rockmech:dozer_item", label = TR("Bulldozer"), price = 35000},
 	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = TR("ANFO bulk truck"), price = 40000},
 	{key = "charger", shop = "blast", item = "rockmech:charger_item", label = TR("Charging unit"), price = 40000},
@@ -135,7 +136,7 @@ config.shop = {
 -- 引擎額定功率（kW，fuel.lua 算油耗）：沒列的車不耗油（手推車靠人推）
 config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, lowboy = 400, dozer = 250,
 	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500,
-	aerial = 150, crane = 250}
+	aerial = 150, crane = 250, heavyhaul = 500}
 
 -- 破碎站的收入：噸數 ×（品位 × 回收率 × 價格 − 處理費）。ore = nil 是廢石，只付處理費
 function config.crush_income(tons, grade, ore, fee)

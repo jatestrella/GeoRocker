@@ -934,7 +934,7 @@ end
 
 -- 車輛的自重 (t)，車種沒列的用 20
 V.MASS = {cart = 0.2, truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
-	jumbo = 30, charger = 20, drillrig = 25, suv = 2.5}
+	jumbo = 30, charger = 20, drillrig = 25, suv = 2.5, miner = 120}   -- 露天採礦機約 100–200 t：只有重型拖車載得動
 
 -- 接地壓力 (kPa) = (自重 + 車上的碎石) / 兩條輪跡的面積（各寬 1 m、長 = 車長），g 取 10。
 -- 重量都在輪子或履帶下面，不能平均到整個車身
