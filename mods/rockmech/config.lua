@@ -124,6 +124,7 @@ config.shop = {
 	{key = "sawbench", shop = "tools", item = "rockmech:sawbench", label = TR("Saw bench"), price = 800},
 	{key = "workbench", shop = "tools", item = "rockmech:workbench", label = TR("Workbench"), price = 300},
 	{key = "camp_flag", shop = "tools", item = "rockmech:camp_flag", label = TR("Back to camp"), price = 200},
+	{key = "work_light", shop = "tools", item = "rockmech:work_light", label = TR("Work light"), price = 300, count = 5},
 	{key = "rain_gauge", shop = "tools", item = "rockmech:rain_gauge", label = TR("Weather station"), price = 500},
 	{key = "survey_prism", shop = "geotech", item = "rockmech:survey_prism", label = TR("Survey prism"), price = 500, count = 5},
 	{key = "schmidt", shop = "geotech", item = "rockmech:schmidt_hammer", label = TR("Schmidt hammer"), price = 1500},
