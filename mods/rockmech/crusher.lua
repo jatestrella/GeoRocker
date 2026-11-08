@@ -24,14 +24,21 @@ local function rate_of(pos)
 		* rockmech.eff_crusher_mult(core.get_meta(pos):get_string("owner"))
 end
 local function title_of(pos) return core.get_node(pos).name == CRUSHER_BIG and S("Large crusher") or S("Crusher") end
-local SIZE, FEEDER = 9, 3    -- 受料倉開口、底部格柵的邊長 (m)
-local DEPTH = (SIZE - FEEDER) / 2 + 1              -- 倉深 (m)：每往下一層四邊各內縮 1 m（壁坡 45°），最底層就是格柵的大小
-local CAPACITY = 0          -- 容量（級），裝到倉口
-for dy = 0, DEPTH - 1 do CAPACITY = CAPACITY + (SIZE - 2 * dy) ^ 2 * rockmech.vehicles.NLEV end
+local SIZE, FEEDER = 9, 3    -- 受料倉開口（大型破碎站、選礦場）、底部格柵的邊長 (m)
+local SMALL_SIZE = 7         -- 一般破碎站的受料倉開口（小一號）；每座的開口記在機身的 meta size
+-- 倉深 (m)：每往下一層四邊各內縮 1 m（壁坡 45°），最底層就是格柵的大小
+local function depth_of(size) return (size - FEEDER) / 2 + 1 end
+local DEPTH = depth_of(SIZE)
+-- 容量（級），裝到倉口
+local function capacity_of(size)
+	local c = 0
+	for dy = 0, depth_of(size) - 1 do c = c + (size - 2 * dy) ^ 2 * rockmech.vehicles.NLEV end
+	return c
+end
 local PILE = 8              -- 格柵上往上找幾格碎石
 local FIND_R = 15           -- 傾倒點離格柵中心多近（水平距離）算在破碎站
 rockmech.HOPPER_RANGE = FIND_R
-rockmech.HOPPER_HALF = SIZE / 2   -- 倉口中心到邊 (m)
+rockmech.HOPPER_HALF = SIZE / 2   -- 倉口中心到邊 (m)：最大的；實際的用 rockmech.hopper_half_at(格柵中心)
 local STEP = 1              -- 每幾秒吃一次
 local MONEY = "money:"      -- mod storage 的鍵
 local COIN_LEAD = 0.4       -- 金幣聲響完多久才出結算訊息 (s)
@@ -206,6 +213,16 @@ core.register_globalstep(function(dtime)
 end)
 
 -- pos 在破碎站的容許範圍內就回傳格柵的中心，否則 nil。給 search 就改找這個距離內最近的破碎站，不管容許範圍
+-- 這座的受料倉開口：機身 meta 記的（舊的沒記就是 SIZE）；蓋之前看機種
+local function size_of(meta) local v = meta:get_int("size"); return v > 0 and v or SIZE end
+local function size_for(name) return name == CRUSHER and SMALL_SIZE or SIZE end
+-- 格柵中心 c 的受料倉開口：找旁邊的機身
+local function size_at(c)
+	local b = core.find_node_near(c, 10, {CRUSHER, CRUSHER_BIG, "rockmech:plant"})
+	return b and size_of(core.get_meta(b)) or SIZE
+end
+function rockmech.hopper_half_at(c) return size_at(c) / 2 end
+
 function rockmech.grate_center(pos, search)
 	local g = core.find_node_near(pos, search or FIND_R + FEEDER, GRATE)
 	if not g then return nil end
@@ -243,8 +260,8 @@ local function top_rubble(c)
 end
 
 -- 受料倉裡的碎石（級）。c：格柵中心
-local function hopper_levels(c)
-	local r = (SIZE - 1) / 2
+local function hopper_levels(c, size)
+	local r = ((size or size_at(c)) - 1) / 2
 	local n = 0
 	for x = c.x - r, c.x + r do for z = c.z - r, c.z + r do for y = c.y + 1, c.y + PILE do
 		n = n + (rockmech.rubble_level[core.get_node({x = x, y = y, z = z}).name] or 0)
@@ -252,17 +269,20 @@ local function hopper_levels(c)
 	return n
 end
 -- 受料倉還放得下幾級（無人駕駛用來判斷要不要等）
-function rockmech.hopper_room(c) return CAPACITY - hopper_levels(c) end
+function rockmech.hopper_room(c)
+	local size = size_at(c)
+	return capacity_of(size) - hopper_levels(c, size)
+end
 
 -- 倉裡的碎石往給料口流：每次掃整個倉，每欄走一步。只叫給料口旁邊的格子的話，外圈階梯上的料不會動。
 -- 倉裡被車壓過變成夯實碎石的（安息角較陡，會卡在倉壁階梯上）換回一般碎石：倉裡的料是鬆的
 local loose_of
-local function drain(c)
+local function drain(c, size)
 	if not loose_of then
 		loose_of = {}
 		for name, cname in pairs(rockmech.compact_of) do loose_of[cname] = name end
 	end
-	local r = (SIZE - 1) / 2
+	local r = ((size or size_at(c)) - 1) / 2
 	for x = c.x - r, c.x + r do for z = c.z - r, c.z + r do
 		for y = c.y + PILE, c.y + 1, -1 do
 			local q = {x = x, y = y, z = z}
@@ -365,7 +385,7 @@ eat_body = function(pos, dtime, rate, limit, take)
 			meta:set_int("next", (start + i) % #cells)
 		end
 	end
-	drain(hopper_center(meta))
+	drain(hopper_center(meta), size_of(meta))
 	meta:set_float("carry", eaten > 0 and budget - math.floor(budget) or 0)
 	if eaten > 0 then rockmech.collapse.rubble_sound(pos, eaten) end
 	return eaten
@@ -427,6 +447,40 @@ end
 
 rockmech.show_bill, rockmech.money_text = show_bill, money_text     -- wages.lua 的人事費單子
 
+-- 運作中的特效（附近有人才放）：一般破碎站從顎破出口（機身後面）噴出碎石；大型破碎廠房屋頂冒白色粉塵
+local function crush_fx(pos, meta)
+	local near = false
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), pos) < 48 then near = true; break end
+	end
+	if not near then return end
+	local c = hopper_center(meta)
+	local dx, dz = c.x - pos.x, c.z - pos.z
+	if math.abs(dx) > math.abs(dz) then dx, dz = dx > 0 and 1 or -1, 0 else dx, dz = 0, dz > 0 and 1 or -1 end
+	if core.get_node(pos).name == CRUSHER_BIG then
+		core.add_particlespawner({amount = 6, time = STEP,
+			minpos = {x = pos.x - 0.9, y = pos.y + 2.6, z = pos.z - 0.9}, maxpos = {x = pos.x + 0.6, y = pos.y + 3.0, z = pos.z + 0.9},
+			minvel = {x = -0.2, y = 0.4, z = -0.2}, maxvel = {x = 0.2, y = 0.9, z = 0.2},
+			minacc = {x = 0.05, y = 0.05, z = 0.05}, maxacc = {x = 0.15, y = 0.15, z = 0.15},
+			minexptime = 3, maxexptime = 5, minsize = 5, maxsize = 10,
+			texture = "[fill:4x4:#ececec^[opacity:140"})
+	else
+		-- 出料口在機身後面（受料倉的反方向）、平台上
+		local o = {x = pos.x - dx * 0.7, y = pos.y + 0.9, z = pos.z - dz * 0.7}
+		core.add_particlespawner({amount = 10, time = STEP,
+			minpos = vector.subtract(o, 0.25), maxpos = vector.add(o, 0.25),
+			minvel = {x = -dx * 1.2 - 0.4, y = 0.5, z = -dz * 1.2 - 0.4}, maxvel = {x = -dx * 2.4 + 0.4, y = 1.6, z = -dz * 2.4 + 0.4},
+			minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
+			minexptime = 0.5, maxexptime = 1.0, minsize = 0, maxsize = 0, collisiondetection = true,
+			node = {name = rockmech.RUBBLE}})
+		core.add_particlespawner({amount = 4, time = STEP,
+			minpos = vector.subtract(o, 0.3), maxpos = vector.add(o, 0.3),
+			minvel = {x = -0.2, y = 0.2, z = -0.2}, maxvel = {x = 0.2, y = 0.6, z = 0.2},
+			minexptime = 1.0, maxexptime = 2.0, minsize = 2, maxsize = 4,
+			texture = "[fill:4x4:#c8c0b4^[opacity:110"})
+	end
+end
+
 local function crush(pos, dtime)
 	local meta = core.get_meta(pos)
 	local dump = meta:get_string("mode") == "dump"
@@ -452,6 +506,7 @@ local function crush(pos, dtime)
 		meta:set_int("batch_day", today)
 	end
 	if eaten == 0 then return end
+	crush_fx(pos, core.get_meta(pos))
 	local t = tons_of(eaten)
 	if income ~= 0 then rockmech.add_money(owner, income) end
 	-- 剝採比（全組累計）：送來的料裡，礦石（照品位折算）和廢石各幾噸
@@ -471,7 +526,7 @@ function rockmech.strip_ratio(acc)
 end
 local function formspec(pos, viewer)
 	local meta = core.get_meta(pos)
-	local queue = hopper_levels(hopper_center(meta))
+	local queue = hopper_levels(hopper_center(meta), size_of(meta))
 	local total = meta:get_float("total_t")
 	local dump = meta:get_string("mode") == "dump"
 	local rate = rate_of(pos)
@@ -494,7 +549,7 @@ local function formspec(pos, viewer)
 		("button[0.5,5.5;8,0.8;mode;%s]"):format(core.formspec_escape(dump and S("Switch to crusher (sell ore)")
 			or S("Switch to waste dump (discard, $@1 per tonne)", ("%g"):format(cfg.dump_fee)))),
 		("label[0.5,2.4;%s]"):format(core.formspec_escape(S("Hopper: @1 / @2 m³ (@3 t)", ("%.1f"):format(queue / V.NLEV),
-			("%.0f"):format(CAPACITY / V.NLEV), ("%.1f"):format(tons_of(queue))))),
+			("%.0f"):format(capacity_of(size_of(meta)) / V.NLEV), ("%.1f"):format(tons_of(queue))))),
 		("label[0.5,3.0;%s]"):format(core.formspec_escape(S("Total processed: @1 t, average grade @2%", ("%.1f"):format(total),
 			("%.0f"):format(total > 0 and 100 * meta:get_float("total_q") / total or 0)))),
 		("label[0.5,3.6;%s]"):format(core.formspec_escape(S("Totals: sales $@1 − processing fees $@2 = net income $@3", ("%.0f"):format(meta:get_float("total_g")),
@@ -549,17 +604,19 @@ core.register_node(LINING, {
 })
 -- 倉的範圍（meta 的 gx, gy, gz）：第 dy 層（倉口 dy = 0）是邊長 SIZE − 2·dy 的正方形
 local function line_hopper(meta)
-	local c, half = hopper_center(meta), (SIZE - 1) / 2
-	local top = meta:get_int("gy") + DEPTH
+	local size = size_of(meta)
+	local depth = depth_of(size)
+	local c, half = hopper_center(meta), (size - 1) / 2
+	local top = meta:get_int("gy") + depth
 	local function cavity(x, y, z)
 		local dy = top - y
-		if dy < 0 or dy >= DEPTH then return false end
+		if dy < 0 or dy >= depth then return false end
 		return math.max(math.abs(x - c.x), math.abs(z - c.z)) <= half - dy
 	end
 	-- 整個範圍先載入（倉壁可能跨到還沒載入的區塊）；還是讀到 ignore 就回傳 nil，下次載入再補
-	core.load_area({x = c.x - half - 1, y = top - DEPTH, z = c.z - half - 1}, {x = c.x + half + 1, y = top + 1, z = c.z + half + 1})
+	core.load_area({x = c.x - half - 1, y = top - depth, z = c.z - half - 1}, {x = c.x + half + 1, y = top + 1, z = c.z + half + 1})
 	local n, missing = 0, false
-	for y = top - DEPTH, top + 1 do
+	for y = top - depth, top + 1 do
 		for x = c.x - half - 1, c.x + half + 1 do for z = c.z - half - 1, c.z + half + 1 do
 			if not cavity(x, y, z) and (cavity(x + 1, y, z) or cavity(x - 1, y, z) or cavity(x, y + 1, z)
 					or cavity(x, y - 1, z) or cavity(x, y, z + 1) or cavity(x, y, z - 1)) then
@@ -587,11 +644,13 @@ function rockmech.in_hopper(x, z, y)
 end
 
 -- 倉裡原有的碎石不挖，之後逐欄疊到新的倉底（舊倉擴建）
-local function dig_hopper(pos, dx, dz)
-	local half = (SIZE - 1) / 2
+local function dig_hopper(pos, dx, dz, size)
+	size = size or size_for(core.get_node(pos).name)
+	local depth = depth_of(size)
+	local half = (size - 1) / 2
 	local cx, cz = pos.x + dx * (2 + half), pos.z + dz * (2 + half)    -- 受料倉中心，緊貼機身
-	local gy = pos.y - 1 - DEPTH
-	for dy = 0, DEPTH - 1 do
+	local gy = pos.y - 1 - depth
+	for dy = 0, depth - 1 do
 		local r = half - dy
 		for x = cx - r, cx + r do for z = cz - r, cz + r do
 			local p = {x = x, y = pos.y - 1 - dy, z = z}
@@ -624,7 +683,7 @@ local function dig_hopper(pos, dx, dz)
 	meta:set_int("gx", cx - r)
 	meta:set_int("gy", gy)
 	meta:set_int("gz", cz - r)
-	meta:set_int("size", SIZE)
+	meta:set_int("size", size)
 	local _, missing = line_hopper(meta)
 	meta:set_int("lined", missing and 0 or 1)
 end
@@ -649,7 +708,7 @@ core.register_lbm({
 -- 限制：無人卡車、怪手沿途也會暫時強制載入（vehicles.lua），合起來常超過 16
 local function each_block(pos, fn)
 	local meta = core.get_meta(pos)
-	local c, h = hopper_center(meta), (SIZE - 1) / 2
+	local c, h = hopper_center(meta), (size_of(meta) - 1) / 2
 	local a = {x = math.min(pos.x - 1, c.x - h), y = meta:get_int("gy"), z = math.min(pos.z - 1, c.z - h)}
 	local b = {x = math.max(pos.x + 1, c.x + h), y = pos.y + PILE, z = math.max(pos.z + 1, c.z + h)}
 	for bx = math.floor(a.x / 16), math.floor(b.x / 16) do
@@ -668,13 +727,15 @@ local function keep_loaded(pos)
 end
 
 -- 機身在 pos、受料倉朝 (dx, dz) 的地形可以蓋嗎：機身 3×3 m 和受料倉要平坦、地下是實心、上方淨空
-local function site_ok(pos, dx, dz)
-	local half = (SIZE - 1) / 2
+local function site_ok(pos, dx, dz, size)
+	size = size or SIZE
+	local depth = depth_of(size)
+	local half = (size - 1) / 2
 	local cx, cz = pos.x + dx * (2 + half), pos.z + dz * (2 + half)    -- 受料倉中心，緊貼機身
 	local function solid(p) return not V.passable(core.get_node(p).name) end
 	for x = cx - half, cx + half do for z = cz - half, cz + half do
 		if solid({x = x, y = pos.y, z = z}) then return false end
-		for y = pos.y - 1 - DEPTH, pos.y - 1 do
+		for y = pos.y - 1 - depth, pos.y - 1 do
 			if not solid({x = x, y = y, z = z}) then return false end
 		end
 	end end
@@ -691,9 +752,11 @@ end
 function rockmech.crusher_build(pos, dx, dz, name, node)
 	-- 範圍內不滿一格的土石先清掉（woodwork.lua）：不然機身架在薄片上
 	if rockmech.clear_site and rockmech.facility_cells then rockmech.clear_site(rockmech.facility_cells(node or CRUSHER, pos, dx, dz), pos) end
-	if not site_ok(pos, dx, dz) then return false end
-	core.set_node(pos, {name = node or CRUSHER, param2 = core.dir_to_facedir({x = dx, y = 0, z = dz})})   -- 進料溜槽朝受料倉
-	dig_hopper(pos, dx, dz)
+	local size = size_for(node or CRUSHER)
+	if not site_ok(pos, dx, dz, size) then return false end
+	-- 進料溜槽朝受料倉（模型的 +Z 是正面；facedir 的方向跟模型反過來）
+	core.set_node(pos, {name = node or CRUSHER, param2 = core.dir_to_facedir({x = -dx, y = 0, z = -dz})})
+	dig_hopper(pos, dx, dz, size)
 	local meta = core.get_meta(pos)
 	local acc = rockmech.account_of(name)       -- 分了組就掛在組上，收入進整組的帳戶
 	meta:set_string("owner", acc)
@@ -718,6 +781,8 @@ local T_MOTOR = tile("[fill:16x16:#3a6aa0^[fill:16x1:0,3:#2a5080^[fill:16x1:0,7:
 local T_BELT = tile("[fill:16x16:#1e1e1e^[fill:16x1:0,4:#3a3a3a^[fill:16x1:0,12:#3a3a3a")
 local T_RAIL = tile("[fill:16x16:#f0c020")
 local T_CHUTE = tile("[fill:16x16:#7a7468^[fill:16x1:0,8:#6a6458^[fill:3x2:4,3:#8a8478^[fill:2x3:11,10:#6a6458")
+-- 板式給料機（倉底斜上到進料口）：一片片鋼板
+local T_APRON = tile("[fill:16x16:#3a3a3a^[fill:16x2:0,0:#5a5a5a^[fill:16x2:0,8:#5a5a5a^[fill:16x1:0,7:#1a1a1a^[fill:16x1:0,15:#1a1a1a")
 local BODY = "[fill:16x16:#d8a820^[fill:16x1:0,15:#a88010^[fill:1x16:15,0:#a88010^[fill:2x2:2,2:#a88010^[fill:2x2:12,2:#a88010"
 local BOX = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}}
 
@@ -737,7 +802,7 @@ local crusher_def = {
 	paramtype = "light",
 	paramtype2 = "facedir",
 	selection_box = BOX, collision_box = BOX,
-	tiles = {T_FRAME, tile(BODY), T_DECK, T_WHEEL, T_MOTOR, T_BELT, T_RAIL, T_CHUTE},
+	tiles = {T_FRAME, tile(BODY), T_DECK, T_WHEEL, T_MOTOR, T_BELT, T_RAIL, T_CHUTE, T_APRON},
 	inventory_image = "rockmech_icon_crusher.png",      -- devtools/make_icons.py
 	groups = {cracky = 2},
 	is_ground_content = false,
@@ -751,7 +816,7 @@ local crusher_def = {
 		local name = placer:get_player_name()
 		if not rockmech.crusher_build(pos, dx, dz, name, itemstack:get_name()) then
 			rockmech.notify(name, S("[Crusher] Place it on flat ground: the 3×3 m machine and the @1×@2 m area in front need level ground, solid rock below and clear space above",
-				tostring(SIZE), tostring(SIZE)))
+				tostring(size_for(itemstack:get_name())), tostring(size_for(itemstack:get_name()))))
 			return itemstack
 		end
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
@@ -794,6 +859,7 @@ local PLANT_TILES = {
 	tile("[fill:16x16:#8a8e92^[fill:16x1:0,3:#6a6e72^[fill:16x1:0,7:#6a6e72^[fill:16x1:0,11:#6a6e72^[fill:16x1:0,15:#6a6e72"),   -- 捲門
 	tile("[fill:16x16:#6e7278^[fill:16x1:0,0:#4a4e54^[fill:1x16:15,0:#4a4e54"),                     -- 皮帶廊道
 	tile("[fill:16x16:#dcdcd6^[fill:16x1:0,8:#b8b8b0"),                                             -- 集塵筒倉
+	T_APRON,                                                                                        -- 板式給料機
 }
 big.description = S("Large crusher\nRight-click on flat ground to build")
 big.short_description = S("Large crusher")
@@ -807,7 +873,7 @@ core.register_node(CRUSHER_BIG, big)
 -- 舊的破碎站（蓋的時候還沒有朝向）：轉到受料倉那一邊
 core.register_lbm({
 	label = "rockmech: 破碎站轉向受料倉",
-	name = "rockmech:crusher_face_hopper",
+	name = "rockmech:crusher_face_hopper2",
 	nodenames = {CRUSHER, CRUSHER_BIG},
 	run_at_every_load = false,
 	action = function(pos, node)
@@ -816,7 +882,7 @@ core.register_lbm({
 		local c = hopper_center(meta)
 		local dx, dz = c.x - pos.x, c.z - pos.z
 		if math.abs(dx) > math.abs(dz) then dx, dz = dx > 0 and 1 or -1, 0 else dx, dz = 0, dz > 0 and 1 or -1 end
-		local p2 = core.dir_to_facedir({x = dx, y = 0, z = dz})
+		local p2 = core.dir_to_facedir({x = -dx, y = 0, z = -dz})
 		if node.param2 ~= p2 then core.swap_node(pos, {name = node.name, param2 = p2}) end
 	end,
 })
@@ -824,7 +890,7 @@ core.register_lbm({
 -- 舊版小倉擴建成現在的大小：舊格柵回填成下面的岩石，再照新尺寸挖（倉裡的碎石留著，疊到新的倉底）
 local function enlarge(pos)
 	local meta = core.get_meta(pos)
-	if core.get_node(pos).name ~= CRUSHER or meta:get_int("size") >= SIZE then return end
+	if core.get_node(pos).name ~= CRUSHER or meta:get_int("size") >= SMALL_SIZE then return end
 	local old = hopper_center(meta)
 	local dx, dz = 0, 0
 	if math.abs(old.x - pos.x) > math.abs(old.z - pos.z) then dx = old.x > pos.x and 1 or -1
@@ -834,8 +900,8 @@ local function enlarge(pos)
 	for _, c in ipairs(grate_cells(meta)) do
 		core.swap_node(c, core.get_node({x = c.x, y = c.y - 1, z = c.z}))
 	end
-	dig_hopper(pos, dx, dz)
-	core.log("action", ("[rockmech] 受料倉擴建成 %d×%d m：機身 %s"):format(SIZE, SIZE, core.pos_to_string(pos)))
+	dig_hopper(pos, dx, dz, SMALL_SIZE)
+	core.log("action", ("[rockmech] 受料倉擴建成 %d×%d m：機身 %s"):format(SMALL_SIZE, SMALL_SIZE, core.pos_to_string(pos)))
 end
 core.register_lbm({
 	label = "rockmech: 舊版受料倉擴建",
@@ -869,7 +935,7 @@ core.register_abm({
 
 -- 給選礦場（plant.lua）共用
 rockmech.hopper_lib = {
-	SIZE = SIZE, PILE = PILE, STEP = STEP, GRATE = GRATE, tons_of = tons_of, eat = eat,
+	SIZE = SIZE, size_for = size_for, PILE = PILE, STEP = STEP, GRATE = GRATE, tons_of = tons_of, eat = eat,
 	hopper_center = hopper_center, hopper_levels = hopper_levels, grate_cells = grate_cells, dig_hopper = dig_hopper,
 	site_ok = site_ok, keep_loaded = keep_loaded, each_block = each_block,
 }

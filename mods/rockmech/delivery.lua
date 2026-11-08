@@ -201,7 +201,7 @@ end
 function rockmech.facility_cells(item, a, dx, dz)
 	local cells = {}
 	square(cells, a.x, a.z, 1)
-	local half = (H.SIZE - 1) / 2
+	local half = ((H.size_for and H.size_for(item) or H.SIZE) - 1) / 2
 	square(cells, a.x + dx * (2 + half), a.z + dz * (2 + half), half)
 	if item == "rockmech:plant" and rockmech.plant_towers then
 		for _, tc in ipairs((rockmech.plant_towers(a, dx, dz))) do square(cells, tc.x, tc.z, 1) end

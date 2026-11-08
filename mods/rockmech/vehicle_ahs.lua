@@ -140,7 +140,8 @@ end
 -- 倉口是方的，斜著倒車時倉口比較遠
 local function hopper_back(a, def)
 	local d = a.hopper.d
-	local rim = rockmech.HOPPER_HALF / math.max(math.abs(d.x), math.abs(d.z))
+	local half = rockmech.hopper_half_at and rockmech.hopper_half_at(a.hopper) or rockmech.HOPPER_HALF
+	local rim = half / math.max(math.abs(d.x), math.abs(d.z))
 	return math.max(def.rear + 1, rim + def.half + 0.5)
 end
 -- 第 i 個傾倒位置（0 起算；超出傾倒區回傳 nil）。破碎站只有一個位置：倒車對準倉的中心

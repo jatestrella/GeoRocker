@@ -56,6 +56,21 @@ class Mesh:
                     uv = [(0.5 + 0.5 * math.cos(g0) * k, 0.5 + 0.5 * math.sin(g0) * k) for k in (0, 1)] + \
                          [(0.5 + 0.5 * math.cos(g1), 0.5 + 0.5 * math.sin(g1)), (0.5, 0.5)]
                     self.quad(mat, q, nn, uv)
+    def slab(self, mat, x0, x1, p0, p1, t):
+        (z0, y0), (z1, y1) = p0, p1
+        dz, dy = z1 - z0, y1 - y0
+        l = math.sqrt(dz * dz + dy * dy)
+        nz, ny = -dy / l * t, dz / l * t          # 斜面的法向（往上那一側）× 厚度
+        if ny < 0: nz, ny = -nz, -ny
+        A = [(z0, y0), (z1, y1), (z1 + nz, y1 + ny), (z0 + nz, y0 + ny)]   # 截面的四個角（底邊、頂邊）
+        def P(x, k): return (x, A[k][1], A[k][0])
+        # 頂面、底面、兩端、兩側
+        self.panel(mat, [P(x0, 3), P(x1, 3), P(x1, 2), P(x0, 2)], [(x0, 0), (x1, 0), (x1, l), (x0, l)])
+        self.panel(mat, [P(x0, 0), P(x0, 1), P(x1, 1), P(x1, 0)], [(x0, 0), (x0, l), (x1, l), (x1, 0)])
+        self.panel(mat, [P(x0, 0), P(x1, 0), P(x1, 3), P(x0, 3)])
+        self.panel(mat, [P(x0, 1), P(x0, 2), P(x1, 2), P(x1, 1)])
+        self.panel(mat, [P(x1, 0), P(x1, 1), P(x1, 2), P(x1, 3)])
+        self.panel(mat, [P(x0, 0), P(x0, 3), P(x0, 2), P(x0, 1)])
     def write(self, path):
         with open(path, 'w', newline='\n') as f:
             f.write('# rockmech crusher (devtools/make_crusher_mesh.py)\n')
@@ -69,9 +84,14 @@ class Mesh:
         print('wrote', os.path.basename(path), 'tiles:', [self.names[m] for m in self.order])
 
 # ---------- 一般破碎站：露天機台 ----------
-FRAME, BODY, DECK, WHEEL, MOTOR, BELT, RAIL, CHUTE = range(8)
+FRAME, BODY, DECK, WHEEL, MOTOR, BELT, RAIL, CHUTE, APRON = range(9)
+# 板式給料機：倉底格柵上 → 斜上到進料口。坡度要陡過受料倉 45° 的階梯壁，才不會穿進護坡（點在格柵上方、壁的轉角上方）
+def apron(m, x, p0, p1):
+    m.slab(APRON, -x, x, p0, p1, 0.18)                                  # 鋼板鏈條
+    m.slab(FRAME, -x - 0.08, -x, p0, p1, 0.4)                          # 兩側擋板（深色鋼構）
+    m.slab(FRAME, x, x + 0.08, p0, p1, 0.4)
 def machine():
-    m = Mesh(['frame', 'body', 'deck', 'wheel', 'motor', 'belt', 'rail', 'chute'])
+    m = Mesh(['frame', 'body', 'deck', 'wheel', 'motor', 'belt', 'rail', 'chute', 'apron'])
     H = 0.6
     for sx in (-1, 1):
         for sz in (-1, 1):
@@ -101,13 +121,14 @@ def machine():
     m.box(CHUTE, -0.75, 1.95, 0.6, 0.75, 2.05, 1.45)
     m.box(CHUTE, -0.85, 1.95, 0.6, -0.75, 2.45, 1.45)
     m.box(CHUTE, 0.75, 1.95, 0.6, 0.85, 2.45, 1.45)
+    apron(m, 0.55, (4.5, -3.4), (1.3, 2.0))
     return m
 
 # ---------- 大型破碎站：破碎廠房 ----------
 # 材質：基座、外牆、屋頂、鋼柱、捲門、窗帶、皮帶廊道、集塵筒倉、警示條
-PLINTH, WALL, ROOF, COLUMN, DOOR, WINDOW, GALLERY, SILO, HAZARD = range(9)
+PLINTH, WALL, ROOF, COLUMN, DOOR, WINDOW, GALLERY, SILO, HAZARD, PAPRON = range(10)
 def plant():
-    m = Mesh(['plinth', 'wall', 'roof', 'column', 'door', 'window', 'gallery', 'silo', 'hazard'])
+    m = Mesh(['plinth', 'wall', 'roof', 'column', 'door', 'window', 'gallery', 'silo', 'hazard', 'apron'])
     X0, X1, Z0, Z1 = -1.4, 0.7, -1.3, 1.3       # 外牆（右邊留給集塵筒倉）
     XM = (X0 + X1) / 2                           # 屋脊
     Y0, YE, YR = -0.2, 2.3, 2.95                 # 牆底、簷口、屋脊
@@ -151,6 +172,10 @@ def plant():
     m.cyl(COLUMN, 'y', -0.2, 0.7, SX, -0.5, 0.08, 8)
     m.cyl(COLUMN, 'y', 2.6, 3.2, SX, -0.5, 0.06, 8)
     m.box(GALLERY, X1, 1.6, -0.62, SX - 0.3, 1.8, -0.38)      # 集塵風管接到廠房
+    # 板式給料機（從坑底穿過捲門進廠房；捲門在 XM）
+    m.slab(PAPRON, XM - 0.6, XM + 0.6, (6.0, -4.4), (1.35, 1.0), 0.2)
+    m.slab(COLUMN, XM - 0.7, XM - 0.6, (6.0, -4.4), (1.35, 1.0), 0.45)
+    m.slab(COLUMN, XM + 0.6, XM + 0.7, (6.0, -4.4), (1.35, 1.0), 0.45)
     return m
 
 here = os.path.dirname(os.path.abspath(__file__))
