@@ -24,11 +24,13 @@ local chatter = {
 }
 local own = {
 	["rockmech:vendor_vehicle"] = {S("I washed that truck yesterday. Look at it now.")},
-	["rockmech:vendor_blast"] = {S("Huh? Say again? My ears aren't great.")},
-	["rockmech:npc_professor"] = {S("In my day we drew stereonets by hand."), S("Three papers due and still no data.")},
+	["rockmech:vendor_blast"] = {S("Huh? Say again? My ears aren't great."), S("TSMC is no fun compared with the mine.")},
+	["rockmech:npc_professor"] = {S("In my day we drew stereonets by hand."), S("Three papers due and still no data."), S("Sigh, you little miners."), S("Please don't use this game as material for your admission report."), S("Anyone want to do a PhD?")},
 	["rockmech:npc_mechanic"] = {S("Who keeps getting gravel in the gearbox?")},
-	["rockmech:npc_geologist"] = {S("What a beautiful rock. Please don't blast it.")},
+	["rockmech:npc_geologist"] = {S("What a beautiful rock. Please don't blast it."), S("We should grab a beer later.")},
 	["rockmech:operator_seated"] = {S("Five more minutes.")},
+	["rockmech:vendor_civil"] = {S("Did you know there are fewer than ten practicing mining engineers in all of Taiwan?")},
+	["rockmech:vendor_geotech"] = {S("I heard someone took ten years to pass the engineer exam.")},
 }
 
 local LINES = {
