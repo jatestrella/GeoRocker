@@ -852,7 +852,8 @@ local function excavator(kind, P)
 					if rockmech.lith_of_node[node.name] then
 						local rn, rp = rockmech.rubble_node(node)
 						core.remove_node(dg.target)          -- 跟鎬子一樣：先移除（觸發開挖、穩定、應力解），原地留碎石
-						if core.get_node(dg.target).name == "air" then core.set_node(dg.target, {name = rn, param2 = rp}) end
+						local tn = core.get_node(dg.target).name      -- 空氣（或車燈：vehicle_lights.lua）
+						if tn == "air" or tn:find("^rockmech:vehicle_light") then core.set_node(dg.target, {name = rn, param2 = rp}) end
 					end
 					dg.t = DIG_PHASES[1] + DIG_PHASES[2] + 1e-3
 				end
