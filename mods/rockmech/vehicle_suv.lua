@@ -14,8 +14,8 @@ local def = {desc = S("4WD SUV"), short = S("SUV"), color = c, cap = 0, speed = 
 	max_grade = math.rad(30),     -- 四輪驅動
 	tire = 0.75,
 	half = 1.0, top = 0.8, lat = {-0.6, 0.6}, eye_up = 1.1, eye_fwd = 0.15, eye_side = -0.45, rear = 3.5,
-	seat = {x = -0.45, y = 0, z = -0.7},      -- 駕駛（左前，左駕）；乘客：副駕駛、後座兩人
-	passengers = {{x = 0.45, y = 0, z = -0.7, front = true}, {x = -0.45, y = 0, z = -1.9}, {x = 0.45, y = 0, z = -1.9}},
+	seat = {x = -0.45, y = -0.6, z = -0.7},      -- 駕駛（左前，左駕）；乘客：副駕駛、後座兩人
+	passengers = {{x = 0.45, y = -0.6, z = -0.7, front = true}, {x = -0.45, y = -0.6, z = -1.9}, {x = 0.45, y = -0.6, z = -1.9}},
 	mirror = {x = 1.1, y = 0.5, z = -0.1}, rearcam = {x = 0, y = 0.6, z = -3.6},   -- 後照鏡（A 柱旁）、倒車攝影機（車尾）
 	exhaust = {x = 0.6, y = -0.55, z = -3.6},     -- 排氣管：車尾下方右側
 	tilt = {front = 0.9, rear = -3.0, side_z = -1.2, side_x = 0.8},
