@@ -45,7 +45,8 @@ end
 
 local FRAME = "[fill:16x16:#6c6c6c^[fill:16x2:0,0:#4a4a4a"
 -- 空的輸送帶面上兩個箭頭（貼圖往上 = 方塊的 +z = 輸送方向）
-local ARROW_C = "#8a8a80"
+-- 箭頭畫在疊加貼圖上，顏色照調色盤（param2 的顏色位元）：0 黃色＝運轉中，1 灰色＝控制箱停住（beltswitch.lua）
+local ARROW_C = "#ffffff"
 local function chevron(y)
 	local t = {}
 	for i = 0, 3 do
@@ -53,7 +54,8 @@ local function chevron(y)
 	end
 	return table.concat(t)
 end
-local RUBBER = "[fill:16x16:#262626" .. chevron(2) .. chevron(9)
+local RUBBER = "[fill:16x16:#262626"
+local ARROWS = "[fill:16x16:#00000000" .. chevron(2) .. chevron(9)
 local function top_of(h) return (h + 1) / 8 - 0.5 end
 -- 形狀（方塊座標：輸送帶往 +z 走，左邊是 −x）：從哪一側有輸送帶接進來，那一側的框架就打開。
 --   ""：直的（兩側框架）；cl／cr：轉彎，料從左／右邊進來（那側打開、後端封起來）；
@@ -152,12 +154,15 @@ for h = 0, 7 do
 			description = S("Conveyor belt"),
 			drawtype = "nodebox",
 			paramtype = "light",
-			paramtype2 = "4dir",
+			paramtype2 = "color4dir", palette = "rockmech_belt_palette.png",
 			sunlight_propagates = true,
 			node_box = {type = "fixed", fixed = boxes(h, st ~= "", sh, leg)},
 			selection_box = {type = "fixed", fixed = sel},
 			collision_box = {type = "fixed", fixed = sel},
-			tiles = {top, FRAME, FRAME, FRAME, FRAME, FRAME},
+			-- 底圖固定白色（不吃調色盤），只有空皮帶上的箭頭（疊加貼圖）跟著調色盤變色
+			tiles = {{name = top, color = "white"}, {name = FRAME, color = "white"}, {name = FRAME, color = "white"},
+				{name = FRAME, color = "white"}, {name = FRAME, color = "white"}, {name = FRAME, color = "white"}},
+			overlay_tiles = st == "" and {ARROWS, "", "", "", "", ""} or nil,
 			groups = {cracky = 3, oddly_breakable_by_hand = 2, rockmech_belt = 1, not_in_creative_inventory = 1},
 			drop = ITEM,
 			is_ground_content = false,
@@ -490,7 +495,8 @@ local function tick()
 	for h, n in pairs(nodes) do
 		local st, sh = want_state(loads[h]), shape_of(h, n, feeds[h])
 		local want = NAME[BELT_H[n.name]][st][sh][leg_of(cells[h])]
-		if n.name ~= want then core.swap_node(cells[h], {name = want, param2 = n.param2}) end
+		local p2 = n.param2 % 4 + (stop[h] and 4 or 0)     -- 停住的那一條：箭頭灰色
+		if n.name ~= want or n.param2 ~= p2 then core.swap_node(cells[h], {name = want, param2 = p2}) end
 		if st ~= "" and np < PARTICLE_MAX and near_player(cells[h]) then
 			np = np + 1
 			local p = cells[h]
