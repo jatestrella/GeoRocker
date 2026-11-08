@@ -17,6 +17,7 @@ local collapse = rockmech.collapse
 
 local def = {desc = S("Bulldozer"), short = S("Dozer"), color = "#e8c828", cap = 0, speed = 2.5,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0, mirror = {x = 1.0, y = 1.4, z = -0.2},
+	seat = {x = 0, y = 0.0, z = -1.0},        -- 駕駛艙中間
 	tilt = {front = 1.3, rear = -2.1, side_z = -0.4, side_x = 1.1}, max_grade = math.rad(30),   -- 履帶推土機
 	exhaust = {x = 0.5, y = 1.1, z = 1.0},   -- 排氣管口（排煙，vehicles.lua 的 V.exhaust）
 	stepheight = 0.3,   -- 放鏟時只壓得過很薄的碎石（要推走，不是爬過去）
@@ -38,8 +39,8 @@ do
 	local TRACK = V.TRACK
 	local y = ("[fill:16x16:%s"):format(c)
 	local grille = ("[fill:16x16:%s^[fill:12x9:2,4:#2a2a2a^[fill:12x1:2,6:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)
-	local win = ("[fill:16x16:%s^[fill:12x8:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = ("[fill:16x16:%s^[fill:10x8:3,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local win = ("[fill:16x16:%s^[fill:12x8:2,2:#9fd0ff60^[fill:16x2:0,14:#2a2a2a"):format(c)
+	local side = ("[fill:16x16:%s^[fill:10x8:3,2:#9fd0ff60^[fill:16x2:0,14:#2a2a2a"):format(c)
 	local blade = "[fill:16x16:#4a4a4a^[fill:16x2:0,14:#b0b0b0^[fill:16x1:0,0:#3a3a3a"
 	local steel = box_tex("#3a3a3a")
 	def.parts = {
@@ -47,7 +48,7 @@ do
 		{pos = {x = 1.1, y = -1.0, z = -0.4}, size = {x = 0.7, y = 1.0, z = 3.8}, tex = {TRACK, TRACK, TRACK, TRACK, TRACK, TRACK}},
 		{pos = {x = 0, y = -0.75, z = -0.4}, size = {x = 1.5, y = 0.7, z = 3.6}, tex = box_tex("#3a3a3a")},       -- 車架
 		{pos = {x = 0, y = -0.05, z = 0.7}, size = {x = 1.6, y = 1.0, z = 1.6}, tex = {y, y, y, y, grille, y}},    -- 引擎蓋
-		{pos = {x = 0, y = 0.55, z = -0.9}, size = {x = 1.8, y = 1.9, z = 1.6},                                   -- 駕駛艙
+		{pos = {x = 0, y = 0.55, z = -0.9}, size = {x = 1.8, y = 1.9, z = 1.6}, alpha = true,                     -- 駕駛艙
 			tex = {y, "[fill:16x16:#2a2a2a", side, side, win, y}},
 		{pos = {x = 0, y = -0.6, z = -2.15}, size = {x = 1.6, y = 0.8, z = 0.7}, tex = box_tex("#b89a18")},      -- 車尾配重
 		{pos = {x = 0.5, y = 0.75, z = 1.0}, size = {x = 0.12, y = 0.6, z = 0.12}, tex = box_tex("#202020")},     -- 排氣管

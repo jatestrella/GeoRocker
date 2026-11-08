@@ -13,6 +13,7 @@ local def = {desc = S("Haul truck"), short = S("Hauler"), color = "#d89818", cap
 	top_speed = 9, accel = 0.8,    -- 直線加速到約 32 km/h
 	tire = 2.4,
 	half = 2.5, top = 1.5, lat = {-2, -1, 0, 1, 2}, eye_up = 1.3, eye_fwd = 2.4, rear = 7.5,
+	seat = {x = -1.45, y = 0.6, z = 1.3},     -- 左側駕駛室
 	mirror = {x = 2.45, y = 1.3, z = 2.2}, rearcam = {x = 0, y = 1.4, z = -7.7},
 	tilt = {front = 1.0, rear = -4.6, side_z = -4.6, side_x = 1.7}, max_grade = math.rad(rockmech.cfg.haul_max_grade),   -- 比真實的重載礦卡（約 15–20%）寬，讓一般坑道上得去
 	item_desc = S("Right-click to get in; Space tips the bed")}
@@ -30,14 +31,14 @@ local c = def.color
 local y = ("[fill:16x16:%s"):format(c)
 local grille = ("[fill:16x16:#2a2a2a^[fill:14x10:1,2:#3a3a3a^[fill:14x1:1,4:#555555^[fill:14x1:1,7:#555555^[fill:14x1:1,10:#555555"
 	.. "^[fill:3x2:1,13:#f0e070^[fill:3x2:12,13:#f0e070")
-local win = ("[fill:16x16:%s^[fill:12x7:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-local side = ("[fill:16x16:%s^[fill:9x7:4,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
+local win = ("[fill:16x16:%s^[fill:12x7:2,2:#9fd0ff60^[fill:16x2:0,14:#2a2a2a"):format(c)
+local side = ("[fill:16x16:%s^[fill:9x7:4,2:#9fd0ff60^[fill:16x2:0,14:#2a2a2a"):format(c)
 local wheel = {TREAD, TREAD, WHEEL, WHEEL, TREAD, TREAD}   -- 上下前後是胎面，左右兩側是輪圈
 local body = {
 	{pos = {x = 0, y = -1.2, z = -2.2}, size = {x = 1.6, y = 0.8, z = 9.0}, tex = box_tex("#2a2a2a")},     -- 車架
 	{pos = {x = 0, y = -0.6, z = 1.5}, size = {x = 2.6, y = 1.8, z = 1.8}, tex = {y, y, y, y, grille, y}},   -- 引擎與水箱
 	{pos = {x = 0, y = 0.4, z = 1.5}, size = {x = 4.9, y = 0.2, z = 1.8}, tex = box_tex("#4a4a4a")},       -- 平台
-	{pos = {x = -1.45, y = 1.2, z = 1.4}, size = {x = 1.8, y = 1.4, z = 1.6},                             -- 駕駛室（左側）
+	{pos = {x = -1.45, y = 1.2, z = 1.4}, size = {x = 1.8, y = 1.4, z = 1.6}, alpha = true,               -- 駕駛室（左側）
 		tex = {y, "[fill:16x16:#2a2a2a", side, side, win, y}},
 	{pos = {x = 1.25, y = 0.95, z = 2.35}, size = {x = 2.3, y = 0.06, z = 0.06}, tex = box_tex("#f0f0f0")}, -- 平台欄杆
 	{pos = {x = 1.25, y = 0.75, z = 0.65}, size = {x = 2.3, y = 0.06, z = 0.06}, tex = box_tex("#f0f0f0")},

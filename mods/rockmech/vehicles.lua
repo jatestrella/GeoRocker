@@ -177,8 +177,13 @@ local TURN_RATE = 1.6        -- rad/s
 -- 往前看得到自己的車頂前緣與車頭正前方的地面（車身方塊從裡面看不透明，相機不能放進車身）
 local EYE_HEIGHT = 1.625
 V.EYE_HEIGHT = EYE_HEIGHT
+-- def.seat：駕駛座（車身座標，坐姿的人放在這裡，從車窗看得到；沒設就是車身中心）。視角照 eye_* 不變，所以扣掉座位的位移
+local function seat_of(def) return def.seat or {x = 0, y = 0, z = 0} end
+local function seat_pos(def) local s = seat_of(def); return {x = s.x * 10, y = s.y * 10, z = s.z * 10} end
+V.seat_pos = seat_pos
 local function eye_offset(def)
-	return {x = (def.eye_side or 0) * 10, y = (def.eye_up - EYE_HEIGHT) * 10, z = def.eye_fwd * 10}
+	local s = seat_of(def)
+	return {x = ((def.eye_side or 0) - s.x) * 10, y = (def.eye_up - EYE_HEIGHT - s.y) * 10, z = (def.eye_fwd - s.z) * 10}
 end
 
 -- 貼圖（[fill 組合）。cube 的六面：上、下、+X、−X、+Z（車頭：yaw 0 朝 +Z）、−Z
@@ -331,6 +336,8 @@ local function spawn_parts(self, parts)
 		end
 		if o then
 			o:set_properties({visual_size = pt.size, textures = pt.tex})
+			-- 駕駛室：車窗半透明，看得到裡面的人
+			if pt.alpha then o:set_properties({use_texture_alpha = true, backface_culling = false}) end
 			o:set_attach(self.object, "", {x = pt.pos.x * 10, y = pt.pos.y * 10, z = pt.pos.z * 10}, pt.rot or {x = 0, y = 0, z = 0})
 			if pt.id then self.parts[pt.id] = o end
 			self.part_list[#self.part_list + 1] = o
@@ -1246,7 +1253,7 @@ V.CHASE = CHASE
 function V.seat_driver(self, player)
 	local def = TYPES[self.vkind]
 	player:set_detach()             -- 換掛載的對象要先拆下來，客戶端才會更新位置
-	player:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+	player:set_attach(self.object, "", seat_pos(def), {x = 0, y = 0, z = 0})
 	player:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
 	player:set_camera({mode = "first"})
 	set_seated(player, true)
@@ -1423,7 +1430,7 @@ function V.register(kind, def)
 				clicker:set_attach(self.object, "", {x = 0, y = -def.half * 10, z = def.push_z * 10}, {x = 0, y = 180, z = 0})
 				clicker:set_look_horizontal(self.object:get_yaw() + math.pi)
 			else
-				clicker:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+				clicker:set_attach(self.object, "", seat_pos(def), {x = 0, y = 0, z = 0})
 			end
 			-- 第三人稱：盡量抬高（上限 y 1.5 m、前後 ±0.5 m），從後上方看得到駕駛艙與手臂
 			clicker:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
@@ -1640,7 +1647,7 @@ function V.register(kind, def)
 					if self.chase then
 						drop_chase(self)
 						d:set_detach()
-						d:set_attach(obj, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+						d:set_attach(obj, "", seat_pos(def), {x = 0, y = 0, z = 0})
 						d:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
 					else
 						local c = core.add_entity(chase_pos(self, def), CHASE)

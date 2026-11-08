@@ -163,6 +163,30 @@ core.register_craftitem(RADIO, {
 	on_place = function(itemstack, user, pointed) rockmech.radio_click(user, pointed); return itemstack end,
 })
 
+-- 操作員坐在駕駛座上：一個坐姿的人（從車窗看得到）
+local CAB_NPC = "rockmech:cab_npc"
+core.register_entity(CAB_NPC, {
+	initial_properties = {visual = "mesh", mesh = "character.b3d", textures = {"character.png"},
+		physical = false, pointable = false, static_save = false, collisionbox = {0, 0, 0, 0, 0, 0}},
+	on_activate = function(self) self.object:set_animation({x = 81, y = 160}, 30) end,
+	on_step = function(self) if not self.object:get_attach() then self.object:remove() end end,
+})
+local function op_figure(self, on)
+	local d = rockmech.vehicles.TYPES[self.vkind]
+	if on and d.seat then
+		if not (self.op_fig and self.op_fig:get_pos()) then
+			local o = core.add_entity(self.object:get_pos(), CAB_NPC)
+			if o then
+				o:set_properties({textures = {rockmech.npc_skin and rockmech.npc_skin("operator") or "character.png"}})
+				o:set_attach(self.object, "", rockmech.vehicles.seat_pos(d), {x = 0, y = 0, z = 0})
+				self.op_fig = o
+			end
+		end
+	elseif self.op_fig then
+		if self.op_fig:get_pos() then self.op_fig:remove() end
+		self.op_fig = nil
+	end
+end
 local function op_show(self)
 	local op = self.op
 	if op and op.on then
@@ -170,6 +194,7 @@ local function op_show(self)
 	else
 		rockmech.vehicles.nametag(self, "")
 	end
+	op_figure(self, op and op.on)
 end
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= OP_ITEM then return end
@@ -198,9 +223,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	return true
 end)
 
-local function cab_tex(c, win_w)
-	local win = ("[fill:16x16:%s^[fill:12x7:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = ("[fill:16x16:%s^[fill:%dx6:%d,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c, win_w or 6, 14 - (win_w or 6))
+-- clear：車窗半透明（看得到裡面的人；駕駛室要 alpha = true）
+local function cab_tex(c, win_w, clear)
+	local g = clear and "#9fd0ff60" or "#9fd0ff"
+	local win = ("[fill:16x16:%s^[fill:12x7:2,2:%s^[fill:16x2:0,14:#2a2a2a"):format(c, g)
+	local side = ("[fill:16x16:%s^[fill:%dx6:%d,2:%s^[fill:16x2:0,14:#2a2a2a"):format(c, win_w or 6, 14 - (win_w or 6), g)
 	return {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", side, side, win, ("[fill:16x16:%s"):format(c)}
 end
 
@@ -1038,6 +1065,7 @@ do
 	-- 履帶很慢（真實約 3–5 km/h）：長距離用平板拖車載（vehicle_lowboy.lua）
 	local def = {desc = S("Excavator"), color = "#e0a020", cap = 4 * NLEV, speed = 1.4,
 		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.65, eye_fwd = 0.45, mirror = {x = 1.15, y = 1.3, z = 0.4},
+		seat = {x = -0.3, y = 0.0, z = -0.2},     -- 駕駛室偏左（駕駛室靠近迴轉軸，上部結構轉了也差不多在裡面）
 		tilt = {front = 1.3, rear = -1.3, side_z = 0, side_x = 1.25}, max_grade = math.rad(35),   -- 履帶挖土機約 70%
 		item_desc = S("Right-click to get in; E digs, Space dumps")}
 	def.inv_image = excavator_icon(def.color, false)
@@ -1050,7 +1078,7 @@ do
 			{pos = {x = 0, y = -1.0, z = 0}, size = {x = 2.0, y = 1.0, z = 2.6}, tex = box_tex("#3a3a3a")},
 		},
 		house = {
-			{id = "cab", pos = {x = 0, y = 0.5, z = -0.1}, size = {x = 2.0, y = 2.0, z = 1.2}, tex = cab_tex(def.color, 10)},
+			{id = "cab", pos = {x = 0, y = 0.5, z = -0.1}, size = {x = 2.0, y = 2.0, z = 1.2}, tex = cab_tex(def.color, 10, true), alpha = true},
 			-- 後側：比駕駛艙矮的引擎室（兩側百葉）、排氣管
 			{id = "engine", pos = {x = 0, y = 0.0, z = -1.1}, size = {x = 2.0, y = 1.0, z = 0.8},
 				tex = {("[fill:16x16:%s"):format(def.color), "[fill:16x16:#2a2a2a", grille_s, grille_s,

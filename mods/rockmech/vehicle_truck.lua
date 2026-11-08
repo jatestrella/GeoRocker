@@ -201,6 +201,7 @@ local truck = {desc = S("Dump truck"), short = S("Truck"), color = "#c84020", ca
 	top_speed = 12, accel = 1.5,   -- 直線加速到約 43 km/h
 	tire = 1.0,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
+	seat = {x = -0.55, y = 0.1, z = 0.6},     -- 左駕：駕駛室左前
 	rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	max_grade = math.rad(17),   -- 重載砂石車約 30%
 	item_desc = S("Right-click to get in; Space tips the bed")}
@@ -214,12 +215,12 @@ do   -- 圖示：車斗、駕駛室、三軸
 end
 do
 	local c = truck.color
-	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)
-	local cab_side = ("[fill:16x16:%s^[fill:6x6:8,2:#9fd0ff"):format(c)
+	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff60^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)
+	local cab_side = ("[fill:16x16:%s^[fill:6x6:8,2:#9fd0ff60"):format(c)
 	local wheel = {TREAD, TREAD, WHEEL, WHEEL, TREAD, TREAD}   -- 上下前後是胎面，左右兩側是輪圈
 	local body = {
 		{pos = {x = 0, y = -0.55, z = -2.0}, size = {x = 1.6, y = 0.3, z = 6.6}, tex = box_tex("#2a2a2a")},   -- 底盤
-		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0},
+		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0}, alpha = true,
 			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side, cab_front, ("[fill:16x16:%s"):format(c)}},
 	}
 	-- 前軸單輪、後兩軸雙輪（較寬），外緣在車斗外側
