@@ -1759,8 +1759,15 @@ function V.register(kind, def)
 				turn = 0
 			end
 			if turn ~= 0 then
-				yaw = yaw + turn * TURN_RATE * dtime
+				local dyaw = turn * TURN_RATE * dtime
+				yaw = yaw + dyaw
 				obj:set_yaw(yaw)
+				-- 車上的人（駕駛、乘客）視線跟著車轉（引擎不會自己轉）；手推車本來就照視線轉
+				if not def.pushed then
+					for _, c in ipairs(obj:get_children()) do
+						if c:is_player() then c:set_look_horizontal(c:get_look_horizontal() + dyaw) end
+					end
+				end
 			end
 			-- 外觀隨地形傾斜（角度平滑趨近）
 			if def.tilt then
