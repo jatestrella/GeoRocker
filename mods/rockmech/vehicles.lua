@@ -1489,6 +1489,10 @@ local function get_off(self)
 	hud_clear(self, nil)
 end
 
+-- Z 在車上、作業籠裡是切換視角。引擎預設 zoom_fov = 0（不能放大），按 Z 會跳「放大已被停用」的提示：
+-- 設成跟一般視角一樣（72°），按 Z 不跳提示、畫面也不會放大
+core.register_on_joinplayer(function(player) player:set_properties({zoom_fov = 72}) end)
+
 -- 坐在車上（掛在車上或追蹤相機上）時右鍵不放方塊：開車時手上的東西藏起來了，右鍵常常是作業鍵（怪手）
 local old_item_place = core.item_place
 function core.item_place(itemstack, placer, pointed, ...)
