@@ -1481,3 +1481,5 @@ Fan off=已關閉
 Forcing duct @1 m=壓入風管 @1 m
 Exhaust duct @1 m=抽出風管 @1 m
 No conveyor belt connected=沒接輸送帶
+Reversed (@1 m)=反向了（@1 m）
+This is the middle of a belt line: extend it from either end=這是輸送帶的中間：從頭或尾接

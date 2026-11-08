@@ -44,7 +44,16 @@ end
 ---------------------------------------------------------------------------
 
 local FRAME = "[fill:16x16:#6c6c6c^[fill:16x2:0,0:#4a4a4a"
-local RUBBER = "[fill:16x16:#262626^[fill:16x2:0,7:#363636"
+-- 空的輸送帶面上兩個箭頭（貼圖往上 = 方塊的 +z = 輸送方向）
+local ARROW_C = "#8a8a80"
+local function chevron(y)
+	local t = {}
+	for i = 0, 3 do
+		t[#t + 1] = ("^[fill:2x1:%d,%d:%s^[fill:2x1:%d,%d:%s"):format(7 - i, y + i, ARROW_C, 7 + i, y + i, ARROW_C)
+	end
+	return table.concat(t)
+end
+local RUBBER = "[fill:16x16:#262626" .. chevron(2) .. chevron(9)
 local function top_of(h) return (h + 1) / 8 - 0.5 end
 -- 形狀（方塊座標：輸送帶往 +z 走，左邊是 −x）：從哪一側有輸送帶接進來，那一側的框架就打開。
 --   ""：直的（兩側框架）；cl／cr：轉彎，料從左／右邊進來（那側打開、後端封起來）；
@@ -74,6 +83,7 @@ local function boxes(h, loaded, sh)
 	return b
 end
 
+local reverse_line          -- 下面定義（整條反向）
 local cells = {}            -- 位置 hash → 位置（目前知道的輸送帶格）
 local loads = {}            -- 位置 hash → {{b = 碎石種類, k = 級數, g = 品位 param2}, ...}（空的不存）
 local dirty = false
@@ -131,6 +141,13 @@ for h = 0, 7 do
 			groups = {cracky = 3, oddly_breakable_by_hand = 2, rockmech_belt = 1, not_in_creative_inventory = 1},
 			drop = ITEM,
 			is_ground_content = false,
+			-- 空手右鍵：整條輸送帶反向；拿著方塊照常放
+			on_rightclick = function(pos, node, clicker, itemstack, pointed)
+				local w = itemstack and itemstack:get_name() or ""
+				if core.registered_nodes[w] then return (core.item_place_node(itemstack, clicker, pointed)) end
+				if w == "" and clicker and clicker:is_player() then reverse_line(pos, clicker:get_player_name()) end
+				return itemstack
+			end,
 			on_construct = function(pos)
 				register_cell(pos)
 				core.forceload_block(pos, false, -1)
@@ -190,6 +207,60 @@ local function next_of(p, n)
 	end
 	return best, d
 end
+
+-- 上一格：旁邊（高低差一格內）把料送進 c 的輸送帶；正後方那格優先
+local function same(a, b) return a and b and a.x == b.x and a.y == b.y and a.z == b.z end
+local function prev_of(c, cn)
+	local d = dir_of(cn or core.get_node(c))
+	local found
+	for _, s in ipairs({{-d.x, -d.z}, {d.z, -d.x}, {-d.z, d.x}, {d.x, d.z}}) do
+		for dy = -1, 1 do
+			local q = {x = c.x + s[1], y = c.y + dy, z = c.z + s[2]}
+			local m, is = belt_at(q)
+			if is and same(next_of(q, m), c) then
+				if s[1] == -d.x and s[2] == -d.z then return q end
+				found = found or q
+			end
+		end
+	end
+	return found
+end
+
+-- 整條反向：從 p 往上游找到頭、往下游找到尾，每格改成朝原本的上一格
+reverse_line = function(p, name)
+	local seen = {}
+	local start = p
+	while true do
+		seen[core.hash_node_position(start)] = true
+		local q = prev_of(start)
+		if not q or seen[core.hash_node_position(q)] then break end
+		start = q
+	end
+	local chain, cur, seen2 = {}, start, {}
+	while cur and not seen2[core.hash_node_position(cur)] do
+		seen2[core.hash_node_position(cur)] = true
+		chain[#chain + 1] = cur
+		local n, is = belt_at(cur)
+		if not is then break end
+		cur = next_of(cur, n)
+	end
+	if #chain < 2 then
+		-- 只有一格：轉 180°
+		local n = core.get_node(p)
+		core.swap_node(p, {name = n.name, param2 = (n.param2 + 2) % 4})
+	else
+		for i = 1, #chain do
+			local a = chain[i]
+			local b = i > 1 and chain[i - 1] or nil
+			local dx, dz
+			if b then dx, dz = b.x - a.x, b.z - a.z else dx, dz = a.x - chain[2].x, a.z - chain[2].z end
+			local n = core.get_node(a)
+			core.swap_node(a, {name = n.name, param2 = core.dir_to_fourdir({x = dx, y = 0, z = dz})})
+		end
+	end
+	if name then rockmech.notify(name, S("[Conveyor]") .. " " .. S("Reversed (@1 m)", tostring(math.max(1, #chain)))) end
+end
+rockmech.belt_reverse = reverse_line
 
 -- 把 a 格的料往 b 格移，最多移到 b 滿（b 格自己的載量：各組的研究加成不同）
 local function move(ha, hb)
@@ -460,7 +531,7 @@ core.register_craftitem(ITEM, {
 		if pointed.type ~= "node" or not placer then return itemstack end
 		local un = core.get_node(pointed.under)
 		local udef = core.registered_nodes[un.name]
-		if udef and udef.on_rightclick and not placer:get_player_control().sneak then
+		if udef and udef.on_rightclick and not BELT_H[un.name] and not placer:get_player_control().sneak then
 			return udef.on_rightclick(pointed.under, un, placer, itemstack, pointed) or itemstack
 		end
 		local name = placer:get_player_name()
@@ -468,11 +539,45 @@ core.register_craftitem(ITEM, {
 		local look = placer:get_look_dir()
 		local fd = core.dir_to_fourdir({x = look.x, y = 0, z = look.z})
 		local d = core.fourdir_to_dir(fd)
-		-- 從哪一格接過來：點到的輸送帶，或前方正好指向這一欄的輸送帶
-		local fpos, fnode
+		local slope = math.max(-rmax(), math.min(rmax(), itemstack:get_meta():get_int("slope")))
+		local function put(p, sf, pd)
+			local q = {x = p.x, y = math.floor(sf / 8), z = p.z}
+			local h = sf - q.y * 8
+			local nd = core.registered_nodes[core.get_node(q).name]
+			if not (nd and nd.buildable_to) then
+				say(S("The next block @1 is occupied; dig it out first", core.pos_to_string(q)))
+				return false
+			end
+			if core.is_protected(q, name) then core.record_protection_violation(q, name); return false end
+			core.set_node(q, {name = NAME[h][""][""], param2 = core.dir_to_fourdir(pd)})
+			if rockmech.account_of then core.get_meta(q):set_string("owner", rockmech.account_of(name)) end   -- 研究加成照這一組
+			if not core.is_creative_enabled(name) then itemstack:take_item() end
+			return true
+		end
+		-- 點在輸送帶上：從這條的兩頭都可以接，往看的方向放下一格
+		--   尾巴（後面沒有接下去）或照原方向直走：往下游接（尾巴可以轉彎；轉彎那格是平的）
+		--   頭（前面沒有東西送進來）：往上游接，新的那格把料送進這格（從料斗接出來的線，可以從料斗旁邊往回鋪）
 		if BELT_H[un.name] then
-			fpos, fnode = pointed.under, un
-		else
+			local c, cn = pointed.under, un
+			local d0 = dir_of(cn)
+			local n = {x = c.x + d.x, z = c.z + d.z}
+			local down = next_of(c, cn)
+			local straight = d0.x == d.x and d0.z == d.z
+			if straight or not down then
+				if put(n, surf(c, cn) + (straight and slope or 0), d) and not straight then
+					core.swap_node(c, {name = cn.name, param2 = fd})      -- 尾巴轉向
+				end
+			elseif not prev_of(c, cn) then
+				local back = d0.x == -d.x and d0.z == -d.z
+				put(n, surf(c, cn) - (back and slope or 0), {x = -d.x, y = 0, z = -d.z})
+			else
+				say(S("This is the middle of a belt line: extend it from either end"))
+			end
+			return itemstack
+		end
+		-- 從哪一格接過來：前方正好指向這一欄的輸送帶
+		local fpos, fnode
+		do
 			local a = pointed.above
 			for _, s in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
 				for dy = -1, 1 do
@@ -485,27 +590,14 @@ core.register_craftitem(ITEM, {
 				end
 			end
 		end
-		local tx, tz, sf
+		-- 點在地上：從地面開始一格，朝看的方向（前方有輸送帶正好指向這一欄就接著它的高度）
+		local sf = pointed.above.y * 8
 		if fpos then
 			local d0 = dir_of(fnode)
 			if d0.x == -d.x and d0.z == -d.z then say(S("Cannot extend backwards")); return itemstack end
-			local r = (d0.x == d.x and d0.z == d.z) and itemstack:get_meta():get_int("slope") or 0   -- 轉彎那格是平的
-			r = math.max(-rmax(), math.min(rmax(), r))
-			tx, tz, sf = fpos.x + d0.x, fpos.z + d0.z, surf(fpos, fnode) + r
-		else
-			tx, tz, sf = pointed.above.x, pointed.above.z, pointed.above.y * 8
+			sf = surf(fpos, fnode) + ((d0.x == d.x and d0.z == d.z) and slope or 0)    -- 轉彎那格是平的
 		end
-		local p = {x = tx, y = math.floor(sf / 8), z = tz}
-		local h = sf - p.y * 8
-		local nd = core.registered_nodes[core.get_node(p).name]
-		if not (nd and nd.buildable_to) then
-			say(S("The next block @1 is occupied; dig it out first", core.pos_to_string(p)))
-			return itemstack
-		end
-		if core.is_protected(p, name) then core.record_protection_violation(p, name); return itemstack end
-		core.set_node(p, {name = NAME[h][""][""], param2 = fd})
-		if rockmech.account_of then core.get_meta(p):set_string("owner", rockmech.account_of(name)) end   -- 研究加成照這一組
-		if not core.is_creative_enabled(name) then itemstack:take_item() end
+		put(pointed.above, sf, d)
 		return itemstack
 	end,
 })

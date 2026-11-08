@@ -67,11 +67,21 @@ local function total(bin)
 	return n
 end
 
-local function info(meta, bin, out)
+-- 名牌：控制箱、牆、格柵都顯示（指著斗的哪一格都看得到存量）；內容變了才改
+local function info(pos, meta, bin, out)
 	local owner = meta:get_string("owner")
-	meta:set_string("infotext", S("Dump hopper (@1)", rockmech.account_label and rockmech.account_label(owner) or owner) .. "\n"
+	local txt = S("Dump hopper (@1)", rockmech.account_label and rockmech.account_label(owner) or owner) .. "\n"
 		.. S("Stock @1 / @2 m³", ("%.1f"):format(total(bin) / NLEV), tostring(CAP))
-		.. (out and "" or ("\n" .. S("No conveyor belt connected"))))
+		.. (out and "" or ("\n" .. S("No conveyor belt connected")))
+	if meta:get_string("infotext") == txt then return end
+	meta:set_string("infotext", txt)
+	for _, c in ipairs(cells_of(pos)) do
+		for y = pos.y, pos.y + 1 do
+			local p = {x = c.x, y = y, z = c.z}
+			local nm = core.get_node(p).name
+			if nm == WALL or nm == GRATE then core.get_meta(p):set_string("infotext", txt) end
+		end
+	end
 end
 
 
@@ -115,7 +125,7 @@ local function step(pos)
 		end
 	end
 	meta:set_string("bin", core.serialize(bin))
-	info(meta, bin, out)
+	info(pos, meta, bin, out)
 end
 
 -- 自動對準（V.dump_to_ground）：倒料的那幾欄中心離格柵 SNAP m 內，改倒在格柵上
@@ -160,7 +170,7 @@ function rockmech.dump_hopper_accept(pos, e)
 	end
 	if took > 0 then
 		meta:set_string("bin", core.serialize(bin))
-		info(meta, bin, core.string_to_pos(meta:get_string("out")))
+		info(pos, meta, bin, core.string_to_pos(meta:get_string("out")))
 		rockmech.collapse.rubble_sound({x = pos.x + 0.5, y = pos.y + 1, z = pos.z + 0.5}, took)
 	end
 	return took
