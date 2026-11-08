@@ -1391,13 +1391,22 @@ end
 local function pass_seat_eye(def, s)
 	return {x = 0, y = (def.eye_up - EYE_HEIGHT - s.y) * 10, z = (s.front and (def.eye_fwd - s.z) or 0) * 10}
 end
-local function pass_on(self, player)
+-- side：玩家站在車的哪一邊（1 右、−1 左、0 不分）：先找那一邊的空位，沒有再找別的
+local function pass_on(self, player, side)
 	local def = TYPES[self.vkind]
 	self.pass = self.pass or {}
 	local used = {}
 	for _, i in pairs(self.pass) do used[i] = true end
+	local order = {}
 	for i, s in ipairs(def.passengers or {}) do
-		if not used[i] then
+		if not used[i] and side and side ~= 0 and (s.x > 0) == (side > 0) then order[#order + 1] = i end
+	end
+	for i in ipairs(def.passengers or {}) do
+		if not used[i] then order[#order + 1] = i end
+	end
+	for _, i in ipairs(order) do
+		local s = def.passengers[i]
+		do
 			local name = player:get_player_name()
 			local parent = player:get_attach()
 			local pe = parent and parent:get_luaentity()
@@ -1550,14 +1559,21 @@ function V.register(kind, def)
 					return
 				end
 			end
+			-- 站在車的哪一邊（車身座標 x：左駕，駕駛座在左邊）
+			local side = 0
+			do
+				local lp = V.to_local(self, clicker:get_pos())
+				side = lp.x > 0.3 and 1 or lp.x < -0.3 and -1 or 0
+			end
+			local function board_passenger()
+				local cp, vp = clicker:get_pos(), self.object:get_pos()
+				if math.sqrt((cp.x - vp.x) ^ 2 + (cp.z - vp.z) ^ 2) <= math.max(def.half, def.rear or 0) + BOARD_REACH then
+					if not pass_on(self, clicker, side) then rockmech.notify(name, S("No free seat")) end
+				end
+			end
 			if self.driver then
 				-- 有人在開：坐上空的乘客座（要走到車旁邊）
-				if def.passengers and V.may_use(self, name) then
-					local cp, vp = clicker:get_pos(), self.object:get_pos()
-					if math.sqrt((cp.x - vp.x) ^ 2 + (cp.z - vp.z) ^ 2) <= math.max(def.half, def.rear or 0) + BOARD_REACH then
-						if not pass_on(self, clicker) then rockmech.notify(name, S("No free seat")) end
-					end
-				end
+				if def.passengers and V.may_use(self, name) then board_passenger() end
 				return
 			end
 			if not V.may_use(self, name) then return end
@@ -1585,6 +1601,8 @@ function V.register(kind, def)
 			local cp, vp = clicker:get_pos(), self.object:get_pos()
 			if math.sqrt((cp.x - vp.x) ^ 2 + (cp.z - vp.z) ^ 2) > math.max(def.half, def.rear or 0) + BOARD_REACH then return end
 			if rockmech.career_load and rockmech.career_load(clicker, self, def) then return end
+			-- 從右邊（副駕駛那一側）上車：當乘客，不開車
+			if def.passengers and side > 0 then board_passenger(); return end
 			-- 從別台車直接換過來：先把原本那台的駕駛清掉（否則兩台都聽這個玩家的）
 			local parent = clicker:get_attach()
 			local pe = parent and parent:get_luaentity()
