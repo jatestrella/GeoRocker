@@ -126,6 +126,7 @@ dofile(modpath .. "/npc_skins.lua")
 dofile(modpath .. "/career.lua")
 dofile(modpath .. "/team.lua")
 dofile(modpath .. "/nametag.lua")
+dofile(modpath .. "/npc_talk.lua")      -- NPC 對話泡泡（台詞在 npc_lines.lua）
 dofile(modpath .. "/preview.lua")
 dofile(modpath .. "/locker.lua")
 dofile(modpath .. "/delivery.lua")
