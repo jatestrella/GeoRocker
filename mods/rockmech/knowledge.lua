@@ -197,7 +197,13 @@ function rockmech.knowledge_hire(name)
 end
 function rockmech.knowledge_hire_text(name)
 	local left = hire_left(rockmech.account_of(name))
-	return left > 0 and S("Hired, @1 left", mmss(left)) or S("@1 / @2 min, all three abilities for the whole team", money_text(HIRE_COST), ("%d"):format(HIRE_SECS / 60))
+	if left > 0 then return S("Hired, @1 left", mmss(left)) end
+	-- 雇得到的能力（不是研發、也不是只能考試的那幾種）
+	local names = {}
+	for _, a in ipairs(ABILITIES) do
+		if not (a.research or a.exam_only) then names[#names + 1] = S(a.label) end
+	end
+	return S("@1 / @2 min, the whole team gets @3", money_text(HIRE_COST), ("%d"):format(HIRE_SECS / 60), table.concat(names, "、"))
 end
 
 -- 跟著雇用者跑的地質學家：雇用期間出現在雇用者身邊，遠了就走過去（更遠用跑的，超過 FOLLOW_TP 直接到身邊），
@@ -904,14 +910,12 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 end)
 core.register_on_leaveplayer(function(player) sessions[player:get_player_name()] = nil end)
 
--- 駐點地質師畫面裡的「雇用」「進修」區塊（research.lua 呼叫）。回傳 formspec 片段、用掉的高度
+-- 駐點地質師畫面裡的「雇用」區塊（research.lua 呼叫）。回傳 formspec 片段、用掉的高度
 function rockmech.knowledge_form(name, y)
 	local out = {}
 	out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, E(S("Hire a geologist: @1", rockmech.knowledge_hire_text(name))))
 	if hire_left(rockmech.account_of(name)) <= 0 then out[#out + 1] = ("button[11.4,%g;3.4,0.8;hire;%s]"):format(y, E(S("Hire"))) end
-	y = y + 1.1
-	out[#out + 1] = ("label[0.5,%g;%s]"):format(y + 0.4, E(S("Want to learn it yourself? Take the training exams with the university professor next door")))
-	return table.concat(out), 1.9
+	return table.concat(out), 1.1
 end
 
 ---------------------------------------------------------------------------
