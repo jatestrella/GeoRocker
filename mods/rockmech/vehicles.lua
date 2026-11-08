@@ -752,6 +752,16 @@ function V.take_rubble(cell, want)
 	local rest = rockmech.rubble_with_level(base, k - t, node.param2)
 	if rest then core.swap_node(cell, {name = rest, param2 = node.param2}) else core.remove_node(cell) end
 	collapse.check_cell({x = cell.x, y = cell.y + 1, z = cell.z})   -- 上方的碎石往下掉
+	-- 這格拿空了：旁邊（同一層、上一層）的碎石也判定一次，比安息角陡就流進來
+	-- （不然料堆底下的輸送帶吸料時，兩側會留下直立的碎石牆）
+	if not rest then
+		for _, dy in ipairs({0, 1}) do
+			for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
+				local q = {x = cell.x + d[1], y = cell.y + dy, z = cell.z + d[2]}
+				if rockmech.rubble_level[core.get_node(q).name] then collapse.check_cell(q) end
+			end
+		end
+	end
 	return t, base, node.param2
 end
 
