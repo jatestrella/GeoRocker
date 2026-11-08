@@ -5,8 +5,8 @@
 -- GeoRocker 開始畫面的「自訂煤礦」把滑桿（0–100）寫成 rockmech_gen_*，沒寫的就隨機：
 --   gen_strata   single（圍岩夾一層煤）或 inter（砂頁岩煤互層）
 --   gen_seams    煤層數 1–5（互層）
---   gen_depth    主煤層頂在出生點底下 5–40 m
---   gen_dip      地層傾角 0–40°（傾向隨機）
+--   gen_outcrop  主煤層在出生點往上傾方向 20–55 m 露出地表（營地那片平地上，一進遊戲就找得到）；營地底下多深由距離和傾角決定
+--   gen_dip      地層傾角 3–40°（傾向隨機；完全水平的煤層會整片貼在地表）
 --   gen_thickvar 每層厚度沿層面的變化 0–60 %（薄的會尖滅）
 --   gen_fold     褶皺振幅 0–25 m（波長 150–300 m，軸向大致沿走向）
 --   gen_terrain  hills（丘陵）或 cuesta（單面山：順向坡＋陡崖，傾角大就是豬背嶺）
@@ -45,9 +45,9 @@ function M.generate(world_conf)
 
 	local mode = choice("strata", {"single", "inter"})
 	local terrain = choice("terrain", {"hills", "cuesta"})
-	local dip = round(40 * frac("dip"))
+	local dip = math.max(3, round(40 * frac("dip")))
 	local dipdir = r:next(0, 359)
-	local depth = round(5 + 35 * frac("depth"))
+	local dist = round(20 + 35 * frac("outcrop"))
 	local var = round(0.6 * frac("thickvar"), 0.01)
 	local foldA = round(25 * frac("fold"))
 	local relief = round(40 * frac("relief"))
@@ -61,12 +61,13 @@ function M.generate(world_conf)
 		else beds[#beds + 1] = {lith, round(t, 0.5)} end
 	end
 	local host = pick(r, {"shale", "sandstone"})
-	local main_top            -- 主煤層頂離柱狀圖頂面的真厚度
+	local main_top, main_i    -- 主煤層頂離柱狀圖頂面的真厚度、主煤層是第幾層
 	local function sum() local d = 0 for _, b in ipairs(beds) do d = d + b[2] end return d end
 	if mode == "single" then
 		add(host, 40)
 		main_top = sum()
 		add("coal", range(r, 4, 12))
+		main_i = #beds
 		add(host, 250)
 	else
 		-- 沉積旋迴：砂岩 → 頁岩 →（煤）→ 頁岩；主煤層是其中一層，比較厚
@@ -83,15 +84,31 @@ function M.generate(world_conf)
 			if k == main then
 				add("sandstone", range(r, 4, 12)); add("shale", range(r, 1, 4))
 				main_top = sum()
-				add("coal", range(r, 5, 10)); add("shale", range(r, 1, 3))
+				add("coal", range(r, 5, 10)); main_i = #beds
+				add("shale", range(r, 1, 3))
 			else
 				cycle(range(r, 0.5, 2.5))
 			end
 		end
 		while sum() < main_top + 250 do cycle(nil) end
 	end
-	local cosd = math.cos(math.rad(dip))
-	local y0 = -depth + main_top / cosd          -- 主煤層頂在出生點 (0, 0) 底下 depth m
+	-- 主煤層在出生點往上傾方向 dist m 的地方 P 露出地表（y = 0）：厚度變化、褶皺都照那一點實際的值算
+	local cosd, tand = math.cos(math.rad(dip)), math.tan(math.rad(dip))
+	local sdd, cdd = math.sin(math.rad(dipdir)), math.cos(math.rad(dipdir))
+	local foldL, foldAz = r:next(150, 300), (dipdir + 90 + r:next(-20, 20)) % 360
+	local varScale = r:next(60, 140)
+	local St = {beds = {}, var = var > 0 and {f = math.min(0.95, var), scale = varScale} or nil}
+	for i, b in ipairs(beds) do St.beds[i] = {lith = b[1], t = b[2]} end
+	local function fold_at(x, z)
+		if foldA <= 0 then return 0 end
+		local az = math.rad(foldAz)
+		return foldA * math.sin(2 * math.pi * (x * math.cos(az) - z * math.sin(az)) / foldL)
+	end
+	local function top_at(x, z) return main_i > 1 and rockmech.stress.strata_column(St, x, z)[main_i - 1] or 0 end
+	local px, pz = -dist * sdd, -dist * cdd
+	-- 頂面高程 ref_y(P) = y0 + tan·dist + fold(P)；主煤層頂 = ref_y(P) − top(P)/cos = 0
+	local y0 = top_at(px, pz) / cosd - tand * dist - fold_at(px, pz)
+	local depth = math.floor(-(y0 + fold_at(0, 0) - top_at(0, 0) / cosd) + 0.5)      -- 營地底下多深（記錄用）
 	local parts = {}
 	for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) end
 
@@ -113,8 +130,8 @@ function M.generate(world_conf)
 	set("zone_order", mode == "single" and host or "shale")
 	set("strata", table.concat(parts, ","))
 	set("strata_attitude", ("%d,%d,%g"):format(dip, dipdir, round(y0, 0.1)))
-	if foldA > 0 then set("strata_fold", ("%d,%d,%d"):format(foldA, r:next(150, 300), (dipdir + 90 + r:next(-20, 20)) % 360)) end
-	if var > 0 then set("strata_var", ("%g,%d"):format(var, r:next(60, 140))) end
+	if foldA > 0 then set("strata_fold", ("%d,%d,%d"):format(foldA, foldL, foldAz)) end
+	if var > 0 then set("strata_var", ("%g,%d"):format(var, varScale)) end
 	if relief > 0 then set("terrain", ("%s,%d,%d"):format(terrain, relief, terrain == "cuesta" and 120 or 60)) end
 	set("gsi_sandstone", round(range(r, 45, 70)))
 	set("gsi_shale", round(range(r, 35, 60)))
@@ -140,8 +157,8 @@ function M.generate(world_conf)
 	local mg = {mg_name = "flat", mg_flags = "nocaves, nodungeons, light, nodecorations, nobiomes, noores",
 		mgflat_spflags = "nolakes, nohills, nocaverns", mgflat_ground_level = "0", water_level = "-31000"}
 	for k, v in pairs(mg) do core.set_mapgen_setting(k, v, true) end
-	core.log("action", ("[rockmech] 地圖產生器：種子 %s → %s %d 層煤、傾角 %d°/%03d°、主煤層深 %d m、褶皺 %d m、厚度變化 %d%%、%s %d m"):format(
-		seed_str, mode, nseam, dip, dipdir, depth, foldA, math.floor(var * 100 + 0.5), terrain, relief))
+	core.log("action", ("[rockmech] 地圖產生器：種子 %s → %s %d 層煤、傾角 %d°/%03d°、露頭 %d m 外、營地底下 %d m、褶皺 %d m、厚度變化 %d%%、%s %d m"):format(
+		seed_str, mode, nseam, dip, dipdir, dist, depth, foldA, math.floor(var * 100 + 0.5), terrain, relief))
 	return true
 end
 

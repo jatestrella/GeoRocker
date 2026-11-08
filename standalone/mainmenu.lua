@@ -33,12 +33,12 @@ local GEN_TERRAIN = {{"hills", "丘陵"}, {"cuesta", "單面山"}}
 local GEN_SLIDERS = {
 	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end},
 	{"seams", "煤層數（互層）", function(v) return ("%d 層"):format(1 + math.floor(4 * v / 100 + 0.5)) end},
-	{"depth", "主煤層深度", function(v) return ("%d m"):format(math.floor(5 + 35 * v / 100 + 0.5)) end},
-	{"dip", "地層傾角", function(v) return ("%d°"):format(math.floor(40 * v / 100 + 0.5)) end},
+	{"outcrop", "主煤層露頭距離", function(v) return ("營地外 %d m"):format(math.floor(20 + 35 * v / 100 + 0.5)) end},
+	{"dip", "地層傾角", function(v) return ("%d°"):format(math.max(3, math.floor(40 * v / 100 + 0.5))) end},
 	{"thickvar", "厚度變化", function(v) return ("±%d%%"):format(math.floor(60 * v / 100 + 0.5)) end},
 	{"fold", "褶皺", function(v) return ("振幅 %d m"):format(math.floor(25 * v / 100 + 0.5)) end},
 }
-local gen = {strata = 2, terrain = 1, relief = 50, seams = 50, depth = 40, dip = 40, thickvar = 30, fold = 30, seed = ""}
+local gen = {strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30, seed = ""}
 local function gen_randomize()
 	math.randomseed(os.time())
 	gen.strata, gen.terrain = math.random(1, 2), math.random(1, 2)
