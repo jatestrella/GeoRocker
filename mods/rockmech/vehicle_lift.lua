@@ -169,6 +169,7 @@ local function lift(kind, P)
 		if o then o:set_attach(self.object, "", {x = center.x * 10, y = center.y * 10, z = center.z * 10}, {x = 0, y = math.deg(psi), z = 0}) end
 	end
 
+	local sync_floor          -- 下面定義（作業籠地板跟著作業籠）
 	local function place_arm(self)
 		local ps, st = self.parts, L(self)
 		if not ps then return end
@@ -204,6 +205,7 @@ local function lift(kind, P)
 			attach_box(self, ps.hook, {x = tip.x, y = tip.y - 0.3, z = tip.z}, psi)
 		end
 		for _, b in ipairs(BKP) do attach_box(self, ps[b[1]], vector.add(st.B, h2v(b[2], psi)), psi) end
+		sync_floor(self)
 	end
 
 	-- 作業籠會不會撞到方塊
@@ -222,9 +224,25 @@ local function lift(kind, P)
 	-- 人在作業籠裡：掛在車上、站在作業籠地板上
 	-- 人在作業籠裡：掛在一個獨立的「座位」物件上（跟追蹤相機同一種），座位每步移到作業籠地板上。
 	-- （掛在車身上再改掛載位置、或掛在掛在車上的零件上，客戶端都不會把人移過去）
-	local function attach_player(self, d)
+	local function floor_w(self)
 		local st = L(self)
-		local w = V.to_world(self, {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z})
+		return V.to_world(self, {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z})
+	end
+	-- 作業籠裡的人：駕駛（st.drv_in）、乘客（st.rider）都掛在同一個座位上，座位移到作業籠地板；沒人就收掉座位
+	local function place_people(self)
+		local st = L(self)
+		local list = {}
+		local dp = st.drv_in and self.driver and core.get_player_by_name(self.driver)
+		if dp then list[#list + 1] = dp end
+		local rp = st.rider and core.get_player_by_name(st.rider)
+		if st.rider and not rp then st.rider = nil end
+		if rp then list[#list + 1] = rp end
+		if #list == 0 then
+			if st.seat and st.seat:get_pos() then st.seat:remove() end
+			st.seat = nil
+			return
+		end
+		local w = floor_w(self)
 		if not (st.seat and st.seat:get_pos()) then
 			st.seat = core.add_entity(w, V.CHASE)
 			if not st.seat then return end
@@ -232,25 +250,38 @@ local function lift(kind, P)
 		else
 			st.seat:move_to(w, true)
 		end
-		if d:get_attach() ~= st.seat then
-			d:set_detach()
-			d:set_attach(st.seat, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+		for i, p in ipairs(list) do
+			local off = #list == 2 and {x = i == 1 and -4 or 4, y = 0, z = 0} or {x = 0, y = 0, z = 0}
+			local par, _, pos = p:get_attach()
+			if par ~= st.seat or not pos or math.abs(pos.x - off.x) > 0.1 then
+				p:set_detach()
+				p:set_attach(st.seat, "", off, {x = 0, y = 0, z = 0})
+			end
 		end
 	end
-	local function drop_seat(self)
+	-- 作業籠地板（給人站、右鍵進作業籠）：固定腳放下時一直在，跟著作業籠走
+	sync_floor = function(self)
 		local st = L(self)
-		if st.seat and st.seat:get_pos() then st.seat:remove() end
-		st.seat = nil
+		if st.e >= 1 then
+			local f = floor_w(self)
+			local fp = {x = f.x, y = f.y - 0.05, z = f.z}
+			if st.floor and st.floor:get_pos() then
+				st.floor:move_to(fp, true)
+			else
+				local o = core.add_entity(fp, FLOOR)
+				if o then o:get_luaentity().vehicle = self.object; st.floor = o end
+			end
+		elseif st.floor then
+			if st.floor:get_pos() then st.floor:remove() end
+			st.floor = nil
+		end
 	end
 	local function to_basket(self, d)
 		local st = L(self)
 		V.drop_chase(self)
-		if st.floor then
-			if st.floor:get_pos() then st.floor:remove() end
-			st.floor = nil
-		end
 		st.mode = "basket"
-		attach_player(self, d)
+		st.drv_in = true
+		place_people(self)
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		d:set_camera({mode = st.cam3 and "third" or "first"})
 		V.set_seated(d, true, "stand")
@@ -262,18 +293,15 @@ local function lift(kind, P)
 		local st = L(self)
 		local f = V.to_world(self, {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z})
 		d:set_detach()
-		drop_seat(self)
+		st.drv_in = false
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		d:set_camera({mode = "any"})
 		V.set_seated(d, false)
 		V.hud_clear(self, d)
 		self.driver = nil
 		st.mode = "free"
-		local o = core.add_entity({x = f.x, y = f.y - 0.05, z = f.z}, FLOOR)
-		if o then
-			o:get_luaentity().vehicle = self.object
-			st.floor = o
-		end
+		place_people(self)
+		sync_floor(self)
 		core.after(0.05, function() if d:get_pos() then d:set_pos({x = f.x, y = f.y + 0.02, z = f.z}) end end)
 	end
 
@@ -284,9 +312,18 @@ local function lift(kind, P)
 		self.lift_board = function(me, clicker)
 			if not clicker or not clicker:is_player() then return end
 			local name = clicker:get_player_name()
-			if me.driver or not V.may_use(me, name) then return end
-			me.driver = name
-			to_basket(me, clicker)
+			if not V.may_use(me, name) then return end
+			local st = L(me)
+			if not me.driver then
+				me.driver = name
+				to_basket(me, clicker)
+			elseif name ~= me.driver and not st.rider then
+				st.rider = name
+				place_people(me)
+				V.set_seated(clicker, true, "stand")
+				clicker:hud_set_flags({hotbar = true, wielditem = true})
+				rockmech.notify(name, S("[Basket] Shift to step out"))
+			end
 		end
 		for _, id in ipairs({"brf", "brb", "brl", "brr"}) do
 			local o = self.parts and self.parts[id]
@@ -298,7 +335,7 @@ local function lift(kind, P)
 
 	function def.hold_controls(self)
 		local m = self.lift and self.lift.mode
-		return m == "basket" or m == "return"
+		return m == "basket" or m == "return" or m == "op"
 	end
 	function def.move(self, ctx)
 		local st = L(self)
@@ -347,11 +384,22 @@ local function lift(kind, P)
 			return
 		end
 		if st.mode == "return" then return end
+		-- 從駕駛座操作作業籠：E 停止操作（作業籠留在原地）、Shift＋E 收回
+		if st.mode == "op" then
+			if ctrl.aux1 and ctrl.sneak then
+				self.t_act = 0.5; st.mode = "return"; update_hud(self)
+			elseif ctrl.aux1 then
+				self.t_act = 0.5; st.mode = "cab"; update_hud(self)
+			end
+			return
+		end
 		-- 駕駛座
 		if ctrl.aux1 then
 			self.t_act = 0.5
 			if st.mode ~= "cab" or vector.distance(st.B, REST) > 0.05 then
 				self.msg = S("Bring the basket back first")
+			elseif st.e > 0 and st.rider then
+				self.msg = S("Someone is in the basket")
 			elseif st.e > 0 then
 				st.edir = -1; self.msg = nil
 			else
@@ -363,7 +411,8 @@ local function lift(kind, P)
 			self.t_act = 0.5
 			if st.e < 1 then self.msg = S("Put the outriggers down first (E)"); update_hud(self); return end
 			self.msg = nil
-			to_basket(self, ctx.d)
+			if st.rider then st.mode = "op"; update_hud(self)       -- 作業籠裡有人：從駕駛座操作
+			else to_basket(self, ctx.d) end
 		end
 	end
 
@@ -374,11 +423,25 @@ local function lift(kind, P)
 		-- 固定腳
 		if st.edir then
 			st.e = math.max(0, math.min(1, st.e + st.edir * dt / OUT_T))
-			if st.e == 0 or st.e == 1 then st.edir = nil; update_hud(self) end
+			if st.e == 0 or st.e == 1 then st.edir = nil; update_hud(self); sync_floor(self) end
 			place_legs(self)
 		end
 		local d = ctx.d
 		st.moving = false
+		if st.rider then
+			local rp = core.get_player_by_name(st.rider)
+			if not rp then
+				st.rider = nil; place_people(self)
+			elseif rp:get_player_control().sneak then
+				st.rider = nil
+				rp:set_detach()
+				V.set_seated(rp, false)
+				place_people(self)
+				sync_floor(self)
+				local f = floor_w(self)
+				core.after(0.05, function() if rp:get_pos() then rp:set_pos({x = f.x, y = f.y + 0.02, z = f.z}) end end)
+			end
+		end
 		if st.mode == "basket" and d then
 			local z = ctx.ctrl.zoom
 			if z and not st.zoom_held then
@@ -387,7 +450,8 @@ local function lift(kind, P)
 			end
 			st.zoom_held = z
 		end
-		if st.mode == "basket" and d and P.crane then
+		local ctrl_mode = (st.mode == "basket" or st.mode == "op") and d
+		if ctrl_mode and P.crane then
 			-- 吊車：WASD 臂尖水平移動；空白鍵／Shift：吊臂模式動臂尖上下、吊索模式收放吊索；Z 切換
 			local c = ctx.ctrl
 			-- 切換動吊臂／收放吊索：Q（rockmech.lift_q，手上有東西時）或空白鍵＋Shift 一起按（兩個一起按時不上下）
@@ -423,12 +487,12 @@ local function lift(kind, P)
 				if moved then
 					st.moving = true
 					place_arm(self)
-					attach_player(self, d)
+					place_people(self)
 					st.hud_t = (st.hud_t or 0) + dt
 					if st.hud_t > 0.3 then st.hud_t = 0; update_hud(self) end
 				end
 			end
-		elseif st.mode == "basket" and d then
+		elseif ctrl_mode then
 			local c = ctx.ctrl
 			if c.aux1 then return end
 			local f = (c.up and 1 or 0) - (c.down and 1 or 0)
@@ -457,7 +521,7 @@ local function lift(kind, P)
 				if moved then
 					st.moving = true
 					place_arm(self)
-					attach_player(self, d)
+					place_people(self)
 					st.hud_t = (st.hud_t or 0) + dt
 					if st.hud_t > 0.3 then st.hud_t = 0; update_hud(self) end
 				end
@@ -471,15 +535,16 @@ local function lift(kind, P)
 			if dist <= step and math.abs(dr) <= step then
 				st.T, st.rope, st.mode = vector.copy(T_REST), ROPE_REST, "cab"
 				place_arm(self)
-				if d then V.seat_driver(self, d) end
-				drop_seat(self)
+				if d and st.drv_in then V.seat_driver(self, d) end
+				st.drv_in = false
+				place_people(self)
 				update_hud(self)
 			else
 				local nT = dist > step and vector.add(st.T, vector.multiply(dv, step / dist)) or vector.copy(T_REST)
 				local nr = st.rope + math.max(-step, math.min(step, dr))
 				if solve_c(nT, nr) then st.T, st.rope = nT, nr else st.T, st.rope = vector.copy(T_REST), ROPE_REST end
 				place_arm(self)
-				if d then attach_player(self, d) end
+				place_people(self)
 			end
 		elseif st.mode == "return" then
 			local dv = vector.subtract(REST, st.B)
@@ -489,14 +554,15 @@ local function lift(kind, P)
 				st.B = vector.copy(REST)
 				st.mode = "cab"
 				place_arm(self)
-				if d then V.seat_driver(self, d) end
-				drop_seat(self)
+				if d and st.drv_in then V.seat_driver(self, d) end
+				st.drv_in = false
+				place_people(self)
 				update_hud(self)
 			else
 				local nb = vector.add(st.B, vector.multiply(dv, step / dist))
 				if solve(nb) then st.B = nb else st.B = vector.copy(REST) end
 				place_arm(self)
-				if d then attach_player(self, d) end
+				place_people(self)
 			end
 		end
 	end
@@ -515,6 +581,18 @@ local function lift(kind, P)
 	end
 	function def.keys(self)
 		local st = L(self)
+		if st and st.mode == "op" then
+			local k = {{"WASD", P.crane and S("Move the boom") or S("Move the basket")}}
+			if P.crane then
+				k[#k + 1] = {S("Space") .. " / Shift", st.hoist and S("Basket up / down (rope)") or S("Boom up / down")}
+				k[#k + 1] = {"Q", st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist}
+			else
+				k[#k + 1] = {S("Space") .. " / Shift", S("Up / down")}
+			end
+			k[#k + 1] = {"E", S("Stop operating")}
+			k[#k + 1] = {"Shift+E", S("Bring the basket back")}
+			return k
+		end
 		if st and (st.mode == "basket" or st.mode == "return") then
 			if P.crane then
 				return {{"WASD", S("Move the boom")},
@@ -526,13 +604,13 @@ local function lift(kind, P)
 				{"E", S("Back to the cab")}, {"Shift+E", S("Step out")}}
 		end
 		return {{"E", st and st.e > 0 and S("Raise the outriggers") or S("Put the outriggers down"), on = st and st.e >= 1},
-			{S("Space"), S("Go to the basket")}}
+			{S("Space"), st and st.rider and S("Operate the basket") or S("Go to the basket")}}
 	end
 	-- Q：吊車吊籠裡切換動吊臂／收放吊索
 	if P.crane then
 		function def.on_q(self)
 			local st = L(self)
-			if not (st and st.mode == "basket") then return false end
+			if not (st and (st.mode == "basket" or st.mode == "op")) then return false end
 			st.hoist = not st.hoist
 			update_hud(self)
 			return true
@@ -543,19 +621,25 @@ end
 
 -- Q（丟東西）：人在作業籠裡時不丟東西；吊車吊籠裡拿來切換動吊臂／收放吊索。
 -- 空手按 Q 伺服器收不到（引擎不送），空手時用空白鍵＋Shift 一起按
+-- 玩家在哪台作業車上：坐在駕駛座（掛在車上）或站在作業籠裡（掛在座位上，座位記著車）。回傳 車, 是不是駕駛
 local function lift_of(player)
 	local parent = player:get_attach()
-	local veh = parent and parent:get_attach()
-	local e = veh and veh:get_luaentity()
-	if e and e.lift and e.driver == player:get_player_name() then return e end
+	local pe = parent and parent:get_luaentity()
+	local e = pe and (pe.lift and pe or pe.vehicle)
+	if e and e.lift then return e, e.driver == player:get_player_name() end
 end
 local old_drop = core.item_drop
 function core.item_drop(itemstack, dropper, pos)
-	local e = dropper and dropper.is_player and dropper:is_player() and lift_of(dropper)
+	local e, is_driver
+	if dropper and dropper.is_player and dropper:is_player() then e, is_driver = lift_of(dropper) end
 	if e then
-		local def = V.TYPES[e.vkind]
-		if def.on_q then def.on_q(e) end
-		return itemstack
+		local st = e.lift
+		local in_basket = st.mode == "basket" or st.mode == "op" or st.rider == dropper:get_player_name()
+		if in_basket then
+			local def = V.TYPES[e.vkind]
+			if is_driver and def.on_q then def.on_q(e) end
+			return itemstack
+		end
 	end
 	return old_drop(itemstack, dropper, pos)
 end
