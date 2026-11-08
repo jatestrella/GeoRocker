@@ -283,6 +283,17 @@ core.register_node(SLAB, {
 	is_ground_content = false, groups = table.copy(G), sounds = sounds,
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return core.item_place(itemstack, placer, pointed) end
+		-- 兩片半格合成一塊木磚：點下半格的頂面、或上半格的底面
+		local un = core.get_node(pointed.under)
+		if un.name == SLAB and core.registered_nodes["default:wood"] then
+			local lower = un.param2 < 20
+			if (lower and pointed.above.y > pointed.under.y) or (not lower and pointed.above.y < pointed.under.y) then
+				if core.is_protected(pointed.under, placer and placer:get_player_name() or "") then return itemstack end
+				core.set_node(pointed.under, {name = "default:wood"})
+				if not (placer and core.is_creative_enabled(placer:get_player_name())) then itemstack:take_item() end
+				return itemstack
+			end
+		end
 		-- 對底面（或牆面上半）放：倒過來成上半格
 		local up = pointed.above.y < pointed.under.y
 		if pointed.above.y == pointed.under.y and placer and placer:is_player() then
@@ -508,9 +519,47 @@ function rockmech.timber_fem_check(a, n, failed, roof_fs, force)
 	end
 end
 
--- 判定用的方塊 id（groundsupport.lua 建好 rockmech.support_ids 之後補上木柱）
+-- 木磚（default:wood，整格木頭，像木垛）：應力解裡有勁度（rockmech_support_block_fem），
+-- σv × 1 m² 超過 block_ucs × 1 m² 就壓碎（不退還）；名牌寫受力和承載力
+local WOOD_BLOCK = "default:wood"
+local function crush_block(p)
+	core.remove_node(p)
+	core.add_particlespawner({amount = 30, time = 0.3,
+		minpos = {x = p.x - 0.4, y = p.y - 0.4, z = p.z - 0.4}, maxpos = {x = p.x + 0.4, y = p.y + 0.4, z = p.z + 0.4},
+		minvel = {x = -2, y = -1, z = -2}, maxvel = {x = 2, y = 2, z = 2}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
+		minexptime = 0.6, maxexptime = 1.4, minsize = 1, maxsize = 2.5, texture = "[fill:4x4:#a07848"})
+	core.sound_play("default_dig_choppy", {pos = p, gain = 1.0, max_hear_distance = 32}, true)
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), p) <= 32 then
+			rockmech.notify(pl:get_player_name(), S("[Wooden block] The wooden block at @1 was crushed: it could not hold the load", core.pos_to_string(p)))
+		end
+	end
+	core.log("action", ("[rockmech] 木磚壓碎 %s"):format(core.pos_to_string(p)))
+	core.after(0, check_around, vector.copy(p))
+end
+local old_check = rockmech.timber_fem_check
+function rockmech.timber_fem_check(a, n, failed, roof_fs, force)
+	old_check(a, n, failed, roof_fs, force)
+	if not force then return end
+	local Nm = rockmech.cfg.model_scale or 1
+	local P = scfg.block_ucs * 1000 / Nm         -- kN（1 m² 的面）
+	for _, p in ipairs(core.find_nodes_in_area({x = a.x + 1, y = a.y + 1, z = a.z + 1}, {x = a.x + n - 2, y = a.y + n - 2, z = a.z + n - 2}, {WOOD_BLOCK})) do
+		local N = force(p.x, p.y, p.z)
+		if N and P > 0 and N > P then
+			crush_block(p)
+		elseif N then
+			core.get_meta(p):set_string("infotext", S("Wooden block") .. "\n"
+				.. S("Load @1 kN / capacity @2 kN (@3%)", d(math.floor(N + 0.5)), d(math.floor(P + 0.5)), d(math.floor(N / P * 100 + 0.5))))
+		end
+	end
+end
+
+-- 判定用的方塊 id（groundsupport.lua 建好 rockmech.support_ids 之後補上木柱、木磚）
 core.register_on_mods_loaded(function()
 	if rockmech.support_ids then
 		rockmech.support_ids.post = {[core.get_content_id(POST)] = true, [core.get_content_id(POST_TOP)] = true}
+		if core.registered_nodes[WOOD_BLOCK] then
+			rockmech.support_ids.wood_block = {[core.get_content_id(WOOD_BLOCK)] = true}
+		end
 	end
 end)

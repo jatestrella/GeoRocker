@@ -178,6 +178,9 @@ local function make_job(pos)
 	-- 跟碎石一樣沒有現地應力、不加重力，頂板往下收斂壓它才受力；這格的 σv × 1 m² 就是木柱的軸力
 	local post_ids = rockmech.support_ids and rockmech.support_ids.post or {}
 	local post_r = math.max(1e-4, cfg.support.post_fem_area or 0.5)
+	-- 木磚（timber.lua）：整格木頭，勁度 = 岩石 × block_fem，受力的算法跟木柱一樣
+	local block_ids = rockmech.support_ids and rockmech.support_ids.wood_block or {}
+	local block_r = math.max(1e-4, cfg.support.block_fem or 0.1)
 	for z = 0, n - 1 do for x = 0, n - 1 do
 		-- 這一欄的地表：岩石頂面，或 surface_y（挖掉的算回去，所以開挖才會放出應力）
 		local gx, gz = a.x + x - g.ox, a.z + z - g.oz
@@ -199,7 +202,7 @@ local function make_job(pos)
 			local gamma = lith and lith.gamma or cfg.failure.gamma_other
 			local solid = g.bonded_of[cid] and true or false
 			local soft = fcfg.rubble_e > 0 and g.rubble_of[cid] == 1
-			if post_ids[cid] then soft = post_r end
+			if post_ids[cid] then soft = post_r elseif block_ids[cid] then soft = block_r end
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			local sv = gamma * math.max(0, top + 0.5 - wy) + (wy <= top and sv_soil or 0)     -- kPa
 			job.solid[c] = solid or (soft and true) or false
@@ -624,7 +627,7 @@ pump = function()
 		-- 天然地形視為已經平衡，砍樹、鏟土、放東西、碎石流動不會讓附近的天然邊坡平白垮掉
 		local failed, faces, warned = find_failed(job, res, meta, (not cur.far and cur.excav) and cur.pos or nil)
 		update_cracks(meta, job.nx, warned)
-		-- 木柱（timber.lua）：木柱格的 σv × 1 m² = 軸力，超過承載力就壓斷；柱頂上方頂板破壞也一起斷。
+		-- 木柱（timber.lua）：木柱格的 σv × 1 m² = 軸力，超過承載力就壓斷；柱頂上方頂板破壞也一起斷。木磚一樣（壓碎）。
 		-- 名牌寫軸力和上方頂板的 FS
 		if rockmech.timber_fem_check then
 			local n, a = job.nx, meta.a

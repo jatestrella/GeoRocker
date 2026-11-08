@@ -301,7 +301,7 @@ local SAW_RECIPES = {
 	{give = POST, n = 2, label = S("Timber post")},
 	{give = PLANK, n = 4, label = S("Timber plank")},
 	{give = SLAB, n = 8, label = S("Timber slab")},
-	{give = "default:wood", n = 1, label = S("Wooden block")},
+	{give = "default:wood", n = 4, label = S("Wooden block")},       -- 一塊木磚 = 兩片半格
 }
 local BENCH_RECIPES = {
 	{give = WALL, n = 4, need = 1, label = S("Wooden wall panel")},

@@ -302,6 +302,10 @@ config.support_defaults = {
 	-- 真實斷面（直徑 20 cm）只有 0.031 m²，太軟，對頂板幾乎沒幫助；假設性放大到 0.5 m²。越大分到的荷重越多、
 	-- 越容易被壓斷（1.0 m² 時 9 m 跨度軸力就到承載力 80%）。承載力照真實直徑，不跟著變
 	post_fem_area = 0.5,
+	-- 木磚（整格的木頭方塊，像木垛）：應力解裡是有勁度的一格，勁度 = 岩石 × block_fem（橫紋受壓的木材比岩石軟很多）；
+	-- σv × 1 m² 超過承載力 block_ucs (MPa，木材橫紋抗壓強度) × 1 m² 就壓碎（不退還）
+	block_fem = 0.1,
+	block_ucs = 5,
 }
 
 -- TNT 爆破破碎（blast.lua）；設定鍵為 rockmech_blast_<key>
@@ -723,6 +727,8 @@ function config.load(get)
 	cfg.support.post_e = math.max(0, cfg.support.post_e)
 	cfg.support.post_max_len = math.max(1, math.floor(cfg.support.post_max_len))
 	cfg.support.post_fem_area = math.max(0.001, math.min(1, cfg.support.post_fem_area))
+	cfg.support.block_fem = math.max(0.001, math.min(1, cfg.support.block_fem))
+	cfg.support.block_ucs = math.max(0, cfg.support.block_ucs)
 
 	-- 爆破破碎
 	cfg.blast = load_section("blast", config.blast_defaults)

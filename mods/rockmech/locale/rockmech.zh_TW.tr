@@ -1730,3 +1730,5 @@ Set price=設定價格
 Large dump hopper=大型受料斗
 Build it on flat ground: @1×@1 m of level ground=要蓋在平地上：@1×@1 m 的平整地面
 Wooden block=木磚
+[Wooden block] The wooden block at @1 was crushed: it could not hold the load=[木磚] @1 的木磚被壓碎了：撐不住上面的荷重
+Load @1 kN / capacity @2 kN (@3%)=受力 @1 kN／承載力 @2 kN（@3%）
