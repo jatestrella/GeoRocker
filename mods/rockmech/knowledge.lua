@@ -42,7 +42,8 @@ local function mmss(s) s = math.max(0, math.ceil(s)); return ("%d:%02d"):format(
 local function hire_left(acc) return storage:get_float(HIRE .. acc) end
 
 -- name 這位玩家看不看得到 ability（grade／rockmass／mechanics）的資訊
-function rockmech.can_see(name, ability)
+-- no_items：不算背包裡的儀器（指著岩石自動顯示、車斗品位只看自己會的；儀器要右鍵用。岩芯箱判讀時背包有就算）
+function rockmech.can_see(name, ability, no_items)
 	if not cfg.career then return true end
 	local player = name and core.get_player_by_name(name)
 	if not player then return false end
@@ -50,24 +51,49 @@ function rockmech.can_see(name, ability)
 	if meta:get_int("godmode:on") == 1 then return true end
 	if meta:get_string(KNOW .. ability) == "1" then return true end
 	local a = AB[ability]
-	if a and a.item and player:get_inventory():contains_item("main", a.item) then return true end
+	if a and a.item and not no_items and player:get_inventory():contains_item("main", a.item) then return true end
 	if a and a.research and rockmech.research_level and rockmech.research_level(name, a.research) >= 1 then return true end
 	if not (a and a.research) and rockmech.account_of and hire_left(rockmech.account_of(name)) > 0 then return true end
 	return false
 end
 
--- 儀器（工具室管理員賣；地質羅盤在 tools.lua）
+-- 儀器（工具室管理員賣；地質羅盤在 tools.lua）：右鍵用，結果顯示在準心右上的資訊泡泡（ui.lua）
+local function use_on_node(player, pointed, give)
+	if pointed.type ~= "node" or not rockmech.instrument_lines then return end
+	local lines = rockmech.instrument_lines(player, pointed.under, give)
+	rockmech.info_bubble(player, #lines > 0 and lines or {S("Nothing to read here")}, pointed.under)
+end
 core.register_craftitem("rockmech:xrf", {
-	description = S("Handheld XRF analyzer\nWorks from your inventory"),
+	description = S("Handheld XRF analyzer\nRight-click rock, rubble or a truck bed"),
 	short_description = S("Handheld XRF analyzer"),
 	inventory_image = "[fill:16x16:#00000000^[fill:8x12:4,3:#e8e8e0^[fill:6x4:5,4:#3a6a9a^[fill:4x3:6,11:#3a3a3a^[fill:2x2:7,0:#c03020",
 	stack_max = 1,
+	on_place = function(itemstack, player, pointed)
+		if player and player:is_player() then use_on_node(player, pointed, {grade = true}) end
+		return itemstack
+	end,
+	-- 指著車：車斗裡的料的品位
+	on_secondary_use = function(itemstack, player, pointed)
+		if not (player and player:is_player() and pointed and pointed.type == "object") then return itemstack end
+		local e = pointed.ref:get_luaentity()
+		local V = rockmech.vehicles
+		if e and e.vkind and V and V.TYPES[e.vkind] and (V.TYPES[e.vkind].cap or 0) > 0 then
+			local ore, grade = V.load_ore(e)
+			rockmech.info_bubble(player, {V.TYPES[e.vkind].desc, ore and rockmech.ore_text(ore, grade)
+				or (V.load_total(e) > 0 and S("No ore in the load") or S("Empty"))})
+		end
+		return itemstack
+	end,
 })
 core.register_craftitem("rockmech:gsi_card", {
-	description = S("GSI chart\nWorks from your inventory"),
+	description = S("GSI chart\nRight-click a rock face"),
 	short_description = S("GSI chart"),
 	inventory_image = "[fill:16x16:#00000000^[fill:14x12:1,2:#f4f0e0^[fill:12x2:2,4:#c08040^[fill:12x2:2,7:#80a060^[fill:12x2:2,10:#6080c0",
 	stack_max = 1,
+	on_place = function(itemstack, player, pointed)
+		if player and player:is_player() then use_on_node(player, pointed, {rockmass = true}) end
+		return itemstack
+	end,
 })
 
 ---------------------------------------------------------------------------
@@ -667,7 +693,7 @@ local function ability_status(name, key)
 	if meta:get_string(KNOW .. key) == "1" then src[#src + 1] = S("Passed the exam (permanent)") end
 	if a.item and player:get_inventory():contains_item("main", a.item) then
 		local d = core.registered_items[a.item]
-		src[#src + 1] = S("@1 in your inventory", d and rockmech.desc_short(d) or a.item)
+		src[#src + 1] = S("@1 in your inventory (right-click to use)", d and rockmech.desc_short(d) or a.item)
 	end
 	if a.research and rockmech.research_level and rockmech.research_level(name, a.research) >= 1 then
 		src[#src + 1] = S("Researched at the research lab (whole team)")

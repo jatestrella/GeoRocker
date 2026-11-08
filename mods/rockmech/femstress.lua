@@ -726,6 +726,9 @@ end
 -- 羅盤點一格：解完送訊息給玩家
 function rockmech.fem_request(pos, name)
 	rockmech.fem_run(pos, function(job, res, meta)
-		core.chat_send_player(name, (report(pos, job, res, meta)))
+		local text = report(pos, job, res, meta)
+		local player = core.get_player_by_name(name)
+		if player and rockmech.info_bubble then rockmech.info_bubble(player, text, pos)
+		else core.chat_send_player(name, text) end
 	end)
 end

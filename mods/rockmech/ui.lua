@@ -178,22 +178,24 @@ end
 
 -- HUD 的精簡報告：岩性、應力、最低的 FS 與它的機制。詳細數值在資訊頁（/rockmech）與羅盤（蹲下＋右鍵）
 -- 經營模式要有知識能力才看得到（knowledge.lua）：岩性、GSI、上覆厚度＝岩體分類，品位＝品位判讀，應力、FS、裂紋＝岩石力學
-local function see(name, ab) return not rockmech.can_see or rockmech.can_see(name, ab) end   -- 知識能力（knowledge.lua）
-local function fmt_report_lines(r, pname)
+-- 知識能力（knowledge.lua）：give = 正在用的儀器給的能力；沒有就看自己會的（考試、雇用的地質師；背包裡的儀器不算）
+local function see(name, ab, give)
+	if give then return give[ab] == true end
+	return not rockmech.can_see or rockmech.can_see(name, ab, true)
+end
+local function fmt_report_lines(r, pname, give)
 	local i = r.init
 	local s = r.local_state
 	local lines = {}
-	if see(pname, "rockmass") then
+	if see(pname, "rockmass", give) then
 		lines[#lines + 1] = S("@1@2　overburden @3 m", S(r.lith.description),
 			s and s.rm and ("　GSI %d"):format(s.rm.gsi) or "", ("%d"):format(i.h))
 		local D = rockmech.collapse.damage_at_xyz and r.pos and rockmech.collapse.damage_at_xyz(r.pos.x, r.pos.y, r.pos.z)
 		if D then lines[#lines + 1] = S("Blast damage D = @1 (strength and deformation modulus reduced)", ("%.1f"):format(D)) end
-	else
-		lines[#lines + 1] = S("Rock")
 	end
 	local ore = cfg.ores[r.lith.ore]
-	if ore and r.is_rock and see(pname, "grade") then lines[#lines + 1] = rockmech.ore_text(ore, r.p2 / 255) end
-	if not s or not see(pname, "mechanics") then return lines end
+	if ore and r.is_rock and see(pname, "grade", give) then lines[#lines + 1] = rockmech.ore_text(ore, r.p2 / 255) end
+	if not s or not see(pname, "mechanics", give) then return lines end
 	-- 應力解決定崩落時，應力與 FS 看應力解（這一格還沒解過就先用現有估算）
 	local fc = rockmech.fem_cell and rockmech.fem_cell(r.pos)
 	lines[#lines + 1] = ("σ1 %.2f　σ3 %.2f MPa"):format(fc and fc.s1 or s.s1, fc and fc.s3 or s.s3)
@@ -219,12 +221,13 @@ end
 rockmech.hud_lines = fmt_report_lines   -- 測試用
 
 -- 指著碎石時的 HUD：種類（岩體分類），礦石碎石再加品位（品位判讀）
-local function rubble_lines(node, pname)
+local function rubble_lines(node, pname, give)
 	local base = rockmech.rubble_base[node.name] or node.name
-	local lines = {see(pname, "rockmass") and rockmech.desc_short(base) or S("Rubble")}
+	local lines = {}
+	if see(pname, "rockmass", give) then lines[#lines + 1] = rockmech.desc_short(base) end
 	-- 混合碎石：礦石的品位要有品位判讀；崩積土這類（土、碎石的比例）看岩體分類就看得出來
 	local m = rockmech.mix_of[base]
-	if m and see(pname, m.ore and "grade" or "rockmass") then lines[#lines + 1] = rockmech.mix_text(base, node.param2) end
+	if m and see(pname, m.ore and "grade" or "rockmass", give) then lines[#lines + 1] = rockmech.mix_text(base, node.param2) end
 	return lines
 end
 
@@ -232,35 +235,81 @@ end
 -- HUD
 ---------------------------------------------------------------------------
 
+-- 資訊泡泡：準心右上一個半透明深色框，裡面是文字（往右、往上長）。
+--   儀器（羅盤、XRF、GSI 圖卡）右鍵：rockmech.info_bubble 顯示 BUBBLE_HOLD 秒，視線移開那一格就收掉
+--   自己會的能力（考過試、雇了地質師）：指著岩石、碎石就一直顯示（/rockmech_hud 開關）
 local HUD_META = "rockmech:hud"
-local huds = {}        -- 玩家名稱 → {id, key, t}
+local BUBBLE_HOLD = 6
+local huds = {}        -- 玩家名稱 → {bg, txt, text, key, t}
+local active = {}      -- 玩家名稱 → {text, key, untl}
 local hud_timer = 0
 
 local function hud_enabled(player)
 	return player:get_meta():get_string(HUD_META) ~= "0"
 end
 
+-- 文字的寬高（像素，估計）：中日韓字 18 px、其他 9 px，一行 20 px
+local function text_size(text)
+	local w, n = 0, 0
+	for line in (core.strip_colors(text) .. "\n"):gmatch("(.-)\n") do
+		n = n + 1
+		local lw = 0
+		for ch in line:gmatch("[%z\1-\127\194-\244][\128-\191]*") do lw = lw + (#ch >= 3 and 18 or 9) end
+		if lw > w then w = lw end
+	end
+	return w, n * 20
+end
+
 local function hud_set(player, text)
 	local name = player:get_player_name()
 	local h = huds[name]
+	if h and h.text == text then return end
+	local w, ht = text_size(text)
 	if not h then
-		h = {id = player:hud_add({
-			type = "text", position = {x = 0.01, y = 0.30}, alignment = {x = 1, y = 1},
-			offset = {x = 0, y = 0}, number = 0xFFFFFF, text = text,
-		}), key = nil, t = 0}
+		h = {
+			bg = player:hud_add({type = "image", position = {x = 0.5, y = 0.5}, alignment = {x = 1, y = -1},
+				offset = {x = 26, y = -18}, scale = {x = w + 16, y = ht + 10}, text = "[fill:1x1:#101418b4", z_index = 90}),
+			txt = player:hud_add({type = "text", position = {x = 0.5, y = 0.5}, alignment = {x = 1, y = -1},
+				offset = {x = 34, y = -23}, number = 0xFFFFFF, text = text, z_index = 91}),
+		}
 		huds[name] = h
 	else
-		player:hud_change(h.id, "text", text)
+		player:hud_change(h.txt, "text", text)
+		player:hud_change(h.bg, "scale", {x = w + 16, y = ht + 10})
 	end
+	h.text = text
 end
 
 local function hud_remove(player)
 	local name = player:get_player_name()
 	local h = huds[name]
 	if h then
-		player:hud_remove(h.id)
+		player:hud_remove(h.bg)
+		player:hud_remove(h.txt)
 		huds[name] = nil
 	end
+end
+
+-- 儀器的結果：顯示在泡泡裡（pos：指著的那一格，視線移開就收掉；nil：只看時間）
+function rockmech.info_bubble(player, text, pos)
+	if type(text) == "table" then text = table.concat(text, "\n") end
+	if text == "" then return end
+	local name = player:get_player_name()
+	active[name] = {text = text, key = pos and core.pos_to_string(pos), untl = core.get_us_time() / 1e6 + BUBBLE_HOLD}
+	hud_set(player, text)
+end
+
+-- 用儀器看 pos 那一格：give = 這個儀器給的能力（{grade = true} …）。回傳顯示的行（空的就是看不出東西）
+function rockmech.instrument_lines(player, pos, give)
+	local name = player:get_player_name()
+	local node = core.get_node(pos)
+	if rockmech.is_rubble(node.name) or rockmech.road_level[node.name] then return rubble_lines(node, name, give) end
+	if rockmech.lith_of_node[node.name] then
+		local lines = fmt_report_lines(rockmech.stress_report(pos), name, give)
+		if #lines == 0 and give.grade then lines[1] = S("No ore") end      -- XRF 對著不含礦的岩石
+		return lines
+	end
+	return {}
 end
 
 function rockmech.set_hud(player, on)
@@ -273,32 +322,44 @@ core.register_globalstep(function(dtime)
 	if hud_timer < 0.3 then return end
 	local dt = hud_timer
 	hud_timer = 0
+	local now = core.get_us_time() / 1e6
 	for _, player in ipairs(core.get_connected_players()) do
-		-- 指著岩石或碎石才顯示
-		local pos = hud_enabled(player) and pointed_node_pos(player, 8)
-		local node = pos and core.get_node(pos)
-		local rubble = node and (rockmech.is_rubble(node.name) or rockmech.road_level[node.name])
-		if rubble or node and rockmech.lith_of_node[node.name] then
-			local name = player:get_player_name()
-			local h = huds[name]
-			local key = core.pos_to_string(pos)
-			-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
-			if not h or h.key ~= key or h.t > 2 then
-				hud_set(player, table.concat(rubble and rubble_lines(node, name)
-					or fmt_report_lines(rockmech.stress_report(pos), name), "\n"))
-				huds[name].key = key
-				huds[name].t = 0
-			else
-				h.t = h.t + dt
-			end
+		local name = player:get_player_name()
+		local pos = pointed_node_pos(player, 8)
+		local key = pos and core.pos_to_string(pos)
+		-- 儀器的結果還在：時間到、或視線移開那一格就收掉
+		local a = active[name]
+		if a and (now > a.untl or (a.key and a.key ~= key)) then active[name], a = nil, nil end
+		if a then
+			hud_set(player, a.text)
 		else
-			hud_remove(player)
+			-- 自己會的能力：指著岩石或碎石就顯示（什麼都不會就不顯示）
+			local node = hud_enabled(player) and pos and core.get_node(pos)
+			local rubble = node and (rockmech.is_rubble(node.name) or rockmech.road_level[node.name])
+			local h = huds[name]
+			if rubble or node and rockmech.lith_of_node[node.name] then
+				-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
+				if not h or h.key ~= key or (h.t or 0) > 2 then
+					local lines = rubble and rubble_lines(node, name) or fmt_report_lines(rockmech.stress_report(pos), name)
+					if #lines > 0 then
+						hud_set(player, table.concat(lines, "\n"))
+						huds[name].key, huds[name].t = key, 0
+					else
+						hud_remove(player)
+					end
+				else
+					h.t = (h.t or 0) + dt
+				end
+			else
+				hud_remove(player)
+			end
 		end
 	end
 end)
 
 core.register_on_leaveplayer(function(player)
 	huds[player:get_player_name()] = nil
+	active[player:get_player_name()] = nil
 end)
 
 core.register_chatcommand("rockmech_hud", {
