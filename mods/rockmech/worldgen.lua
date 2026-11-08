@@ -151,7 +151,8 @@ function M.generate(world_conf)
 	set("weakness_c", 0)
 	set("weakness_max_spacing", 1.5)
 	set("career", "true")
-	set("solo", "true")            -- 個人遊戲：沒有老師、分組、名牌（team.lua、knowledge.lua）
+	set("solo", "true")            -- 個人遊戲
+	set("teacher", "false")        -- 不是教學地圖：沒有老師示範區、分組、防爆、名牌（config.lua 的 cfg.teacher）
 	world_conf:write()
 	-- 引擎的地形：平地（起伏由 rockmech_terrain 自己造），沒有湖、海、洞穴
 	local mg = {mg_name = "flat", mg_flags = "nocaves, nodungeons, light, nodecorations, nobiomes, noores",

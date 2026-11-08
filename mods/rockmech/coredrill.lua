@@ -1249,8 +1249,8 @@ local function finish(name, d, why)
 		msg = why and S("[Core drilling] @1 finished BH-@2, depth @3 m, @4: the blue core box is next to the collar; right-click it with a field notebook to log it", name, sn, sd, why)
 			or S("[Core drilling] @1 finished BH-@2, depth @3 m: the blue core box is next to the collar; right-click it with a field notebook to log it", name, sn, sd)
 	else
-		msg = why and S("[Core drilling] @1 finished BH-@2, depth @3 m, @4: no room next to the collar, so the core box was not placed (ask the teacher)", name, sn, sd, why)
-			or S("[Core drilling] @1 finished BH-@2, depth @3 m: no room next to the collar, so the core box was not placed (ask the teacher)", name, sn, sd)
+		msg = why and S("[Core drilling] @1 finished BH-@2, depth @3 m, @4: no room next to the collar, so the core box was not placed; clear a spot next to the collar", name, sn, sd, why)
+			or S("[Core drilling] @1 finished BH-@2, depth @3 m: no room next to the collar, so the core box was not placed; clear a spot next to the collar", name, sn, sd)
 	end
 	if rockmech.account_members then
 		for _, m in ipairs(rockmech.account_members(acc)) do

@@ -838,7 +838,7 @@ function rockmech.knowledge_exam(player, ab)
 	end
 	local pool = BANK[ab]
 	if #pool < EXAM_N then
-		rockmech.notify(name, S("[Training] The \"@1\" question bank only has @2 questions; at least @3 are needed (ask the teacher to add some to questions.txt)",
+		rockmech.notify(name, S("[Training] The \"@1\" question bank only has @2 questions; at least @3 are needed (add some to questions.txt in the world folder)",
 			S(AB[ab].label), tostring(#pool), tostring(EXAM_N)))
 		return
 	end
@@ -1157,8 +1157,8 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 			local shown = rockmech.nick_of and rockmech.nick_of(name) or name
 			local who = shown ~= name and ("%s (%s)"):format(shown, name) or name
 			local fs
-			if rockmech.cfg.solo then
-				fs = {}                    -- 單機版：沒有分組、名牌，不顯示名字和改暱稱
+			if not rockmech.cfg.teacher then
+				fs = {}                    -- 不是教學地圖：沒有分組、名牌，不顯示名字和改暱稱
 			else
 				fs = {("label[0,0;%s]"):format(F(("%s  %s"):format(who, team and S("Team @1", tostring(team)) or S("No team")))),
 					("image_button[%g,-0.15;0.5,0.5;%s;rm_nick_edit;]"):format(math.min(6.5, 0.13 * #who + 1.6), F(rockmech.PENCIL or "blank.png")),

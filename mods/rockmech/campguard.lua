@@ -3,6 +3,7 @@
 -- 而且要在 tnt 建快取（mods 載入完）之前掛上 on_blast，所以不能等 register_on_mods_loaded）。
 -- 營地的建築炸不壞：營地專用的方塊（帳篷、貨櫃辦公室、家具、看板）一律不動；
 -- 營地也用到的一般方塊（玻璃、木門、鋼樓梯）在營地範圍裡不動，營地外照常炸掉（自己移除、掉落）
+if not rockmech.cfg.teacher then return end     -- 教學地圖才有（防學生炸別人、炸營地）
 local function noop() end
 local SHARED = {["default:glass"] = true, ["stairs:stair_steelblock"] = true}
 for name, def in pairs(core.registered_nodes) do

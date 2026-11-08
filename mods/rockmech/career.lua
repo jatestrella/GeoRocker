@@ -540,7 +540,7 @@ local function shop_form(name, kind)
 	local team = rockmech.team_of(name)
 	local money = ("%.0f"):format(rockmech.money(name))
 	local head = team and S("@1   Team @2 funds $@3", who, team, money)
-		or rockmech.has_account(name) and S("@1   Funds $@2", who, money)
+		or (rockmech.has_account(name) or not cfg.teacher) and S("@1   Funds $@2", who, money)      -- 不是教學地圖：沒有「等老師分組」
 		or S("@1   You are not in a team yet; you will have funds once the teacher assigns you to a team", who)
 	local out = {"formspec_version[6]size[13.5,13.2]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local col, row = 0, 0

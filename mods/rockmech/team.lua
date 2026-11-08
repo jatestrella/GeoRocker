@@ -107,6 +107,67 @@ end
 -- 回自己組的營地
 local function send_home(name, t) send_to(name, site_x(t)) end
 
+-- 單機版（rockmech_solo）：引擎在單機時會給玩家幾乎所有權限（含 server，等於老師），這裡只留基本的
+local SOLO_PRIVS = {interact = true, shout = true}
+if cfg.solo then
+	core.register_on_mods_loaded(function()
+		if not core.is_singleplayer() then return end
+		for priv, def in pairs(core.registered_privileges) do
+			if not SOLO_PRIVS[priv] then def.give_to_singleplayer = false end
+		end
+	end)
+end
+if cfg.solo then
+	core.register_on_joinplayer(function(player)
+		local n = player:get_player_name()
+		core.log("action", ("[rockmech] solo: %s privs = %s"):format(n, core.privs_to_string(core.get_player_privs(n))))
+	end)
+end
+
+---------------------------------------------------------------------------
+-- 「回營地」旗子：拿著按左鍵或右鍵就回營地（教學地圖每人發一支，其他地圖向工具室管理員買）
+---------------------------------------------------------------------------
+
+local FLAG = "rockmech:camp_flag"
+local function go_camp(itemstack, user)
+	if not (user and user:is_player()) then return itemstack end
+	local name = user:get_player_name()
+	local t = rockmech.team_of(name)
+	if t then
+		send_home(name, t)
+		core.chat_send_player(name, S("[Back to camp] Camp of team @1", t))
+	else
+		send_to(name, cfg.career_camp_dx)
+		core.chat_send_player(name, S("[Back to camp] Spawn"))
+	end
+	return itemstack
+end
+core.register_craftitem(FLAG, {
+	description = S("Back to camp\nClick to go back to your team's camp"),
+	short_description = S("Back to camp"),
+	inventory_image = "[fill:16x16:#00000000^[fill:2x15:3,1:#6a4a28^[fill:9x6:5,1:#c04030^[fill:9x2:5,3:#f0e0b0",
+	stack_max = 1,
+	groups = {not_in_creative_inventory = 1},
+	on_use = go_camp,
+	on_secondary_use = go_camp,
+	on_place = go_camp,
+	on_drop = function(itemstack) return itemstack end,     -- 丟不掉
+})
+-- 教學地圖每人登入時沒有就補一支；其他地圖不發，要的話向工具室管理員買
+if cfg.teacher then
+	core.register_on_joinplayer(function(player)
+		local inv = player:get_inventory()
+		if not inv:contains_item("main", FLAG) then inv:add_item("main", FLAG) end
+	end)
+end
+
+-- 不是教學地圖（單機、自訂、隨機地圖）：沒有分組、名單、老師示範區、別組礦帶不能炸、老師分頁和指令
+if not cfg.teacher then
+	function rockmech.lane_team() return nil end
+	function rockmech.blast_forbidden() return nil end
+	return
+end
+
 -- 分組（t = nil 取消分組）。在線上就馬上送到營地，否則下次登入時送
 local function set_team(name, t)
 	if t then
@@ -239,23 +300,6 @@ end)
 ---------------------------------------------------------------------------
 
 local function money_text(v) return ("%s$%.0f"):format(v < 0 and "−" or "", math.abs(v)) end
-
--- 單機版（rockmech_solo）：引擎在單機時會給玩家幾乎所有權限（含 server，等於老師），這裡只留基本的
-local SOLO_PRIVS = {interact = true, shout = true}
-if cfg.solo then
-	core.register_on_mods_loaded(function()
-		if not core.is_singleplayer() then return end
-		for priv, def in pairs(core.registered_privileges) do
-			if not SOLO_PRIVS[priv] then def.give_to_singleplayer = false end
-		end
-	end)
-end
-if cfg.solo then
-	core.register_on_joinplayer(function(player)
-		local n = player:get_player_name()
-		core.log("action", ("[rockmech] solo: %s privs = %s"):format(n, core.privs_to_string(core.get_player_privs(n))))
-	end)
-end
 
 local function is_teacher(name) return core.check_player_privs(name, {[TEACHER] = true}) end
 
@@ -506,39 +550,3 @@ if core.get_modpath("sfinv") and sfinv then
 	end) end
 end
 
----------------------------------------------------------------------------
--- 「回營地」旗子：每人一支，拿著按左鍵或右鍵就回營地
----------------------------------------------------------------------------
-
-local FLAG = "rockmech:camp_flag"
-local function go_camp(itemstack, user)
-	if not (user and user:is_player()) then return itemstack end
-	local name = user:get_player_name()
-	local t = rockmech.team_of(name)
-	if t then
-		send_home(name, t)
-		core.chat_send_player(name, S("[Back to camp] Camp of team @1", t))
-	else
-		send_to(name, cfg.career_camp_dx)
-		core.chat_send_player(name, S("[Back to camp] Spawn"))
-	end
-	return itemstack
-end
-core.register_craftitem(FLAG, {
-	description = S("Back to camp\nClick to go back to your team's camp"),
-	short_description = S("Back to camp"),
-	inventory_image = "[fill:16x16:#00000000^[fill:2x15:3,1:#6a4a28^[fill:9x6:5,1:#c04030^[fill:9x2:5,3:#f0e0b0",
-	stack_max = 1,
-	groups = {not_in_creative_inventory = 1},
-	on_use = go_camp,
-	on_secondary_use = go_camp,
-	on_place = go_camp,
-	on_drop = function(itemstack) return itemstack end,     -- 丟不掉
-})
--- 全班伺服器每人登入時沒有就補一支；單機版不發，要的話向工具室管理員買
-if not cfg.solo then
-	core.register_on_joinplayer(function(player)
-		local inv = player:get_inventory()
-		if not inv:contains_item("main", FLAG) then inv:add_item("main", FLAG) end
-	end)
-end

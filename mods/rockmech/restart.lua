@@ -6,7 +6,7 @@
 local cfg = rockmech.cfg
 local S = rockmech.S
 local at = cfg.daily_restart
-if not at then return end
+if not at or not cfg.teacher then return end      -- 上課的常駐伺服器才重開
 local hh, mm = at:match("^(%d%d?):(%d%d)$")
 if not hh then
 	core.log("warning", "[rockmech] rockmech_daily_restart 要寫成 HH:MM（例如 04:00），現在是：" .. at)

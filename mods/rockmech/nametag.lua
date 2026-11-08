@@ -13,6 +13,10 @@ local NICK_MAX = 12
 local TAG = "rockmech:nametag"
 
 rockmech.real_names = rockmech.real_names or {}
+-- 玩家頭上的名牌、暱稱、改名提醒：教學地圖才有（下面 NPC 的名牌每張地圖都有）
+if not rockmech.cfg.teacher then
+	function rockmech.nametag_hide() end
+else
 
 local function is_teacher(name) return core.check_player_privs(name, {server = true}) end
 
@@ -215,6 +219,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	end
 	return true
 end)
+
+end    -- 教學地圖的玩家名牌
 
 ---------------------------------------------------------------------------
 -- NPC 的名牌（攤主、技工、地質師、教授、怪手操作員…）：只給 NPC_NEAR 公尺內的人看。
