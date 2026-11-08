@@ -222,9 +222,11 @@ local function excavator(kind, P)
 	for _, p in ipairs(P.house) do parts[#parts + 1] = p end
 	-- 鏟斗：側面看是 J 形的殼（前壁、底板、往駕駛那側翹起的斗唇）＋兩片側板＋斗齒。
 	-- 下面的座標是「平端」姿勢（開口朝上）的鏟斗座標，中心在小臂尖端；挖、倒時整組繞橫軸翻（self.curl）
-	local BW, BH, BD = P.bucket.x, P.bucket.y, P.bucket.z
+	-- 尺寸照真實鏟斗（P.bucket_real：寬、斗高、斗深；接點在後壁頂端，接點到齒尖約 1.2–1.3 倍斗深）
+	local BR = P.bucket_real or P.bucket
+	local BW, BH, BD = BR.x, BR.y, BR.z
 	local BT = BH * 0.09                                   -- 鋼板厚度
-	local lip_a, lip_c = {y = -BH / 2, z = -BD * 0.4}, {y = BH * 0.05, z = -BD / 2}   -- 方一點：斗唇幾乎垂直
+	local lip_a, lip_c = {y = -BH / 2, z = -BD / 4}, {y = BH * 0.1, z = -BD / 2}
 	local lip_len = math.sqrt((lip_c.y - lip_a.y) ^ 2 + (lip_c.z - lip_a.z) ^ 2)
 	local lip_pitch = atan2(lip_c.z - lip_a.z, lip_c.y - lip_a.y)
 	local lip_dir = {y = (lip_c.y - lip_a.y) / lip_len, z = (lip_c.z - lip_a.z) / lip_len}
@@ -234,13 +236,13 @@ local function excavator(kind, P)
 	local steel = "[fill:16x16:#9a9ea4^[fill:16x3:0,13:#c8ccd0"
 	-- {id, 鏟斗座標的中心, 大小, 自己的俯仰（rad）, 貼圖}
 	local BK = {
-		{"bucket", {x = 0, y = -BH / 2 + BT / 2, z = BD * 0.05}, {x = BW, y = BT, z = BD * 0.9}, 0, {shell, shell, shell, shell, shell, shell}},
+		{"bucket", {x = 0, y = -BH / 2 + BT / 2, z = BD / 8}, {x = BW, y = BT, z = BD * 0.75}, 0, {shell, shell, shell, shell, shell, shell}},
 		{"bk_front", {x = 0, y = 0, z = BD / 2 - BT / 2}, {x = BW, y = BH, z = BT}, 0, {shell, shell, shell, shell, shell, shell}},
 		{"bk_lip", {x = 0, y = (lip_a.y + lip_c.y) / 2, z = (lip_a.z + lip_c.z) / 2}, {x = BW, y = lip_len, z = BT}, lip_pitch, {shell, shell, shell, shell, shell, shell}},
 		{"bk_sl", {x = -BW / 2 + BT / 2, y = 0, z = 0}, {x = BT, y = BH, z = BD}, 0, {side, side, side, side, side, side}},
 		{"bk_sr", {x = BW / 2 - BT / 2, y = 0, z = 0}, {x = BT, y = BH, z = BD}, 0, {side, side, side, side, side, side}},
 		-- 頂上的耳板（跟小臂接的地方）
-		{"bk_ear", {x = 0, y = BH / 2 + BT, z = BD * 0.15}, {x = BW * 0.3, y = BT * 2, z = BD * 0.4}, 0, box_tex("#303030")},
+		{"bk_ear", {x = 0, y = BH / 2 + BT, z = BD * 0.38}, {x = BW * 0.3, y = BT * 2, z = BD * 0.24}, 0, box_tex("#303030")},
 	}
 	local NT = BW > 2 and 6 or 5
 	local TL = BH * 0.22
@@ -259,7 +261,7 @@ local function excavator(kind, P)
 		return {x = o.x, y = o.y * c - o.z * sn, z = o.y * sn + o.z * c}
 	end
 	-- 小臂尖端接在耳板頂上（鏟斗座標），鏟斗掛在下面
-	local EAR = {x = 0, y = BH / 2 + BT * 2, z = BD * 0.15}
+	local EAR = {x = 0, y = BH / 2 + BT * 2, z = BD * 0.38}
 	local function place_bucket(self, vb, psi, hide)
 		local ps, th = self.parts, self.curl or 0
 		for i, k in ipairs(BK) do
@@ -1038,6 +1040,7 @@ do
 		bucket_rest = {x = 0.55, y = -0.9, z = 2.6},     -- 收起時挖斗在車頭前方約 1.1 m
 		boom_len = 3.6, stick_len = 3.0, boom_w = 0.5, stick_w = 0.4,
 		bucket = {x = 1.3, y = 0.8, z = 0.7}, bucket_color = "#505050",
+		bucket_real = {x = 1.25, y = 1.1, z = 1.4},      -- 20 t 級、約 1 m³：寬 1.25、斗高 1.1、斗深 1.4，接點到齒尖約 1.45 m
 		fill_w = 1.1, fill_l = 0.55, fill_h0 = 0.12, fill_h1 = 0.72, fill_dy = 0.4,
 		dig_r = 1, dig_reach = 10, lift = 2.0, swing_rate = 1.5, dump_reach = 6,
 		bucket_box = {r = 0.7, down = 0.45, up = 0.9},
@@ -1077,6 +1080,7 @@ do
 		bucket_rest = {x = 0.5, y = -2.5, z = 6.5},      -- 收起時挖斗放在車頭前方地上
 		boom_len = 8.2, stick_len = 5.0, boom_w = 1.1, stick_w = 0.9,
 		bucket = {x = 2.8, y = 2.0, z = 1.8}, bucket_color = "#4a4a4a",
+		bucket_real = {x = 3.2, y = 2.5, z = 2.8},       -- 200 t 級、約 12 m³：寬 3.2、斗高 2.5、斗深 2.8，接點到齒尖約 2.9 m
 		fill_w = 2.4, fill_l = 1.4, fill_h0 = 0.2, fill_h1 = 1.4, fill_dy = 1.0,
 		dig_r = 2, dig_reach = 18, lift = 3.5, swing_rate = 0.8, dump_reach = 9,
 		bucket_box = {r = 1.6, down = 1.1, up = 2.4},
