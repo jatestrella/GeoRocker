@@ -103,6 +103,7 @@ local function show_hand(player, w)
 	w.hand_was = nil
 end
 local function big_show(player, w, st, key)
+	if not st then big_remove(player, w); return end
 	local name = player:get_player_name()
 	local function add(def)
 		def.position = def.position or {x = 0.5, y = 0.5}
@@ -115,7 +116,7 @@ local function big_show(player, w, st, key)
 		big_remove(player, w)
 		w.big_sig = keep
 		w.big_huds, w.big_key = {}, key
-		local lines = st and detail_lines(st) or {{nil, S("Point the tablet at rock")}}
+		local lines = detail_lines(st)
 		local panel_h = (fname and BH + 40 or 0) + 30 + #lines * 24 + 20
 		local top = -panel_h / 2
 		add({type = "image", alignment = {x = 0, y = 1}, offset = {x = 0, y = top - 16}, scale = {x = BW + 40, y = panel_h + 32},
@@ -204,9 +205,9 @@ core.register_globalstep(function(dtime)
 					end
 				end
 			end
-			-- 按住右鍵：正面看；放開就收起來
+			-- 按住右鍵（對著岩石）：正面看；放開或移開就收起來
 			local hold = player:get_player_control().place
-			if hold and not player:get_attach() then
+			if hold and rock and not player:get_attach() then     -- 沒對著岩石：什麼都不顯示
 				w.big_on = true
 				hide_hand(player, w)
 				w.big_t = (w.big_t or 0) + dt
