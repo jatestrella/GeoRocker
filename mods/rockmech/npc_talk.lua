@@ -14,10 +14,10 @@ local CREAM = "#f4f0e0"
 local TAIL = "[fill:8x8:#00000000^[fill:8x2:0,0:" .. CREAM .. "^[fill:6x2:1,2:" .. CREAM .. "^[fill:4x2:2,4:" .. CREAM .. "^[fill:2x2:3,6:" .. CREAM
 core.register_entity(BUBBLE, {
 	initial_properties = {
-		visual = "sprite", textures = {TAIL}, visual_size = {x = 0.25, y = 0.25}, use_texture_alpha = true,
-		selectionbox = {-0.01, 0, -0.01, 0.01, 0.12, 0.01}, collisionbox = {0, 0, 0, 0, 0, 0},
+		visual = "sprite", textures = {TAIL}, visual_size = {x = 0.5, y = 0.5}, use_texture_alpha = true,
+		selectionbox = {-0.01, 0, -0.01, 0.01, 0.25, 0.01}, collisionbox = {0, 0, 0, 0, 0, 0},
 		physical = false, pointable = false, static_save = false,
-		nametag = "", nametag_color = "#202020", nametag_bgcolor = CREAM .. "f0",
+		nametag = "", nametag_color = "#202020", nametag_bgcolor = CREAM .. "f0", nametag_fontsize = 32,   -- 字約一般名牌的兩倍
 	},
 	on_step = function(self, dtime)
 		self.t = (self.t or 0) + dtime
