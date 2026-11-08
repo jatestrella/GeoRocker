@@ -20,6 +20,11 @@ return {
 		S("Tap the rock with a Schmidt hammer first."),
 		S("Anything small, I've got it."),
 	},
+	["rockmech:vendor_civil"] = {
+		S("Crushers, plants, belts, ventilation: I design them all."),
+		S("A hopper needs flat ground."),
+		S("Dig deeper and you will need a fan."),
+	},
 	["rockmech:vendor"] = {
 		S("Need supplies?"),
 	},

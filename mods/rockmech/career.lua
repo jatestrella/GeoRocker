@@ -477,8 +477,11 @@ end)
 
 -- kind → 攤位：名牌（職稱）、顏色、坐著還是站著
 local BOOTHS = {
-	vehicle = {entity = "rockmech:vendor_vehicle", title = S("Equipment Manager"), sells = S("Vehicles · crushers · conveyor belts"),
+	vehicle = {entity = "rockmech:vendor_vehicle", title = S("Equipment Manager"), sells = S("Vehicles · vehicle upgrades"),
 		color = "#80b0ff", tint = "#2050a0", sit = true},
+	-- 土木技師：貨櫃辦公室 2 樓（破碎站、選礦場、輸送帶、料斗、通風）
+	civil = {entity = "rockmech:vendor_civil", title = S("Civil Engineer"), sells = S("Crushers · plants · conveyors · ventilation"),
+		color = "#ffd060", tint = "#806010", sit = true},
 	blast = {entity = "rockmech:vendor_blast", title = S("Blasting Supervisor"), sells = S("Drilling · explosives · charging"),
 		color = "#ff8060", tint = "#c03020", sit = false},
 	tools = {entity = "rockmech:vendor_tools", title = S("Tool Room Keeper"), sells = S("Hand tools · support · instruments"),
@@ -807,10 +810,36 @@ local function build_market(x0)
 				elseif edge_x or edge_z then set(dx, h, dz, h == 1 and "rockmech:office_wall_base" or "rockmech:office_wall")
 				else set(dx, h, dz, "air") end
 			end
-			set(dx, 4, dz, "rockmech:office_roof")
 			if not edge_x and not edge_z then set(dx, 0, dz, "rockmech:office_floor") end
+			-- 2 樓：1 樓的天花板是 2 樓地板（h 4），牆 h 5–7，屋頂 h 8
+			if edge_x and edge_z then set(dx, 4, dz, "rockmech:office_post")
+			elseif edge_x or edge_z then set(dx, 4, dz, "rockmech:office_wall_base")
+			else set(dx, 4, dz, "rockmech:office_floor") end
+			for h = 5, 7 do
+				if edge_x and edge_z then set(dx, h, dz, "rockmech:office_post")
+				elseif edge_x or edge_z then set(dx, h, dz, "rockmech:office_wall")
+				else set(dx, h, dz, "air") end
+			end
+			set(dx, 8, dz, "rockmech:office_roof")
 		end
 	end
+	-- 2 樓：前後兩排窗、天花板燈；土木技師坐在辦公桌後面（面向正面），背後一面設計圖板、兩個櫃子
+	for _, dx in ipairs({-4, -3, -2, 2, 3, 4}) do set(dx, 6, RZ, "default:glass"); set(dx, 6, -RZ, "default:glass") end
+	set(0, 7, 0, "rockmech:camp_lamp"); set(-4, 7, 0, "rockmech:camp_lamp"); set(4, 7, 0, "rockmech:camp_lamp")
+	for dx = -1, 1 do set(dx, 5, 1, "rockmech:camp_table") end
+	set(0, 6, 1, "rockmech:camp_papers"); set(-1, 6, 1, "rockmech:camp_helmets")
+	set(0, 5, 0, "rockmech:camp_chair")
+	for dx = -1, 1 do set(dx, 5, -2, "rockmech:camp_blackboard"); set(dx, 6, -2, "rockmech:camp_blackboard") end
+	set(-3, 5, -2, "rockmech:camp_shelf"); set(-3, 6, -2, "rockmech:camp_shelf"); set(3, 5, -2, "rockmech:camp_shelf")
+	-- 2 樓的門在 1 樓門的正上方；門外一座鋼樓梯：從地面沿著牆外往門那邊爬，頂上一塊平台
+	set(RX, 5, 0, "doors:door_wood_a", 3)
+	set(RX, 6, 0, "doors:hidden", 3)
+	set(RX + 1, 4, 0, "rockmech:office_post")                        -- 平台
+	for i = 1, 3 do
+		set(RX + 1, 4 - i, i, "stairs:stair_steelblock", 2)          -- 往 −dz 爬
+		for h = 4 - i + 1, 7 do set(RX + 1, h, i, "air") end
+	end
+	set(RX + 1, 1, 4, "air"); set(RX + 1, 2, 4, "air")
 	for kind, bx in pairs(BOOTH_X) do
 		-- 正面：攤主前面的櫃台窗口（3 寬、h 2–3，h 1 的牆當櫃台），外面一片遮陽棚
 		for dx = -1, 1 do
@@ -822,10 +851,10 @@ local function build_market(x0)
 	-- 背面高處一排玻璃窗、西側一扇玻璃窗
 	for _, dx in ipairs({-5, -4, -3, 3, 4, 5}) do set(dx, 3, -RZ, "default:glass") end
 	set(-RX, 2, -1, "default:glass"); set(-RX, 2, 0, "default:glass")
-	-- 東側木門（朝東開），門外兩個三角錐；西側牆外冷氣室外機
+	-- 東側木門（朝東開），門外一個三角錐（另一邊是上 2 樓的樓梯）；西側牆外冷氣室外機
 	set(RX, 1, 0, "doors:door_wood_a", 3)
 	set(RX, 2, 0, "doors:hidden", 3)
-	set(RX + 1, 1, 2, "rockmech:camp_cone"); set(RX + 1, 1, -2, "rockmech:camp_cone")
+	set(RX + 1, 1, -2, "rockmech:camp_cone")
 	set(-RX - 1, 1, 1, "rockmech:office_ac", 3)       -- facedir 3：風扇朝西
 	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
 	for kind, bx in pairs(BOOTH_X) do
@@ -834,6 +863,8 @@ local function build_market(x0)
 		local p = at(bx, 0, 1)
 		list[#list + 1] = {kind = kind, pos = {x = p.x, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = p.z}, yaw = FACE_YAW}
 	end
+	local pc = at(0, 0, 0)
+	list[#list + 1] = {kind = "civil", pos = {x = pc.x, y = y + 5.05, z = pc.z}, yaw = FACE_YAW}       -- 土木技師（2 樓的椅子上）
 	storage:set_string(VENDOR_SPOTS, core.serialize(list))
 end
 

@@ -72,7 +72,7 @@ config.ores = {
 }
 
 -- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個；
--- shop：哪一攤賣（vehicle 機械設備課長、blast 爆破主任、tools 工具室管理員）
+-- shop：哪一攤賣（vehicle 機械設備課長、blast 爆破主任、tools 工具室管理員、civil 土木技師）
 config.shop = {
 	{key = "pick", shop = "tools", item = "rockmech:pick", label = TR("Pickaxe"), price = 0},
 	{key = "shovel", shop = "tools", item = "rockmech:shovel", label = TR("Shovel"), price = 100},
@@ -80,10 +80,10 @@ config.shop = {
 	{key = "suv", shop = "vehicle", item = "rockmech:suv_item", label = TR("SUV"), price = 3000},
 	{key = "truck", shop = "vehicle", item = "rockmech:truck_item", label = TR("Dump truck"), price = 10000},
 	{key = "excavator", shop = "vehicle", item = "rockmech:excavator_item", label = TR("Excavator"), price = 15000},
-	{key = "crusher", shop = "vehicle", item = "rockmech:crusher", label = TR("Crusher"), price = 20000},
-	{key = "crusher_big", shop = "vehicle", item = "rockmech:crusher_big", label = TR("Large crusher"), price = 300000},
-	{key = "plant", shop = "vehicle", item = "rockmech:plant", label = TR("Ore plant"), price = 30000},
-	{key = "belt", shop = "vehicle", item = "rockmech:belt", label = TR("Conveyor belt"), price = 1000, count = 10},
+	{key = "crusher", shop = "civil", item = "rockmech:crusher", label = TR("Crusher"), price = 20000},
+	{key = "crusher_big", shop = "civil", item = "rockmech:crusher_big", label = TR("Large crusher"), price = 300000},
+	{key = "plant", shop = "civil", item = "rockmech:plant", label = TR("Ore plant"), price = 30000},
+	{key = "belt", shop = "civil", item = "rockmech:belt", label = TR("Conveyor belt"), price = 1000, count = 10},
 	{key = "lowboy", shop = "vehicle", item = "rockmech:lowboy_item", label = TR("Lowboy trailer"), price = 40000},
 	{key = "dozer", shop = "vehicle", item = "rockmech:dozer_item", label = TR("Bulldozer"), price = 35000},
 	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = TR("ANFO bulk truck"), price = 40000},
@@ -95,8 +95,8 @@ config.shop = {
 	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = TR("Drill jumbo"), price = 60000},
 	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = TR("Haul truck"), price = 150000},
 	{key = "excavator_big", shop = "vehicle", item = "rockmech:excavator_big_item", label = TR("Mining excavator"), price = 200000},
-	{key = "loadout", shop = "vehicle", item = "rockmech:loadout", label = TR("Loadout bin"), price = 25000},
-	{key = "dump_hopper", shop = "vehicle", item = "rockmech:dump_hopper", label = TR("Dump hopper"), price = 12000},
+	{key = "loadout", shop = "civil", item = "rockmech:loadout", label = TR("Loadout bin"), price = 25000},
+	{key = "dump_hopper", shop = "civil", item = "rockmech:dump_hopper", label = TR("Dump hopper"), price = 12000},
 	-- 終極目標：買下時全服廣播（career.lua）
 	{key = "miner", shop = "vehicle", item = "rockmech:miner_item", label = TR("Surface miner"), price = 1500000, final = true},
 	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = TR("Excavator operator"), price = 0},
@@ -127,8 +127,8 @@ config.shop = {
 	{key = "compass", shop = "tools", item = "rockmech:compass", label = TR("Geological compass"), price = 200},
 	{key = "fieldbook", shop = "tools", item = "rockmech:fieldbook", label = TR("Field notebook"), price = 10},
 	{key = "gas_detector", shop = "tools", item = "rockmech:gas_detector", label = TR("Gas detector"), price = 800},
-	{key = "vent_fan", shop = "vehicle", item = "rockmech:vent_fan", label = TR("Ventilation fan"), price = 8000},
-	{key = "vent_duct", shop = "vehicle", item = "rockmech:vent_duct", label = TR("Ventilation duct"), price = 500, count = 10},
+	{key = "vent_fan", shop = "civil", item = "rockmech:vent_fan", label = TR("Ventilation fan"), price = 8000},
+	{key = "vent_duct", shop = "civil", item = "rockmech:vent_duct", label = TR("Ventilation duct"), price = 500, count = 10},
 	{key = "locker", shop = "tools", item = "rockmech:locker", label = TR("Locker"), price = 200},
 }
 

@@ -136,6 +136,20 @@ do
 	SKINS.operator = p.done()
 end
 
+-- 土木技師：白安全帽（藍色帽帶）、螢光黃反光背心、淺灰襯衫、深色長褲
+do
+	local p = painter()
+	p.head("#3a2a20", 2)
+	p.hat("#f4f4f0", 2)
+	p.top("#c8ccd0")
+	p.r(16, 20, 24, 10, "#e0e830")                                   -- 反光背心
+	p.r(23, 20, 2, 10, "#c8ccd0")                                    -- 前襟
+	p.r(16, 26, 24, 1, "#d0d0d0"); p.r(28, 26, 12, 1, "#d0d0d0")     -- 反光條
+	p.r(28, 20, 4, 10, "#e0e830"); p.r(32, 20, 8, 10, "#e0e830")
+	p.pants("#30343a", "#1a1a1a")
+	SKINS.civil = p.done()
+end
+
 function rockmech.npc_skin(role) return SKINS[role] or "character.png" end
 
 ---------------------------------------------------------------------------
