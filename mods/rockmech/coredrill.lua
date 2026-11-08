@@ -1,6 +1,6 @@
 -- rockmech/coredrill.lua
 -- 岩芯鑽探：手持岩芯鑽機（$3,000，工具室管理員）對地面按住右鍵往下鑽一個垂直孔（放開就停），每公尺 SEC_PER_M 秒，最深 HAND_DEPTH m；
--- 要待在孔旁 STAY_R m 內、手上拿著鑽機。更深的孔用岩芯鑽探車（rockmech.coredrill_start，60 m）。碰到空洞或設施就停。
+-- 對著地面往下鑽、對著岩壁水平鑽。要待在孔旁 STAY_R m 內、手上拿著鑽機。更深的孔用岩芯鑽探車（rockmech.coredrill_start，60 m）。碰到空洞或設施就停。
 -- 鑽完：孔口留一根套管（混凝土墊、橘色套管、管蓋），岩芯裝進藍色岩芯箱放在孔口旁邊的地上。
 --   岩芯箱比照碎石搬：左鍵捧起來（一次一個，不進背包），右鍵放下（可以疊起來當岩芯庫）。只有自己組（和老師）搬得動。
 --   野帳本（$10）：拿著對岩芯箱右鍵判讀（每公尺 LOG_SEC_PER_M 秒，要待在 LOG_STAY m 內、手上拿著），記進野帳本；
@@ -75,7 +75,7 @@ local function core_breaks(bh, i)
 	local fine = {}
 	local lith = rockmech.cfg.lithologies[r.lith]
 	if lith and rockmech.collapse and rockmech.collapse.rock then
-		local gsi = rockmech.collapse.rock.gsi(r.lith, bh.pos.y - i)
+		local gsi = rockmech.collapse.rock.gsi(r.lith, bh.pos.y + (bh.dir and bh.dir.y or -1) * i)
 		local q = (lith.jr or 2) / (lith.ja or 1)
 		local target = math.max(0, math.min(100, 2 * (gsi - 52 * q / (1 + q))))
 		local lam = lambda_of(target)
@@ -1228,7 +1228,7 @@ local function finish(name, d, why)
 	local acc = rockmech.account_of and rockmech.account_of(name) or name
 	local list = logs_of(acc)
 	local n = #list + 1
-	local bh = {n = n, pos = d.collar, depth = #d.rows, rows = d.rows, stop = why, by = name}
+	local bh = {n = n, pos = d.collar, depth = #d.rows, rows = d.rows, stop = why, by = name, dir = d.dir}
 	list[n] = bh
 	save_logs(acc, list)
 	-- 孔口：混凝土墊＋套管（空的才放）
@@ -1262,19 +1262,25 @@ local function finish(name, d, why)
 	end
 end
 
--- 從 collar（孔口那一格，空的）往下鑽到 max m。ok() 每一步檢查還能不能繼續（回傳停下的原因或 nil）
-function rockmech.coredrill_start(name, collar, max, ok, on_done)
+-- 從 collar（孔口那一格，空的）沿 dir（省略 = 往下；手持鑽機也可以水平）鑽到 max m。
+-- ok() 每一步檢查還能不能繼續（回傳停下的原因或 nil）
+function rockmech.coredrill_start(name, collar, max, ok, on_done, dir)
 	if drilling[name] then rockmech.notify(name, S("[Core drilling] Already drilling")); return false end
-	drilling[name] = {collar = collar, x = collar.x, y = collar.y - 1, z = collar.z, rows = {}, t = 0, max = max, ok = ok, on_done = on_done}
-	rockmech.notify(name, S("[Core drilling] Drilling down (@1 s per metre, max @2 m)", tostring(SEC_PER_M), tostring(max)))
+	dir = dir or {x = 0, y = -1, z = 0}
+	drilling[name] = {collar = collar, dir = dir, x = collar.x + dir.x, y = collar.y + dir.y, z = collar.z + dir.z,
+		rows = {}, t = 0, max = max, ok = ok, on_done = on_done}
+	rockmech.notify(name, dir.y < 0 and S("[Core drilling] Drilling down (@1 s per metre, max @2 m)", tostring(SEC_PER_M), tostring(max))
+		or S("[Core drilling] Drilling horizontally (@1 s per metre, max @2 m)", tostring(SEC_PER_M), tostring(max)))
 	return true
 end
 function rockmech.coredrill_depth(name) local d = drilling[name]; return d and #d.rows, d and d.max end
 
 local function start_hand(player, pointed)
 	if pointed.type ~= "node" then return end
-	if pointed.above.y ~= pointed.under.y + 1 then
-		rockmech.notify(player:get_player_name(), S("[Core drilling] Aim at the ground (the top of a block) to drill down"))
+	-- 對著地面（方塊頂面）往下鑽；對著岩壁（側面）往牆裡水平鑽；頂板不行
+	local nrm = vector.subtract(pointed.above, pointed.under)
+	if nrm.y < 0 then
+		rockmech.notify(player:get_player_name(), S("[Core drilling] Aim at the ground to drill down, or at a wall to drill horizontally"))
 		return
 	end
 	local name = player:get_player_name()
@@ -1287,7 +1293,7 @@ local function start_hand(player, pointed)
 		-- 要一直按住右鍵才會鑽（比照鑿岩機按住左鍵），放開就停在目前的深度
 		local ctrl = p:get_player_control()
 		if not (ctrl.place or ctrl.RMB) then return S("you let go") end
-	end)
+	end, nil, vector.multiply(nrm, -1))
 end
 
 core.register_globalstep(function(dtime)
@@ -1303,15 +1309,16 @@ core.register_globalstep(function(dtime)
 			else
 				d.t = d.t + dtime
 				-- 孔口冒岩粉
-				core.add_particlespawner({amount = 3, time = 0.1, minpos = {x = d.x - 0.1, y = d.y + 0.5, z = d.z - 0.1},
-					maxpos = {x = d.x + 0.1, y = d.y + 0.6, z = d.z + 0.1}, minvel = {x = -0.6, y = 0.8, z = -0.6},
+				local m = vector.add(d.collar, vector.multiply(d.dir, 0.5))         -- 孔口（岩面上）
+				core.add_particlespawner({amount = 3, time = 0.1, minpos = {x = m.x - 0.1, y = m.y, z = m.z - 0.1},
+					maxpos = {x = m.x + 0.1, y = m.y + 0.1, z = m.z + 0.1}, minvel = {x = -0.6, y = 0.8, z = -0.6},
 					maxvel = {x = 0.6, y = 1.6, z = 0.6}, minacc = {x = 0, y = -5, z = 0}, maxacc = {x = 0, y = -5, z = 0},
 					minexptime = 0.4, maxexptime = 0.8, minsize = 0.6, maxsize = 1.2, texture = "[fill:4x4:#a89c90"})
 				d.hud_t = (d.hud_t or 0) + dtime
 				if d.hud_t >= 0.2 or not d.hud then d.hud_t = 0; progress_hud(p, d) end
 				while d.t >= SEC_PER_M and drilling[name] do
 					d.t = d.t - SEC_PER_M
-					local cell = {x = d.x, y = d.y - #d.rows, z = d.z}
+					local cell = vector.add({x = d.x, y = d.y, z = d.z}, vector.multiply(d.dir, #d.rows))
 					local node = core.get_node(cell)
 					local lith = rockmech.lith_of_node[node.name]
 					local row
