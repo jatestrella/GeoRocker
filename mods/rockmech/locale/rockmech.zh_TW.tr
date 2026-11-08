@@ -1483,3 +1483,4 @@ Exhaust duct @1 m=抽出風管 @1 m
 No conveyor belt connected=沒接輸送帶
 Reversed (@1 m)=反向了（@1 m）
 This is the middle of a belt line: extend it from either end=這是輸送帶的中間：從頭或尾接
+A conveyor belt can only have one way in and one way out=一條輸送帶只能一進一出

@@ -141,13 +141,6 @@ for h = 0, 7 do
 			groups = {cracky = 3, oddly_breakable_by_hand = 2, rockmech_belt = 1, not_in_creative_inventory = 1},
 			drop = ITEM,
 			is_ground_content = false,
-			-- 空手右鍵：整條輸送帶反向；拿著方塊照常放
-			on_rightclick = function(pos, node, clicker, itemstack, pointed)
-				local w = itemstack and itemstack:get_name() or ""
-				if core.registered_nodes[w] then return (core.item_place_node(itemstack, clicker, pointed)) end
-				if w == "" and clicker and clicker:is_player() then reverse_line(pos, clicker:get_player_name()) end
-				return itemstack
-			end,
 			on_construct = function(pos)
 				register_cell(pos)
 				core.forceload_block(pos, false, -1)
@@ -261,6 +254,31 @@ reverse_line = function(p, name)
 	if name then rockmech.notify(name, S("[Conveyor]") .. " " .. S("Reversed (@1 m)", tostring(math.max(1, #chain)))) end
 end
 rockmech.belt_reverse = reverse_line
+
+-- 對著輸送帶按 E（aux1）：整條反向。按下去那一下才算；坐在車上不算（車上的 E 是作業鍵）
+local e_down = {}
+local function e_check(pl)
+	local name = pl:get_player_name()
+	local down = pl:get_player_control().aux1
+	if down and not e_down[name] and not pl:get_attach() then
+		local eye = vector.add(pl:get_pos(), {x = 0, y = pl:get_properties().eye_height or 1.625, z = 0})
+		local tip = vector.add(eye, vector.multiply(pl:get_look_dir(), 6))
+		for th in core.raycast(eye, tip, false, false) do
+			if th.type == "node" then
+				if BELT_H[core.get_node(th.under).name] and not core.is_protected(th.under, name) then
+					reverse_line(th.under, name)
+				end
+				break
+			end
+		end
+	end
+	e_down[name] = down
+end
+rockmech.belt_e_check = e_check      -- 測試用
+core.register_globalstep(function()
+	for _, pl in ipairs(core.get_connected_players()) do e_check(pl) end
+end)
+core.register_on_leaveplayer(function(pl) e_down[pl:get_player_name()] = nil end)
 
 -- 把 a 格的料往 b 格移，最多移到 b 滿（b 格自己的載量：各組的研究加成不同）
 local function move(ha, hb)
@@ -540,9 +558,39 @@ core.register_craftitem(ITEM, {
 		local fd = core.dir_to_fourdir({x = look.x, y = 0, z = look.z})
 		local d = core.fourdir_to_dir(fd)
 		local slope = math.max(-rmax(), math.min(rmax(), itemstack:get_meta():get_int("slope")))
-		local function put(p, sf, pd)
+		-- via：新的這格的進料來源（從尾巴往下游接時的那格）
+		local function put(p, sf, pd, via)
 			local q = {x = p.x, y = math.floor(sf / 8), z = p.z}
 			local h = sf - q.y * 8
+			-- 一進一出：送進這格的最多一條；前面接到的那條原本不能已經有進料
+			local ins, n_in = {}, 0
+			if via then ins[core.hash_node_position(via)] = true; n_in = 1 end
+			for _, s in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
+				for dy = -1, 1 do
+					local r = {x = q.x + s[1], y = q.y + dy, z = q.z + s[2]}
+					local m, is = belt_at(r)
+					if is then
+						local md = dir_of(m)
+						local hr = core.hash_node_position(r)
+						if r.x + md.x == q.x and r.z + md.z == q.z and not (md.x == -pd.x and md.z == -pd.z) and not ins[hr] then
+							ins[hr] = true; n_in = n_in + 1
+						end
+					end
+				end
+			end
+			local blocked = n_in > 1
+			for dy = -1, 1 do
+				local t = {x = q.x + pd.x, y = q.y + dy, z = q.z + pd.z}
+				local m, is = belt_at(t)
+				if is then
+					local md = dir_of(m)
+					if not (md.x == -pd.x and md.z == -pd.z) and prev_of(t, m) then blocked = true end
+				end
+			end
+			if blocked then
+				say(S("A conveyor belt can only have one way in and one way out"))
+				return false
+			end
 			local nd = core.registered_nodes[core.get_node(q).name]
 			if not (nd and nd.buildable_to) then
 				say(S("The next block @1 is occupied; dig it out first", core.pos_to_string(q)))
@@ -564,14 +612,14 @@ core.register_craftitem(ITEM, {
 			local down = next_of(c, cn)
 			local straight = d0.x == d.x and d0.z == d.z
 			if straight or not down then
-				if put(n, surf(c, cn) + (straight and slope or 0), d) and not straight then
+				if put(n, surf(c, cn) + (straight and slope or 0), d, c) and not straight then
 					core.swap_node(c, {name = cn.name, param2 = fd})      -- 尾巴轉向
 				end
 			elseif not prev_of(c, cn) then
 				local back = d0.x == -d.x and d0.z == -d.z
 				put(n, surf(c, cn) - (back and slope or 0), {x = -d.x, y = 0, z = -d.z})
 			else
-				say(S("This is the middle of a belt line: extend it from either end"))
+				say(S("A conveyor belt can only have one way in and one way out"))
 			end
 			return itemstack
 		end
