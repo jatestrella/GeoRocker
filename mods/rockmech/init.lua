@@ -121,6 +121,7 @@ dofile(modpath .. "/crusher.lua")
 dofile(modpath .. "/plant.lua")
 dofile(modpath .. "/conveyor.lua")
 dofile(modpath .. "/loadout.lua")
+dofile(modpath .. "/dumphopper.lua")   -- 受料斗：卡車倒進來、交給輸送帶運走
 dofile(modpath .. "/npc_skins.lua")
 dofile(modpath .. "/career.lua")
 dofile(modpath .. "/team.lua")

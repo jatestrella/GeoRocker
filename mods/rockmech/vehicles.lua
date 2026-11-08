@@ -1007,6 +1007,14 @@ end
 
 -- 倒出車上的碎石：平均分到 cells 所在的欄（每欄往上最多堆 8 格），之後依安息角流開
 function V.dump_to_ground(self, cells, ytop)
+	-- 旁邊有受料斗（dumphopper.lua）：自動對準，倒在它的格柵上
+	if rockmech.dump_hopper_cells then
+		local hc, ht, hp = rockmech.dump_hopper_cells(cells, ytop)
+		if hc then
+			cells, ytop = hc, ht
+			rockmech.dump_hopper_accept(hp, self)
+		end
+	end
 	for base, lv in pairs(self.load) do
 		local rest = 0
 		if base == "default:tree" and rockmech.lay_log then
