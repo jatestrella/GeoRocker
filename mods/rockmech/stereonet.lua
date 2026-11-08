@@ -3,8 +3,8 @@
 --   羅盤右鍵岩面：量這一格的節理位態（切過這一格的節理組，每組一筆，加上量測誤差：傾角 ±3°、傾向 ±5°），顯示在準心右上
 --   Shift＋E：量坡面位態（周圍 7×7 的地表擬合一個平面）
 --   E：把剛量到的記進野帳本（背包裡要有野帳本）
---   羅盤對空中右鍵：用野帳本的紀錄打開赤平投影圖（下半球、等角投影 Wulff）：各筆量測的極點（依節理組上色）、各組平均位態的大圓、
---     坡面的大圓和極點、摩擦圓（節理摩擦角 φj：極點在圓內的面比 φj 緩，不會平面滑動）。
+--   赤平投影圖在野帳本的「赤平投影」分頁（下半球、等角投影 Wulff）：各筆量測的極點（依節理組上色）、各組平均位態的大圓、
+--     坡面的大圓和極點、各組的摩擦圓（φj = atan(Jr/Ja)：極點在圓內的面比 φj 緩，不會平面滑動）。
 --   Markland 平面滑動：節理極點在摩擦圓外、跟坡面極點同一側而且比坡面緩（大圓在坡面大圓裡面）→ 可能滑動。
 -- 圖是伺服器即時畫的 PNG（512×512），只傳給看的人。量測記在野帳本上（換一本野帳本就是新的紀錄）。
 
@@ -12,7 +12,6 @@ local cfg = rockmech.cfg
 local S = rockmech.S
 local joints = rockmech.joints
 local COMPASS = "rockmech:compass"
-local FORM = "rockmech:stereonet"
 local MAX_N = 200
 local SIZE, RAD = 512, 230              -- 圖的像素、投影圓半徑
 local rad, deg = math.rad, math.deg
@@ -197,7 +196,8 @@ end
 -- 選單
 ---------------------------------------------------------------------------
 local serial = 0
-local function show(name, d)
+-- 畫好圖、傳給玩家：cb(檔名, info)，info = {means = {{s, n, d, a}...}, slope}（野帳本的分頁用）
+local function media(name, d, cb)
 	local png, means = draw(d)
 	serial = serial + 1
 	local fname = ("rockmech_stereo_%s_%d.png"):format(name:gsub("[^%w_]", "_"), serial)
@@ -208,31 +208,14 @@ local function show(name, d)
 	if not fh then return end
 	fh:write(png)
 	fh:close()
-	local sets = rockmech.get_joint_sets()
-	local lines = {}
-	for _, m in ipairs(means) do
-		local js = sets[m.s]
-		lines[#lines + 1] = core.colorize(js and js.color or "#ffffff", S("@1: @2 readings, mean @3°/@4°", js and js.name or S("Set @1", tostring(m.s)), tostring(m.n), ("%02.0f"):format(m.d), ("%03.0f"):format(m.a)))
-	end
-	lines[#lines + 1] = d.slope and S("Slope: @1°/@2° (thick black line; the square is its pole)", ("%02.0f"):format(d.slope.d), ("%03.0f"):format(d.slope.a))
-		or S("Slope: not measured yet (Shift + E to measure the slope)")
-	local fc = {}
-	for _, js in ipairs(sets) do
-		fc[#fc + 1] = core.colorize(js.color or "#ffffff", ("%s %.0f°"):format(js.name, js.phi or (cfg.weakness and cfg.weakness.phi) or 30))
-	end
-	lines[#lines + 1] = S("Friction circles φj = atan(Jr/Ja): @1", table.concat(fc, "  "))
 	core.dynamic_add_media({filepath = path, to_player = name, ephemeral = true}, function()
-		local out = {"formspec_version[6]size[17,11]",
-			"label[0.4,0.5;" .. core.formspec_escape(S("Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up")) .. "]",
-			("image[0.4,0.9;9.8,9.8;%s]"):format(fname),
-			("textarea[10.6,0.9;6.1,7.6;;;%s]"):format(core.formspec_escape(table.concat(lines, "\n") .. "\n\n" ..
-				S("Compass: right-click a rock face to measure joints, Shift + E to measure the slope, E to write the reading into the field notebook\n\nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible"))),
-			"button[10.6,8.8;3,0.7;clear;" .. core.formspec_escape(S("Clear readings")) .. "]",
-			"button_exit[13.8,8.8;3,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"}
-		core.show_formspec(name, FORM, table.concat(out))
+		cb(fname, {means = means, slope = d.slope})
 		core.after(30, function() os.remove(path) end)
 	end)
 end
+rockmech.stereonet_media = media
+rockmech.stereonet_data = data_of
+rockmech.stereonet_clear = function(stack) save(stack, {m = {}}) end
 
 -- 剛量到、還沒記進野帳本的那一筆：玩家名 → {m = {...}} 或 {slope = ...}
 local last = {}
@@ -264,14 +247,6 @@ core.override_item(COMPASS, {
 	short_description = S("Geological compass"),
 	on_use = nil,
 	on_place = measure,
-	-- 對空中右鍵：野帳本的赤平投影
-	on_secondary_use = function(itemstack, user)
-		if not (user and user:is_player()) then return itemstack end
-		local _, book = find_book(user)
-		if not book then bubble(user, {S("You need a field notebook (the readings are kept in it)")}); return itemstack end
-		show(user:get_player_name(), data_of(book))
-		return itemstack
-	end,
 })
 
 -- E：記進野帳本；Shift＋E：量坡面。拿著羅盤、沒坐在車上；按下去那一下才算
@@ -305,7 +280,7 @@ core.register_globalstep(function()
 					pl:get_inventory():set_stack("main", i, book)
 					last[name] = nil
 					bubble(pl, {l.slope and S("Slope written into the field notebook")
-						or S("Written into the field notebook (@1 joint readings; right-click the air with the compass to see the stereonet)", tostring(#d.m))})
+						or S("Written into the field notebook (@1 joint readings; see the stereonet tab)", tostring(#d.m))})
 				end
 			end
 		end
@@ -313,18 +288,5 @@ core.register_globalstep(function()
 	end
 end)
 core.register_on_leaveplayer(function(pl) e_down[pl:get_player_name()] = nil; last[pl:get_player_name()] = nil end)
-
-core.register_on_player_receive_fields(function(player, formname, fields)
-	if formname ~= FORM then return end
-	if fields.clear then
-		local i, book = find_book(player)
-		if book then
-			save(book, {m = {}})
-			player:get_inventory():set_stack("main", i, book)
-			show(player:get_player_name(), {m = {}})
-		end
-	end
-	return true
-end)
 
 rockmech.stereonet_draw = draw        -- 測試用

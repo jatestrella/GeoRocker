@@ -771,7 +771,7 @@ end
 local BOOK_COLORS = {
 	book_cover = "#5a3a22", book_cover_edge = "#7a5232", book_page = "#f4eddb", book_page_edge = "#ddd3b8",
 	book_ink = "#2b2620", book_rule = "#bfd0de", book_margin = "#d88080", book_ribbon = "#a02828",
-	book_tab_field = "#f2d65c", book_tab_core = "#8cc0e8", book_hover = "#00000018",
+	book_tab_field = "#f2d65c", book_tab_core = "#8cc0e8", book_tab_stereo = "#9ad08a", book_hover = "#00000018",
 }
 function rockmech.ui_color(key)
 	local v = storage:get_string("ui_color:" .. key)
@@ -821,7 +821,7 @@ local BODY_Y, BODY_H = 2.35, 10.5     -- 表格內容（可以捲動）
 local function book_frame(st, page_no)
 	local out = {("formspec_version[6]size[%g,%g]bgcolor[#00000000;false]"):format(BW + 2.1, BH + 0.3)}
 	-- 便條紙分頁（先畫，被封皮蓋住一半，看起來是夾在書裡、從右邊露出來）
-	local tabs = {{"field", S("Field survey"), 1.3}, {"core", S("Cores"), 2.75}}
+	local tabs = {{"field", S("Field survey"), 1.3}, {"core", S("Cores"), 2.75}, {"stereo", S("Stereonet"), 4.2}}
 	for _, t in ipairs(tabs) do
 		local on = st.tab == t[1]
 		local x = BW - 0.6 + (on and 0.25 or 0)
@@ -953,11 +953,45 @@ local function field_page(out, list)
 	end
 end
 
+-- 赤平投影頁：圖（伺服器畫的 PNG，先傳給玩家，st.stereo = {fname, info}）＋各組平均位態、坡面、摩擦圓
+local function stereo_page(out, st)
+	title(out, S("Stereonet (lower hemisphere, equal-angle)"))
+	local sv = st.stereo
+	if not sv then
+		out[#out + 1] = ("label[%g,%g;%s]"):format(LX, BODY_Y + 0.25, ink(S("Drawing…")))
+		return
+	end
+	out[#out + 1] = ("image[%g,1.55;7.2,7.2;%s]"):format(LX + 0.5, sv.fname)
+	local sets = rockmech.get_joint_sets()
+	local y = 9.05
+	local function row(color, text)
+		if color then out[#out + 1] = ("box[%g,%g;0.25,0.25;%s]"):format(LX, y - 0.12, color) end
+		out[#out + 1] = ("label[%g,%g;%s]"):format(LX + 0.4, y, ink(text))
+		y = y + 0.42
+	end
+	if #sv.info.means == 0 then row(nil, S("No joint readings yet (compass: right-click a rock face, then E)")) end
+	for _, m in ipairs(sv.info.means) do
+		local js = sets[m.s]
+		row(js and js.color, S("@1: @2 readings, mean @3°/@4°", js and js.name or "?", tostring(m.n), ("%02.0f"):format(m.d), ("%03.0f"):format(m.a))
+			.. (js and js.phi and ("   φj %.0f°"):format(js.phi) or ""))
+	end
+	local sl = sv.info.slope
+	row("#202020", sl and S("Slope: @1°/@2° (thick black line; the square is its pole)", ("%02.0f"):format(sl.d), ("%03.0f"):format(sl.a))
+		or S("Slope: not measured yet (Shift + E to measure the slope)"))
+	row(nil, S("Circles: friction circle of each set (φj = atan(Jr/Ja))"))
+	row(nil, S("Markland: pole outside the circle, same side as the slope pole, flatter than the slope → may slide"))
+	out[#out + 1] = "style[clear_stereo;bgcolor=#00000000;border=false;textcolor=#8a3a30]"
+	out[#out + 1] = ("button[%g,%g;2.6,0.5;clear_stereo;%s]"):format(LX - 0.1, PY + PH - 0.6, core.formspec_escape(S("Tear out this page")))
+end
+
 local function book_form(name, stack)
 	local st = book_state[name] or {tab = "core"}
 	book_state[name] = st
 	local out
-	if st.tab == "field" then
+	if st.tab == "stereo" then
+		out = book_frame(st, nil)
+		stereo_page(out, st)
+	elseif st.tab == "field" then
 		out = book_frame(st, 1)
 		field_page(out, schmidt_of(stack))
 	else
@@ -991,6 +1025,25 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local changed = false
 	if fields.tab_field then st.tab, st.hole, changed = "field", nil, true end
 	if fields.tab_core then st.tab, st.hole, changed = "core", nil, true end
+	if fields.clear_stereo and rockmech.stereonet_clear then
+		rockmech.stereonet_clear(stack)
+		player:set_wielded_item(stack)
+		fields.tab_stereo = true
+	end
+	if fields.tab_stereo and rockmech.stereonet_media then
+		-- 先畫圖、傳給玩家，傳到了才顯示這一頁
+		st.tab, st.hole, st.stereo = "stereo", nil, nil
+		core.show_formspec(name, BOOK_FORM, book_form(name, stack))
+		rockmech.stereonet_media(name, rockmech.stereonet_data(stack), function(fname, info)
+			if book_state[name] ~= st or st.tab ~= "stereo" then return end
+			st.stereo = {fname = fname, info = info}
+			local p = core.get_player_by_name(name)
+			if p and p:get_wielded_item():get_name() == BOOK then
+				core.show_formspec(name, BOOK_FORM, book_form(name, p:get_wielded_item()))
+			end
+		end)
+		return true
+	end
 	if fields.back then st.hole, changed = nil, true end
 	if fields.clear_sch then
 		stack:get_meta():set_string("schmidt", "")
