@@ -389,7 +389,7 @@ This is already sprayed to @1 layers (or the space in front of the rock face is 
 ### knowledge.lua
 Grade assessment=品位判讀
 Rock mass classification=岩體分類
-Rock mechanics=岩石力學
+Rock mechanics=應力分析
 Mine planning=採礦規劃
 Handheld XRF analyzer@nWorks from your inventory=手持式 XRF 分析儀@n放在背包裡就有作用
 Handheld XRF analyzer=手持式 XRF 分析儀
@@ -443,7 +443,7 @@ Funds: $@1=資金 $@1
 Your abilities=掌握的能力
 Source: @1=來源：@1
 @1 (retake in @2)=@1（重考還要 @2）
-Grade assessment: grades   Rock mass classification: lithology, GSI, overburden thickness   Rock mechanics: stress, factor of safety, cracks=品位判讀：看得到品位　岩體分類：岩性、GSI、上覆厚度　岩石力學：應力、安全係數、裂紋
+Grade assessment: grades   Rock mass classification: lithology, GSI, overburden thickness   Rock mechanics: stress, factor of safety, cracks=品位判讀：看得到品位　岩體分類：岩性、GSI、上覆厚度　應力分析：應力、安全係數、裂紋
 
 ### loadout.lua
 [Loadout bin]=[裝車料斗]
