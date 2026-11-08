@@ -146,6 +146,7 @@ dofile(modpath .. "/fuel.lua")
 dofile(modpath .. "/airq.lua")         -- 空氣品質：柴油廢氣、炮煙、通風、氣體偵測器
 dofile(modpath .. "/knowledge.lua")
 dofile(modpath .. "/coredrill.lua")
+dofile(modpath .. "/mohr.lua")         -- Mohr 圓（準心旁的小圖）
 dofile(modpath .. "/stressmeter.lua")   -- 量應力：平板千斤頂、孔內應力計
 dofile(modpath .. "/worldtools.lua")
 dofile(modpath .. "/fsmask.lua")

@@ -280,6 +280,46 @@ local function hud_set(player, text)
 	h.text = text
 end
 
+-- 準心旁的小 Mohr 圓（會「Mohr 圓分析」，只能考試學會）：泡泡右邊，應力解的 σ1、σ3 一個圓＋遊戲用的強度包絡線
+local MINI_W, MINI_H = 220, 140
+local minis = {}       -- 玩家名稱 → {hud, key, t, busy}
+local function mini_remove(player)
+	local m = minis[player:get_player_name()]
+	if m and m.hud then player:hud_remove(m.hud) end
+	minis[player:get_player_name()] = nil
+end
+local function mini_set(player, rep, text)
+	local name = player:get_player_name()
+	local M = rockmech.mohr
+	local s = rep.local_state
+	if not (M and s and s.rm) then mini_remove(player); return end
+	local fc = rockmech.fem_cell and rockmech.fem_cell(rep.pos)
+	local s1, s3 = fc and fc.s1 or s.s1, fc and fc.s3 or s.s3
+	local rm = s.rm
+	local key = ("%.2f/%.2f/%s/%d"):format(s1, s3, rep.lith.name, rm.gsi)
+	local w = text_size(text)
+	local off = {x = 26 + w + 16 + 6, y = -18}
+	local m = minis[name] or {}
+	minis[name] = m
+	if m.hud then player:hud_change(m.hud, "offset", off) end
+	if m.key == key or m.busy then return end
+	m.busy = true
+	local mi = rep.lith.mi or 10
+	local png = M.draw({w = MINI_W, h = MINI_H, bg = string.char(244, 244, 240, 255), circles = {{s1, s3, M.COLOR.circle, 2}},
+		envs = {{pts = M.envelope(rm.sigci, mi, 1, 0.5, s1 * 1.3 + 1), color = M.COLOR.intact, dashed = true},
+			{pts = M.envelope(rm.sigci, rm.mb, rm.s, rm.a, s1 * 1.3 + 1), color = M.COLOR.mass}}})
+	M.send(name, png, function(fname)
+		m.busy = false
+		if minis[name] ~= m or not player:is_player() then return end
+		m.key = key
+		if m.hud then player:hud_change(m.hud, "text", fname)
+		else
+			m.hud = player:hud_add({type = "image", position = {x = 0.5, y = 0.5}, alignment = {x = 1, y = -1},
+				offset = off, scale = {x = 1, y = 1}, text = fname, z_index = 92})
+		end
+	end)
+end
+
 local function hud_remove(player)
 	local name = player:get_player_name()
 	local h = huds[name]
@@ -288,6 +328,7 @@ local function hud_remove(player)
 		player:hud_remove(h.txt)
 		huds[name] = nil
 	end
+	mini_remove(player)
 end
 
 -- 儀器的結果：顯示在泡泡裡（pos：指著的那一格，視線移開就收掉；nil：只看時間）
@@ -332,6 +373,7 @@ core.register_globalstep(function(dtime)
 		if a and (now > a.untl or (a.key and a.key ~= key)) then active[name], a = nil, nil end
 		if a then
 			hud_set(player, a.text)
+			mini_remove(player)
 		else
 			-- 自己會的能力：指著岩石或碎石就顯示（什麼都不會就不顯示）
 			local node = hud_enabled(player) and pos and core.get_node(pos)
@@ -345,10 +387,14 @@ core.register_globalstep(function(dtime)
 			elseif rubble or node and rockmech.lith_of_node[node.name] then
 				-- 指向改變時立即更新；同一格每 2 秒更新一次（周圍可能已被開挖）
 				if not h or h.key ~= key or (h.t or 0) > 2 then
-					local lines = rubble and rubble_lines(node, name) or fmt_report_lines(rockmech.stress_report(pos), name)
+					local rep = not rubble and rockmech.stress_report(pos)
+					local lines = rubble and rubble_lines(node, name) or fmt_report_lines(rep, name)
 					if #lines > 0 then
-						hud_set(player, table.concat(lines, "\n"))
+						local text = table.concat(lines, "\n")
+						hud_set(player, text)
 						huds[name].key, huds[name].t = key, 0
+						if rep and rockmech.can_see and rockmech.can_see(name, "mohr", true) then mini_set(player, rep, text)
+						else mini_remove(player) end
 					else
 						hud_remove(player)
 					end
@@ -364,6 +410,7 @@ end)
 
 core.register_on_leaveplayer(function(player)
 	huds[player:get_player_name()] = nil
+	minis[player:get_player_name()] = nil
 	active[player:get_player_name()] = nil
 end)
 

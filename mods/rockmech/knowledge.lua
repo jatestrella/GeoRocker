@@ -22,6 +22,8 @@ local ABILITIES = {
 	{key = "planning", label = TR("Mine planning"), research = "mine_planning"},
 	-- 赤平投影穩定性分析：只能考試學會（買不到、雇地質學家也不算）
 	{key = "kinematics", label = TR("Stereonet kinematic analysis"), exam_only = true},
+	-- Mohr 圓分析：準心旁顯示那一格的 Mohr 圓和強度包絡線；只能考試學會
+	{key = "mohr", label = TR("Mohr circle analysis"), exam_only = true},
 }
 local AB = {}
 for _, a in ipairs(ABILITIES) do AB[a.key] = a end
@@ -500,7 +502,80 @@ ANS: A
 ]]
 
 local SUBJECT = {["品位判讀"] = "grade", ["岩體分類"] = "rockmass", ["岩石力學"] = "mechanics", ["採礦規劃"] = "planning",
-	["赤平投影穩定性分析"] = "kinematics"}
+	["赤平投影穩定性分析"] = "kinematics", ["Mohr圓分析"] = "mohr"}
+-- Mohr 圓分析的預設題目
+local MOHR_BANK = [[
+[Mohr圓分析]
+Q: Mohr 圓的圓心和半徑分別是？
+A: 圓心 (σ1+σ3)/2、半徑 (σ1−σ3)/2
+B: 圓心 σ1、半徑 σ3
+C: 圓心 (σ1−σ3)/2、半徑 (σ1+σ3)/2
+D: 圓心 0、半徑 σ1
+ANS: A
+
+Q: σ1 = 10 MPa、σ3 = 4 MPa，最大剪應力是多少 MPa？
+NUM: 3
+TOL: 0
+UNIT: MPa
+
+Q: Mohr 圓碰到破壞包絡線代表？
+A: 應力達到強度，會破壞
+B: 岩石最安全
+C: 應力是零
+D: 包絡線要往下移
+ANS: A
+
+Q: σ1 不變、圍壓 σ3 增加，Mohr 圓會？
+A: 變小、離包絡線較遠（較穩定）
+B: 變大、更接近包絡線
+C: 不變
+D: 整個往左移
+ANS: A
+
+Q: 開挖面（臨空面）上 σ3 接近 0，Mohr 圓會？
+A: 左端在原點附近，最容易碰到包絡線
+B: 一定離包絡線很遠
+C: 變成一個點
+D: 移到負的那一側
+ANS: A
+
+Q: 孔隙水壓 u 增加時，Mohr 圓（以有效應力畫）會？
+A: 大小不變、往左移 u，更接近包絡線
+B: 往右移 u
+C: 變大一倍
+D: 不變
+ANS: A
+
+Q: Mohr-Coulomb 包絡線 τ = c + σn·tanφ 中，φ 是？
+A: 內摩擦角
+B: 節理傾角
+C: 坡角
+D: 圍壓
+ANS: A
+
+Q: Mohr-Coulomb 理論中，破壞面和 σ1 作用方向的夾角是？
+A: 45° − φ/2
+B: 45° + φ/2
+C: φ
+D: 90°
+ANS: A
+
+Q: 三維應力狀態（σ1、σ2、σ3）可以畫出幾個 Mohr 圓？
+NUM: 3
+TOL: 0
+
+Q: Hoek-Brown 的岩體包絡線比完整岩石的低，主要因為？
+A: GSI 反映節理和破碎，使 mb、s 降低
+B: 岩石的單位重比較大
+C: 地下水比較多
+D: 包絡線是隨便畫的
+ANS: A
+
+Q: σ1 = 20、σ3 = 10 MPa，最大剪應力作用面上的正應力是多少 MPa？
+NUM: 15
+TOL: 0
+UNIT: MPa
+]]
 -- 赤平投影穩定性分析的預設題目：questions.txt 沒有這一科時用這些（不改老師的檔案）
 local KIN_BANK = [[
 [赤平投影穩定性分析]
@@ -667,7 +742,8 @@ local function load_bank()
 	end
 	if not text:find("[採礦規劃]", 1, true) then text = text .. "\n" .. PLANNING_BANK end
 	if not text:find("[赤平投影穩定性分析]", 1, true) then text = text .. "\n" .. KIN_BANK end
-	local bank = {grade = {}, rockmass = {}, mechanics = {}, planning = {}, kinematics = {}}
+	if not text:find("[Mohr圓分析]", 1, true) then text = text .. "\n" .. MOHR_BANK end
+	local bank = {grade = {}, rockmass = {}, mechanics = {}, planning = {}, kinematics = {}, mohr = {}}
 	local subj, q
 	local function finish()
 		if q and subj and q.text and (q.num or (#q.opts >= 2 and q.ans)) then table.insert(bank[subj], q) end
@@ -1025,6 +1101,7 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 		rockmass = S("Buy a GSI chart, hire a geologist, or take the professor's exam"),
 		mechanics = S("Buy a geological compass, hire a geologist, or take the professor's exam"),
 		kinematics = S("Only by passing the professor's exam (cannot be bought or hired)"),
+		mohr = S("Only by passing the professor's exam (cannot be bought or hired)"),
 	}
 	sfinv.register_page("rockmech:profile", {
 		title = S("Profile"),
