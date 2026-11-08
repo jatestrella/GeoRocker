@@ -172,6 +172,14 @@ local function bar(x, y, w, job)
 		x, y, w, x, y, math.max(0.01, w * frac), x + w + 0.2, y + 0.18,
 		E(S("@1%  @2 left", tostring(math.floor(frac * 100)), mmss(job.left))))
 end
+-- 格子裡的進度條：字寫在條上，不會超出格子
+local function tile_bar(x, y, w, job)
+	local total = job.total or job.left
+	local frac = total > 0 and math.max(0, math.min(1, 1 - job.left / total)) or 1
+	return ("box[%g,%g;%g,0.45;#2a2a2a]box[%g,%g;%g,0.45;#3fbf5f]label[%g,%g;%s]"):format(
+		x, y, w, x, y, math.max(0.01, w * frac), x + 0.1, y + 0.22,
+		E(S("@1%  @2 left", tostring(math.floor(frac * 100)), mmss(job.left))))
+end
 
 local viewing = {}          -- 玩家名稱 → 正在看哪位研究員
 
@@ -198,8 +206,8 @@ local function form(name, who)
 			local x = 0.5 + col * TW
 			local active = job and job.key == it.key
 			-- 底框（正在研發：黃框；練滿：綠框）
-			out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(x - 0.1, y - 0.1, TW - 0.3, 3.3, active and "#806010" or maxed and "#2f5a2f" or "#2a2e34")
-			out[#out + 1] = ("box[%g,%g;%g,%g;#1e2228]"):format(x, y, TW - 0.5, 3.1)
+			out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(x - 0.1, y - 0.1, TW - 0.3, 3.8, active and "#806010" or maxed and "#2f5a2f" or "#2a2e34")
+			out[#out + 1] = ("box[%g,%g;%g,%g;#1e2228]"):format(x, y, TW - 0.5, 3.6)
 			local icon = ICON[it.key] and ICON[it.key]() or "blank.png"
 			out[#out + 1] = ("image_button[%g,%g;1.8,1.8;%s;go_%d;]"):format(x + (TW - 0.5 - 1.8) / 2, y + 0.15, E(icon), i)
 			-- 名稱、等級格子
@@ -208,7 +216,7 @@ local function form(name, who)
 			for k = 1, it.max do
 				out[#out + 1] = ("box[%g,%g;%g,0.22;%s]"):format(x + 0.15 + (k - 1) * pw, y + 2.6, pw - 0.06, k <= lv and "#f0c020" or "#4a4e54")
 			end
-			if active then out[#out + 1] = bar(x + 0.05, y + 2.95, TW - 0.6, job) end
+			if active then out[#out + 1] = tile_bar(x + 0.15, y + 2.95, TW - 0.8, job) end
 			-- 滑鼠移上去的說明
 			local tip = {S(it.label) .. "  Lv" .. lv .. "/" .. it.max, S(it.desc), S("Now: @1", it.value(acc))}
 			if maxed then tip[#tip + 1] = S("Max level")
@@ -218,10 +226,10 @@ local function form(name, who)
 			end
 			out[#out + 1] = ("tooltip[go_%d;%s;#101418;#ffffff]"):format(i, E(table.concat(tip, "\n")))
 			col = col + 1
-			if col >= 4 then col = 0; y = y + 3.6 end
+			if col >= 4 then col = 0; y = y + 4.1 end
 		end
 	end
-	if col > 0 then y = y + 3.6 end
+	if col > 0 then y = y + 4.1 end
 	-- 機械技工：修車
 	if who == "mechanic" then
 		local rj = repair_job(acc)
@@ -256,7 +264,9 @@ local function form(name, who)
 		out[#out + 1] = fs
 		y = y + 0.4 + h
 	end
-	out[#out + 1] = ("button_exit[6,%g;3,0.8;close;%s]"):format(math.max(y + 0.4, 8.6), E(S("Close")))
+	local by = math.max(y + 0.4, 8.6)
+	out[#out + 1] = ("button_exit[6,%g;3,0.8;close;%s]"):format(by, E(S("Close")))
+	out[1] = ("formspec_version[6]size[15,%g]"):format(by + 1.3)     -- 高度跟著內容
 	return table.concat(out)
 end
 rockmech.research_form_test = form      -- 測試用
