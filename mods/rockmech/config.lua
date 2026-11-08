@@ -107,6 +107,7 @@ config.shop = {
 	{key = "excavator_big", shop = "vehicle", item = "rockmech:excavator_big_item", label = TR("Mining excavator"), price = 200000},
 	{key = "loadout", shop = "civil", item = "rockmech:loadout", label = TR("Loadout bin"), price = 25000},
 	{key = "dump_hopper", shop = "civil", item = "rockmech:dump_hopper", label = TR("Dump hopper"), price = 12000},
+	{key = "dump_hopper_big", shop = "civil", item = "rockmech:dump_hopper_big", label = TR("Large dump hopper"), price = 30000},
 	-- 終極目標：買下時全服廣播（career.lua）
 	{key = "miner", shop = "vehicle", item = "rockmech:miner_item", label = TR("Surface miner"), price = 1500000, final = true},
 	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = TR("Excavator operator"), price = 0},

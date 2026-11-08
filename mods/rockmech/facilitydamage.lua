@@ -13,7 +13,7 @@ local HIT, CAP = 10, 60
 local SHELL = "rockmech:crack_shell"
 local CONTROLS = {
 	["rockmech:crusher"] = true, ["rockmech:crusher_big"] = true, ["rockmech:plant"] = true,
-	["rockmech:loadout"] = true, ["rockmech:dump_hopper"] = true,
+	["rockmech:loadout"] = true, ["rockmech:dump_hopper"] = true, ["rockmech:dump_hopper_big"] = true,
 }
 local CTRL_LIST = {}
 for n in pairs(CONTROLS) do CTRL_LIST[#CTRL_LIST + 1] = n end
@@ -39,6 +39,8 @@ local function bounds(pos)
 	local name = core.get_node(pos).name
 	if name == "rockmech:dump_hopper" then
 		return {x = pos.x + 0.5, y = pos.y + 0.5, z = pos.z + 0.5}, {x = 4, y = 2, z = 4}
+	elseif name == "rockmech:dump_hopper_big" then
+		return {x = pos.x + 0.5, y = pos.y + 0.5, z = pos.z + 0.5}, {x = 6, y = 2, z = 6}
 	elseif name == "rockmech:loadout" then
 		return {x = pos.x, y = pos.y + 2, z = pos.z}, {x = 3, y = 5, z = 3}
 	end
