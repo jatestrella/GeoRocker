@@ -39,7 +39,7 @@ core.register_tool(HAMMER, {
 		local rec = {x = p.x, y = p.y, z = p.z, r = R, lith = see(name, "rockmass") and lith.name or nil}
 		local n = rockmech.fieldbook_add_schmidt and rockmech.fieldbook_add_schmidt(user, rec)
 		if n then
-			tell(name, S("[Schmidt hammer] @1: R = @2 (recorded in the field notebook, @3 readings; left-click the notebook to see them)",
+			tell(name, S("[Schmidt hammer] @1: R = @2 (recorded in the field notebook, @3 readings; right-click the notebook to see them)",
 				core.pos_to_string(p), tostring(R), tostring(n)))
 		else
 			tell(name, S("[Schmidt hammer] @1: R = @2 (no field notebook in your inventory: not recorded)", core.pos_to_string(p), tostring(R)))

@@ -4,7 +4,7 @@
 -- 鑽完：孔口留一根套管（混凝土墊、橘色套管、管蓋），岩芯裝進藍色岩芯箱放在孔口旁邊的地上。
 --   岩芯箱比照碎石搬：左鍵捧起來（一次一個，不進背包），右鍵放下（可以疊起來當岩芯庫）。只有自己組（和老師）搬得動。
 --   野帳本（$10）：拿著對岩芯箱右鍵判讀（每公尺 LOG_SEC_PER_M 秒，要待在 LOG_STAY m 內、手上拿著），記進野帳本；
---   左鍵打開野帳本看記過的孔（最多 BOOK_MAX 孔）。記下來的內容照判讀的人「當時」的能力：
+--   右鍵（對岩芯箱以外的地方）打開野帳本看記過的孔（最多 BOOK_MAX 孔）。記下來的內容照判讀的人「當時」的能力：
 --   沒有岩體分類就記不了岩性、節理、RQD，沒有品位判讀就記不了品位（學會之後重新判讀同一箱補上）。
 -- 每公尺記錄：岩性、品位（param2）、穿過的節理條數；RQD 由節理頻率 λ（前後 1 m 的平均，條/m）用
 -- Priest & Hudson（1976）RQD = 100·e^(−0.1λ)·(0.1λ + 1) 換算（模型裡只有明確的節理，沒有次網格裂隙）。
@@ -724,7 +724,7 @@ box_spot = function(c)
 end
 
 ---------------------------------------------------------------------------
--- 野帳本：右鍵對岩芯箱判讀，左鍵翻開。記在物品 meta：logs = {{acc, n, rm, gr, by}, ...}、schmidt、plt
+-- 野帳本：右鍵對岩芯箱判讀，右鍵其他地方翻開。記在物品 meta：logs = {{acc, n, rm, gr, by}, ...}、schmidt、plt
 ---------------------------------------------------------------------------
 
 local function book_entries(stack) return core.deserialize(stack:get_meta():get_string("logs")) or {} end
@@ -1057,11 +1057,11 @@ core.register_globalstep(function(dtime)
 					for i, x in ipairs(entries) do if x.acc == e.acc and x.n == e.n then at = i end end
 					entries[at or (#entries + 1)] = e
 					stack:get_meta():set_string("logs", core.serialize(entries))
-					stack:get_meta():set_string("description", S("Field notebook (@1 / @2 holes)\nRight-click a core box to log it; left-click to see logged holes", tostring(#entries), tostring(BOOK_MAX)))
+					stack:get_meta():set_string("description", S("Field notebook (@1 / @2 holes)\nRight-click a core box to log it; right-click anywhere else to see logged holes", tostring(#entries), tostring(BOOK_MAX)))
 					p:set_wielded_item(stack)
 					stop_logging(name, (e.rm and e.gr)
-						and S("@1 logged: left-click to open the field notebook", bh_label(L.acc, L.n))
-						or S("@1 logged (some fields you cannot interpret were recorded as ?): left-click to open the field notebook", bh_label(L.acc, L.n)))
+						and S("@1 logged: right-click to open the field notebook", bh_label(L.acc, L.n))
+						or S("@1 logged (some fields you cannot interpret were recorded as ?): right-click to open the field notebook", bh_label(L.acc, L.n)))
 					open_book(p, stack, {acc = L.acc, n = L.n})
 				end
 			end
@@ -1071,7 +1071,7 @@ end)
 core.register_on_leaveplayer(function(player) logging[player:get_player_name()] = nil; book_state[player:get_player_name()] = nil end)
 
 core.register_craftitem(BOOK, {
-	description = S("Field notebook\nRight-click a core box to log it; left-click to read"),
+	description = S("Field notebook\nRight-click a core box to log it; right-click anywhere else to read"),
 	short_description = S("Field notebook"),
 	inventory_image = "[fill:16x16:#00000000^[fill:11x14:3,1:#d8c048^[fill:2x14:3,1:#8a7020^[fill:7x1:6,4:#5a4a10^[fill:7x1:6,7:#5a4a10^[fill:5x1:6,10:#5a4a10",
 	stack_max = 1,
@@ -1082,14 +1082,14 @@ core.register_craftitem(BOOK, {
 			local un = core.get_node(pointed.under)
 			local nd = core.registered_nodes[un.name]
 			if nd and nd.on_rightclick then return nd.on_rightclick(pointed.under, un, placer, itemstack, pointed) end
-			rockmech.notify(placer:get_player_name(), S("[Field notebook] Right-click a core box to log it"))
+			open_book(placer, itemstack)
 		end
 		return itemstack
 	end,
-	on_use = function(itemstack, user)
-		if not user then return end
-		local name = user:get_player_name()
-		open_book(user, itemstack)
+	-- 對空中右鍵：翻開
+	on_secondary_use = function(itemstack, user)
+		if user and user:is_player() then open_book(user, itemstack) end
+		return itemstack
 	end,
 })
 

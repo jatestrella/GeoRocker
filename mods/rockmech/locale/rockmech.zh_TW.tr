@@ -187,10 +187,10 @@ Tear out this page=撕掉這頁
 The core box was moved; logging interrupted=岩芯箱被搬走了，判讀中斷
 You walked away (or are not holding the field notebook); logging interrupted=人走開了（或手上沒拿野帳本），判讀中斷
 Logging @1   @2 / @3 m=判讀 @1　@2 / @3 m
-Field notebook (@1 / @2 holes)@nRight-click a core box to log it; left-click to see logged holes=野帳本（@1 / @2 孔）@n右鍵對岩芯箱判讀，左鍵看記過的孔
-@1 logged: left-click to open the field notebook=@1 記好了：左鍵打開野帳本看
-@1 logged (some fields you cannot interpret were recorded as ?): left-click to open the field notebook=@1 記好了（有些欄位不會判讀，記成 ?）：左鍵打開野帳本看
-Field notebook@nRight-click a core box to log it; left-click to read=野帳本@n對岩芯箱右鍵判讀；左鍵翻閱
+Field notebook (@1 / @2 holes)@nRight-click a core box to log it; right-click anywhere else to see logged holes=野帳本（@1 / @2 孔）@n右鍵對岩芯箱判讀，右鍵其他地方看記過的孔
+@1 logged: right-click to open the field notebook=@1 記好了：右鍵打開野帳本看
+@1 logged (some fields you cannot interpret were recorded as ?): right-click to open the field notebook=@1 記好了（有些欄位不會判讀，記成 ?）：右鍵打開野帳本看
+Field notebook@nRight-click a core box to log it; right-click anywhere else to read=野帳本@n對岩芯箱右鍵判讀；右鍵其他地方翻閱
 [Field notebook] Right-click a core box to log it=[野帳本] 對著岩芯箱按右鍵判讀
 Core drilling @1 / @2 m @3=鑽岩芯 @1 / @2 m @3
 [Core drilling] Nothing was drilled (@1)=[岩芯鑽探] 沒鑽到東西（@1）
@@ -710,7 +710,7 @@ Back to camp=回營地
 ### testing.lua
 Schmidt hammer@nRight-click a rock face=施密特錘@n對岩面右鍵
 [Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=[施密特錘] 要敲在完整的岩面上（碎石、土敲不出讀數）
-[Schmidt hammer] @1: R @= @2 (recorded in the field notebook, @3 readings; left-click the notebook to see them)=[施密特錘] @1：R @= @2（已記進野帳本，共 @3 筆；左鍵打開野帳本看）
+[Schmidt hammer] @1: R @= @2 (recorded in the field notebook, @3 readings; right-click the notebook to see them)=[施密特錘] @1：R @= @2（已記進野帳本，共 @3 筆；右鍵打開野帳本看）
 [Schmidt hammer] @1: R @= @2 (no field notebook in your inventory: not recorded)=[施密特錘] @1：R @= @2（背包裡沒有野帳本，沒有記下來）
 
 ### timber.lua
@@ -1576,7 +1576,6 @@ Written into the field notebook (@1 joint readings; right-click the air with the
 Reading=讀數
 Flat jack=扁千斤頂
 Borehole stress cell=孔內應力計
-Flat jack@nRight-click a rock wall: stress across a vertical slot (horizontal stress); Shift: horizontal slot (vertical stress)=扁千斤頂@n右鍵岩壁：切垂直槽量水平應力；按住 Shift：切水平槽量垂直應力
 Borehole stress cell@nRight-click a drill hole: in-situ stresses at the bottom of the hole=孔內應力計@n右鍵鑽孔：量孔底的地應力
 Use it on a rock face=要用在岩面上
 Use it on a wall, not the floor or roof=要用在岩壁上，不是地面或頂板
@@ -1589,3 +1588,7 @@ Written into the field notebook=記進野帳本了
 No field notebook: not recorded=沒有野帳本，沒記下來
 Put it into an empty drill hole (drill one with the rock drill)=要放進空的鑽孔（先用鑿岩機鑽孔）
 Stress cell @1 m deep: σv @2  σH @3  σh @4 MPa, σH azimuth @5°=應力計 孔深 @1 m：σv @2  σH @3  σh @4 MPa，σH 方位 @5°
+Flat jack@nRight-click a rock wall to measure; E switches between a vertical slot (horizontal stress) and a horizontal slot (vertical stress)=扁千斤頂@n右鍵岩壁量測；E 切換垂直槽（量水平應力）／水平槽（量垂直應力）
+Flat jack (horizontal slot: vertical stress)=扁千斤頂（水平槽：量垂直應力）
+Horizontal slot: measures vertical stress=水平槽：量垂直應力
+Vertical slot: measures horizontal stress along the wall=垂直槽：量沿岩壁的水平應力

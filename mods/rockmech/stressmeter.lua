@@ -1,7 +1,7 @@
 -- rockmech/stressmeter.lua
 -- 量應力的兩樣工具（工具室管理員賣），讀數記進野帳本的「野外調查」頁、也顯示在準心右上：
 --   扁千斤頂（flat jack）：右鍵牆面，在岩面切一道槽、放進扁千斤頂加壓到槽口回到原位，讀到「垂直於槽」的應力。
---     平常切垂直槽 → 量沿著牆面的水平應力；蹲下（Shift）切水平槽 → 量垂直應力。
+--     垂直槽 → 量沿著牆面的水平應力；水平槽 → 量垂直應力。拿著按 E 切換槽的方向（記在這把扁千斤頂上）。
 --     讀到的就是那一格的初始地應力（不算開挖造成的應力集中，保持簡單）。
 --   孔內應力計（undercoring）：右鍵一個鑽孔（鑿岩機鑽的），把應力計放到孔底，讀孔底的三向應力 σv、σH、σh 和 σH 方位。
 --     讀到的是孔底那一格的初始地應力。
@@ -24,7 +24,7 @@ local function record(player, pos, lith, txt)
 end
 
 core.register_tool(FLATJACK, {
-	description = S("Flat jack\nRight-click a rock wall: stress across a vertical slot (horizontal stress); Shift: horizontal slot (vertical stress)"),
+	description = S("Flat jack\nRight-click a rock wall to measure; E switches between a vertical slot (horizontal stress) and a horizontal slot (vertical stress)"),
 	short_description = S("Flat jack"),
 	inventory_image = "[fill:16x16:#00000000^[fill:12x3:2,7:#b8bcc2^[fill:12x1:2,6:#8a8e92^[fill:12x1:2,10:#8a8e92^[fill:2x6:13,4:#3a3a3a^[fill:3x2:12,2:#c03020",
 	stack_max = 1,
@@ -35,7 +35,7 @@ core.register_tool(FLATJACK, {
 		if n.y ~= 0 then bubble(player, {S("Use it on a wall, not the floor or roof")}, pos); return itemstack end
 		local r = rockmech.stress_report(pos)
 		local i = r.init
-		local horizontal_slot = player:get_player_control().sneak
+		local horizontal_slot = itemstack:get_meta():get_string("slot") == "h"
 		local val, what
 		if horizontal_slot then
 			val, what = noisy(i.sv or 0), S("vertical stress")
@@ -52,6 +52,27 @@ core.register_tool(FLATJACK, {
 		return itemstack
 	end,
 })
+
+-- E：切換槽的方向（拿著扁千斤頂、沒坐在車上；按下去那一下才算）
+local e_down = {}
+core.register_globalstep(function()
+	for _, pl in ipairs(core.get_connected_players()) do
+		local name = pl:get_player_name()
+		local e = pl:get_player_control().aux1
+		if e and not e_down[name] and not pl:get_attach() then
+			local st = pl:get_wielded_item()
+			if st:get_name() == FLATJACK then
+				local h = st:get_meta():get_string("slot") ~= "h"
+				st:get_meta():set_string("slot", h and "h" or "")
+				st:get_meta():set_string("description", h and S("Flat jack (horizontal slot: vertical stress)") or "")
+				pl:set_wielded_item(st)
+				bubble(pl, {h and S("Horizontal slot: measures vertical stress") or S("Vertical slot: measures horizontal stress along the wall")})
+			end
+		end
+		e_down[name] = e
+	end
+end)
+core.register_on_leaveplayer(function(pl) e_down[pl:get_player_name()] = nil end)
 
 core.register_tool(CELL, {
 	description = S("Borehole stress cell\nRight-click a drill hole: in-situ stresses at the bottom of the hole"),
