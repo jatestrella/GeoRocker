@@ -47,6 +47,63 @@ local NAME_MAX = 20          -- 名字最多幾個字
 
 -- Priest & Hudson：節理頻率 λ（條/m）→ RQD（%）
 local function rqd_of(lambda) return 100 * math.exp(-0.1 * lambda) * (0.1 * lambda + 1) end
+-- 反過來：RQD → λ（二分法）
+local function lambda_of(rqd)
+	if rqd >= 99.9 then return 0 end
+	local lo, hi = 0, 80
+	for _ = 1, 40 do
+		local m = (lo + hi) / 2
+		if rqd_of(m) > rqd then lo = m else hi = m end
+	end
+	return (lo + hi) / 2
+end
+local function frac(n, i, k) local v = math.sin(n * 12.9898 + i * 78.233 + k * 37.719) * 43758.5453; return v - math.floor(v) end
+
+-- 岩芯第 i 公尺的裂面：
+--   細線 = 方塊尺度的小節理：RQD 由那裡的 GSI 反推（GSI = 52·r/(1+r) + RQD/2，r = 岩性的 Jr/Ja），
+--          換成頻率 λ（Priest & Hudson），用指數分布的間距排位置（同一孔、同一公尺每次都一樣）
+--   粗線 = 大尺度的節理組（類似斷層）穿過鑽孔的位置
+-- 回傳 fine = {位置 0..1}, thick = {位置}, rqd（照畫出來的岩芯段算：≥ 10 cm 的段加起來）
+local FINE_MAX = 30
+local core_cache = setmetatable({}, {__mode = "k"})
+local function core_breaks(bh, i)
+	local r = bh.rows[i]
+	local c = core_cache[r]
+	if c then return c end
+	local thick = {}
+	for j = 1, math.min(r.joints or 0, 8) do thick[#thick + 1] = 0.1 + 0.8 * frac(bh.n, i, j) end
+	local fine = {}
+	local lith = rockmech.cfg.lithologies[r.lith]
+	if lith and rockmech.collapse and rockmech.collapse.rock then
+		local gsi = rockmech.collapse.rock.gsi(r.lith, bh.pos.y - i)
+		local q = (lith.jr or 2) / (lith.ja or 1)
+		local target = math.max(0, math.min(100, 2 * (gsi - 52 * q / (1 + q))))
+		local lam = lambda_of(target)
+		if lam > 0 then
+			local x, k = 0, 0
+			while #fine < FINE_MAX do
+				k = k + 1
+				x = x - math.log(math.max(1e-6, frac(bh.n, i, 100 + k))) / lam
+				if x >= 1 then break end
+				fine[#fine + 1] = x
+			end
+		end
+	end
+	local all = {0, 1}
+	for _, p in ipairs(fine) do all[#all + 1] = p end
+	for _, p in ipairs(thick) do all[#all + 1] = p end
+	table.sort(all)
+	local sum = 0
+	for k = 2, #all do
+		local len = all[k] - all[k - 1]
+		if len >= 0.1 then sum = sum + len end
+	end
+	c = {fine = fine, thick = thick, rqd = 100 * sum}
+	core_cache[r] = c
+	return c
+end
+rockmech.core_breaks = core_breaks        -- 測試用
+local function rqd_txt(bh, i) return ("%.0f%%"):format(core_breaks(bh, i).rqd) end
 
 ---------------------------------------------------------------------------
 -- 柱狀圖
@@ -79,12 +136,6 @@ local function log_form(name, bh, rm, gr)
 		"]label[4.4,1.2;" .. core.formspec_escape(S("Lithology")) .. "]label[7.4,1.2;" .. core.formspec_escape(S("Grade")) ..
 		"]label[9.6,1.2;" .. core.formspec_escape(S("Joints")) .. "]label[11.6,1.2;RQD]"}
 	local rows = bh.rows or {}
-	-- 節理頻率：前後 1 m 平均
-	local function lambda(i)
-		local s, n = 0, 0
-		for j = math.max(1, i - 1), math.min(#rows, i + 1) do s = s + (rows[j].joints or 0); n = n + 1 end
-		return n > 0 and s / n or 0
-	end
 	-- 資料列放在捲動區（60 m 的孔有 60 行，視窗放不下）；表頭和關閉鈕固定
 	local H = 0.34
 	local TOP, VIEW = 1.5, 9.5          -- 捲動區的上緣、高度
@@ -103,7 +154,7 @@ local function log_form(name, bh, rm, gr)
 		out[#out + 1] = ("label[7.4,%g;%s]"):format(y + H / 2, core.formspec_escape(g))
 		local soil = r.lith == "soil"
 		out[#out + 1] = ("label[9.6,%g;%s]"):format(y + H / 2, soil and "—" or rm and tostring(r.joints or 0) or "?")
-		out[#out + 1] = ("label[11.6,%g;%s]"):format(y + H / 2, soil and "—" or rm and ("%.0f%%"):format(rqd_of(lambda(i))) or "?")
+		out[#out + 1] = ("label[11.6,%g;%s]"):format(y + H / 2, (soil or r.lith == "rubble") and "—" or rm and rqd_txt(bh, i) or "?")
 	end
 	if note then
 		out[#out + 1] = ("label[0.5,%g;%s]"):format(0.1 + #rows * H + 0.2, core.formspec_escape(
@@ -481,8 +532,6 @@ local function close_for(name)
 end
 
 -- 0..1 的假亂數（同一孔同一公尺每次一樣）：節理裂縫畫在那一公尺的哪裡、碎石段的碎塊
-local function frac(n, i, k) local v = math.sin(n * 12.9898 + i * 78.233 + k * 37.719) * 43758.5453; return v - math.floor(v) end
-
 -- 岩芯的外觀：鑽到的是什麼方塊就畫什麼方塊的貼圖（礦石方塊再乘上那一格品位的顏色，跟世界裡看到的一樣）
 local PLT_NODE, PLT_R = "rockmech:point_load", 3
 local cb_state = {}                        -- 玩家名稱 → {sel = 選的那一公尺, scroll = 捲軸位置, last = 上一次試驗的結果}
@@ -532,11 +581,6 @@ local function corebox_form(name, bh, acc, pos)
 			tostring(bh.pos.x), tostring(bh.pos.y), tostring(bh.pos.z), tostring(bh.depth)))),
 		("box[0.3,%g;19.4,%g;#2a62c8]"):format(TOP - 0.1, VIEW + 0.2),
 		("scroll_container[0.3,%g;19.4,%g;cb_scroll;vertical;0.1]"):format(TOP, VIEW)}
-	local function lambda(i)
-		local s, c = 0, 0
-		for j = math.max(1, i - 1), math.min(#rows, i + 1) do s = s + (rows[j].joints or 0); c = c + 1 end
-		return c > 0 and s / c or 0
-	end
 	local buttons = {}
 	for k = 0, nrow - 1 do
 		local y0 = k * RH
@@ -570,9 +614,13 @@ local function corebox_form(name, bh, acc, pos)
 				local nq = math.max(1, math.floor(L / ch + 0.5))
 				out[#out + 1] = ("image[%g,%g;%g,%g;%s]"):format(x + 0.04, cy, L, ch, esc(strip_tex(seg_tex(r), nq)))
 				out[#out + 1] = ("box[%g,%g;%g,0.06;#ffffff28]"):format(x + 0.04, cy + 0.1, L)
-				for j = 1, math.min(r.joints or 0, 8) do
-					local jx = x + 0.2 + (MW - 0.4) * frac(bh.n, i, j)
-					out[#out + 1] = ("box[%g,%g;0.06,%g;#141414]"):format(jx, cy, ch)
+				-- 裂面：細線是小節理（RQD），粗線是大尺度的節理組
+				local br = core_breaks(bh, i)
+				for _, p in ipairs(br.fine) do
+					out[#out + 1] = ("box[%g,%g;0.025,%g;#1a1a1acc]"):format(x + 0.04 + L * p, cy, ch)
+				end
+				for _, p in ipairs(br.thick) do
+					out[#out + 1] = ("box[%g,%g;0.1,%g;#0a0a0a]"):format(x + 0.04 + L * p - 0.05, cy - 0.04, ch + 0.08)
 				end
 			end
 			-- 點一段岩芯：選它（上面再疊一個透明的按鈕）
@@ -582,7 +630,7 @@ local function corebox_form(name, bh, acc, pos)
 				out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.27, esc(lith_label(r.lith)))
 				if not crumbly(r) then
 					out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.6,
-						esc(S("RQD @1%  joints @2", ("%.0f"):format(rqd_of(lambda(i))), tostring(r.joints or 0))))
+						esc(S("RQD @1  joints @2", rqd_txt(bh, i), tostring(r.joints or 0))))
 				end
 				if is_ore or r.grade then
 					out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.93, esc((gr and r.grade)
@@ -902,11 +950,6 @@ local function core_page(out, h, stack)
 	local rows = b.rows or {}
 	local plt = plt_by_metre(stack, h.acc, h.n)
 	local K = rockmech.PLT_K or 22
-	local function lambda(i)
-		local s, c = 0, 0
-		for j = math.max(1, i - 1), math.min(#rows, i + 1) do s = s + (rows[j].joints or 0); c = c + 1 end
-		return c > 0 and s / c or 0
-	end
 	out[#out + 1] = ("scroll_container[0,%g;%g,%g;bk_scroll;vertical;0.1]"):format(BODY_Y, BW, BODY_H)
 	for i, r in ipairs(rows) do
 		local y = (i - 1) * LINE
@@ -917,7 +960,7 @@ local function core_page(out, h, stack)
 		local p = plt[i - 1]
 		local cells = {("%d–%d"):format(i - 1, i), nil, rm and lith_label(r.lith) or "?", g,
 			soil and "—" or rm and tostring(r.joints or 0) or "?",
-			soil and "—" or rm and ("%.0f%%"):format(rqd_of(lambda(i))) or "?",
+			(soil or r.lith == "rubble") and "—" or rm and rqd_txt(b, i) or "?",
 			p and ("%.2f"):format(p.sum / p.c) .. (p.c > 1 and (" ×" .. p.c) or "") or "",
 			p and ("%.0f"):format(K * p.sum / p.c) or ""}
 		for k = 1, 8 do

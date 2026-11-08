@@ -60,6 +60,14 @@ config.lithologies.coal = {
 	rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 2.0,
 }
 
+-- 方塊尺度的小節理（方塊 = 岩體，裡面的小節理只用 GSI 代表）的面況：Q 系統的 Jr、Ja。
+-- 只用來把 GSI 換成岩芯看得到的 RQD（Hoek、Carter & Diederichs 2013：GSI = 52·(Jr/Ja)/(1 + Jr/Ja) + RQD/2），不影響力學。
+-- 沒列的岩性用 Jr 2、Ja 1
+for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}}) do
+	local l = config.lithologies[key]
+	if l then l.jr, l.ja = v[1], v[2] end
+end
+
 -- 礦石：每一列是一種礦石和它混合的廢石。param2 1..255 = 礦石佔的比例（品位），0 = 全是廢石。
 --   lith    礦石的岩性；waste：混合的廢石是哪種岩性的碎石（同一格會合併，品位下降）
 --   pure    純礦石的顏色；waste_color：廢石的顏色（未破碎的方塊用兩者之間的顏色）
