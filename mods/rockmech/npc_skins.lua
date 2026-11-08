@@ -150,6 +150,35 @@ do
 	SKINS.civil = p.done()
 end
 
+-- 地質技師：綠色安全帽、卡其工作襯衫、多口袋背心（插著放大鏡和筆）、工作褲
+do
+	local p = painter()
+	p.head("#4a3428", 2)
+	p.hat("#2f8a3f", 2)
+	p.top("#c8b890")
+	p.r(16, 20, 24, 10, "#6a7a48")                                   -- 背心
+	p.r(23, 20, 2, 10, "#c8b890")                                    -- 前襟
+	p.r(20, 22, 3, 3, "#556238"); p.r(25, 22, 3, 3, "#556238")       -- 口袋
+	p.r(21, 21, 1, 2, "#e8e8e8")                                     -- 筆
+	p.r(28, 20, 4, 10, "#6a7a48"); p.r(32, 20, 8, 10, "#6a7a48")
+	p.pants("#7a6a4a", "#3a2a18")
+	SKINS.geo = p.done()
+end
+
+-- 大地技師：藍色安全帽、深藍襯衫、橘色反光背心、深色長褲
+do
+	local p = painter()
+	p.head("#3a2a20", 2)
+	p.hat("#1f5fbf", 2)
+	p.top("#2a3a5a")
+	p.r(16, 20, 24, 10, "#f08020")                                   -- 反光背心
+	p.r(23, 20, 2, 10, "#2a3a5a")                                    -- 前襟
+	p.r(16, 26, 24, 1, "#e0e0e0"); p.r(28, 26, 12, 1, "#e0e0e0")     -- 反光條
+	p.r(28, 20, 4, 10, "#f08020"); p.r(32, 20, 8, 10, "#f08020")
+	p.pants("#262a30", "#1a1a1a")
+	SKINS.geotech = p.done()
+end
+
 function rockmech.npc_skin(role) return SKINS[role] or "character.png" end
 
 ---------------------------------------------------------------------------
@@ -197,6 +226,12 @@ local DRESS = {
 		{bone = "Arm_Right", pos = {x = 0, y = 5.5, z = 3}, rot = {x = -90, y = 225, z = 90}, item = "rockmech:geo_hammer"},
 	},
 	vehicle = HARDHAT("#f4f4f0"),
+	geo = (function()
+		local t = HARDHAT("#2f8a3f")
+		t[#t + 1] = {bone = "Arm_Right", pos = {x = 0, y = 5.5, z = 3}, rot = {x = -90, y = 225, z = 90}, item = "rockmech:geo_hammer"}
+		return t
+	end)(),
+	geotech = HARDHAT("#1f5fbf"),
 	operator = HARDHAT("#f0c020"),
 	blast = HARDHAT("#c02020"),
 	mechanic = (function()

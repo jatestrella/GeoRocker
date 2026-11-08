@@ -484,8 +484,13 @@ local BOOTHS = {
 		color = "#ffd060", tint = "#806010", sit = true},
 	blast = {entity = "rockmech:vendor_blast", title = S("Blasting Supervisor"), sells = S("Drilling · explosives · charging"),
 		color = "#ff8060", tint = "#c03020", sit = false},
-	tools = {entity = "rockmech:vendor_tools", title = S("Tool Room Keeper"), sells = S("Hand tools · support · instruments"),
+	tools = {entity = "rockmech:vendor_tools", title = S("Tool Room Keeper"), sells = S("Hand tools · timber · drones · safety"),
 		color = "#a0e080", tint = "#407020", sit = true},
+	-- 地質技師、大地技師：也在貨櫃辦公室 2 樓，跟採礦技師坐一排
+	geo = {entity = "rockmech:vendor_geo", title = S("Geology Technician"), sells = S("Geological instruments"),
+		color = "#c0e0a0", tint = "#507030", sit = true},
+	geotech = {entity = "rockmech:vendor_geotech", title = S("Geotechnical Engineer"), sells = S("Rock testing · in-situ stress · monitoring · support"),
+		color = "#a0d0ff", tint = "#204a80", sit = true},
 }
 local shop_kind = {}        -- 玩家名稱 → 正在看哪一攤（nil：全部）
 -- 給 research.lua：其他 NPC（研究員）也登記到 BOOTHS，由 ensure_vendors 一起補人；帳篷的 z、攤主位置的 storage 鍵
@@ -796,22 +801,25 @@ end
 local OFFICE_DX, OFFICE_Z = 27, -10
 rockmech.career_office_dx = OFFICE_DX
 
--- 2 樓的擺設：門在 +dx 那一頭（dx = RX）。採礦技師坐在 dx = 1、面向門，前面一排辦公桌（dx = 2），
--- 跟門之間留兩格走道；背後（dx = −1）一面設計圖板，兩邊櫃子。回傳採礦技師的位置（本地座標）
-local CIVIL_AT = {dx = 1, dz = 0}
+-- 2 樓的擺設：門在 +dx 那一頭（dx = RX）。三位技師坐成一排（dx = 1）、面向門：中間採礦技師、兩邊地質技師和大地技師；
+-- 前面一整排辦公桌（dx = 2），跟門之間留兩格走道；背後（dx = −1）一面設計圖板，西邊櫃子。
+local OFFICE_NPC = {civil = {dx = 1, dz = 0}, geo = {dx = 1, dz = -2}, geotech = {dx = 1, dz = 2}}
 function rockmech.career_office_2f(set)
-	for dz = -1, 1 do set(2, 5, dz, "rockmech:camp_table") end
+	for dz = -2, 2 do set(2, 5, dz, "rockmech:camp_table") end
 	set(2, 6, 0, "rockmech:camp_papers"); set(2, 6, -1, "rockmech:camp_helmets")
-	set(1, 5, 0, "rockmech:camp_chair", 1)                         -- 椅子轉向門
+	set(2, 6, 1, "rockmech:camp_papers")
+	for _, a in pairs(OFFICE_NPC) do set(a.dx, 5, a.dz, "rockmech:camp_chair", 1) end    -- 椅子轉向門
 	for dz = -1, 1 do set(-1, 5, dz, "rockmech:camp_blackboard", 1); set(-1, 6, dz, "rockmech:camp_blackboard", 1) end
 	set(-4, 5, -2, "rockmech:camp_shelf"); set(-4, 6, -2, "rockmech:camp_shelf"); set(-4, 5, 2, "rockmech:camp_shelf")
 end
--- 採礦技師的攤位（坐在 2 樓椅子上、面向門）
-local function civil_spot(at, y)
-	local p, q = at(CIVIL_AT.dx, 0, CIVIL_AT.dz), at(CIVIL_AT.dx + 1, 0, CIVIL_AT.dz)
+-- 2 樓技師的攤位（坐在椅子上、面向門）：kind = civil／geo／geotech
+local function office_spot(kind, at, y)
+	local a = OFFICE_NPC[kind]
+	local p, q = at(a.dx, 0, a.dz), at(a.dx + 1, 0, a.dz)
 	local d = {x = q.x - p.x, z = q.z - p.z}
-	return {kind = "civil", pos = {x = p.x, y = y + 5.05, z = p.z}, yaw = math.atan2 and math.atan2(-d.x, d.z) or math.atan(-d.x, d.z)}
+	return {kind = kind, pos = {x = p.x, y = y + 5.05, z = p.z}, yaw = math.atan2 and math.atan2(-d.x, d.z) or math.atan(-d.x, d.z)}
 end
+local function civil_spot(at, y) return office_spot("civil", at, y) end
 rockmech.career_civil_spot = civil_spot
 
 -- 2 樓門外的鋼樓梯：平台（h 4，頂面跟 2 樓地板同高）＋四階樓梯從地面往 −dz 爬，最上面那階頂面跟平台一樣高
@@ -882,8 +890,9 @@ local function build_market(x0)
 		local p = at(bx, 0, 1)
 		list[#list + 1] = {kind = kind, pos = {x = p.x, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = p.z}, yaw = FACE_YAW}
 	end
-	list[#list + 1] = civil_spot(at, y)       -- 採礦技師（2 樓的椅子上、面向門）
+	for kind in pairs(OFFICE_NPC) do list[#list + 1] = office_spot(kind, at, y) end   -- 2 樓的三位技師（椅子上、面向門）
 	storage:set_string("stairs4:" .. x0, "1")   -- 新版的樓梯和擺設（不用再補）
+	storage:set_string("office3:" .. x0, "1")   -- 2 樓三位技師
 	storage:set_string("yard2:" .. x0, "1")     -- 新的交車區在 camp_area 裡，蓋營地時一起整地
 	storage:set_string(VENDOR_SPOTS, core.serialize(list))
 end
@@ -1146,6 +1155,32 @@ local function fix_stairs(x0)
 	if rockmech.career_reset_vendors then rockmech.career_reset_vendors() end
 	core.log("action", ("[rockmech] 營地 x = %d 的 2 樓：樓梯補成四階、辦公桌面向門"):format(x0))
 end
+
+-- 已經有 2 樓的營地：擺設換成三位技師一排（加地質技師、大地技師）
+local function office3(x0)
+	local cx, cz = x0 + OFFICE_DX, OFFICE_Z
+	local y
+	for yy = -30, 40 do
+		if core.get_node({x = cx, y = yy, z = cz}).name == "rockmech:office_floor" then y = yy; break end
+	end
+	storage:set_string("office3:" .. x0, "1")
+	if not y or core.get_node({x = cx, y = y + 4, z = cz}).name ~= "rockmech:office_floor" then return end   -- 沒有 2 樓
+	local set, at = rockmech.career_placer(cx, cz, y)
+	for dx = -MARKET_RX + 1, MARKET_RX - 1 do for dz = -MARKET_RZ + 1, MARKET_RZ - 1 do
+		for h = 5, 6 do set(dx, h, dz, "air") end
+	end end
+	rockmech.career_office_2f(set)
+	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
+	local c = at(0, 0, 0)
+	local keep = {}
+	for _, sp in ipairs(list) do
+		if not (OFFICE_NPC[sp.kind] and math.abs(sp.pos.x - c.x) < 8 and math.abs(sp.pos.z - c.z) < 8) then keep[#keep + 1] = sp end
+	end
+	for kind in pairs(OFFICE_NPC) do keep[#keep + 1] = office_spot(kind, at, y) end
+	storage:set_string(VENDOR_SPOTS, core.serialize(keep))
+	if rockmech.career_reset_vendors then rockmech.career_reset_vendors() end
+	core.log("action", ("[rockmech] 營地 x = %d 的 2 樓：加上地質技師、大地技師"):format(x0))
+end
 if cfg.career then
 	core.after(3, function()
 		local sites = {}
@@ -1156,11 +1191,13 @@ if cfg.career then
 			end
 		end
 		for _, x0 in ipairs(sites) do
-			if storage:get_string("stairs4:" .. x0) == "" or storage:get_string("yard2:" .. x0) == "" then
+			if storage:get_string("stairs4:" .. x0) == "" or storage:get_string("yard2:" .. x0) == ""
+					or storage:get_string("office3:" .. x0) == "" then
 				local a, b = camp_area(x0)
 				core.emerge_area(a, b, function(_, _, rem)
 					if rem > 0 then return end
 					if storage:get_string("stairs4:" .. x0) == "" then fix_stairs(x0) end
+					if storage:get_string("office3:" .. x0) == "" then office3(x0) end
 					-- 交車區搬到南邊（delivery.lua 的 YARD：x0+10..x0+36、z −54..−36）：舊營地當初沒整到那裡，補整一次
 					if storage:get_string("yard2:" .. x0) == "" then
 						storage:set_string("yard2:" .. x0, "1")

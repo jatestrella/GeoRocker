@@ -20,6 +20,16 @@ return {
 		S("Tap the rock with a Schmidt hammer first."),
 		S("Anything small, I've got it."),
 	},
+	["rockmech:vendor_geo"] = {
+		S("Measure the joints before you dig."),
+		S("Keep everything in the field notebook."),
+		S("The core never lies."),
+	},
+	["rockmech:vendor_geotech"] = {
+		S("Test the rock first, then design the support."),
+		S("Bolt it before it moves."),
+		S("A prism tells you a slope is moving long before you see it."),
+	},
 	["rockmech:vendor_civil"] = {
 		S("Crushers, plants, belts, ventilation: I design them all."),
 		S("A hopper needs flat ground."),
