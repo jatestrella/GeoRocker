@@ -325,7 +325,10 @@ local function remove_parts(self)
 	for _, o in ipairs(self.part_list or {}) do
 		if o:get_pos() then o:remove() end
 	end
-	self.part_list = nil
+	for _, o in ipairs(self.inner_list or {}) do
+		if o:get_pos() then o:remove() end
+	end
+	self.part_list, self.inner_list, self.inner_key = nil, nil, nil
 end
 -- 履帶滾動：履帶零件（貼圖是 V.track_tex 裡的）側面、頂面有灰色細線，跟著那一側履帶走的距離往前、往後移。
 -- 轉彎時左右兩條速度不同（原地迴轉時方向相反）。一圈 TRACK_FRAMES 格，車子動了才換貼圖
@@ -387,12 +390,44 @@ local function spawn_parts(self, parts)
 		end
 		if o then
 			o:set_properties({visual_size = pt.size, textures = pt.tex})
-			-- 駕駛室：車窗半透明，看得到裡面的人。只畫外面那一面（背面不畫）：坐在駕駛室裡往外看不會被自己的車身擋住
-			if pt.alpha then o:set_properties({use_texture_alpha = true, backface_culling = true}) end
 			o:set_attach(self.object, "", {x = pt.pos.x * 10, y = pt.pos.y * 10, z = pt.pos.z * 10}, pt.rot or {x = 0, y = 0, z = 0})
+			-- 駕駛室（車窗半透明，看得到裡面的人）：這一份只畫外面那一面，坐在車上往外看不會被自己的車身擋住；
+			-- 再掛一份略小、正反兩面都畫的，只給車外的人看（透過車窗看得到駕駛室裡面的牆，不然像敞篷車）。
+			-- 看得到的人用 set_observers 分開（V.cab_observers）；掛在上面那份身上，跟著它動
+			if pt.alpha then
+				o:set_properties({use_texture_alpha = true, backface_culling = true})
+				local a = core.add_entity(self.object:get_pos(), PART)
+				if a then
+					a:set_properties({visual_size = vector.multiply(pt.size, 0.98), textures = pt.tex,
+						use_texture_alpha = true, backface_culling = false})
+					a:set_attach(o, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+					self.inner_list = self.inner_list or {}
+					self.inner_list[#self.inner_list + 1] = a
+				end
+			end
 			if pt.id then self.parts[pt.id] = o end
 			self.part_list[#self.part_list + 1] = o
 		end
+	end
+end
+
+-- 駕駛室兩面都畫的那一份：車上的人（直接掛在車上的駕駛、乘客）看不到，其他人看得到。每秒、上下車時更新
+function V.cab_observers(self)
+	if not self.inner_list then return end
+	local inside, set, key = {}, {}, {}
+	for _, c in ipairs(self.object:get_children()) do
+		if c:is_player() then inside[c:get_player_name()] = true end
+	end
+	for _, pl in ipairs(core.get_connected_players()) do
+		local n = pl:get_player_name()
+		if not inside[n] then set[n] = true; key[#key + 1] = n end
+	end
+	table.sort(key)
+	local k = table.concat(key, ",")
+	if k == self.inner_key then return end
+	self.inner_key = k
+	for _, a in ipairs(self.inner_list) do
+		if a:get_pos() then a:set_observers(set) end
 	end
 end
 
@@ -1418,6 +1453,7 @@ local function pass_on(self, player, side)
 			set_seated(player, true)
 			self.pass[name] = i
 			if s.door then V.door_swing(self, s.door) end
+			core.after(0.1, function() if self.object:get_pos() then V.cab_observers(self) end end)
 			return true
 		end
 	end
@@ -1437,7 +1473,10 @@ local function pass_off(self, name)
 	set_seated(p, false)
 	if s and s.door then V.door_swing(self, s.door) end
 	local spot = outside_spot(self, s and s.x > 0 and 1 or -1)
-	core.after(0.1, function() if p:get_pos() then p:set_pos(spot) end end)
+	core.after(0.1, function()
+		if p:get_pos() then p:set_pos(spot) end
+		if self.object:get_pos() then V.cab_observers(self) end
+	end)
 end
 V.pass_off = pass_off
 -- 乘客按 Shift 下車；掉線、被拆下來的從名單拿掉
@@ -1464,6 +1503,7 @@ local function get_off(self)
 		set_seated(d, false)
 		hud_clear(self, d)
 		local spot = outside_spot(self, -1)
+		core.after(0.15, function() if self.object:get_pos() then V.cab_observers(self) end end)
 		core.after(0.1, function()
 			if d:get_pos() then d:set_pos(spot) end
 		end)
@@ -1623,6 +1663,7 @@ function V.register(kind, def)
 			clicker:set_camera({mode = "first"})
 			set_seated(clicker, true, def.pushed and "stand")
 			V.door_swing(self, 1)
+			core.after(0.1, function() if self.object:get_pos() then V.cab_observers(self) end end)
 			update_hud(self)
 		end,
 		-- 爆炸（tnt）：扣耐久度。tnt 的 damage = 4 / 距離 × 半徑；×5 換成 kJ（貼著爆炸約 −60 %、4 m 外約 −15 %）
@@ -1690,7 +1731,7 @@ function V.register(kind, def)
 			local vel = obj:get_velocity()
 			keep_area(self, pos)
 			self.t_tag = (self.t_tag or 0) + dtime
-			if self.t_tag >= 1 then self.t_tag = 0; nametag_apply(self) end
+			if self.t_tag >= 1 then self.t_tag = 0; nametag_apply(self); V.cab_observers(self) end
 			-- 零件被引擎拆掉了（見 PART 的 on_step）：每秒檢查一次，少了就整組重新生成
 			if self.part_list then
 				self.t_parts = (self.t_parts or 0) + dtime
