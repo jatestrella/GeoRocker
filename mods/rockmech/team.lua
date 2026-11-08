@@ -497,13 +497,13 @@ if core.get_modpath("sfinv") and sfinv then
 		end,
 	})
 
-	-- 進遊戲提示一次按鈕在哪
-	core.register_on_joinplayer(function(player)
+	-- 進遊戲提示一次按鈕在哪（單機版沒有旗子、沒有分組，不提示）
+	if not cfg.solo then core.register_on_joinplayer(function(player)
 		local name = player:get_player_name()
 		core.after(2, function()
 			core.chat_send_player(name, S("[Tip] Hold the \"Back to camp\" flag and left-click to return to camp; your team's funds are at the top right of the screen"))
 		end)
-	end)
+	end) end
 end
 
 ---------------------------------------------------------------------------
@@ -535,7 +535,10 @@ core.register_craftitem(FLAG, {
 	on_place = go_camp,
 	on_drop = function(itemstack) return itemstack end,     -- 丟不掉
 })
-core.register_on_joinplayer(function(player)
-	local inv = player:get_inventory()
-	if not inv:contains_item("main", FLAG) then inv:add_item("main", FLAG) end
-end)
+-- 全班伺服器每人登入時沒有就補一支；單機版不發，要的話向工具室管理員買
+if not cfg.solo then
+	core.register_on_joinplayer(function(player)
+		local inv = player:get_inventory()
+		if not inv:contains_item("main", FLAG) then inv:add_item("main", FLAG) end
+	end)
+end

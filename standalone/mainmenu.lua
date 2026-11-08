@@ -4,6 +4,7 @@
 --     rockmech.conf（世界設定，建新遊戲時複製進世界資料夾）、其他檔案（例如 students.csv）也一起複製。
 --     每張地圖一個世界（worlds/map_<id>）：「繼續遊戲」進去、「新遊戲」刪掉重建。
 --     solo：單機（世界設定 rockmech_solo = true，沒有老師功能）。
+--     random = true：每次新遊戲用新的種子，rockmech.conf 只放 rockmech_solo，地質由地圖產生器擲（mods/rockmech/worldgen.lua）。
 --     class：在這台電腦開伺服器，開的人（名稱）是管理員＝老師；學生用「加入連線」連進來。
 --   加入連線：輸入位址、埠、帳號、密碼，連到別人開的伺服器（課堂）。
 --   設定：音量、全螢幕。
@@ -46,7 +47,7 @@ local function maps()
 		local dir = base .. DS .. id
 		local s = Settings(dir .. DS .. "map.conf")
 		out[#out + 1] = {id = id, dir = dir, title = s:get("title") or id, description = s:get("description") or "",
-			mode = s:get("mode") or "solo", order = tonumber(s:get("order") or "") or 99}
+			mode = s:get("mode") or "solo", order = tonumber(s:get("order") or "") or 99, random = s:get("random") == "true"}
 	end
 	table.sort(out, function(a, b) return a.order < b.order end)
 	return out
@@ -74,7 +75,15 @@ end
 local function new_world(m)
 	local i = find_world(m)
 	if i then core.delete_world(i) end
-	local err = core.create_world(world_name(m), GAME, MAPGEN)
+	-- 隨機地圖（map.conf random = true）：每次新遊戲換一個種子，地圖產生器（worldgen.lua）依種子擲地質
+	local mg = MAPGEN
+	if m.random then
+		mg = {}
+		for k, v in pairs(MAPGEN) do mg[k] = v end
+		math.randomseed(os.time())
+		mg.fixed_map_seed = tostring(math.random(1, 2000000000))
+	end
+	local err = core.create_world(world_name(m), GAME, mg)
 	if err then return err end
 	local _, w = find_world(m)
 	if not w then return "建立世界失敗" end

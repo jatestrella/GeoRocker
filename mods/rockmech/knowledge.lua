@@ -1156,9 +1156,14 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 			-- 名字（暱稱）旁邊一枝鉛筆：按下去改暱稱
 			local shown = rockmech.nick_of and rockmech.nick_of(name) or name
 			local who = shown ~= name and ("%s (%s)"):format(shown, name) or name
-			local fs = {("label[0,0;%s]"):format(F(("%s  %s"):format(who, team and S("Team @1", tostring(team)) or S("No team")))),
-				("image_button[%g,-0.15;0.5,0.5;%s;rm_nick_edit;]"):format(math.min(6.5, 0.13 * #who + 1.6), F(rockmech.PENCIL or "blank.png")),
-				("tooltip[rm_nick_edit;%s]"):format(F(S("Change nickname")))}
+			local fs
+			if rockmech.cfg.solo then
+				fs = {}                    -- 單機版：沒有分組、名牌，不顯示名字和改暱稱
+			else
+				fs = {("label[0,0;%s]"):format(F(("%s  %s"):format(who, team and S("Team @1", tostring(team)) or S("No team")))),
+					("image_button[%g,-0.15;0.5,0.5;%s;rm_nick_edit;]"):format(math.min(6.5, 0.13 * #who + 1.6), F(rockmech.PENCIL or "blank.png")),
+					("tooltip[rm_nick_edit;%s]"):format(F(S("Change nickname")))}
+			end
 			if rockmech.has_account and rockmech.has_account(name) then
 				fs[#fs + 1] = ("label[0,0.5;%s]"):format(F(S("Funds: $@1", ("%.0f"):format(rockmech.money(name)))))
 			end

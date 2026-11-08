@@ -18,6 +18,7 @@ local function range(r, a, b) return a + (b - a) * r:next(0, 10000) / 10000 end
 local function round(v, step) step = step or 1; return math.floor(v / step + 0.5) * step end
 
 function M.generate(world_conf)
+	-- 已經有地質設定的世界不動（單機版開始畫面的「隨機煤礦」只放 rockmech_solo，地質還是由這裡擲）
 	if world_conf:has("rockmech_joint_lattice") or world_conf:has("rockmech_zone_order") or world_conf:has("rockmech_generated") then
 		return false
 	end
@@ -67,6 +68,7 @@ function M.generate(world_conf)
 	set("weakness_max_spacing", 1.5)
 	set("coal_seam", ("%d,%d,%d,%d"):format(dip, dipdir, thick, -depth))
 	set("career", "true")
+	set("solo", "true")            -- 個人遊戲：沒有老師、分組、名牌（team.lua、knowledge.lua）
 	world_conf:write()
 	-- 地形照上課的圖：平地加緩丘，沒有湖、海、洞穴（主選單選的地形產生器換掉；只有新世界第一次載入時改得動）
 	local mg = {mg_name = "flat", mg_flags = "nocaves, nodungeons, light, nodecorations, nobiomes, noores",
