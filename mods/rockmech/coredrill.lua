@@ -931,15 +931,22 @@ end
 local function field_page(out, list)
 	title(out, S("Field survey"))
 	local X = {LX, LX + 1.0, LX + 3.9, LX + 6.4}
-	local heads = {S("No."), S("Position"), S("Rock"), S("Rebound R")}
+	local heads = {S("No."), S("Position"), S("Rock"), S("Reading")}
 	for i, t in ipairs(heads) do out[#out + 1] = ("label[%g,1.9;%s]"):format(X[i], ink(t)) end
 	out[#out + 1] = ("scroll_container[0,%g;%g,%g;bk_scroll;vertical;0.1]"):format(BODY_Y, BW, BODY_H)
+	-- 施密特錘的讀數是數字（R），寫在第 4 欄；應力量測的讀數是一行字（txt），寫在下一行
+	local row = 0
 	for i, e in ipairs(list) do
-		local y = (i - 1) * LINE
-		local cells = {tostring(i), ("(%d, %d, %d)"):format(e.x, e.y, e.z), e.lith and lith_label(e.lith) or "?", tostring(e.r)}
+		local y = row * LINE
+		local cells = {tostring(i), ("(%d, %d, %d)"):format(e.x, e.y, e.z), e.lith and lith_label(e.lith) or "?", e.r and ("R " .. tostring(e.r)) or ""}
 		for k = 1, 4 do out[#out + 1] = ("label[%g,%g;%s]"):format(X[k], y + LINE / 2, ink(cells[k])) end
+		row = row + 1
+		if e.txt then
+			out[#out + 1] = ("label[%g,%g;%s]"):format(X[2], row * LINE + LINE / 2, ink(e.txt))
+			row = row + 1
+		end
 	end
-	scroll_body(out, #list)
+	scroll_body(out, row)
 	if #list > 0 then
 		out[#out + 1] = "style[clear_sch;bgcolor=#00000000;border=false;textcolor=#8a3a30]"
 		out[#out + 1] = ("button[%g,%g;2.6,0.5;clear_sch;%s]"):format(LX - 0.1, PY + PH - 0.6, core.formspec_escape(S("Tear out this page")))

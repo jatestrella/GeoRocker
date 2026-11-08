@@ -117,6 +117,8 @@ config.shop = {
 	{key = "survey_prism", shop = "tools", item = "rockmech:survey_prism", label = TR("Survey prism"), price = 500, count = 5},
 	{key = "schmidt", shop = "tools", item = "rockmech:schmidt_hammer", label = TR("Schmidt hammer"), price = 1500},
 	{key = "point_load", shop = "tools", item = "rockmech:point_load", label = TR("Point load tester"), price = 3000},
+	{key = "flatjack", shop = "tools", item = "rockmech:flatjack", label = TR("Flat jack"), price = 8000},
+	{key = "stress_cell", shop = "tools", item = "rockmech:stress_cell", label = TR("Borehole stress cell"), price = 12000},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = TR("Timber post"), price = 200, count = 10},
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = TR("Timber plank"), price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = TR("Timber slab"), price = 100, count = 10},
