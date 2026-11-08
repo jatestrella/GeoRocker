@@ -1,23 +1,26 @@
 -- rockmech/npc_talk.lua
 -- NPC 的對話泡泡：跟 NPC 互動完（右鍵打開的視窗關掉）時，頭上（名牌再上面）冒出一句話，只有點的那個人看得到，SHOW 秒後消失。
--- 泡泡是一個看不見的小物件帶名牌（米白底、深色字，太長自動換行），下面一個小三角形當尾巴，指向 NPC。
+-- 泡泡是看不見的小物件帶名牌：米白底、深色字（太長自動換行），四周留一個字寬的空白，外面再一圈深色框。
+-- 名牌不能畫框，所以框是另一個名牌（RING）：字是透明的、字小（RING_FS）而排得比較多，剛好比裡面的泡泡大一圈；
+-- 名牌照「出現的先後」畫，所以框先出現、泡泡晚一點才填字，泡泡就疊在框上面。
 -- 台詞在 npc_lines.lua。原本的右鍵功能（開商店、考試…）照舊，泡泡是加上去的。
 
 local LINES = dofile(rockmech.modpath .. "/npc_lines.lua")
 local BUBBLE = "rockmech:npc_bubble"
 local SHOW = 5               -- 泡泡顯示幾秒
 local WRAP = 14              -- 每行幾個字（中文；英文照字元數 ×2）
-local HEIGHT = 1.65          -- 尾巴在 NPC 腳底上方幾公尺（名牌在 1.2 m 左右）
-local CREAM = "#f4f0e0"
+local HEIGHT = 1.65          -- 泡泡中心在 NPC 腳底上方幾公尺（名牌在 1.2 m 左右）
+local CREAM, FRAME = "#f4f0e0", "#5a4630"
+local FS, RING_FS = 32, 8    -- 泡泡字的大小；框用的字大小（框的粗細約一個 RING_FS 的字）
+local K = FS / RING_FS
+local PAD = "　"      -- 全形空白：泡泡四周的留白
 
--- 尾巴：往下指的小三角形
-local TAIL = "[fill:8x8:#00000000^[fill:8x2:0,0:" .. CREAM .. "^[fill:6x2:1,2:" .. CREAM .. "^[fill:4x2:2,4:" .. CREAM .. "^[fill:2x2:3,6:" .. CREAM
 core.register_entity(BUBBLE, {
 	initial_properties = {
-		visual = "sprite", textures = {TAIL}, visual_size = {x = 0.5, y = 0.5}, use_texture_alpha = true,
-		selectionbox = {-0.01, 0, -0.01, 0.01, 0.25, 0.01}, collisionbox = {0, 0, 0, 0, 0, 0},
+		visual = "sprite", textures = {"[fill:1x1:#00000000"}, visual_size = {x = 0, y = 0}, use_texture_alpha = true,
+		selectionbox = {-0.01, 0, -0.01, 0.01, 0.01, 0.01}, collisionbox = {0, 0, 0, 0, 0, 0},
 		physical = false, pointable = false, static_save = false,
-		nametag = "", nametag_color = "#202020", nametag_bgcolor = CREAM .. "f0", nametag_fontsize = 32,   -- 字約一般名牌的兩倍
+		nametag = "", nametag_color = "#202020", nametag_bgcolor = CREAM, nametag_fontsize = FS,
 	},
 	on_step = function(self, dtime)
 		self.t = (self.t or 0) + dtime
@@ -25,7 +28,16 @@ core.register_entity(BUBBLE, {
 	end,
 })
 
--- 換行：中日韓字算 2 格寬，其他算 1 格，一行最多 WRAP×2 格
+-- 字寬（以字的大小為 1）：中日韓字 1、空白 0.28、其他英數 0.55
+local function em_width(line)
+	local w = 0
+	for ch in line:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+		w = w + (#ch > 1 and 1 or ch == " " and 0.28 or 0.55)
+	end
+	return w
+end
+
+-- 換行：中日韓字算 2 格寬，其他算 1 格，一行最多 WRAP×2 格。回傳每一行
 local function wrap(text)
 	local out, line, w = {}, {}, 0
 	for ch in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
@@ -38,10 +50,36 @@ local function wrap(text)
 		end
 	end
 	if #line > 0 then out[#out + 1] = table.concat(line) end
-	return table.concat(out, "\n")
+	return out
 end
 
-local bubbles = {}       -- NPC 物件 → {玩家名 → 泡泡物件}
+-- 泡泡的字（四周留白）和框的字（透明、全形空白排成比泡泡大一圈的方塊）
+local function bubble_texts(text)
+	local lines = wrap(text)
+	local inner, wmax = {PAD}, 1
+	for _, l in ipairs(lines) do
+		inner[#inner + 1] = PAD .. l .. PAD
+		wmax = math.max(wmax, em_width(l) + 2)
+	end
+	inner[#inner + 1] = PAD
+	local cols = math.floor(wmax * K + 0.5) + 2          -- 左右各多一個小字寬
+	local rows = #inner * K + 2                          -- 上下各多一行小字
+	local row = PAD:rep(cols)
+	local ring = {}
+	for i = 1, rows do ring[i] = row end
+	return table.concat(inner, "\n"), table.concat(ring, "\n")
+end
+
+local function add_part(o, name, props)
+	local b = core.add_entity(o:get_pos(), BUBBLE)
+	if not b then return end
+	b:set_attach(o, "", {x = 0, y = HEIGHT * 10, z = 0}, {x = 0, y = 0, z = 0})
+	b:set_properties(props)
+	b:set_observers({[name] = true})
+	return b
+end
+
+local bubbles = {}       -- NPC 物件 → {玩家名 → {泡泡, 框}}
 local last = {}          -- NPC 物件 → 上一句的序號（不連續說同一句）
 
 -- NPC（物件 o）對玩家說一句（text 已經翻譯過的字串，或 nil = 從台詞裡挑）
@@ -58,14 +96,17 @@ function rockmech.npc_say(o, player, text)
 		text = core.get_translated_string(info and info.lang_code ~= "" and info.lang_code or "zh_TW", list[i])
 	end
 	bubbles[o] = bubbles[o] or {}
-	local old = bubbles[o][name]
-	if old and old:get_pos() then old:remove() end
-	local b = core.add_entity(o:get_pos(), BUBBLE)
-	if not b then return end
-	b:set_attach(o, "", {x = 0, y = HEIGHT * 10, z = 0}, {x = 0, y = 0, z = 0})
-	b:set_properties({nametag = wrap(text)})
-	b:set_observers({[name] = true})
-	bubbles[o][name] = b
+	for _, old in ipairs(bubbles[o][name] or {}) do
+		if old:get_pos() then old:remove() end
+	end
+	local inner, ring_txt = bubble_texts(text)
+	local ring = add_part(o, name, {nametag = ring_txt, nametag_color = "#00000000", nametag_bgcolor = FRAME, nametag_fontsize = RING_FS})
+	local b = add_part(o, name, {})
+	bubbles[o][name] = {b, ring}
+	-- 泡泡晚一點才填字：讓它的名牌排在框後面（畫在框上面）
+	core.after(0.2, function()
+		if b and b:get_pos() then b:set_properties({nametag = inner}) end
+	end)
 end
 
 -- 右鍵：照原本的功能，另外冒泡泡（手上的東西優先時不說話，例如拿著無人機遙控器）

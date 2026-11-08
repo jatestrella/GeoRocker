@@ -1016,6 +1016,8 @@ end
 
 local function start_logging(player, pos)
 	local name = player:get_player_name()
+	-- 按住右鍵時 on_place 會一直重複觸發：同一箱已經在判讀就不重來
+	if logging[name] and vector.equals(logging[name].pos, pos) then return end
 	local meta = core.get_meta(pos)
 	local acc, n, depth = meta:get_string("acc"), meta:get_int("n"), meta:get_int("depth")
 	if not find_bh(acc, n) then rockmech.notify(name, S("[Field notebook] No borehole record found for this box")); return end
@@ -1030,7 +1032,7 @@ local function start_logging(player, pos)
 	logging[name] = {pos = pos, acc = acc, n = n, depth = depth, t = 0, need = math.max(1, depth) * LOG_SEC_PER_M,
 		hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.7}, alignment = {x = 0, y = 0},
 			number = 0x9fe0ff, text = "", z_index = 100})}
-	rockmech.notify(name, S("[Field notebook] Logging @1 (depth @2 m, about @3 s): stay next to the core box and keep holding the field notebook",
+	rockmech.notify(name, S("[Field notebook] Logging @1 (depth @2 m, about @3 s): keep holding right-click on the core box",
 		bh_label(acc, n), tostring(depth), tostring(math.ceil(depth * LOG_SEC_PER_M))))
 end
 
@@ -1045,6 +1047,8 @@ core.register_globalstep(function(dtime)
 				stop_logging(name, S("The core box was moved; logging interrupted"))
 			elseif vector.distance(pp, L.pos) > LOG_STAY or p:get_wielded_item():get_name() ~= BOOK then
 				stop_logging(name, S("You walked away (or are not holding the field notebook); logging interrupted"))
+			elseif not p:get_player_control().place then
+				stop_logging(name, S("You let go of right-click; logging interrupted"))
 			else
 				L.t = L.t + dtime
 				local m_done = math.min(L.depth, math.floor(L.t / LOG_SEC_PER_M))
