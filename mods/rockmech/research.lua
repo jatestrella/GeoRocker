@@ -41,6 +41,25 @@ local ITEMS = {
 			return "—"
 		end},
 }
+-- 研發面板的圖示：設施的圖示＋角落的小徽章（綠加號：提升、紅減號：減少、黃箭頭：加快）
+local BADGE = {
+	plus = "[fill:16x16:#00000000^[fill:7x7:9,9:#1e1e1e^[fill:5x1:10,12:#50d050^[fill:1x5:12,10:#50d050",
+	minus = "[fill:16x16:#00000000^[fill:7x5:9,10:#1e1e1e^[fill:5x1:10,12:#f05050",
+	up = "[fill:16x16:#00000000^[fill:7x8:9,8:#1e1e1e^[fill:1x1:12,9:#f0c020^[fill:3x1:11,10:#f0c020^[fill:5x1:10,11:#f0c020^[fill:1x3:12,12:#f0c020",
+}
+local function badged(base, badge) return "(" .. base .. ")^[resize:32x32^(" .. BADGE[badge] .. "^[resize:32x32)" end
+local function item_img(name) local d = core.registered_items[name]; return d and d.inventory_image or "blank.png" end
+local ICON = {
+	plant_recovery = function() return badged("rockmech_icon_plant.png", "plus") end,
+	plant_misplaced = function() return badged("rockmech_icon_plant.png", "minus") end,
+	crusher_rate = function() return badged("rockmech_icon_crusher.png", "up") end,
+	conveyor_rate = function() return badged("rockmech_icon_belt.png", "up") end,
+	-- 剝採比：長條圖（廢石灰、礦石黑）
+	mine_planning = function() return "[fill:16x16:#f4f0e0^[fill:14x1:1,14:#404040^[fill:1x13:1,1:#404040"
+		.. "^[fill:3x9:3,5:#9a9890^[fill:3x4:6,10:#2a2a2a^[fill:3x11:9,3:#9a9890^[fill:3x5:12,9:#2a2a2a" end,
+	ore_recovery = function() return badged(item_img("rockmech:xrf"), "plus") end,
+}
+
 local BY_KEY = {}
 for _, it in ipairs(ITEMS) do BY_KEY[it.key] = it end
 
@@ -157,31 +176,41 @@ local function form(name, who)
 		status = S("@1 has no research in progress. Each researcher works on one item at a time; different researchers can work at the same time.", S(npc.title))
 	end
 	out[#out + 1] = ("label[0.5,1.2;%s]"):format(core.formspec_escape(status))
-	out[#out + 1] = ("label[0.5,2.0;%s]label[3.6,2.0;%s]label[8.6,2.0;%s]label[11.4,2.0;%s]"):format(
-		E(S("Item")), E(S("Effect")), E(S("Current → next level")), E(S("Price / time")))
-	local y = 2.6
+	-- 研發項目：一個項目一個圖示，下面名稱和等級格子；滑鼠移上去看說明，點一下開始研發
+	local y = 2.0
+	local col = 0
+	local TW = 3.4                     -- 每格寬
 	for i, it in ipairs(ITEMS) do
 		if it.who == who then
 			local lv = rockmech.research_level(acc, it.key)
 			local maxed = lv >= it.max
-			out[#out + 1] = ("label[0.5,%g;%s　Lv%d/%d]"):format(y + 0.4, E(S(it.label)), lv, it.max)
-			out[#out + 1] = ("label[3.6,%g;%s]"):format(y + 0.4, E(S(it.desc)))
-			local now = it.value(acc)
-			local nxt = maxed and S("Max level") or ("→ Lv" .. (lv + 1))
-			out[#out + 1] = ("label[8.6,%g;%s　%s]"):format(y + 0.4, core.formspec_escape(now), core.formspec_escape(nxt))
-			if maxed then
-				out[#out + 1] = ("label[11.4,%g;—]"):format(y + 0.4)
+			local x = 0.5 + col * TW
+			local active = job and job.key == it.key
+			-- 底框（正在研發：黃框；練滿：綠框）
+			out[#out + 1] = ("box[%g,%g;%g,%g;%s]"):format(x - 0.1, y - 0.1, TW - 0.3, 3.3, active and "#806010" or maxed and "#2f5a2f" or "#2a2e34")
+			out[#out + 1] = ("box[%g,%g;%g,%g;#1e2228]"):format(x, y, TW - 0.5, 3.1)
+			local icon = ICON[it.key] and ICON[it.key]() or "blank.png"
+			out[#out + 1] = ("image_button[%g,%g;1.8,1.8;%s;go_%d;]"):format(x + (TW - 0.5 - 1.8) / 2, y + 0.15, E(icon), i)
+			-- 名稱、等級格子
+			out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.15, y + 2.25, E(S(it.label)))
+			local pw = math.min(0.42, (TW - 0.8) / it.max)
+			for k = 1, it.max do
+				out[#out + 1] = ("box[%g,%g;%g,0.22;%s]"):format(x + 0.15 + (k - 1) * pw, y + 2.6, pw - 0.06, k <= lv and "#f0c020" or "#4a4e54")
+			end
+			if active then out[#out + 1] = bar(x + 0.05, y + 2.95, TW - 0.6, job) end
+			-- 滑鼠移上去的說明
+			local tip = {S(it.label) .. "  Lv" .. lv .. "/" .. it.max, S(it.desc), S("Now: @1", it.value(acc))}
+			if maxed then tip[#tip + 1] = S("Max level")
 			else
-				out[#out + 1] = ("label[11.4,%g;%s]"):format(y + 0.4, E(S("@1  @2 min", money_text(cost_of(it, lv + 1)), ("%d"):format(secs_of(it, lv + 1) / 60))))
-				if not job then out[#out + 1] = ("button[13.5,%g;1.3,0.8;go_%d;%s]"):format(y, i, E(S("Research"))) end
+				tip[#tip + 1] = S("Next: Lv@1   @2   @3 min", tostring(lv + 1), money_text(cost_of(it, lv + 1)), ("%d"):format(secs_of(it, lv + 1) / 60))
+				tip[#tip + 1] = active and S("Researching…") or job and S("Another item is being researched") or S("Click to start this research")
 			end
-			y = y + 1.0
-			if job and job.key == it.key then
-				out[#out + 1] = bar(0.5, y - 0.1, 10.5, job)
-				y = y + 0.5
-			end
+			out[#out + 1] = ("tooltip[go_%d;%s;#101418;#ffffff]"):format(i, E(table.concat(tip, "\n")))
+			col = col + 1
+			if col >= 4 then col = 0; y = y + 3.6 end
 		end
 	end
+	if col > 0 then y = y + 3.6 end
 	-- 機械技工：修車
 	if who == "mechanic" then
 		local rj = repair_job(acc)
