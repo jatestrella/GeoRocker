@@ -224,7 +224,7 @@ local function excavator(kind, P)
 	-- 下面的座標是「平端」姿勢（開口朝上）的鏟斗座標，中心在小臂尖端；挖、倒時整組繞橫軸翻（self.curl）
 	local BW, BH, BD = P.bucket.x, P.bucket.y, P.bucket.z
 	local BT = BH * 0.09                                   -- 鋼板厚度
-	local lip_a, lip_c = {y = -BH / 2, z = -BD / 4}, {y = -BH * 0.12, z = -BD / 2}
+	local lip_a, lip_c = {y = -BH / 2, z = -BD * 0.4}, {y = BH * 0.05, z = -BD / 2}   -- 方一點：斗唇幾乎垂直
 	local lip_len = math.sqrt((lip_c.y - lip_a.y) ^ 2 + (lip_c.z - lip_a.z) ^ 2)
 	local lip_pitch = atan2(lip_c.z - lip_a.z, lip_c.y - lip_a.y)
 	local lip_dir = {y = (lip_c.y - lip_a.y) / lip_len, z = (lip_c.z - lip_a.z) / lip_len}
@@ -234,13 +234,13 @@ local function excavator(kind, P)
 	local steel = "[fill:16x16:#9a9ea4^[fill:16x3:0,13:#c8ccd0"
 	-- {id, 鏟斗座標的中心, 大小, 自己的俯仰（rad）, 貼圖}
 	local BK = {
-		{"bucket", {x = 0, y = -BH / 2 + BT / 2, z = BD / 8}, {x = BW, y = BT, z = BD * 0.75}, 0, {shell, shell, shell, shell, shell, shell}},
+		{"bucket", {x = 0, y = -BH / 2 + BT / 2, z = BD * 0.05}, {x = BW, y = BT, z = BD * 0.9}, 0, {shell, shell, shell, shell, shell, shell}},
 		{"bk_front", {x = 0, y = 0, z = BD / 2 - BT / 2}, {x = BW, y = BH, z = BT}, 0, {shell, shell, shell, shell, shell, shell}},
 		{"bk_lip", {x = 0, y = (lip_a.y + lip_c.y) / 2, z = (lip_a.z + lip_c.z) / 2}, {x = BW, y = lip_len, z = BT}, lip_pitch, {shell, shell, shell, shell, shell, shell}},
 		{"bk_sl", {x = -BW / 2 + BT / 2, y = 0, z = 0}, {x = BT, y = BH, z = BD}, 0, {side, side, side, side, side, side}},
 		{"bk_sr", {x = BW / 2 - BT / 2, y = 0, z = 0}, {x = BT, y = BH, z = BD}, 0, {side, side, side, side, side, side}},
 		-- 頂上的耳板（跟小臂接的地方）
-		{"bk_ear", {x = 0, y = BH / 2 + BT, z = BD / 4}, {x = BW * 0.3, y = BT * 2, z = BD * 0.4}, 0, box_tex("#303030")},
+		{"bk_ear", {x = 0, y = BH / 2 + BT, z = BD * 0.15}, {x = BW * 0.3, y = BT * 2, z = BD * 0.4}, 0, box_tex("#303030")},
 	}
 	local NT = BW > 2 and 6 or 5
 	local TL = BH * 0.22
@@ -258,6 +258,8 @@ local function excavator(kind, P)
 		local c, sn = math.cos(th), math.sin(th)
 		return {x = o.x, y = o.y * c - o.z * sn, z = o.y * sn + o.z * c}
 	end
+	-- 小臂尖端接在耳板頂上（鏟斗座標），鏟斗掛在下面
+	local EAR = {x = 0, y = BH / 2 + BT * 2, z = BD * 0.15}
 	local function place_bucket(self, vb, psi, hide)
 		local ps, th = self.parts, self.curl or 0
 		for i, k in ipairs(BK) do
@@ -387,8 +389,12 @@ local function excavator(kind, P)
 		if not ps then return end
 		local psi = self.swing or 0
 		local elbow
+		-- b 是斗身中心；小臂尖端在耳板上（跟著翻斗轉）。破碎錘：b 就是小臂尖端
+		local ear = self.tool ~= "breaker" and rot_x(EAR, self.curl or 0) or nil
+		if ear then b = vector.add(b, ear) end
 		b, elbow = arm_solve(b)
 		local vb, ve, vr = h2v(b, psi), h2v(elbow, psi), h2v(BOOM_ROOT, psi)
+		local vc = ear and vector.subtract(vb, h2v(ear, psi)) or vb      -- 斗身中心
 		local rot = {x = 0, y = math.deg(psi), z = 0}
 		for _, hp in ipairs(P.house) do
 			local o = ps[hp.id]
@@ -407,10 +413,10 @@ local function excavator(kind, P)
 			seg_attach(self, ps.bucket, vb, mid)
 			seg_attach(self, ps.chisel, mid, tip)
 		else
-			place_bucket(self, vb, psi, false)
+			place_bucket(self, vc, psi, false)
 		end
-		place_fill(self, vb, psi)
-		self.bucket_at = vb
+		place_fill(self, vc, psi)
+		self.bucket_at = vc
 		seg_attach(self, ps.boom, vr, ve)
 		local su = vector.normalize(vector.subtract(vb, ve))
 		seg_attach(self, ps.stick, vector.subtract(ve, vector.multiply(su, STICK_TAIL)), vb)
