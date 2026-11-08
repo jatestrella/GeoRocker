@@ -2,8 +2,7 @@
 -- 拖車：牽引車＋平板，載慢的機具，或把報廢的車拖回來。由 vehicles.lua 載入。兩種：
 --   平板拖車（lowboy）：60 t，怪手、推土機、鑽機這類
 --   重型拖車（heavyhaul）：多軸線模組化平板，150 t，礦用挖土機、礦卡（真實的大型礦用機具也是這樣運，或自己開、拆開運）
---   只載履帶車（挖土機、推土機、鑽機…）：有輪胎的車自己開過去。
---   E：把平板旁邊 LOAD_R m 內、自己組（或沒有組）的履帶車拉上來（有人在開的不行），可以載好幾台：
+--   E：把平板旁邊 LOAD_R m 內、自己組（或沒有組）的車拉上來（有人在開的不行），可以載好幾台：
 --      總重不超過 MAX_T t、平板排得下（從前端往後排）。空白鍵：卸下最後載上去的那一台，卸在車尾後方。拖車不能載拖車。
 --   直線加速：空車到 top_speed，載車時上限 LOADED_SPEED、加速度減半。載的車掛在平板上（附著），拖車存檔時記著它的編號，
 --   區塊重新載入後自己再掛回去。
@@ -75,7 +74,7 @@ local function trailer(kind, P)
 		for _, o in ipairs(core.get_objects_inside_radius(deck, LOAD_R + 8)) do
 			local e = o:get_luaentity()
 			local ed = e and e.vkind and V.TYPES[e.vkind]
-			if e and e ~= self and ed and not ed.trailer and not ed.tire and not ed.pushed and not e.driver and not o:get_attach()
+			if e and e ~= self and ed and not ed.trailer and not e.driver and not o:get_attach()
 					and (not self.owner or not e.owner or e.owner == self.owner) then
 				local d = vector.distance(o:get_pos(), deck)
 				if d <= LOAD_R and (not bd or d < bd) then best, bd = e, d end
@@ -86,8 +85,6 @@ local function trailer(kind, P)
 	end
 	put_on = function(self, best)
 		local d = V.TYPES[best.vkind]
-		-- 只載履帶車：有輪胎的車自己開過去（拖車本身也是輪胎車）
-		if d.tire or d.pushed then return S("@1 has tyres: drive it there yourself", d.desc) end
 		local t = V.MASS[best.vkind] or 20
 		local now = total_t(self)
 		if now + t > MAX_T then
