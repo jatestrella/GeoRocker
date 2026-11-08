@@ -1650,3 +1650,7 @@ Learn "Mohr circle analysis" from the professor to see the Mohr circle=跟教授
 Numerical analysis tablet@nHold it to see the stress of the rock you point at; hold right-click to look at it up close=數值分析平板@n拿在手上：看指著的岩石的應力；按住右鍵：舉起來正面看
 [Core drilling] Drilling horizontally (@1 s per metre, max @2 m)=[岩芯鑽探] 水平鑽進中（每公尺 @1 秒，最深 @2 m）
 [Core drilling] Aim at the ground to drill down, or at a wall to drill horizontally=[岩芯鑽探] 對著地面往下鑽，或對著岩壁水平鑽
+Cancel=取消
+Change nickname=改暱稱
+Save=儲存
+Untick an ability to hide what it shows automatically (instruments still work)=取消勾選的能力不會自動顯示（儀器照常可以用）

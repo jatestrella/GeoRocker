@@ -189,12 +189,30 @@ end
 local nick_msg = {}    -- 玩家名稱 → 上次設定的結果（顯示在頁面上）
 function rockmech.nick_message(name) return nick_msg[name] end
 
-core.register_on_player_receive_fields(function(player, formname, fields)
-	if formname ~= "" or not (fields.rm_nick_set or (fields.key_enter_field == "rm_nick")) then return end
+-- 個人資料頁名字旁的鉛筆：按下去跳出改暱稱的小視窗
+rockmech.PENCIL = "[fill:16x16:#00000000^[fill:3x3:11,2:#f0c020^[fill:3x3:10,3:#f0c020^[fill:3x3:9,4:#f0c020^[fill:3x3:8,5:#f0c020^[fill:3x3:7,6:#f0c020^[fill:3x3:6,7:#f0c020^[fill:3x3:5,8:#f0c020^[fill:3x3:4,9:#f0c020^[fill:3x3:3,10:#f0c020^[fill:3x3:12,1:#e88090^[fill:2x2:2,12:#e8d0a0^[fill:2x2:1,13:#303030"
+local NICK_FORM = "rockmech:nick_edit"
+function rockmech.nick_edit_show(player, err)
 	local name = player:get_player_name()
-	local err = rockmech.set_nick(name, fields.rm_nick)
-	nick_msg[name] = err or S("Set: classmates see \"@1\"", nick_of(name))
-	if sfinv and sfinv.set_player_inventory_formspec then sfinv.set_player_inventory_formspec(player) end
+	local F = core.formspec_escape
+	core.show_formspec(name, NICK_FORM, "formspec_version[6]size[8,4.2]" ..
+		("label[0.4,0.5;%s]"):format(F(S("Nickname (the name classmates see above your head, at most @1 characters; blank = use your account name)", tostring(NICK_MAX)))) ..
+		("field[0.4,1.1;7.2,0.8;rm_nick;;%s]"):format(F(storage:get_string(NICK .. name))) ..
+		"field_close_on_enter[rm_nick;false]" ..
+		(err and ("label[0.4,2.25;%s]"):format(F(core.colorize("#ff8080", err))) or "") ..
+		("button[1.4,2.9;2.4,0.8;rm_nick_save;%s]"):format(F(S("Save"))) ..
+		("button_exit[4.2,2.9;2.4,0.8;rm_nick_cancel;%s]"):format(F(S("Cancel"))))
+end
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= NICK_FORM then return end
+	if fields.rm_nick_save or fields.key_enter_field == "rm_nick" then
+		local name = player:get_player_name()
+		local err = rockmech.set_nick(name, fields.rm_nick)
+		if err then rockmech.nick_edit_show(player, err); return true end
+		nick_msg[name] = S("Set: classmates see \"@1\"", nick_of(name))
+		core.close_formspec(name, NICK_FORM)
+		if sfinv and sfinv.set_player_inventory_formspec then sfinv.set_player_inventory_formspec(player) end
+	end
 	return true
 end)
 

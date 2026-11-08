@@ -32,6 +32,7 @@ rockmech.abilities = ABILITIES
 local HIRE_COST, HIRE_SECS = 8000, 20 * 60
 local EXAM_N, EXAM_PASS, EXAM_COOLDOWN = 5, 4, 180
 local KNOW = "rockmech:know_"           -- 玩家 meta：考過的科目
+local HIDE = "rockmech:hide_"           -- 玩家 meta：個人資料頁取消勾選（不自動顯示）的能力
 local COOL = "rockmech:exam_cd_"        -- 玩家 meta：這一科下次能考的時間（os.time）
 local HIRE = "hire:"                    -- mod storage：hire:<帳戶> = 剩幾秒
 local HIRED_BY = "hire_by:"             -- mod storage：hire_by:<帳戶> = 雇用者（地質學家跟著他）
@@ -52,6 +53,8 @@ function rockmech.can_see(name, ability, no_items)
 	local player = name and core.get_player_by_name(name)
 	if not player then return false end
 	local meta = player:get_meta()
+	-- 個人資料頁取消勾選的能力：不自動顯示（儀器右鍵、岩芯判讀照常，no_items = false 那些）
+	if no_items and meta:get_string(HIDE .. ability) == "1" then return false end
 	if meta:get_int("godmode:on") == 1 then return true end
 	if meta:get_string(KNOW .. ability) == "1" then return true end
 	local a = AB[ability]
@@ -1103,12 +1106,31 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 		kinematics = S("Only by passing the professor's exam (cannot be bought or hired)"),
 		mohr = S("Only by passing the professor's exam (cannot be bought or hired)"),
 	}
+	-- 個人資料頁的勾選框、鉛筆
+	core.register_on_player_receive_fields(function(player, formname, fields)
+		if formname ~= "" then return end
+		if fields.rm_nick_edit and rockmech.nick_edit_show then rockmech.nick_edit_show(player); return true end
+		local changed = false
+		for _, a in ipairs(ABILITIES) do
+			local v = fields["rm_show_" .. a.key]
+			if v ~= nil then
+				player:get_meta():set_string(HIDE .. a.key, v == "true" and "" or "1")
+				changed = true
+			end
+		end
+		if changed then sfinv.set_player_inventory_formspec(player); return true end
+	end)
 	sfinv.register_page("rockmech:profile", {
 		title = S("Profile"),
 		get = function(self, player, context)
 			local name = player:get_player_name()
 			local team = rockmech.team_of and rockmech.team_of(name)
-			local fs = {("label[0,0;%s]"):format(F(("%s  %s"):format(name, team and S("Team @1", tostring(team)) or S("No team"))))}
+			-- 名字（暱稱）旁邊一枝鉛筆：按下去改暱稱
+			local shown = rockmech.nick_of and rockmech.nick_of(name) or name
+			local who = shown ~= name and ("%s (%s)"):format(shown, name) or name
+			local fs = {("label[0,0;%s]"):format(F(("%s  %s"):format(who, team and S("Team @1", tostring(team)) or S("No team")))),
+				("image_button[%g,-0.15;0.5,0.5;%s;rm_nick_edit;]"):format(math.min(6.5, 0.13 * #who + 1.6), F(rockmech.PENCIL or "blank.png")),
+				("tooltip[rm_nick_edit;%s]"):format(F(S("Change nickname")))}
 			if rockmech.has_account and rockmech.has_account(name) then
 				fs[#fs + 1] = ("label[0,0.5;%s]"):format(F(S("Funds: $@1", ("%.0f"):format(rockmech.money(name)))))
 			end
@@ -1116,7 +1138,13 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 			local y = 1.7
 			for _, a in ipairs(ABILITIES) do
 				local has, src = ability_status(name, a.key)
-				fs[#fs + 1] = ("label[0,%g;%s]"):format(y, F((has and "● " or "○ ") .. S(a.label)))
+				if has then
+					-- 會的能力：打勾 = 自動顯示；取消勾選就隱藏
+					local on = player:get_meta():get_string(HIDE .. a.key) ~= "1"
+					fs[#fs + 1] = ("checkbox[0,%g;rm_show_%s;%s;%s]"):format(y - 0.2, a.key, F(S(a.label)), on and "true" or "false")
+				else
+					fs[#fs + 1] = ("label[0,%g;%s]"):format(y, F("○ " .. S(a.label)))
+				end
 				if has then
 					fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F(S("Source: @1", src)))
 				else
@@ -1127,11 +1155,9 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 				y = y + 0.6
 			end
 			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.3, F(S("Grade assessment: grades   Rock mass classification: lithology, GSI, overburden thickness   Rock mechanics: stress, factor of safety, cracks")))
-			if rockmech.nick_formspec then
-				fs[#fs + 1] = rockmech.nick_formspec(name, y + 1.2)
-				local m = rockmech.nick_message(name)
-				if m then fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 2.6, F(m)) end
-			end
+			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.75, F(S("Untick an ability to hide what it shows automatically (instruments still work)")))
+			local m = rockmech.nick_message and rockmech.nick_message(name)
+			if m then fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 1.3, F(m)) end
 			return sfinv.make_formspec(player, context, table.concat(fs), false)
 		end,
 	})
