@@ -1563,3 +1563,13 @@ Nothing on the deck=平板上沒有車
 [Trailer] Get within @1 m of the deck first=[拖車] 先開到平板 @1 m 內
 [Trailer] @1=[拖車] @1
 [Trailer] @1 is on the deck: Shift to get out, right-click the trailer to drive off=[拖車] @1在平板上了：Shift 下車，對拖車右鍵開下來
+
+Slope: not measured yet (Shift + E to measure the slope)=坡面：還沒量（Shift＋E 量坡面）
+Compass: right-click a rock face to measure joints, Shift + E to measure the slope, E to write the reading into the field notebook@n@nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible=羅盤：右鍵岩面量節理、Shift＋E 量坡面、E 記進野帳本@n@nMarkland 平面滑動：節理極點在摩擦圓外、跟坡面極點同一側，而且比坡面緩（大圓在坡面大圓裡面）→ 可能滑動
+E: write into the field notebook=E：記進野帳本
+Geological compass@nRight-click a rock face to measure joints; Shift + E measures the slope; E writes it into the field notebook=地質羅盤@n右鍵岩面量節理；Shift＋E 量坡面；E 記進野帳本
+You need a field notebook (the readings are kept in it)=需要野帳本（量測記在野帳本上）
+Slope @1° / @2° (dip / dip direction)=坡面 @1° / @2°（傾角 / 傾向）
+Measure something first (right-click a rock face)=先量一筆（右鍵岩面）
+Slope written into the field notebook=坡面記進野帳本了
+Written into the field notebook (@1 joint readings; right-click the air with the compass to see the stereonet)=記進野帳本了（共 @1 筆節理；拿羅盤對空中右鍵看赤平投影）

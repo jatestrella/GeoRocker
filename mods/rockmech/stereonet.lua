@@ -1,11 +1,12 @@
 -- rockmech/stereonet.lua
--- 赤平投影（串接地質羅盤）：
---   羅盤左鍵岩面：量這一格的節理位態（切過這一格的節理組，每組記一筆，加上量測誤差：傾角 ±3°、傾向 ±5°）
---   羅盤蹲下＋左鍵：量坡面位態（周圍 7×7 的地表擬合一個平面）
---   羅盤對空中右鍵：打開赤平投影圖（下半球、等角投影 Wulff）：各筆量測的極點（依節理組上色）、各組平均位態的大圓、
+-- 地質羅盤＋赤平投影（量測記在野帳本上）：
+--   羅盤右鍵岩面：量這一格的節理位態（切過這一格的節理組，每組一筆，加上量測誤差：傾角 ±3°、傾向 ±5°），顯示在準心右上
+--   Shift＋E：量坡面位態（周圍 7×7 的地表擬合一個平面）
+--   E：把剛量到的記進野帳本（背包裡要有野帳本）
+--   羅盤對空中右鍵：用野帳本的紀錄打開赤平投影圖（下半球、等角投影 Wulff）：各筆量測的極點（依節理組上色）、各組平均位態的大圓、
 --     坡面的大圓和極點、摩擦圓（節理摩擦角 φj：極點在圓內的面比 φj 緩，不會平面滑動）。
 --   Markland 平面滑動：節理極點在摩擦圓外、跟坡面極點同一側而且比坡面緩（大圓在坡面大圓裡面）→ 可能滑動。
--- 圖是伺服器即時畫的 PNG（512×512），只傳給看的人。量測記在羅盤上（換一把羅盤就是新的一本）。
+-- 圖是伺服器即時畫的 PNG（512×512），只傳給看的人。量測記在野帳本上（換一本野帳本就是新的紀錄）。
 
 local cfg = rockmech.cfg
 local S = rockmech.S
@@ -16,15 +17,20 @@ local MAX_N = 200
 local SIZE, RAD = 512, 230              -- 圖的像素、投影圓半徑
 local rad, deg = math.rad, math.deg
 
+local FIELDBOOK = "rockmech:fieldbook"
 local function data_of(stack)
 	local d = core.deserialize(stack:get_meta():get_string("stereo"))
 	return type(d) == "table" and d or {m = {}}
 end
 local function save(stack, d)
 	stack:get_meta():set_string("stereo", core.serialize(d))
-	stack:get_meta():set_string("description", d.slope
-		and S("Geological compass (stereonet: @1 joint readings, slope)", tostring(#d.m))
-		or S("Geological compass (stereonet: @1 joint readings)", tostring(#d.m)))
+end
+-- 背包裡第一本野帳本：回傳 清單索引, 那一疊（沒有回傳 nil）
+local function find_book(player)
+	local inv = player:get_inventory()
+	for i, st in ipairs(inv:get_list("main") or {}) do
+		if st:get_name() == FIELDBOOK then return i, st end
+	end
 end
 local function gauss() return (math.random() + math.random() + math.random() - 1.5) * 2 end
 local function tell(name, msg) rockmech.notify(name, core.colorize("#80d0ff", S("[Stereonet]") .. " ") .. msg) end
@@ -197,14 +203,14 @@ local function show(name, d)
 		lines[#lines + 1] = core.colorize(js and js.color or "#ffffff", S("@1: @2 readings, mean @3°/@4°", js and js.name or S("Set @1", tostring(m.s)), tostring(m.n), ("%02.0f"):format(m.d), ("%03.0f"):format(m.a)))
 	end
 	lines[#lines + 1] = d.slope and S("Slope: @1°/@2° (thick black line; the square is its pole)", ("%02.0f"):format(d.slope.d), ("%03.0f"):format(d.slope.a))
-		or S("Slope: not measured yet (sneak + left-click to measure the slope)")
+		or S("Slope: not measured yet (Shift + E to measure the slope)")
 	lines[#lines + 1] = core.colorize("#ff8080", S("Red circle: friction circle φj = @1°", ("%g"):format(cfg.weakness and cfg.weakness.phi or 30)))
 	core.dynamic_add_media({filepath = path, to_player = name, ephemeral = true}, function()
 		local out = {"formspec_version[6]size[17,11]",
 			"label[0.4,0.5;" .. core.formspec_escape(S("Stereonet (lower hemisphere, equal-angle projection)   dip/dip direction   north is up")) .. "]",
 			("image[0.4,0.9;9.8,9.8;%s]"):format(fname),
 			("textarea[10.6,0.9;6.1,7.6;;;%s]"):format(core.formspec_escape(table.concat(lines, "\n") .. "\n\n" ..
-				S("Left-click a rock face: measure joints (one reading per set)\nSneak + left-click: measure the slope\n\nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible"))),
+				S("Compass: right-click a rock face to measure joints, Shift + E to measure the slope, E to write the reading into the field notebook\n\nMarkland planar sliding: a joint pole outside the friction circle, on the same side as the slope pole, and flatter than the slope (its great circle inside the slope's great circle) → sliding is possible"))),
 			"button[10.6,8.8;3,0.7;clear;" .. core.formspec_escape(S("Clear readings")) .. "]",
 			"button_exit[13.8,8.8;3,0.7;close;" .. core.formspec_escape(S("Close")) .. "]"}
 		core.show_formspec(name, FORM, table.concat(out))
@@ -212,49 +218,93 @@ local function show(name, d)
 	end)
 end
 
+-- 剛量到、還沒記進野帳本的那一筆：玩家名 → {m = {...}} 或 {slope = ...}
+local last = {}
+local function bubble(player, lines, pos)
+	if rockmech.info_bubble then rockmech.info_bubble(player, lines, pos) else tell(player:get_player_name(), table.concat(lines, " ")) end
+end
+
+-- 右鍵岩面：量節理
+local function measure(itemstack, user, pointed)
+	if not (user and user:is_player()) or pointed.type ~= "node" then return itemstack end
+	local name = user:get_player_name()
+	local pos = pointed.under
+	if not rockmech.lith_of_node[core.get_node(pos).name] then bubble(user, {S("Measure on a rock face")}, pos); return itemstack end
+	local ms = measure_joints(pos)
+	if #ms == 0 then bubble(user, {S("No joint cuts through this block (intact rock bridge); try another block")}, pos); return itemstack end
+	local sets = rockmech.get_joint_sets()
+	local txt = {}
+	for _, m in ipairs(ms) do
+		txt[#txt + 1] = core.colorize(sets[m.s].color or "#ffffff", ("%s  %02.0f° / %03.0f°"):format(sets[m.s].name, m.d, m.a))
+	end
+	txt[#txt + 1] = S("E: write into the field notebook")
+	last[name] = {m = ms}
+	bubble(user, txt, pos)
+	return itemstack
+end
+
 core.override_item(COMPASS, {
-	description = S("Geological compass\nRight- or left-click a rock face; sneak for more"),
+	description = S("Geological compass\nRight-click a rock face to measure joints; Shift + E measures the slope; E writes it into the field notebook"),
 	short_description = S("Geological compass"),
-	on_use = function(itemstack, user, pointed)
-		if not (user and user:is_player()) or pointed.type ~= "node" then return itemstack end
-		local name = user:get_player_name()
-		local pos = pointed.under
-		local d = data_of(itemstack)
-		if user:get_player_control().sneak then
-			local s = measure_slope(pos)
-			if not s then tell(name, S("Cannot measure a slope here")); return itemstack end
-			d.slope = s
-			save(itemstack, d)
-			tell(name, S("Slope @1°/@2° (dip/dip direction) recorded", ("%02.0f"):format(s.d), ("%03.0f"):format(s.a)))
-			return itemstack
-		end
-		if not rockmech.lith_of_node[core.get_node(pos).name] then tell(name, S("Measure on a rock face")); return itemstack end
-		local ms = measure_joints(pos)
-		if #ms == 0 then tell(name, S("No joint cuts through this block (intact rock bridge); try another block")); return itemstack end
-		local sets = rockmech.get_joint_sets()
-		local txt = {}
-		for _, m in ipairs(ms) do
-			if #d.m >= MAX_N then table.remove(d.m, 1) end
-			d.m[#d.m + 1] = m
-			txt[#txt + 1] = core.colorize(sets[m.s].color or "#ffffff", ("%s %02.0f°/%03.0f°"):format(sets[m.s].name, m.d, m.a))
-		end
-		save(itemstack, d)
-		tell(name, S("Measured @1 (@2 readings in total; right-click the air to see the stereonet)", table.concat(txt, ", "), tostring(#d.m)))
-		return itemstack
-	end,
+	on_use = nil,
+	on_place = measure,
+	-- 對空中右鍵：野帳本的赤平投影
 	on_secondary_use = function(itemstack, user)
-		if user and user:is_player() then show(user:get_player_name(), data_of(itemstack)) end
+		if not (user and user:is_player()) then return itemstack end
+		local _, book = find_book(user)
+		if not book then bubble(user, {S("You need a field notebook (the readings are kept in it)")}); return itemstack end
+		show(user:get_player_name(), data_of(book))
 		return itemstack
 	end,
 })
 
+-- E：記進野帳本；Shift＋E：量坡面。拿著羅盤、沒坐在車上；按下去那一下才算
+local e_down = {}
+core.register_globalstep(function()
+	for _, pl in ipairs(core.get_connected_players()) do
+		local name = pl:get_player_name()
+		local c = pl:get_player_control()
+		if c.aux1 and not e_down[name] and not pl:get_attach() and pl:get_wielded_item():get_name() == COMPASS then
+			if c.sneak then
+				local pos = rockmech.pointed_node_pos and rockmech.pointed_node_pos(pl, 8)
+				local sl = pos and measure_slope(pos)
+				if not sl then bubble(pl, {S("Cannot measure a slope here")}, pos)
+				else
+					last[name] = {slope = sl}
+					bubble(pl, {S("Slope @1° / @2° (dip / dip direction)", ("%02.0f"):format(sl.d), ("%03.0f"):format(sl.a)), S("E: write into the field notebook")}, pos)
+				end
+			else
+				local l = last[name]
+				local i, book = find_book(pl)
+				if not l then bubble(pl, {S("Measure something first (right-click a rock face)")})
+				elseif not book then bubble(pl, {S("You need a field notebook (the readings are kept in it)")})
+				else
+					local d = data_of(book)
+					if l.slope then d.slope = l.slope end
+					for _, m in ipairs(l.m or {}) do
+						if #d.m >= MAX_N then table.remove(d.m, 1) end
+						d.m[#d.m + 1] = m
+					end
+					save(book, d)
+					pl:get_inventory():set_stack("main", i, book)
+					last[name] = nil
+					bubble(pl, {l.slope and S("Slope written into the field notebook")
+						or S("Written into the field notebook (@1 joint readings; right-click the air with the compass to see the stereonet)", tostring(#d.m))})
+				end
+			end
+		end
+		e_down[name] = c.aux1
+	end
+end)
+core.register_on_leaveplayer(function(pl) e_down[pl:get_player_name()] = nil; last[pl:get_player_name()] = nil end)
+
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= FORM then return end
 	if fields.clear then
-		local stack = player:get_wielded_item()
-		if stack:get_name() == COMPASS then
-			save(stack, {m = {}})
-			player:set_wielded_item(stack)
+		local i, book = find_book(player)
+		if book then
+			save(book, {m = {}})
+			player:get_inventory():set_stack("main", i, book)
 			show(player:get_player_name(), {m = {}})
 		end
 	end
