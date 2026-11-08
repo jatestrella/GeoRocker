@@ -2,9 +2,9 @@
 -- 量應力的兩樣工具（工具室管理員賣），讀數記進野帳本的「野外調查」頁、也顯示在準心右上：
 --   扁千斤頂（flat jack）：右鍵牆面，在岩面切一道槽、放進扁千斤頂加壓到槽口回到原位，讀到「垂直於槽」的應力。
 --     平常切垂直槽 → 量沿著牆面的水平應力；蹲下（Shift）切水平槽 → 量垂直應力。
---     量的是開挖面上的應力：初始地應力 × 開挖造成的應力集中（局部 σ1 ÷ 初始最大主應力，1～3 倍）。
+--     讀到的就是那一格的初始地應力（不算開挖造成的應力集中，保持簡單）。
 --   孔內應力計（undercoring）：右鍵一個鑽孔（鑿岩機鑽的），把應力計放到孔底，讀孔底的三向應力 σv、σH、σh 和 σH 方位。
---     孔底離開挖面越遠越接近初始地應力；孔太淺（孔底還在應力集中區）讀數會偏大。
+--     讀到的是孔底那一格的初始地應力。
 --   讀數有 ±5 % 的量測誤差。
 
 local S = rockmech.S
@@ -14,14 +14,6 @@ local NOISE = 0.05
 
 local function noisy(v) return v * (1 + NOISE * (math.random() + math.random() - 1)) end
 local function mpa(v) return ("%.2f"):format(v) end
-
--- 開挖造成的應力集中：局部最大主應力 ÷ 初始最大主應力（1～3）
-local function concentration(r)
-	local i, ls = r.init, r.local_state
-	local m = math.max(i.sv or 0, i.sH or 0, i.shmin or 0)
-	if not ls or m <= 0 then return 1 end
-	return math.max(1, math.min(3, (ls.s1 or m) / m))
-end
 
 local function bubble(player, lines, pos)
 	if rockmech.info_bubble then rockmech.info_bubble(player, lines, pos) end
@@ -42,17 +34,16 @@ core.register_tool(FLATJACK, {
 		if not rockmech.lith_of_node[core.get_node(pos).name] then bubble(player, {S("Use it on a rock face")}, pos); return itemstack end
 		if n.y ~= 0 then bubble(player, {S("Use it on a wall, not the floor or roof")}, pos); return itemstack end
 		local r = rockmech.stress_report(pos)
-		local c = concentration(r)
 		local i = r.init
 		local horizontal_slot = player:get_player_control().sneak
 		local val, what
 		if horizontal_slot then
-			val, what = noisy((i.sv or 0) * c), S("vertical stress")
+			val, what = noisy(i.sv or 0), S("vertical stress")
 		else
 			-- 沿著牆面的水平方向 t 上的初始水平應力：σH cos²θ + σh sin²θ（θ：t 跟 σH 方位的夾角）
 			local az = math.rad(cfg.sH_azimuth or 0)
 			local cth = math.abs(-n.z * math.sin(az) + n.x * math.cos(az))
-			val, what = noisy(((i.sH or 0) * cth * cth + (i.shmin or 0) * (1 - cth * cth)) * c), S("horizontal stress along the wall")
+			val, what = noisy(((i.sH or 0) * cth * cth + (i.shmin or 0) * (1 - cth * cth))), S("horizontal stress along the wall")
 		end
 		local slot = horizontal_slot and S("horizontal slot") or S("vertical slot")
 		local txt = S("Flat jack (@1): @2 @3 MPa", slot, what, mpa(val))
@@ -81,9 +72,8 @@ core.register_tool(CELL, {
 		if depth <= 0 then depth = (cfg.blast and cfg.blast.hole_depth) or 2 end
 		local bottom = vector.round(vector.add(hp, vector.multiply(dir, depth)))
 		local r = rockmech.stress_report(bottom)
-		local c = concentration(r)
 		local i = r.init
-		local sv, sH, sh = noisy((i.sv or 0) * c), noisy((i.sH or 0) * c), noisy((i.shmin or 0) * c)
+		local sv, sH, sh = noisy(i.sv or 0), noisy(i.sH or 0), noisy(i.shmin or 0)
 		local azm = (cfg.sH_azimuth or 0) + 5 * (math.random() + math.random() - 1)
 		local txt = S("Stress cell @1 m deep: σv @2  σH @3  σh @4 MPa, σH azimuth @5°", ("%.0f"):format(depth), mpa(sv), mpa(sH), mpa(sh), ("%03.0f"):format(azm % 360))
 		local ok = record(player, bottom, r.lith, txt)
