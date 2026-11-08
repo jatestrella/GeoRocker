@@ -200,7 +200,7 @@ V.WHEEL, V.TREAD = WHEEL, TREAD
 local truck = {desc = S("Dump truck"), short = S("Truck"), color = "#c84020", cap = 12 * NLEV, speed = 5.0,
 	top_speed = 12, accel = 1.5,   -- 直線加速到約 43 km/h
 	tire = 1.0,
-	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.9, eye_fwd = 1.6, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
+	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.9, eye_fwd = 1.6, eye_side = -0.55, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 	seat = {x = -0.55, y = 0.1, z = 0.6},     -- 左駕：駕駛室左前
 	passengers = {{x = 0.55, y = 0.1, z = 0.6, front = true, door = 2}},     -- 副駕駛
 	rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
