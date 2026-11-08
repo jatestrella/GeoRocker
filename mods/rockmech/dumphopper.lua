@@ -2,7 +2,8 @@
 -- 受料斗（dump hopper）：裝車料斗反過來用。4×4、高 2 m 的鋼斗，頂上是格柵。
 --   進料：卡車、怪手在格柵 SNAP m 內倒料，自動對準倒在格柵上（vehicles.lua 的 V.dump_to_ground 問 rockmech.dump_hopper_cells），
 --         格柵上的碎石每一步吃進斗裡，斗滿了就堆在格柵上等。
---   出料：四邊外面任何一格接一條朝外走的輸送帶就是出料口，斗裡的料照輸送帶的運量放上去
+--   出料：四邊外面任何一格（跟斗底同高或低一格）接一條輸送帶就是出料口（往外、往旁邊走都可以，往斗裡走的不算），
+--         斗裡的料照輸送帶的運量放上去
 --         （先放最多的那一種，礦石碎石保留品位）。第一條接上的鎖住，其他方向接了也不出料；敲掉它才能改接別邊。
 --   放的人（分了組就是整組）擁有；挖控制箱拆掉整座，斗裡的料沒了。
 
@@ -30,18 +31,20 @@ local function belt_dir(p)
 	if not n.name:find("^rockmech:belt_%d") then return nil end
 	return core.fourdir_to_dir(n.param2 % 4)
 end
--- 四邊外面的格子，每格配上朝外的方向
+-- 四邊外面的格子（跟斗底同高、低一格），每格配上朝外的方向
 local function rim(pos)
 	local r = {}
-	for i = -1, 2 do
-		r[#r + 1] = {p = {x = pos.x - 2, y = pos.y, z = pos.z + i}, d = {x = -1, z = 0}}
-		r[#r + 1] = {p = {x = pos.x + 3, y = pos.y, z = pos.z + i}, d = {x = 1, z = 0}}
-		r[#r + 1] = {p = {x = pos.x + i, y = pos.y, z = pos.z - 2}, d = {x = 0, z = -1}}
-		r[#r + 1] = {p = {x = pos.x + i, y = pos.y, z = pos.z + 3}, d = {x = 0, z = 1}}
+	for _, y in ipairs({pos.y, pos.y - 1}) do
+		for i = -1, 2 do
+			r[#r + 1] = {p = {x = pos.x - 2, y = y, z = pos.z + i}, d = {x = -1, z = 0}}
+			r[#r + 1] = {p = {x = pos.x + 3, y = y, z = pos.z + i}, d = {x = 1, z = 0}}
+			r[#r + 1] = {p = {x = pos.x + i, y = y, z = pos.z - 2}, d = {x = 0, z = -1}}
+			r[#r + 1] = {p = {x = pos.x + i, y = y, z = pos.z + 3}, d = {x = 0, z = 1}}
+		end
 	end
 	return r
 end
--- 出料口：鎖住的那條還在就用它；沒有就找第一條接上（朝外走）的輸送帶鎖住
+-- 出料口：鎖住的那條還在就用它；沒有就找第一條接上（不是往斗裡走）的輸送帶鎖住
 local function outlet(pos, meta)
 	local cur = core.string_to_pos(meta:get_string("out"))
 	if cur then
@@ -50,7 +53,7 @@ local function outlet(pos, meta)
 	end
 	for _, c in ipairs(rim(pos)) do
 		local d = belt_dir(c.p)
-		if d and d.x == c.d.x and d.z == c.d.z then
+		if d and not (d.x == -c.d.x and d.z == -c.d.z) then
 			meta:set_string("out", core.pos_to_string(c.p))
 			return c.p
 		end
@@ -64,10 +67,11 @@ local function total(bin)
 	return n
 end
 
-local function info(meta, bin)
+local function info(meta, bin, out)
 	local owner = meta:get_string("owner")
 	meta:set_string("infotext", S("Dump hopper (@1)", rockmech.account_label and rockmech.account_label(owner) or owner) .. "\n"
-		.. S("Stock @1 / @2 m³", ("%.1f"):format(total(bin) / NLEV), tostring(CAP)))
+		.. S("Stock @1 / @2 m³", ("%.1f"):format(total(bin) / NLEV), tostring(CAP))
+		.. (out and "" or ("\n" .. S("No conveyor belt connected"))))
 end
 
 
@@ -111,7 +115,7 @@ local function step(pos)
 		end
 	end
 	meta:set_string("bin", core.serialize(bin))
-	info(meta, bin)
+	info(meta, bin, out)
 end
 
 -- 自動對準（V.dump_to_ground）：倒料的那幾欄中心離格柵 SNAP m 內，改倒在格柵上
@@ -156,7 +160,7 @@ function rockmech.dump_hopper_accept(pos, e)
 	end
 	if took > 0 then
 		meta:set_string("bin", core.serialize(bin))
-		info(meta, bin)
+		info(meta, bin, core.string_to_pos(meta:get_string("out")))
 		rockmech.collapse.rubble_sound({x = pos.x + 0.5, y = pos.y + 1, z = pos.z + 0.5}, took)
 	end
 	return took
