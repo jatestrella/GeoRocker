@@ -411,6 +411,7 @@ end
 
 local function tick()
 	local nodes = {}
+	local stop = rockmech.belt_stopped and rockmech.belt_stopped() or {}   -- 控制箱停住的格（beltswitch.lua）
 	-- 1. 裝料：每格正上方那一格的碎石
 	for h, p in pairs(cells) do
 		local n, is = belt_at(p)
@@ -418,7 +419,7 @@ local function tick()
 			cells[h] = nil          -- 已經不是輸送帶了（被別的東西蓋掉）
 		elseif n then
 			nodes[h] = n
-			local C = cell_cap(h, p)
+			local C = stop[h] and 0 or cell_cap(h, p)      -- 停住的格不吸料
 			local room = C - total(loads[h])
 			if room > 0 then
 				local up = {x = p.x, y = p.y + 1, z = p.z}
@@ -436,6 +437,7 @@ local function tick()
 			while h and nodes[h] and not done[h] and not seen[h] do
 				seen[h] = true
 				chain[#chain + 1] = h
+				if stop[h] then h = nil; break end      -- 停住的格：不往前送，上游送到這裡就塞住
 				local q, d, w = next_of(cells[h], nodes[h])
 				if q then
 					local hq = core.hash_node_position(q)

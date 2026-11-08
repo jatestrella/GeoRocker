@@ -92,6 +92,7 @@ config.shop = {
 	{key = "crusher_big", shop = "civil", item = "rockmech:crusher_big", label = TR("Large crusher"), price = 300000},
 	{key = "plant", shop = "civil", item = "rockmech:plant", label = TR("Ore plant"), price = 30000},
 	{key = "belt", shop = "civil", item = "rockmech:belt", label = TR("Conveyor belt"), price = 1000, count = 10},
+	{key = "belt_switch", shop = "civil", item = "rockmech:belt_switch", label = TR("Conveyor control box"), price = 3000},
 	{key = "lowboy", shop = "vehicle", item = "rockmech:lowboy_item", label = TR("Lowboy trailer"), price = 40000},
 	{key = "heavyhaul", shop = "vehicle", item = "rockmech:heavyhaul_item", label = TR("Heavy haul trailer"), price = 120000},
 	{key = "dozer", shop = "vehicle", item = "rockmech:dozer_item", label = TR("Bulldozer"), price = 35000},

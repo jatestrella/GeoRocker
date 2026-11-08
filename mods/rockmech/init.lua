@@ -121,6 +121,7 @@ dofile(modpath .. "/impact.lua")
 dofile(modpath .. "/crusher.lua")
 dofile(modpath .. "/plant.lua")
 dofile(modpath .. "/conveyor.lua")
+dofile(modpath .. "/beltswitch.lua")   -- 輸送帶控制箱：運轉／停止／依礦價
 dofile(modpath .. "/loadout.lua")
 dofile(modpath .. "/dumphopper.lua")   -- 受料斗：卡車倒進來、交給輸送帶運走
 dofile(modpath .. "/facilitydamage.lua")   -- 設施耐久度：爆炸扣整座的血、裂紋、炸毀、技工修理
