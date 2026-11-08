@@ -51,7 +51,14 @@ local function lift(kind, P)
 	local wheel = {V.TREAD, V.TREAD, V.WHEEL, V.WHEEL, V.TREAD, V.TREAD}
 	local parts = {
 		{pos = {x = 0, y = -0.55, z = -2.0}, size = {x = 2.0, y = 0.3, z = 7.0}, tex = box_tex("#2a2a2a")},     -- 底盤
-		{pos = {x = 0, y = -0.3, z = -3.0}, size = {x = 2.4, y = 0.2, z = 5.0}, tex = box_tex("#5a5e62")},      -- 甲板
+		-- 後段車體：有厚度的箱型（引擎、液壓油箱、固定腳箱都在裡面），上面是轉台座；輪子上半埋在輪拱裡
+		{pos = {x = 0, y = -0.35, z = -3.0}, size = {x = 2.4, y = 1.3, z = 5.0},
+			tex = {"[fill:16x16:#5a5e62^[fill:16x1:0,0:#4a4e52^[fill:16x1:0,15:#4a4e52",
+				"[fill:16x16:#2a2a2a",
+				("[fill:16x16:%s^[fill:16x2:0,12:#2a2a2a^[fill:3x8:2,3:#3a3a3a^[fill:3x8:7,3:#3a3a3a^[fill:3x8:12,3:#3a3a3a"):format(c),
+				("[fill:16x16:%s^[fill:16x2:0,12:#2a2a2a^[fill:3x8:2,3:#3a3a3a^[fill:3x8:7,3:#3a3a3a^[fill:3x8:12,3:#3a3a3a"):format(c),
+				("[fill:16x16:%s"):format(c),
+				"[fill:16x16:#e8c020^[fill:3x16:0,0:#202020^[fill:3x16:6,0:#202020^[fill:3x16:12,0:#202020^[fill:4x3:1,2:#c02020^[fill:4x3:11,2:#c02020"}},
 		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0},
 			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side, cab_front, ("[fill:16x16:%s"):format(c)}},
 	}
@@ -138,6 +145,26 @@ local function lift(kind, P)
 		return psi, tip, rope, r
 	end
 
+	-- 吊車：臂尖 T、吊索長 rope 決定吊籠位置。回傳 轉台角度, 臂尖, 吊索, 水平距離, 吊籠中心；不合作業範圍回傳 nil
+	local ROPE_MAX = 45
+	local function solve_c(T, rope)
+		local dx, dz = T.x - P0.x, T.z - P0.z
+		local r = math.sqrt(dx * dx + dz * dz)
+		if r < P.rmin - 1e-6 or r > P.rmax + 1e-6 or T.y < P0.y + 0.3 then return nil end
+		local Lb = vector.distance(T, P0)
+		if Lb < P.Lmin - 1e-6 or Lb > P.Lmax + 1e-6 then return nil end
+		if rope < 1 - 1e-6 or rope > ROPE_MAX then return nil end
+		local B = {x = T.x, y = T.y - rope - BK.y / 2, z = T.z}
+		if B.y < P.ymin - 1e-6 or B.y > P.ymax + 1e-6 then return nil end
+		return atan2(dx, dz), T, rope, r, B
+	end
+	-- 收起時的臂尖、吊索（從收起的作業籠位置算）
+	local T_REST, ROPE_REST
+	if P.crane then
+		local _, tip, rope = solve(REST)
+		T_REST, ROPE_REST = tip, rope
+	end
+
 	local function attach_box(self, o, center, psi)
 		if o then o:set_attach(self.object, "", {x = center.x * 10, y = center.y * 10, z = center.z * 10}, {x = 0, y = math.deg(psi), z = 0}) end
 	end
@@ -145,8 +172,16 @@ local function lift(kind, P)
 	local function place_arm(self)
 		local ps, st = self.parts, L(self)
 		if not ps then return end
-		local psi, tip, rope = solve(st.B)
-		if not psi then st.B = vector.copy(REST); psi, tip, rope = solve(st.B) end
+		local psi, tip, rope
+		if P.crane then
+			local B
+			psi, tip, rope, _, B = solve_c(st.T, st.rope)
+			if not psi then st.T, st.rope = vector.copy(T_REST), ROPE_REST; psi, tip, rope, _, B = solve_c(st.T, st.rope) end
+			st.B = B
+		else
+			psi, tip, rope = solve(st.B)
+			if not psi then st.B = vector.copy(REST); psi, tip, rope = solve(st.B) end
+		end
 		st.psi = psi
 		attach_box(self, ps.turret, {x = P0.x, y = P0.y - P.turret.y / 2, z = P0.z}, psi)
 		if ps.cw then attach_box(self, ps.cw, vector.add(P0, h2v({x = 0, y = 0.1, z = -1.4}, psi)), psi) end
@@ -185,10 +220,17 @@ local function lift(kind, P)
 	end
 
 	-- 人在作業籠裡：掛在車上、站在作業籠地板上
+	-- 掛在作業籠地板（零件）上：作業籠移動時人跟著走，不用每步重新掛
+	-- （掛在車身上再改掛載位置，客戶端不會更新，人留在原地）
 	local function attach_player(self, d)
+		local f = self.parts and self.parts.bfloor
+		if f and f:get_pos() then
+			if d:get_attach() ~= f then d:set_attach(f, "", {x = 0, y = 0.5, z = 0}, {x = 0, y = 0, z = 0}) end
+			return
+		end
 		local st = L(self)
-		local f = {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z}
-		d:set_attach(self.object, "", {x = f.x * 10, y = f.y * 10, z = f.z * 10}, {x = 0, y = 0, z = 0})
+		local p = {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z}
+		d:set_attach(self.object, "", {x = p.x * 10, y = p.y * 10, z = p.z * 10}, {x = 0, y = 0, z = 0})
 	end
 	local function to_basket(self, d)
 		local st = L(self)
@@ -226,7 +268,8 @@ local function lift(kind, P)
 
 	-- 地板實體右鍵：回到作業籠操作
 	function def.on_spawn(self)
-		self.lift = self.lift or {e = 0, B = vector.copy(REST), mode = "cab"}
+		self.lift = self.lift or {e = 0, B = vector.copy(REST), mode = "cab",
+			T = T_REST and vector.copy(T_REST), rope = ROPE_REST}
 		self.lift_board = function(me, clicker)
 			if not clicker or not clicker:is_player() then return end
 			local name = clicker:get_player_name()
@@ -325,7 +368,46 @@ local function lift(kind, P)
 		end
 		local d = ctx.d
 		st.moving = false
-		if st.mode == "basket" and d then
+		if st.mode == "basket" and d and P.crane then
+			-- 吊車：WASD 臂尖水平移動；空白鍵／Shift：吊臂模式動臂尖上下、吊索模式收放吊索；Z 切換
+			local c = ctx.ctrl
+			if c.zoom and not st.zoom_held then
+				st.hoist = not st.hoist
+				update_hud(self)
+			end
+			st.zoom_held = c.zoom
+			if c.aux1 then return end
+			local f = (c.up and 1 or 0) - (c.down and 1 or 0)
+			local s = (c.right and 1 or 0) - (c.left and 1 or 0)
+			local u = (c.jump and 1 or 0) - (c.sneak and 1 or 0)
+			if f ~= 0 or s ~= 0 or u ~= 0 then
+				local lh = d:get_look_horizontal()
+				local fw, rt = {x = -math.sin(lh), z = math.cos(lh)}, {x = math.cos(lh), z = math.sin(lh)}
+				local hx, hz = fw.x * f + rt.x * s, fw.z * f + rt.z * s
+				local hl = math.sqrt(hx * hx + hz * hz)
+				if hl > 0 then hx, hz = hx / hl, hz / hl end
+				local step = P.speed * dt
+				local function try(dw, drope)
+					local nT = V.to_local(self, vector.add(V.to_world(self, st.T), dw))
+					local nr = st.rope + drope
+					local psi, _, _, _, B = solve_c(nT, nr)
+					if psi and not blocked(self, B, psi) then st.T, st.rope = nT, nr; return true end
+				end
+				local moved = false
+				if hl > 0 then moved = try({x = hx * step, y = 0, z = hz * step}, 0) or moved end
+				if u ~= 0 then
+					if st.hoist then moved = try({x = 0, y = 0, z = 0}, -u * step) or moved
+					else moved = try({x = 0, y = u * step, z = 0}, 0) or moved end
+				end
+				if moved then
+					st.moving = true
+					place_arm(self)
+					attach_player(self, d)
+					st.hud_t = (st.hud_t or 0) + dt
+					if st.hud_t > 0.3 then st.hud_t = 0; update_hud(self) end
+				end
+			end
+		elseif st.mode == "basket" and d then
 			local c = ctx.ctrl
 			if c.aux1 then return end
 			local f = (c.up and 1 or 0) - (c.down and 1 or 0)
@@ -359,6 +441,24 @@ local function lift(kind, P)
 					if st.hud_t > 0.3 then st.hud_t = 0; update_hud(self) end
 				end
 			end
+		elseif st.mode == "return" and P.crane then
+			-- 吊車收回：吊索收到原長、臂尖回原位（一起動）
+			local step = RETURN_SPEED * dt
+			local dv = vector.subtract(T_REST, st.T)
+			local dist = vector.length(dv)
+			local dr = ROPE_REST - st.rope
+			if dist <= step and math.abs(dr) <= step then
+				st.T, st.rope, st.mode = vector.copy(T_REST), ROPE_REST, "cab"
+				place_arm(self)
+				if d then V.seat_driver(self, d) end
+				update_hud(self)
+			else
+				local nT = dist > step and vector.add(st.T, vector.multiply(dv, step / dist)) or vector.copy(T_REST)
+				local nr = st.rope + math.max(-step, math.min(step, dr))
+				if solve_c(nT, nr) then st.T, st.rope = nT, nr else st.T, st.rope = vector.copy(T_REST), ROPE_REST end
+				place_arm(self)
+				if d then attach_player(self, d) end
+			end
 		elseif st.mode == "return" then
 			local dv = vector.subtract(REST, st.B)
 			local dist = vector.length(dv)
@@ -383,15 +483,22 @@ local function lift(kind, P)
 		if not st then return "" end
 		local s = "\n" .. (st.edir and S("Outriggers moving") or st.e >= 1 and S("Outriggers down") or S("Outriggers up"))
 		if st.mode ~= "cab" or vector.distance(st.B, REST) > 0.05 then
-			local _, _, _, r = solve(st.B)
+			local r
+			if P.crane then _, _, _, r = solve_c(st.T, st.rope) else _, _, _, r = solve(st.B) end
 			s = s .. "   " .. S("Basket: @1 m high, @2 m out", ("%.1f"):format(st.B.y - BK.y / 2 + 1.5), ("%.1f"):format(r or 0))
+			if P.crane then s = s .. "   " .. S("Rope @1 m", ("%.1f"):format(st.rope)) end
 		end
-		if self.msg then s = s .. "\n" .. self.msg end
 		return s
 	end
 	function def.keys(self)
 		local st = L(self)
 		if st and (st.mode == "basket" or st.mode == "return") then
+			if P.crane then
+				return {{"WASD", S("Move the boom")},
+					{S("Space") .. " / Shift", st.hoist and S("Basket up / down (rope)") or S("Boom up / down")},
+					{"Z", st.hoist and S("Switch to the boom") or S("Switch to the rope"), on = st.hoist},
+					{"E", S("Back to the cab")}, {"Shift+E", S("Step out")}}
+			end
 			return {{"WASD", S("Move the basket")}, {S("Space") .. " / Shift", S("Up / down")},
 				{"E", S("Back to the cab")}, {"Shift+E", S("Step out")}}
 		end

@@ -102,7 +102,6 @@ function def.hud(self)
 	local s = "\n" .. S("Hole depth setting @1 m", ("%d"):format(depth_setting(self)))
 	if self.boring and self.boring.up then s = s .. "  " .. S("Pulling out the drill rods")
 	elseif self.boring then s = s .. "  " .. S("Drilling @1 / @2 m", ("%.0f"):format(self.boring.t / SEC_PER_M), ("%d"):format(self.boring.depth)) end
-	if self.msg then s = s .. "\n" .. self.msg end
 	return s
 end
 function def.keys(self) return {{"E", S("Drill (below the mast)"), on = self.boring ~= nil}, {S("Space"), S("Set hole depth")}} end

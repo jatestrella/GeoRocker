@@ -104,7 +104,6 @@ function def.hud(self)
 	local s = "\n" .. S("Tank: ANFO @1 / @2 bags  Emulsion @3 / @4 sticks",
 		("%d"):format(V.store_count(self, ANFO)), ("%d"):format(def.store[1][2]), ("%d"):format(V.store_count(self, EMULSION)), ("%d"):format(def.store[2][2]))
 	if self.pumping then s = s .. "  " .. S("Filling holes @1 / @2", ("%d"):format(self.pumping.done), ("%d"):format(#self.pumping.list)) end
-	if self.msg then s = s .. "\n" .. self.msg end
 	return s
 end
 function def.keys(self)

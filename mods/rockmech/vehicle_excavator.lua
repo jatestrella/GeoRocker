@@ -536,7 +536,6 @@ local function excavator(kind, P)
 			s = s .. "\n" .. S("@1 ahead: @2", TYPES[truck.vkind].short, V.volume_text(tt, cap))
 		end
 		if self.breaker then s = s .. "\n" .. (self.tool == "breaker" and S("Tool: hydraulic breaker") or S("Tool: bucket (Space switches to the breaker when the bucket is empty)")) end
-		if self.msg then s = s .. "\n" .. self.msg end
 		return s
 	end
 	function def.keys(self)

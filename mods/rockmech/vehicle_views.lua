@@ -28,9 +28,16 @@ local function hud_text(self)
 	local hp = self.hp or 100
 	if hp <= 0 then s = s .. "\n" .. core.colorize("#ff6040", S("[WRECKED] Cannot be driven; get a mechanic to repair it"))
 	elseif hp < 100 then s = s .. core.colorize(hp < V.WORN and "#ff9040" or "#ffffff", "  " .. S("Durability @1%", ("%d"):format(math.floor(hp + 0.5)))) end
-	if self.steep then s = s .. "\n" .. self.steep end
 	return s
 end
+-- 警示訊息（各車的 self.msg、爬不上去的 self.steep）：顯示在準心下方
+local function warn_text(self)
+	local w = {}
+	if self.msg then w[#w + 1] = self.msg end
+	if self.steep then w[#w + 1] = self.steep end
+	return table.concat(w, "\n")
+end
+local WARN_HOLD = 4          -- self.msg 顯示幾秒後自動消失
 
 -- 儀表板上的按鍵列：每個鍵一個按鈕，上面寫鍵名和功能；開著的功能（def.keys 回傳 on = true）按鈕亮起來。
 -- 各車的 def.keys(self) 回傳 {{鍵名, 功能, on = 開著嗎}, ...}，後面再接共用的 Z（追蹤相機）、Shift（下車）。
@@ -42,6 +49,7 @@ local function keys_of(self)
 	local def = TYPES[self.vkind]
 	local out = {}
 	for _, k in ipairs(def.keys and def.keys(self) or {}) do out[#out + 1] = k end
+	if def.hold_controls and def.hold_controls(self) then return out end   -- 按鍵歸車子自己用（作業籠）：不接共用的 Z、Shift
 	if not def.pushed then out[#out + 1] = {"Z", S("Chase camera"), on = self.chase ~= nil} end
 	out[#out + 1] = {"Shift", def.pushed and S("Let go") or S("Get out")}
 	return out
@@ -397,11 +405,13 @@ end
 function V.hud_clear(self, player)
 	if player then
 		if self.hud then player:hud_remove(self.hud) end
+		if self.hud_warn then player:hud_remove(self.hud_warn) end
 		if self.hud_cockpit then player:hud_remove(self.hud_cockpit) end
 		for _, id in ipairs(self.hud_mirror or {}) do player:hud_remove(id) end
 		keys_clear(self, player)
 	end
 	self.hud, self.hud_cockpit, self.hud_mirror = nil, nil, nil
+	self.hud_warn, self.warn_shown = nil, nil
 	self.hud_keys, self.keys_sig = nil, nil
 end
 
@@ -434,6 +444,20 @@ function V.update_hud(self)
 		self.hud = d:hud_add({type = "text", position = {x = 0.5, y = KEY_Y - KEY_H / 200 - 0.01}, alignment = {x = 0, y = -1},
 			text = hud_text(self), number = 0xFFE080, z_index = 100})
 	end
+	local warn = warn_text(self)
+	if self.hud_warn then
+		if warn ~= self.warn_shown then d:hud_change(self.hud_warn, "text", warn) end
+	else
+		self.hud_warn = d:hud_add({type = "text", position = {x = 0.5, y = 0.56}, alignment = {x = 0, y = 1},
+			text = warn, number = 0xFF9040, z_index = 100})
+	end
+	if warn ~= self.warn_shown and self.msg then
+		local m = self.msg
+		core.after(WARN_HOLD, function()
+			if self.object and self.object:get_pos() and self.msg == m then self.msg = nil; V.update_hud(self) end
+		end)
+	end
+	self.warn_shown = warn
 	V.update_keys(self, d)
 	V.refresh(self)
 end

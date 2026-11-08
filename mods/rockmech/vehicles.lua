@@ -1497,7 +1497,8 @@ function V.register(kind, def)
 			if d then
 				local parent = d:get_attach()
 				local pe = parent and parent:get_luaentity()
-				if not (pe == self or (self.chase and parent and pe and pe.name == CHASE and pe.vehicle == self)) then
+				-- 掛在這台車的零件上（作業籠）也算在車上
+				if not (pe == self or (parent and parent:get_attach() == obj) or (self.chase and parent and pe and pe.name == CHASE and pe.vehicle == self)) then
 					hud_clear(self, d)
 					if not parent then
 						d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})

@@ -122,7 +122,6 @@ function def.hud(self)
 		local d, max = rockmech.coredrill_depth(self.coring)
 		s = s .. S("Coring @1 / @2 m (the rig cannot move)", ("%d"):format(d or 0), ("%d"):format(max or MAX_DEPTH))
 	end
-	if self.msg then s = s .. "\n" .. self.msg end
 	return s
 end
 function def.keys(self) return {{"E", S("Core drilling (up to @1 m)", ("%d"):format(MAX_DEPTH)), on = self.coring ~= nil}} end

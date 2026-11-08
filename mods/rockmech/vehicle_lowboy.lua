@@ -149,7 +149,6 @@ end
 function def.hud(self)
 	local e = carried(self)
 	return "\n" .. S("Deck: @1", e and V.TYPES[e.vkind].desc or (self.carry_uid and S("(carried vehicle not loaded yet)") or S("empty")))
-		.. (self.msg and ("\n" .. self.msg) or "")
 end
 function def.keys(self) return {{"E", self.carry_uid and S("Unload vehicle") or S("Load vehicle (next to the deck)"), on = self.carry_uid ~= nil}} end
 function def.on_save(self, data) data.carry_uid = self.carry_uid end

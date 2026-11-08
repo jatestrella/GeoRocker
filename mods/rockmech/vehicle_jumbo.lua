@@ -207,7 +207,6 @@ do
 		local plan = pattern(self)
 		local s = "\n" .. S("Blast hole pattern @1 × @2", ("%d"):format(plan.w), ("%d"):format(plan.h))
 		if self.drill then s = s .. "  " .. S("Drilling @1 / @2", ("%d"):format(self.drill.done), ("%d"):format(#self.drill.list)) end
-		if self.msg then s = s .. "\n" .. self.msg end
 		return s
 	end
 	function def.keys(self) return {{"E", S("Drill to pattern"), on = self.drill ~= nil}, {S("Space"), S("Edit pattern")}} end
@@ -417,7 +416,6 @@ do
 		local n = stock(d)
 		s = s .. "  " .. (n == math.huge and S("(not used up in creative mode)") or S("@1 sticks in inventory", ("%d"):format(n)))
 		if self.charging then s = s .. "  " .. S("Charging @1 / @2", ("%d"):format(self.charging.done), ("%d"):format(#self.charging.list)) end
-		if self.msg then s = s .. "\n" .. self.msg end
 		return s
 	end
 	function def.keys(self) return {{"E", S("Charge (face ahead)"), on = self.charging ~= nil}, {S("Space"), S("Sticks per hole")}} end
