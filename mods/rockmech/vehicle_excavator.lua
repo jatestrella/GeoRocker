@@ -949,7 +949,7 @@ local function excavator(kind, P)
 					else
 						local ucs = (rockmech.cfg.lithologies[lith.name] or {}).ucs or 30
 						self.dig = {t = 0, mode = "break", target = target, to = th, psi = psi, psi0 = self.swing or 0,
-							need = ucs * rockmech.cfg.breaker_rate, hold = 0}
+							need = ucs * rockmech.cfg.breaker_rate / (P.breaker_power or 1), hold = 0}   -- 大的破碎錘打擊能量大，敲得快
 						self.msg = S("Breaking rock (UCS @1 MPa, about @2 s)", ("%d"):format(ucs), ("%.1f"):format(self.dig.need))
 					end
 				end
@@ -1100,6 +1100,7 @@ do
 		bucket_rest = {x = 0.5, y = -2.1, z = 6.5},      -- 收起時挖斗在車頭前方，斗底離地約 10 cm（斗高 2.5 m）
 		boom_len = 8.2, stick_len = 5.0, boom_w = 1.1, stick_w = 0.9,
 		bucket = {x = 2.8, y = 2.0, z = 1.8}, bucket_color = "#4a4a4a",
+		breaker_power = 4,                               -- 破碎錘打擊能量約是 20 t 級的 4 倍：同樣的岩石 1/4 時間
 		bucket_real = {x = 3.2, y = 2.5, z = 2.8},       -- 200 t 級、約 12 m³：寬 3.2、斗高 2.5、斗深 2.8，接點到齒尖約 2.9 m
 		dig_r = 2, dig_reach = 18, lift = 3.5, swing_rate = 0.8, dump_reach = 9,
 		bucket_box = {r = 1.6, down = 1.1, up = 2.4},
