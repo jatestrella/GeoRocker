@@ -1732,3 +1732,7 @@ Build it on flat ground: @1×@1 m of level ground=要蓋在平地上：@1×@1 m 
 Wooden block=木磚
 [Wooden block] The wooden block at @1 was crushed: it could not hold the load=[木磚] @1 的木磚被壓碎了：撐不住上面的荷重
 Load @1 kN / capacity @2 kN (@3%)=受力 @1 kN／承載力 @2 kN（@3%）
+Show this world's geology (teacher)=顯示這個世界的地質（老師用）
+Host rock: @1=圍岩：@1
+Coal seam: dip @1°, dip direction @2°, thickness @3 m, @4 m below spawn=煤層：傾角 @1°、傾向 @2°、厚 @3 m、出生點底下 @4 m
+Generated from seed @1=由種子 @1 產生

@@ -39,6 +39,9 @@ rockmech.rockmass = dofile(modpath .. "/rockmass.lua")
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
 local world_conf_path = core.get_worldpath() .. "/rockmech.conf"
 local world_conf = Settings(world_conf_path)
+-- 地圖產生器：新世界（還沒有 rockmech.conf）第一次啟動時擲一套地質寫進去（worldgen.lua）
+local worldgen = dofile(modpath .. "/worldgen.lua")
+if worldgen.generate(world_conf) then world_conf = Settings(world_conf_path) end
 local function get_setting(key)
 	local v = world_conf:get(key)
 	if v ~= nil and v ~= "" then return v end
@@ -79,6 +82,7 @@ if not world_conf:has("rockmech_joint_persistence") then
 	cfg.joint_persistence = "face"
 	world_conf:write()
 end
+worldgen.register_command()       -- /rockmech_geology：老師查這個世界的地質
 -- mapgen 執行緒無法讀主環境的變數，以 IPC 傳遞世界設定
 core.ipc_set("rockmech:world_settings", world_conf:to_table())
 
