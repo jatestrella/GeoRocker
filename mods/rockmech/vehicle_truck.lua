@@ -202,6 +202,7 @@ local truck = {desc = S("Dump truck"), short = S("Truck"), color = "#c84020", ca
 	tire = 1.0,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 	seat = {x = -0.55, y = 0.1, z = 0.6},     -- 左駕：駕駛室左前
+	passengers = {{x = 0.55, y = 0.1, z = 0.6, front = true, door = 2}},     -- 副駕駛
 	rearcam = {x = 0, y = 1.0, z = -5.7}, tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	max_grade = math.rad(17),   -- 重載砂石車約 30%
 	item_desc = S("Right-click to get in; Space tips the bed")}
@@ -223,6 +224,16 @@ do
 		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0}, alpha = true,
 			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side, cab_front, ("[fill:16x16:%s"):format(c)}},
 	}
+	-- 車門：左（駕駛）右（副駕駛），鉸鏈在前緣，關著時貼在駕駛室側面外
+	local door_tex = V.cab_glass(c, 2, 1, 12, 6) .. "^[fill:3x1:10,10:#2a2a2a"
+	truck.doors = {
+		{id = "door_l", hinge = {x = -1.23, y = 0.65, z = 1.35}, w = 1.1, side = -1},
+		{id = "door_r", hinge = {x = 1.23, y = 0.65, z = 1.35}, w = 1.1, side = 1},
+	}
+	for _, d in ipairs(truck.doors) do
+		body[#body + 1] = {id = d.id, pos = {x = d.hinge.x, y = d.hinge.y, z = d.hinge.z - d.w / 2}, size = {x = 0.05, y = 1.3, z = d.w},
+			alpha = true, tex = {door_tex, door_tex, door_tex, door_tex, door_tex, door_tex}}
+	end
 	-- 前軸單輪、後兩軸雙輪（較寬），外緣在車斗外側
 	for _, w in ipairs({{x = -1.15, z = 0.5, wd = 0.35}, {x = 1.15, z = 0.5, wd = 0.35},
 			{x = -1.1, z = -3.2, wd = 0.6}, {x = 1.1, z = -3.2, wd = 0.6}, {x = -1.1, z = -4.4, wd = 0.6}, {x = 1.1, z = -4.4, wd = 0.6}}) do

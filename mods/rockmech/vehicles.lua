@@ -1331,37 +1331,130 @@ local function drop_chase(self)
 end
 V.drop_chase = drop_chase
 
+-- 車門（def.doors = {{id, hinge（鉸鏈：車門前緣、車身座標）, w（寬）, side（−1 左門、1 右門）}...}）：
+-- 上下車時門打開再關上（只是外觀，不用多按）。門的零件在 def.parts 裡（同一個 id，放在關著的位置）
+local DOOR_OPEN, DOOR_T, DOOR_HOLD = math.rad(70), 0.25, 0.35
+local function place_door(self, d, ang)
+	local o = self.parts and self.parts[d.id]
+	if not o then return end
+	local psi = d.side < 0 and ang or -ang                  -- 左門往 −x 開、右門往 +x 開
+	local c = vector.add(d.hinge, h2v({x = 0, y = 0, z = -d.w / 2}, psi))
+	o:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, {x = 0, y = math.deg(psi), z = 0})
+end
+function V.door_swing(self, i)
+	local def = TYPES[self.vkind]
+	local d = def.doors and def.doors[i or 1]
+	if not d then return end
+	self.door_anim = self.door_anim or {}
+	local token = {}
+	self.door_anim[i or 1] = token
+	local t0 = core.get_us_time() / 1e6
+	local function tick()
+		if not self.object:get_pos() or self.door_anim[i or 1] ~= token then return end
+		local t = core.get_us_time() / 1e6 - t0
+		local a
+		if t < DOOR_T then a = DOOR_OPEN * t / DOOR_T
+		elseif t < DOOR_T + DOOR_HOLD then a = DOOR_OPEN
+		elseif t < 2 * DOOR_T + DOOR_HOLD then a = DOOR_OPEN * (1 - (t - DOOR_T - DOOR_HOLD) / DOOR_T)
+		else place_door(self, d, 0); return end
+		place_door(self, d, a)
+		core.after(0.04, tick)
+	end
+	tick()
+end
+
+-- 下車的位置：車外站得下人的地方（不能放進車身、伸出去的車斗或岩石、碎石裡，會卡住）：
+-- 左側、右側（車身中段、靠後）、車尾後、車頭前，依序選第一個空的；腳底在地面上（或高一格）。side：先試哪一側（1 右）
+local function outside_spot(self, side)
+	local p = self.object:get_pos()
+	local yaw = self.object:get_yaw()
+	local def = TYPES[self.vkind]
+	local c, sn = math.cos(yaw), math.sin(yaw)
+	local hw = def.half + PLAYER_R + PUSH_CLEAR + 0.3
+	for _, r in ipairs(def.overhangs or {}) do hw = math.max(hw, -r.x0 + PLAYER_R + PUSH_CLEAR, r.x1 + PLAYER_R + PUSH_CLEAR) end
+	local rear = (def.rear or def.half) + PLAYER_R + PUSH_CLEAR + 0.3
+	local first = side == 1 and hw or -hw
+	local cands = {{first, 0}, {-first, 0}, {first, -rear / 2}, {-first, -rear / 2}, {0, -rear}, {0, def.half + 1.2},
+		{first * (1 + 1.5 / hw), 0}, {-first * (1 + 1.5 / hw), 0}}
+	local feet = p.y - def.half + 0.05
+	for _, cd in ipairs(cands) do
+		for _, dy in ipairs({0, 1}) do
+			local q = {x = p.x + cd[1] * c - cd[2] * sn, y = feet + dy, z = p.z + cd[1] * sn + cd[2] * c}
+			if body_free(q) then return q end
+		end
+	end
+	return {x = p.x, y = p.y + (def.top or def.half) + 0.1, z = p.z}      -- 四周都被擋住：站到車頂上
+end
+
+-- 乘客（def.passengers = {{x, y, z, front = 前排？, door = 車門序號}...}）：有人在開的車，別人右鍵坐上空的乘客座；
+-- Shift 或再右鍵一次下車。self.pass：玩家名 → 座位序號（不存檔：重新載入時乘客已經下車了）
+local function pass_seat_eye(def, s)
+	return {x = 0, y = (def.eye_up - EYE_HEIGHT - s.y) * 10, z = (s.front and (def.eye_fwd - s.z) or 0) * 10}
+end
+local function pass_on(self, player)
+	local def = TYPES[self.vkind]
+	self.pass = self.pass or {}
+	local used = {}
+	for _, i in pairs(self.pass) do used[i] = true end
+	for i, s in ipairs(def.passengers or {}) do
+		if not used[i] then
+			local name = player:get_player_name()
+			local parent = player:get_attach()
+			local pe = parent and parent:get_luaentity()
+			if pe and pe ~= self and pe.driver == name then hud_clear(pe, player); pe.driver = nil end
+			player:set_detach()
+			player:set_attach(self.object, "", {x = s.x * 10, y = s.y * 10, z = s.z * 10}, {x = 0, y = 0, z = 0})
+			player:set_eye_offset(pass_seat_eye(def, s), {x = 0, y = 15, z = -5})
+			player:set_camera({mode = "first"})
+			set_seated(player, true)
+			self.pass[name] = i
+			if s.door then V.door_swing(self, s.door) end
+			return true
+		end
+	end
+	return false
+end
+local function pass_off(self, name)
+	local def = TYPES[self.vkind]
+	local i = self.pass and self.pass[name]
+	if not i then return end
+	self.pass[name] = nil
+	local p = core.get_player_by_name(name)
+	if not p then return end
+	local s = def.passengers[i]
+	if p:get_attach() == self.object then p:set_detach() end
+	p:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+	p:set_camera({mode = "any"})
+	set_seated(p, false)
+	if s and s.door then V.door_swing(self, s.door) end
+	local spot = outside_spot(self, s and s.x > 0 and 1 or -1)
+	core.after(0.1, function() if p:get_pos() then p:set_pos(spot) end end)
+end
+V.pass_off = pass_off
+-- 乘客按 Shift 下車；掉線、被拆下來的從名單拿掉
+core.register_globalstep(function()
+	for _, e in pairs(V.by_uid) do
+		if e.pass and next(e.pass) then
+			for name in pairs(e.pass) do
+				local p = core.get_player_by_name(name)
+				if not p or p:get_attach() ~= e.object then e.pass[name] = nil
+				elseif p:get_player_control().sneak then pass_off(e, name) end
+			end
+		end
+	end
+end)
+
 local function get_off(self)
 	local d = self.driver and core.get_player_by_name(self.driver)
 	drop_chase(self)
 	if d then
+		V.door_swing(self, 1)
 		d:set_detach()
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		d:set_camera({mode = "any"})
 		set_seated(d, false)
 		hud_clear(self, d)
-		-- 放到車外站得下人的地方（不能放進車身、伸出去的車斗或岩石、碎石裡，會卡住）：
-		-- 左側、右側（車身中段、靠後）、車尾後、車頭前，依序選第一個空的；腳底在地面上（或高一格）
-		local p = self.object:get_pos()
-		local yaw = self.object:get_yaw()
-		local def = TYPES[self.vkind]
-		local c, sn = math.cos(yaw), math.sin(yaw)
-		local hw = def.half + PLAYER_R + PUSH_CLEAR + 0.3
-		-- 伸出碰撞箱那段（車斗、挖臂…）的寬度也要讓開
-		for _, r in ipairs(def.overhangs or {}) do hw = math.max(hw, -r.x0 + PLAYER_R + PUSH_CLEAR, r.x1 + PLAYER_R + PUSH_CLEAR) end
-		local rear = (def.rear or def.half) + PLAYER_R + PUSH_CLEAR + 0.3
-		local cands = {{-hw, 0}, {hw, 0}, {-hw, -rear / 2}, {hw, -rear / 2}, {0, -rear}, {0, def.half + 1.2},
-			{-hw - 1.5, 0}, {hw + 1.5, 0}}
-		local feet = p.y - def.half + 0.05
-		local spot
-		for _, cd in ipairs(cands) do
-			for _, dy in ipairs({0, 1}) do
-				local q = {x = p.x + cd[1] * c - cd[2] * sn, y = feet + dy, z = p.z + cd[1] * sn + cd[2] * c}
-				if body_free(q) then spot = q; break end
-			end
-			if spot then break end
-		end
-		spot = spot or {x = p.x, y = p.y + (def.top or def.half) + 0.1, z = p.z}     -- 四周都被擋住：站到車頂上
+		local spot = outside_spot(self, -1)
 		core.after(0.1, function()
 			if d:get_pos() then d:set_pos(spot) end
 		end)
@@ -1447,6 +1540,7 @@ function V.register(kind, def)
 			if not clicker or not clicker:is_player() then return end
 			local name = clicker:get_player_name()
 			if self.driver == name then get_off(self); return end
+			if self.pass and self.pass[name] then pass_off(self, name); return end
 			-- 開著別台車對拖車按右鍵：把那台開上平板（已經在這台拖車上就開下來，vehicle_lowboy.lua）
 			if def.drive_on then
 				local par = clicker:get_attach()
@@ -1456,7 +1550,16 @@ function V.register(kind, def)
 					return
 				end
 			end
-			if self.driver then return end
+			if self.driver then
+				-- 有人在開：坐上空的乘客座（要走到車旁邊）
+				if def.passengers and V.may_use(self, name) then
+					local cp, vp = clicker:get_pos(), self.object:get_pos()
+					if math.sqrt((cp.x - vp.x) ^ 2 + (cp.z - vp.z) ^ 2) <= math.max(def.half, def.rear or 0) + BOARD_REACH then
+						if not pass_on(self, clicker) then rockmech.notify(name, S("No free seat")) end
+					end
+				end
+				return
+			end
 			if not V.may_use(self, name) then return end
 			-- 無人機飛行中（或拿著遙控器）按右鍵：起飛／回到起飛點，不上車
 			if rockmech.drone_flying and rockmech.drone_flying(name) or rockmech.drone_remote_item
@@ -1501,6 +1604,7 @@ function V.register(kind, def)
 			clicker:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
 			clicker:set_camera({mode = "first"})
 			set_seated(clicker, true, def.pushed and "stand")
+			V.door_swing(self, 1)
 			update_hud(self)
 		end,
 		-- 爆炸（tnt）：扣耐久度。tnt 的 damage = 4 / 距離 × 半徑；×5 換成 kJ（貼著爆炸約 −60 %、4 m 外約 −15 %）
