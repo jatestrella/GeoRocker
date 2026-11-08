@@ -207,7 +207,7 @@ end
 -- P：def 的欄位（desc、color、cap、speed、half…）之外：
 --   body：不轉的零件（履帶、下車架）；house：跟著迴轉的零件 {id, pos（上部結構座標）, size, tex}
 --   boom_root、bucket_rest（上部結構座標）、boom_len、stick_len、boom_w、stick_w；bucket（挖斗大小）、bucket_color
---   fill_w、fill_l、fill_h0／fill_h1（斗裡碎石高度：空到滿）、fill_dy（碎石底在挖斗中心上方）
+--   bucket_real（鏟斗真實尺寸：寬、斗高、斗深；斗裡碎石的大小也照這個算）
 --   dig_r（挖、倒在目標周圍幾格）、dig_reach（從相機量）、lift（抬到目標上方）、swing_rate（rad/s）、dump_reach
 --   bucket_box（擋人：鏟斗外包的半寬、下、上）、body_box（擋人：車身，大車引擎擋不住走近的玩家）
 local function excavator(kind, P)
@@ -287,7 +287,11 @@ local function excavator(kind, P)
 	local STICK_TAIL = STICK_LEN / 4
 	parts[#parts + 1] = {id = "stick", pos = BUCKET_REST, size = {x = P.stick_w, y = STICK_LEN + STICK_TAIL, z = P.stick_w}, tex = box_tex(def.color)}
 	-- 鏟斗裡的碎石：高度依載量（空 → 不顯示），貼圖用載最多的那種碎石
-	parts[#parts + 1] = {id = "fill", pos = BUCKET_REST, size = {x = P.fill_w, y = 0.2, z = P.fill_l}, tex = box_tex("#6a6058")}
+	-- 碎石的大小照鏟斗內部：寬＝斗寬扣兩片側板，長＝底板扣前壁，高：空 15% → 滿 95% 斗高
+	local FILL_W, FILL_L = BW - 2 * BT - 0.02, BD * 0.75 - BT - 0.02
+	local FILL_Z = BD / 8 - BT / 2
+	local FILL_H0, FILL_H1 = BH * 0.15, BH * 0.95
+	parts[#parts + 1] = {id = "fill", pos = BUCKET_REST, size = {x = FILL_W, y = 0.2, z = FILL_L}, tex = box_tex("#6a6058")}
 	def.parts = parts
 
 	-- 油壓缸（大臂缸、小臂缸、鏟斗缸）：缸筒從一端、活塞桿從另一端，長度都固定，各自朝對方伸過去，
@@ -367,21 +371,21 @@ local function excavator(kind, P)
 		if not o then return end
 		local total, best = V.load_mix(self)
 		local frac = math.min(1, total / def.cap)
-		local h = frac > 0 and (P.fill_h0 + (P.fill_h1 - P.fill_h0) * frac) or 0
+		local h = frac > 0 and (FILL_H0 + (FILL_H1 - FILL_H0) * frac) or 0
 		local tex = total > 0 and V.fill_tex(self)
 		local key = ("%.2f/%s"):format(h, tostring(tex))
 		if self.fill_key ~= key then
 			self.fill_key = key
 			if h > 0 then
 				local t = tex
-				o:set_properties({is_visible = true, visual_size = {x = P.fill_w, y = h, z = P.fill_l}, textures = {t, t, t, t, t, t}})
+				o:set_properties({is_visible = true, visual_size = {x = FILL_W, y = h, z = FILL_L}, textures = {t, t, t, t, t, t}})
 			else
 				o:set_properties({is_visible = false})
 			end
 		end
 		-- 碎石放在斗裡（底板上），跟著鏟斗翻
 		local th = self.curl or 0
-		local c = vector.add(b, h2v(rot_x({x = 0, y = -BH / 2 + BT + h / 2, z = BD * 0.1}, th), psi or 0))
+		local c = vector.add(b, h2v(rot_x({x = 0, y = -BH / 2 + BT + h / 2, z = FILL_Z}, th), psi or 0))
 		o:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, {x = math.deg(th), y = math.deg(psi or 0), z = 0})
 	end
 
@@ -1041,7 +1045,6 @@ do
 		boom_len = 3.6, stick_len = 3.0, boom_w = 0.5, stick_w = 0.4,
 		bucket = {x = 1.3, y = 0.8, z = 0.7}, bucket_color = "#505050",
 		bucket_real = {x = 1.25, y = 1.1, z = 1.4},      -- 20 t 級、約 1 m³：寬 1.25、斗高 1.1、斗深 1.4，接點到齒尖約 1.45 m
-		fill_w = 1.1, fill_l = 0.55, fill_h0 = 0.12, fill_h1 = 0.72, fill_dy = 0.4,
 		dig_r = 1, dig_reach = 10, lift = 2.0, swing_rate = 1.5, dump_reach = 6,
 		bucket_box = {r = 0.7, down = 0.45, up = 0.9},
 	})
@@ -1081,7 +1084,6 @@ do
 		boom_len = 8.2, stick_len = 5.0, boom_w = 1.1, stick_w = 0.9,
 		bucket = {x = 2.8, y = 2.0, z = 1.8}, bucket_color = "#4a4a4a",
 		bucket_real = {x = 3.2, y = 2.5, z = 2.8},       -- 200 t 級、約 12 m³：寬 3.2、斗高 2.5、斗深 2.8，接點到齒尖約 2.9 m
-		fill_w = 2.4, fill_l = 1.4, fill_h0 = 0.2, fill_h1 = 1.4, fill_dy = 1.0,
 		dig_r = 2, dig_reach = 18, lift = 3.5, swing_rate = 0.8, dump_reach = 9,
 		bucket_box = {r = 1.6, down = 1.1, up = 2.4},
 		body_box = {x0 = -3.5, x1 = 3.5, z0 = -3.5, z1 = 3.5, y0 = -3.5, y1 = 3.0},
