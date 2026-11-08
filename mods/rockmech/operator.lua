@@ -421,8 +421,8 @@ core.register_globalstep(function(dtime)
 		local total = geti(REST .. s.acc)
 		local first = list[1]
 		if first and first:get_pos() then
-			first:set_properties({nametag = total > SEATS and S("Operators resting: @1 (those who don't fit on the bench are in the office)", tostring(total))
-				or S("Operators resting: @1 (right-click)", tostring(total))})
+			rockmech.npc_set_tag(first, total > SEATS and S("Operators resting: @1 (those who don't fit on the bench are in the office)", tostring(total))
+				or S("Operators resting: @1 (right-click)", tostring(total)))
 		end
 	end
 end)

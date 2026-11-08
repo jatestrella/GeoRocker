@@ -145,7 +145,7 @@ core.register_entity(FOLLOWER, {
 		self.tag_t = (self.tag_t or 1) + dtime
 		if self.tag_t >= 1 then
 			self.tag_t = 0
-			self.object:set_properties({nametag = S("Geologist  @1 left", mmss(hire_left(acc)))})
+			rockmech.npc_set_tag(self.object, S("Geologist  @1 left", mmss(hire_left(acc))))
 		end
 	end,
 	on_punch = function() return true end,
