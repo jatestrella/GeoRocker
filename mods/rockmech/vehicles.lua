@@ -189,43 +189,52 @@ end
 -- 貼圖（[fill 組合）。cube 的六面：上、下、+X、−X、+Z（車頭：yaw 0 朝 +Z）、−Z
 -- 有車窗的面：底色是半透明的玻璃，四周疊上不透明的車身（在不透明的底上疊半透明的藍，結果還是不透明）。
 -- 窗戶在 (x, y) 大小 w×h（16×16 的格子）；駕駛室零件要 alpha = true
--- 有門的側面（32×32，線條細一點）：o = {win = {x, y, w, h}（16 格的座標）, clear = 半透明玻璃, sill = 下緣深色條的顏色,
+-- 有門的側面（64×64：線條細）：o = {win = {x, y, w, h}（16 格的座標）, clear = 半透明玻璃, sill = 下緣深色條的顏色,
 -- doors = {{x, y, w, h}...}（門，16 格的座標，可以有小數）, pillars = {{x, w}...}（窗戶中間的柱子）}。
--- 這張是右側（+X 面：左邊是車尾、右邊是車頭）；左側用 V.flip_side（左右翻過來）。門把在門的後緣
+-- 這張是右側（+X 面：左邊是車尾、右邊是車頭）；左側用 V.flip_side（左右翻過來）。門把在門的後緣。
+-- 門縫用比車身深一點的同色系（不是黑框）
+local SIDE_R = 64
+local function darker(c, k)
+	local h = c:gsub("#", "")
+	local r, g, b = tonumber(h:sub(1, 2), 16), tonumber(h:sub(3, 4), 16), tonumber(h:sub(5, 6), 16)
+	if not (r and g and b) then return "#202020" end
+	return ("#%02x%02x%02x"):format(math.floor(r * k), math.floor(g * k), math.floor(b * k))
+end
 function V.cab_side(c, o)
-	local function px(v) return math.floor(v * 2 + 0.5) end
+	local R, K = SIDE_R, SIDE_R / 16
+	local function px(v) return math.floor(v * K + 0.5) end
 	local t = {}
 	local w = o.win
 	if w and o.clear then
 		local x, y, ww, h = px(w.x), px(w.y), px(w.w), px(w.h)
-		t[#t + 1] = "[fill:32x32:#9fd0ff60"
-		if y > 0 then t[#t + 1] = ("[fill:32x%d:0,0:%s"):format(y, c) end
-		if y + h < 32 then t[#t + 1] = ("[fill:32x%d:0,%d:%s"):format(32 - y - h, y + h, c) end
+		t[#t + 1] = ("[fill:%dx%d:#9fd0ff60"):format(R, R)
+		if y > 0 then t[#t + 1] = ("[fill:%dx%d:0,0:%s"):format(R, y, c) end
+		if y + h < R then t[#t + 1] = ("[fill:%dx%d:0,%d:%s"):format(R, R - y - h, y + h, c) end
 		if x > 0 then t[#t + 1] = ("[fill:%dx%d:0,%d:%s"):format(x, h, y, c) end
-		if x + ww < 32 then t[#t + 1] = ("[fill:%dx%d:%d,%d:%s"):format(32 - x - ww, h, x + ww, y, c) end
+		if x + ww < R then t[#t + 1] = ("[fill:%dx%d:%d,%d:%s"):format(R - x - ww, h, x + ww, y, c) end
 	else
-		t[#t + 1] = ("[fill:32x32:%s"):format(c)
+		t[#t + 1] = ("[fill:%dx%d:%s"):format(R, R, c)
 		if w then t[#t + 1] = ("[fill:%dx%d:%d,%d:#9fd0ff"):format(px(w.w), px(w.h), px(w.x), px(w.y)) end
 	end
 	for _, p in ipairs(o.pillars or {}) do
 		if w then t[#t + 1] = ("[fill:%dx%d:%d,%d:%s"):format(px(p.w), px(w.h), px(p.x), px(w.y), c) end
 	end
-	if w then   -- 車窗的黑色膠條
+	if w then   -- 車窗的黑色膠條（1 像素）
 		local x, y, ww, h = px(w.x), px(w.y), px(w.w), px(w.h)
 		t[#t + 1] = ("[fill:%dx1:%d,%d:#202020^[fill:%dx1:%d,%d:#202020^[fill:1x%d:%d,%d:#202020^[fill:1x%d:%d,%d:#202020"):format(
 			ww, x, y, ww, x, y + h - 1, h, x, y, h, x + ww - 1, y)
 	end
-	if o.sill then t[#t + 1] = ("[fill:32x4:0,28:%s"):format(o.sill) end
+	if o.sill then t[#t + 1] = ("[fill:%dx%d:0,%d:%s"):format(R, px(2), R - px(2), o.sill) end
+	local line = darker(c, 0.55)
 	for _, d in ipairs(o.doors or {}) do
 		local x0, y0, x1, y1 = px(d.x), px(d.y), px(d.x + d.w) - 1, px(d.y + d.h) - 1
-		local line = "#1c1c1c"
 		if not d.no_top then t[#t + 1] = ("[fill:%dx1:%d,%d:%s"):format(x1 - x0 + 1, x0, y0, line) end
 		if not d.no_bottom then t[#t + 1] = ("[fill:%dx1:%d,%d:%s"):format(x1 - x0 + 1, x0, y1, line) end
 		if not d.no_rear then t[#t + 1] = ("[fill:1x%d:%d,%d:%s"):format(y1 - y0 + 1, x0, y0, line) end
 		if not d.no_front then t[#t + 1] = ("[fill:1x%d:%d,%d:%s"):format(y1 - y0 + 1, x1, y0, line) end
 		if not d.no_handle then
-			local hy = d.handle_y and px(d.handle_y) or (w and math.min(y1 - 3, px(w.y + w.h) + 2) or math.floor((y0 + y1) / 2))
-			t[#t + 1] = ("[fill:4x2:%d,%d:#2a2a2a^[fill:4x1:%d,%d:#8a8a8a"):format(x0 + 2, hy, x0 + 2, hy)
+			local hy = d.handle_y and px(d.handle_y) or (w and math.min(y1 - px(1.5), px(w.y + w.h) + px(1)) or math.floor((y0 + y1) / 2))
+			t[#t + 1] = ("[fill:6x2:%d,%d:#2a2a2a^[fill:6x1:%d,%d:#9a9a9a"):format(x0 + px(0.8), hy, x0 + px(0.8), hy)
 		end
 	end
 	return table.concat(t, "^")
