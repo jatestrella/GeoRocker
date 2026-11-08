@@ -293,6 +293,13 @@ local function excavator(kind, P)
 	local FILL_H0, FILL_H1 = BH * 0.15, BH * 0.95
 	parts[#parts + 1] = {id = "fill", pos = BUCKET_REST, size = {x = FILL_W, y = 0.2, z = FILL_L}, tex = box_tex("#6a6058")}
 	def.parts = parts
+	-- 冒煙：排氣管（上部結構的 "stack" 零件）頂端，跟著迴轉
+	for _, hp in ipairs(P.house) do
+		if hp.id == "stack" then
+			local top = {x = hp.pos.x, y = hp.pos.y + hp.size.y / 2 + 0.05, z = hp.pos.z}
+			def.exhaust = function(self) return h2v(top, self.swing or 0) end
+		end
+	end
 
 	-- 油壓缸（大臂缸、小臂缸、鏟斗缸）：缸筒從一端、活塞桿從另一端，長度都固定，各自朝對方伸過去，
 	-- 兩段重疊多少跟著手臂姿勢變，看起來就是在伸縮。長度在下面掃過整個工作範圍後決定

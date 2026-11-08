@@ -842,7 +842,8 @@ local function engine_stop(self)
 	end
 end
 -- 排煙（代表吃油）：引擎發動時（有駕駛或自動駕駛）從排氣管口冒煙，怠速淡灰、作業或行駛時濃黑。
--- 排氣管口：def.exhaust（車身座標）；沒設就在車頂右後側；def.exhaust = false 不冒煙（之後的電動車）。
+-- 排氣管口：def.exhaust（車身座標；也可以是函式 (self) → 車身座標，例如挖土機的排氣管跟著上部結構轉）；
+-- 沒設就在車頂右後側；def.exhaust = false 不冒煙（之後的電動車）。
 -- 跟其他粒子一樣，只給 EXHAUST_NEAR m 內有玩家的車產生
 local EXHAUST_STEP, EXHAUST_NEAR = 0.25, 64
 function V.exhaust(self, def, working, dtime)
@@ -857,6 +858,7 @@ function V.exhaust(self, def, working, dtime)
 	end
 	if not near then return end
 	local lp = def.exhaust
+	if type(lp) == "function" then lp = lp(self) end
 	if not lp then
 		local hw = 0.5
 		for _, l in ipairs(def.lat or {0}) do hw = math.max(hw, math.abs(l) + 0.5) end
