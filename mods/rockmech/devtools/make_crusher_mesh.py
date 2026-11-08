@@ -1,99 +1,93 @@
 # -*- coding: utf-8 -*-
-# 破碎站的模型（OBJ）：一般破碎站（顎式破碎機）、大型破碎站（加控制室）。
+# 破碎站的模型（OBJ）：一般破碎站（露天的顎式破碎機機台）、大型破碎站（一棟破碎廠房）。
 # 座標單位 = 1 格（1 m），原點在機身那一格的中心，地面 y = −0.5；受料倉在 +Z（方塊用 facedir 轉向受料倉）。
-# 每一種材質（usemtl）對應節點定義 tiles 的一個（照第一次出現的順序）。貼圖座標用公尺：貼圖每 1 m 重複一次。
+# 每一種材質一個群組（g）＋材質（usemtl）：Luanti 讀 OBJ 時要有群組名才會分成不同的面組，
+# 各面組照第一次出現的順序對應節點定義 tiles 的一個。貼圖座標用公尺：貼圖每 1 m 重複一次。
 # 用法：python make_crusher_mesh.py  → 寫到 ../models/
 import math, os
 
 class Mesh:
-    def __init__(self):
-        self.v, self.vt, self.vn, self.faces = [], [], [], {}
-        self.order = []
-    def _v(self, p):
-        self.v.append(p); return len(self.v)
-    def _vt(self, uv):
-        self.vt.append(uv); return len(self.vt)
-    def _vn(self, n):
-        self.vn.append(n); return len(self.vn)
+    def __init__(self, names):
+        self.names = names
+        self.v, self.vt, self.vn, self.faces, self.order = [], [], [], {}, []
     def quad(self, mat, pts, n, uvs):
         if mat not in self.faces:
             self.faces[mat] = []; self.order.append(mat)
-        ni = self._vn(n)
-        idx = [(self._v(p), self._vt(uv), ni) for p, uv in zip(pts, uvs)]
+        self.vn.append(n); ni = len(self.vn)
+        idx = []
+        for p, uv in zip(pts, uvs):
+            self.v.append(p); self.vt.append(uv)
+            idx.append((len(self.v), len(self.vt), ni))
         self.faces[mat].append(idx)
     def box(self, mat, x0, y0, z0, x1, y1, z1):
-        # 六面，法向朝外，頂點逆時針（從外面看）
-        X = [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]  # +Z
-        self.quad(mat, X, (0, 0, 1), [(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
-        X = [(x1, y0, z0), (x0, y0, z0), (x0, y1, z0), (x1, y1, z0)]  # −Z
-        self.quad(mat, X, (0, 0, -1), [(-x1, y0), (-x0, y0), (-x0, y1), (-x1, y1)])
-        X = [(x1, y0, z1), (x1, y0, z0), (x1, y1, z0), (x1, y1, z1)]  # +X
-        self.quad(mat, X, (1, 0, 0), [(-z1, y0), (-z0, y0), (-z0, y1), (-z1, y1)])
-        X = [(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)]  # −X
-        self.quad(mat, X, (-1, 0, 0), [(z0, y0), (z1, y0), (z1, y1), (z0, y1)])
-        X = [(x0, y1, z1), (x1, y1, z1), (x1, y1, z0), (x0, y1, z0)]  # +Y
-        self.quad(mat, X, (0, 1, 0), [(x0, -z1), (x1, -z1), (x1, -z0), (x0, -z0)])
-        X = [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)]  # −Y
-        self.quad(mat, X, (0, -1, 0), [(x0, z0), (x1, z0), (x1, z1), (x0, z1)])
-    def cyl_x(self, mat, xa, xb, cy, cz, r, seg=20):
-        # 沿 X 軸的圓柱（飛輪）：側面一圈＋兩個端面（扇形用四邊形：中心點重複）
-        pts = [(cy + r * math.cos(2 * math.pi * i / seg), cz + r * math.sin(2 * math.pi * i / seg)) for i in range(seg)]
+        self.quad(mat, [(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)], (0, 0, 1), [(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+        self.quad(mat, [(x1, y0, z0), (x0, y0, z0), (x0, y1, z0), (x1, y1, z0)], (0, 0, -1), [(-x1, y0), (-x0, y0), (-x0, y1), (-x1, y1)])
+        self.quad(mat, [(x1, y0, z1), (x1, y0, z0), (x1, y1, z0), (x1, y1, z1)], (1, 0, 0), [(-z1, y0), (-z0, y0), (-z0, y1), (-z1, y1)])
+        self.quad(mat, [(x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0)], (-1, 0, 0), [(z0, y0), (z1, y0), (z1, y1), (z0, y1)])
+        self.quad(mat, [(x0, y1, z1), (x1, y1, z1), (x1, y1, z0), (x0, y1, z0)], (0, 1, 0), [(x0, -z1), (x1, -z1), (x1, -z0), (x0, -z0)])
+        self.quad(mat, [(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)], (0, -1, 0), [(x0, z0), (x1, z0), (x1, z1), (x0, z1)])
+    def panel(self, mat, pts, uvs=None):
+        # 任意四邊形（屋頂斜面、三角牆）：法向由頂點算
+        a, b, c = pts[0], pts[1], pts[2]
+        u = [b[i] - a[i] for i in range(3)]; v = [c[i] - a[i] for i in range(3)]
+        n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+        l = math.sqrt(sum(q * q for q in n)) or 1
+        n = tuple(q / l for q in n)
+        if uvs is None:
+            # 投影到法向以外最大的兩軸
+            ax = sorted(range(3), key=lambda i: abs(n[i]))[:2]
+            uvs = [(p[ax[0]], p[ax[1]]) for p in pts]
+        self.quad(mat, pts, n, uvs)
+    def cyl(self, mat, axis, a0, a1, c1, c2, r, seg=20, caps=True):
+        # axis = 'x' 或 'y'：沿這一軸的圓柱，c1、c2 是另外兩軸的中心
+        def P(t, s, ang):
+            if axis == 'x': return (t, c1 + r * math.cos(ang) * s, c2 + r * math.sin(ang) * s)
+            return (c1 + r * math.cos(ang) * s, t, c2 + r * math.sin(ang) * s)
         for i in range(seg):
-            (y0, z0), (y1, z1) = pts[i], pts[(i + 1) % seg]
-            a = 2 * math.pi * (i + 0.5) / seg
-            n = (0, math.cos(a), math.sin(a))
-            self.quad(mat, [(xa, y0, z0), (xa, y1, z1), (xb, y1, z1), (xb, y0, z0)], n,
-                      [(0, i / seg * 4), (0, (i + 1) / seg * 4), (1, (i + 1) / seg * 4), (1, i / seg * 4)])
-        for x, sgn in ((xb, 1), (xa, -1)):
-            for i in range(seg):
-                (y0, z0), (y1, z1) = pts[i], pts[(i + 1) % seg]
-                p = [(x, cy, cz), (x, y0, z0), (x, y1, z1), (x, cy, cz)]
-                if sgn < 0: p = [p[0], p[2], p[1], p[3]]
-                uv = [(0.5 + (q[2] - cz) / (2 * r), 0.5 + (q[1] - cy) / (2 * r)) for q in p]
-                self.quad(mat, p, (sgn, 0, 0), uv)
-    def write(self, path, names):
+            g0, g1 = 2 * math.pi * i / seg, 2 * math.pi * (i + 1) / seg
+            p = [P(a0, 1, g0), P(a0, 1, g1), P(a1, 1, g1), P(a1, 1, g0)]
+            gm = (g0 + g1) / 2
+            n = (0, math.cos(gm), math.sin(gm)) if axis == 'x' else (math.cos(gm), 0, math.sin(gm))
+            self.quad(mat, p, n, [(i / seg * 4, a0), ((i + 1) / seg * 4, a0), ((i + 1) / seg * 4, a1), (i / seg * 4, a1)])
+            if caps:
+                for t, sg in ((a1, 1), (a0, -1)):
+                    q = [P(t, 0, g0), P(t, 1, g0), P(t, 1, g1), P(t, 0, g0)]
+                    nn = (sg, 0, 0) if axis == 'x' else (0, sg, 0)
+                    uv = [(0.5 + 0.5 * math.cos(g0) * k, 0.5 + 0.5 * math.sin(g0) * k) for k in (0, 1)] + \
+                         [(0.5 + 0.5 * math.cos(g1), 0.5 + 0.5 * math.sin(g1)), (0.5, 0.5)]
+                    self.quad(mat, q, nn, uv)
+    def write(self, path):
         with open(path, 'w', newline='\n') as f:
             f.write('# rockmech crusher (devtools/make_crusher_mesh.py)\n')
             for p in self.v: f.write('v %.4f %.4f %.4f\n' % p)
             for t in self.vt: f.write('vt %.4f %.4f\n' % t)
             for n in self.vn: f.write('vn %.4f %.4f %.4f\n' % n)
             for m in self.order:
-                f.write('usemtl %s\n' % names[m])
+                f.write('g %s\nusemtl %s\n' % (self.names[m], self.names[m]))
                 for q in self.faces[m]:
                     f.write('f ' + ' '.join('%d/%d/%d' % t for t in q) + '\n')
-        print('wrote', path, 'materials:', [names[m] for m in self.order])
+        print('wrote', os.path.basename(path), 'tiles:', [self.names[m] for m in self.order])
 
-# 材質（順序就是 tiles 的順序）
-FRAME, BODY, DECK, WHEEL, MOTOR, BELT, RAIL, CHUTE, CABIN = range(9)
-NAMES = ['frame', 'body', 'deck', 'wheel', 'motor', 'belt', 'rail', 'chute', 'cabin']
-
-def crusher(big):
-    m = Mesh()
-    # 依材質順序先各放一個（讓 usemtl 順序固定 = tiles 順序）
-    H = 0.6                       # 平台面
-    # 鋼構：四支柱、四邊的梁
+# ---------- 一般破碎站：露天機台 ----------
+FRAME, BODY, DECK, WHEEL, MOTOR, BELT, RAIL, CHUTE = range(8)
+def machine():
+    m = Mesh(['frame', 'body', 'deck', 'wheel', 'motor', 'belt', 'rail', 'chute'])
+    H = 0.6
     for sx in (-1, 1):
         for sz in (-1, 1):
             m.box(FRAME, sx * 1.3 - 0.09, -0.5, sz * 1.3 - 0.09, sx * 1.3 + 0.09, H, sz * 1.3 + 0.09)
     m.box(FRAME, -1.45, H - 0.15, -1.45, 1.45, H, -1.3)
-    # 破碎機主體（顎式）、上面收窄的頂蓋
     m.box(BODY, -0.75, H + 0.08, -0.55, 0.75, 2.0, 0.75)
     m.box(BODY, -0.6, 2.0, -0.4, 0.6, 2.22, 0.6)
-    # 平台（格柵）
     m.box(DECK, -1.45, H, -1.45, 1.45, H + 0.08, 1.45)
-    # 飛輪（兩側）、輪轂
     for sx in (-1, 1):
         xa, xb = (0.78, 0.92) if sx > 0 else (-0.92, -0.78)
-        m.cyl_x(WHEEL, xa, xb, 1.45, 0.1, 0.55)
-        m.cyl_x(FRAME, (xb if sx > 0 else xa - 0.08), (xb + 0.08 if sx > 0 else xa), 1.45, 0.1, 0.12, 12)
-    # 馬達（後方右側）
+        m.cyl(WHEEL, 'x', xa, xb, 1.45, 0.1, 0.55)
     m.box(MOTOR, 0.25, H + 0.08, -1.35, 0.95, 1.15, -0.85)
-    m.cyl_x(MOTOR, 0.95, 1.05, 0.92, -1.1, 0.16, 12)
-    # 出料皮帶（後方中央，伸出機身外一點）、兩端的滾筒
+    m.cyl(MOTOR, 'x', 0.95, 1.05, 0.92, -1.1, 0.16, 12)
     m.box(BELT, -0.35, H + 0.15, -1.6, 0.35, H + 0.27, -0.5)
     m.box(FRAME, -0.4, H + 0.08, -1.6, -0.35, H + 0.3, -0.5)
     m.box(FRAME, 0.35, H + 0.08, -1.6, 0.4, H + 0.3, -0.5)
-    # 皮帶護蓋（黃，飛輪到馬達之間）、扶手欄杆（後面、兩側；前面是進料口不擋）
     m.box(RAIL, 0.92, 0.95, -1.05, 1.02, 1.6, 0.15)
     for x in (-1.4, -0.45, 0.45, 1.4):
         m.box(RAIL, x - 0.03, H + 0.08, -1.43, x + 0.03, H + 1.0, -1.37)
@@ -104,20 +98,63 @@ def crusher(big):
         m.box(RAIL, sx * 1.4 - 0.025, H + 0.5, -1.43, sx * 1.4 + 0.025, H + 0.55, 1.43)
     m.box(RAIL, -1.43, H + 0.95, -1.43, 1.43, H + 1.02, -1.37)
     m.box(RAIL, -1.43, H + 0.5, -1.43, 1.43, H + 0.55, -1.37)
-    # 進料溜槽（朝受料倉 +Z）：底板、兩側擋板
     m.box(CHUTE, -0.75, 1.95, 0.6, 0.75, 2.05, 1.45)
     m.box(CHUTE, -0.85, 1.95, 0.6, -0.75, 2.45, 1.45)
     m.box(CHUTE, 0.75, 1.95, 0.6, 0.85, 2.45, 1.45)
-    if big:
-        # 控制室（左後角）＋屋頂
-        m.box(CABIN, -1.38, H + 0.08, -1.36, -0.8, 1.95, -0.62)
-        m.box(FRAME, -1.42, 1.95, -1.4, -0.76, 2.03, -0.58)
-        # 上面再一層：大型機的二級破碎頂座
-        m.box(BODY, -0.5, 2.22, -0.3, 0.5, 2.7, 0.45)
+    return m
+
+# ---------- 大型破碎站：破碎廠房 ----------
+# 材質：基座、外牆、屋頂、鋼柱、捲門、窗帶、皮帶廊道、集塵筒倉、警示條
+PLINTH, WALL, ROOF, COLUMN, DOOR, WINDOW, GALLERY, SILO, HAZARD = range(9)
+def plant():
+    m = Mesh(['plinth', 'wall', 'roof', 'column', 'door', 'window', 'gallery', 'silo', 'hazard'])
+    X0, X1, Z0, Z1 = -1.4, 0.7, -1.3, 1.3       # 外牆（右邊留給集塵筒倉）
+    XM = (X0 + X1) / 2                           # 屋脊
+    Y0, YE, YR = -0.2, 2.3, 2.95                 # 牆底、簷口、屋脊
+    m.box(PLINTH, -1.45, -0.5, -1.45, 1.45, Y0, 1.45)
+    # 外牆（前面 +Z 留捲門的開口另外蓋）
+    m.box(WALL, X0, Y0, Z0, X1, YE, Z1 - 0.02)
+    # 四角鋼柱、簷口的鋼梁
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            cx = X0 - 0.02 if sx < 0 else X1 + 0.02
+            m.box(COLUMN, cx - 0.08, Y0, sz * 1.32 - 0.08, cx + 0.08, YE, sz * 1.32 + 0.08)
+    m.box(COLUMN, X0 - 0.04, YE - 0.12, Z0 - 0.04, X1 + 0.04, YE, Z1 + 0.04)
+    # 窗帶（兩側高處）、通風百葉（窗帶下面）
+    for x in (X0 - 0.01, X1 + 0.01):
+        m.box(WINDOW, x - 0.01, 1.75, -1.0, x + 0.01, 2.05, 1.0)
+    # 斜屋頂（屋脊沿 Z：前後兩坡朝 ±X），屋簷伸出 0.15
+    o = 0.15
+    m.panel(ROOF, [(X0 - o, YE - 0.05, Z1 + o), (XM, YR, Z1 + o), (XM, YR, Z0 - o), (X0 - o, YE - 0.05, Z0 - o)])
+    m.panel(ROOF, [(XM, YR, Z1 + o), (X1 + o, YE - 0.05, Z1 + o), (X1 + o, YE - 0.05, Z0 - o), (XM, YR, Z0 - o)])
+    # 屋頂底面（從下面看）
+    m.panel(ROOF, [(X0 - o, YE - 0.05, Z0 - o), (XM, YR, Z0 - o), (XM, YR, Z1 + o), (X0 - o, YE - 0.05, Z1 + o)])
+    m.panel(ROOF, [(XM, YR, Z0 - o), (X1 + o, YE - 0.05, Z0 - o), (X1 + o, YE - 0.05, Z1 + o), (XM, YR, Z1 + o)])
+    # 前後的三角牆
+    for z, sg in ((Z1 - 0.02, 1), (Z0, -1)):
+        tri = [(X0, YE, z), (X1, YE, z), (XM, YR - 0.05, z), (XM, YR - 0.05, z)]
+        if sg < 0: tri = [tri[1], tri[0], tri[2], tri[3]]
+        m.panel(WALL, tri)
+    # 前面（朝受料倉）的捲門進料口、周圍的黃黑警示條
+    m.box(HAZARD, XM - 0.85, Y0, Z1 - 0.02, XM + 0.85, 1.95, Z1 + 0.02)
+    m.box(DOOR, XM - 0.7, Y0, Z1 + 0.02, XM + 0.7, 1.8, Z1 + 0.04)
+    # 後面：出料皮帶廊道（有頂蓋的斜皮帶，一段一段往上）
+    for k in range(4):
+        z0, z1 = Z0 - 0.35 * (k + 1), Z0 - 0.35 * k
+        y = 0.6 + 0.18 * k
+        m.box(GALLERY, XM - 0.4, y, z0, XM + 0.4, y + 0.55, z1)
+    m.box(COLUMN, XM - 0.35, -0.5, Z0 - 1.25, XM - 0.25, 1.0, Z0 - 1.15)
+    m.box(COLUMN, XM + 0.25, -0.5, Z0 - 1.25, XM + 0.35, 1.0, Z0 - 1.15)
+    # 側面的集塵筒倉（圓柱）、錐底、頂上的排氣管
+    SX = 1.08
+    m.cyl(SILO, 'y', 0.7, 2.6, SX, -0.5, 0.33, 16)
+    m.cyl(COLUMN, 'y', -0.2, 0.7, SX, -0.5, 0.08, 8)
+    m.cyl(COLUMN, 'y', 2.6, 3.2, SX, -0.5, 0.06, 8)
+    m.box(GALLERY, X1, 1.6, -0.62, SX - 0.3, 1.8, -0.38)      # 集塵風管接到廠房
     return m
 
 here = os.path.dirname(os.path.abspath(__file__))
 out = os.path.join(here, '..', 'models')
 os.makedirs(out, exist_ok=True)
-crusher(False).write(os.path.join(out, 'rockmech_crusher.obj'), NAMES)
-crusher(True).write(os.path.join(out, 'rockmech_crusher_big.obj'), NAMES)
+machine().write(os.path.join(out, 'rockmech_crusher.obj'))
+plant().write(os.path.join(out, 'rockmech_crusher_big.obj'))

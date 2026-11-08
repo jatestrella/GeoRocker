@@ -704,9 +704,11 @@ function rockmech.crusher_build(pos, dx, dz, name, node)
 	return true
 end
 
--- 外觀：模型 models/rockmech_crusher(_big).obj（devtools/make_crusher_mesh.py 產生）：鋼構底座、格柵平台、
--- 顎式破碎機、兩側飛輪、馬達、出料皮帶、扶手、朝受料倉的進料溜槽；大型的加控制室和二級破碎頂座。
--- tiles 照模型材質的順序：鋼構、機身、平台、飛輪、馬達、皮帶、欄杆、溜槽（、控制室）
+-- 外觀：模型 models/rockmech_crusher(_big).obj（devtools/make_crusher_mesh.py 產生）。
+--   一般破碎站：露天機台（鋼構底座、格柵平台、顎式破碎機、兩側飛輪、馬達、出料皮帶、扶手、朝受料倉的進料溜槽）；
+--     tiles：鋼構、機身、平台、飛輪、馬達、皮帶、欄杆、溜槽
+--   大型破碎站：破碎廠房（混凝土基座、浪板外牆、斜屋頂、窗帶、朝受料倉的捲門進料口、後面的出料皮帶廊道、集塵筒倉）；
+--     tiles：基座、外牆、鋼柱、窗帶、屋頂、警示條、捲門、廊道、筒倉
 local function tile(t) return {name = t, backface_culling = false} end
 local T_FRAME = tile("[fill:16x16:#3a3e44^[fill:16x1:0,15:#2a2e34^[fill:1x16:15,0:#2a2e34")
 local T_DECK = tile("[fill:16x16:#5c6064^[fill:16x1:0,3:#3a3c40^[fill:16x1:0,7:#3a3c40^[fill:16x1:0,11:#3a3c40^[fill:16x1:0,15:#3a3c40"
@@ -716,7 +718,6 @@ local T_MOTOR = tile("[fill:16x16:#3a6aa0^[fill:16x1:0,3:#2a5080^[fill:16x1:0,7:
 local T_BELT = tile("[fill:16x16:#1e1e1e^[fill:16x1:0,4:#3a3a3a^[fill:16x1:0,12:#3a3a3a")
 local T_RAIL = tile("[fill:16x16:#f0c020")
 local T_CHUTE = tile("[fill:16x16:#7a7468^[fill:16x1:0,8:#6a6458^[fill:3x2:4,3:#8a8478^[fill:2x3:11,10:#6a6458")
-local T_CABIN = tile("[fill:16x16:#e8e8e0^[fill:10x6:3,3:#9fd0ff^[fill:16x1:0,15:#a8a8a0")
 local BODY = "[fill:16x16:#d8a820^[fill:16x1:0,15:#a88010^[fill:1x16:15,0:#a88010^[fill:2x2:2,2:#a88010^[fill:2x2:12,2:#a88010"
 local BOX = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}}
 
@@ -778,12 +779,27 @@ local crusher_def = {
 core.register_node(CRUSHER, crusher_def)
 -- 大型破碎站：一樣的機身大小和受料倉，處理能力大好幾倍（深灰機身、黃黑警示條）
 local big = table.copy(crusher_def)
-local BIG_BODY = "[fill:16x16:#4a5058^[fill:16x2:0,0:#f0c020^[fill:2x2:2,0:#202020^[fill:2x2:8,0:#202020^[fill:2x2:14,0:#202020^[fill:16x1:0,15:#3a4048"
+local function ribs(base, line, step)
+	local t = {"[fill:16x16:" .. base}
+	for x = 1, 15, step do t[#t + 1] = ("[fill:1x16:%d,0:%s"):format(x, line) end
+	return table.concat(t, "^")
+end
+local PLANT_TILES = {
+	tile("[fill:16x16:#9a9890^[fill:16x1:0,15:#86847c^[fill:1x16:15,0:#86847c"),                       -- 混凝土基座
+	tile(ribs("#c8ccd0", "#a4a8ac", 3)),                                                            -- 浪板外牆
+	tile("[fill:16x16:#3a3e44^[fill:16x1:0,15:#2a2e34"),                                            -- 鋼柱、鋼梁
+	tile("[fill:16x16:#9fd0ff^[fill:1x16:0,0:#4a5058^[fill:1x16:8,0:#4a5058^[fill:16x1:0,0:#4a5058"),   -- 窗帶
+	tile(ribs("#46607a", "#36506a", 4)),                                                            -- 屋頂浪板
+	tile("[fill:16x16:#f0c020^[fill:4x16:0,0:#202020^[fill:4x16:8,0:#202020"),                      -- 黃黑警示條
+	tile("[fill:16x16:#8a8e92^[fill:16x1:0,3:#6a6e72^[fill:16x1:0,7:#6a6e72^[fill:16x1:0,11:#6a6e72^[fill:16x1:0,15:#6a6e72"),   -- 捲門
+	tile("[fill:16x16:#6e7278^[fill:16x1:0,0:#4a4e54^[fill:1x16:15,0:#4a4e54"),                     -- 皮帶廊道
+	tile("[fill:16x16:#dcdcd6^[fill:16x1:0,8:#b8b8b0"),                                             -- 集塵筒倉
+}
 big.description = S("Large crusher\nRight-click on flat ground to build")
 big.short_description = S("Large crusher")
 big.inventory_image = "rockmech_icon_crusher_big.png"
 big.mesh = "rockmech_crusher_big.obj"
-big.tiles = {T_FRAME, tile(BIG_BODY), T_DECK, T_WHEEL, T_MOTOR, T_BELT, T_RAIL, T_CHUTE, T_CABIN}
+big.tiles = PLANT_TILES
 local BIG_BOX = {type = "fixed", fixed = {{-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}, {-0.6, 2.4, -0.6, 0.6, 2.9, 0.6}}}
 big.selection_box, big.collision_box = BIG_BOX, BIG_BOX
 core.register_node(CRUSHER_BIG, big)
