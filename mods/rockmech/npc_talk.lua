@@ -6,6 +6,7 @@
 -- 台詞在 npc_lines.lua。原本的右鍵功能（開商店、考試…）照舊，泡泡是加上去的。
 
 local LINES = dofile(rockmech.modpath .. "/npc_lines.lua")
+local CHATTER_P = 0.25          -- 講廢話的機率
 local BUBBLE = "rockmech:npc_bubble"
 local SHOW = 5               -- 泡泡顯示幾秒
 local WRAP = 14              -- 每行幾個字（中文；英文照字元數 ×2）
@@ -89,6 +90,11 @@ function rockmech.npc_say(o, player, text)
 	if not text then
 		local list = e and LINES[e.name]
 		if not list or #list == 0 then return end
+		-- 偶爾講廢話
+		if math.random() < CHATTER_P then
+			list = table.copy(LINES.chatter)
+			for _, t in ipairs(LINES.own_chatter[e.name] or {}) do list[#list + 1] = t; list[#list + 1] = t end   -- 自己的廢話機會多一點
+		end
 		local i = math.random(#list)
 		if #list > 1 and i == last[o] then i = i % #list + 1 end
 		last[o] = i

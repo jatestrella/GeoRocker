@@ -4,7 +4,34 @@
 
 local S = rockmech.S
 
-return {
+
+-- 廢話：偶爾（npc_talk.lua 的 CHATTER_P）不講正事，從大家都會講的和自己的廢話裡挑一句
+local chatter = {
+	S("Pork chop lunch box again today."),
+	S("Is it going to rain this afternoon?"),
+	S("My back is killing me."),
+	S("I could really use a bubble tea."),
+	S("The office AC is broken again."),
+	S("Payday is still so far away."),
+	S("Who took my hard hat?"),
+	S("The mosquitoes up here are huge."),
+	S("My kid says I smell like diesel."),
+	S("The vending machine coffee tastes like rock dust."),
+	S("I parked my scooter around here somewhere..."),
+	S("Did you watch the game last night?"),
+	S("The boss visits this week. Look busy."),
+	S("The phone signal out here is awful."),
+}
+local own = {
+	["rockmech:vendor_vehicle"] = {S("I washed that truck yesterday. Look at it now.")},
+	["rockmech:vendor_blast"] = {S("Huh? Say again? My ears aren't great.")},
+	["rockmech:npc_professor"] = {S("In my day we drew stereonets by hand."), S("Three papers due and still no data.")},
+	["rockmech:npc_mechanic"] = {S("Who keeps getting gravel in the gearbox?")},
+	["rockmech:npc_geologist"] = {S("What a beautiful rock. Please don't blast it.")},
+	["rockmech:operator_seated"] = {S("Five more minutes.")},
+}
+
+local LINES = {
 	["rockmech:vendor_vehicle"] = {
 		S("What do you need? Trucks, excavators, crushers, all here."),
 		S("Every machine burns diesel. Count the fuel bill."),
@@ -63,3 +90,5 @@ return {
 		S("Need me on a machine?"),
 	},
 }
+LINES.chatter, LINES.own_chatter = chatter, own     -- 不是實體名稱（npc_talk.lua 會跳過）
+return LINES
