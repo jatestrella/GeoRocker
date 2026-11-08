@@ -798,7 +798,8 @@ core.register_node("rockmech:camp_lectern", {
 
 local PROF = "rockmech:npc_professor"
 local PROF_FORM = "rockmech:professor"
-local PROF_DX, PROF_Z = 11, -28   -- 講堂中心：研究帳篷（營地中心往東 23）的西邊，同一排、面向北
+local PROF_DX, PROF_Z = 15, -28   -- 講堂中心：研究帳篷（營地中心往東 23、寬 ±3）的西邊，同一排、面向北，中間留 2 格
+local OLD_PROF_DX = 11            -- 舊版講堂的位置（擋路）：已經蓋在這裡的搬過來
 
 local function prof_form(name)
 	local player = core.get_player_by_name(name)
@@ -850,7 +851,7 @@ if rockmech.career_npcs then rockmech.career_npcs.professor = {entity = PROF, si
 local function prof_flag(x0) return "professor_site:" .. x0 end
 function rockmech.career_build_professor(x0)
 	if not rockmech.career_placer then return end
-	storage:set_string(prof_flag(x0), "1")
+	storage:set_string(prof_flag(x0), "2")       -- "1"：舊位置（OLD_PROF_DX）；"2"：現在的位置
 	local cx, cz = x0 + PROF_DX, PROF_Z
 	local y
 	for yy = 40, -30, -1 do
@@ -873,7 +874,30 @@ function rockmech.career_build_professor(x0)
 	storage:set_string(key, core.serialize(list))
 end
 
--- 已經蓋好的營地補上講堂
+-- 舊位置（OLD_PROF_DX）的講堂拆掉：只拿掉講堂自己的東西（黑板、講桌、椅子），教授的攤位也從清單拿掉
+local LECTURE_NODES = {["rockmech:camp_blackboard"] = true, ["rockmech:camp_lectern"] = true, ["rockmech:camp_chair"] = true}
+local function move_old_lecture(x0)
+	local cx, cz = x0 + OLD_PROF_DX, PROF_Z
+	local y
+	for yy = 40, -30, -1 do
+		if core.get_node({x = cx, y = yy, z = cz + 1}).name == "rockmech:camp_lectern" then y = yy - 1; break end
+	end
+	if y then
+		for dx = -2, 2 do for dz = -2, 4 do for h = 1, 2 do
+			local p = {x = cx + dx, y = y + h, z = cz + dz}
+			if LECTURE_NODES[core.get_node(p).name] then core.remove_node(p) end
+		end end end
+	end
+	local key = rockmech.career_vendor_spots
+	local list = core.deserialize(storage:get_string(key)) or {}
+	local keep = {}
+	for _, sp in ipairs(list) do
+		if not (sp.kind == "professor" and math.abs(sp.pos.x - cx) < 1.5 and math.abs(sp.pos.z - cz) < 1.5) then keep[#keep + 1] = sp end
+	end
+	storage:set_string(key, core.serialize(keep))
+end
+
+-- 已經蓋好的營地補上講堂（舊位置的搬過來）
 if cfg.career then
 	core.after(3, function()
 		local sites = {}
@@ -884,13 +908,17 @@ if cfg.career then
 			end
 		end
 		for _, x0 in ipairs(sites) do
-			if storage:get_string(prof_flag(x0)) == "" then
-				local cx = x0 + PROF_DX
-				core.emerge_area({x = cx - 8, y = -30, z = PROF_Z - 8}, {x = cx + 8, y = 40, z = PROF_Z + 8}, function(_, _, rem)
+			local f = storage:get_string(prof_flag(x0))
+			if f == "" or f == "1" then
+				local x1, x2 = x0 + math.min(PROF_DX, OLD_PROF_DX) - 8, x0 + math.max(PROF_DX, OLD_PROF_DX) + 8
+				core.emerge_area({x = x1, y = -30, z = PROF_Z - 8}, {x = x2, y = 40, z = PROF_Z + 8}, function(_, _, rem)
 					if rem > 0 then return end
-					if storage:get_string(prof_flag(x0)) == "" then
+					local f2 = storage:get_string(prof_flag(x0))
+					if f2 == "1" then move_old_lecture(x0) end
+					if f2 == "" or f2 == "1" then
 						rockmech.career_build_professor(x0)
-						core.log("action", ("[rockmech] 營地 x = %d 加上大學教授的講堂"):format(x0))
+						if rockmech.career_reset_vendors then rockmech.career_reset_vendors() end
+						core.log("action", ("[rockmech] 營地 x = %d 的大學教授講堂%s"):format(x0, f2 == "1" and "往東搬了" or "蓋好了"))
 					end
 				end)
 			end
