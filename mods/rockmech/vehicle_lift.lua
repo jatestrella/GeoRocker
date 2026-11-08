@@ -220,17 +220,27 @@ local function lift(kind, P)
 	end
 
 	-- 人在作業籠裡：掛在車上、站在作業籠地板上
-	-- 掛在作業籠地板（零件）上：作業籠移動時人跟著走，不用每步重新掛
-	-- （掛在車身上再改掛載位置，客戶端不會更新，人留在原地）
+	-- 人在作業籠裡：掛在一個獨立的「座位」物件上（跟追蹤相機同一種），座位每步移到作業籠地板上。
+	-- （掛在車身上再改掛載位置、或掛在掛在車上的零件上，客戶端都不會把人移過去）
 	local function attach_player(self, d)
-		local f = self.parts and self.parts.bfloor
-		if f and f:get_pos() then
-			if d:get_attach() ~= f then d:set_attach(f, "", {x = 0, y = 0.5, z = 0}, {x = 0, y = 0, z = 0}) end
-			return
-		end
 		local st = L(self)
-		local p = {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z}
-		d:set_attach(self.object, "", {x = p.x * 10, y = p.y * 10, z = p.z * 10}, {x = 0, y = 0, z = 0})
+		local w = V.to_world(self, {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z})
+		if not (st.seat and st.seat:get_pos()) then
+			st.seat = core.add_entity(w, V.CHASE)
+			if not st.seat then return end
+			st.seat:get_luaentity().vehicle = self
+		else
+			st.seat:move_to(w, true)
+		end
+		if d:get_attach() ~= st.seat then
+			d:set_detach()
+			d:set_attach(st.seat, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+		end
+	end
+	local function drop_seat(self)
+		local st = L(self)
+		if st.seat and st.seat:get_pos() then st.seat:remove() end
+		st.seat = nil
 	end
 	local function to_basket(self, d)
 		local st = L(self)
@@ -252,6 +262,7 @@ local function lift(kind, P)
 		local st = L(self)
 		local f = V.to_world(self, {x = st.B.x, y = st.B.y - BK.y / 2 + 0.1, z = st.B.z})
 		d:set_detach()
+		drop_seat(self)
 		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 		d:set_camera({mode = "any"})
 		V.set_seated(d, false)
@@ -461,6 +472,7 @@ local function lift(kind, P)
 				st.T, st.rope, st.mode = vector.copy(T_REST), ROPE_REST, "cab"
 				place_arm(self)
 				if d then V.seat_driver(self, d) end
+				drop_seat(self)
 				update_hud(self)
 			else
 				local nT = dist > step and vector.add(st.T, vector.multiply(dv, step / dist)) or vector.copy(T_REST)
@@ -478,6 +490,7 @@ local function lift(kind, P)
 				st.mode = "cab"
 				place_arm(self)
 				if d then V.seat_driver(self, d) end
+				drop_seat(self)
 				update_hud(self)
 			else
 				local nb = vector.add(st.B, vector.multiply(dv, step / dist))

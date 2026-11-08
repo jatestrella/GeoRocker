@@ -1240,8 +1240,10 @@ end
 
 V.set_seated = set_seated
 -- 駕駛坐回駕駛座（作業籠收回時用）
+V.CHASE = CHASE
 function V.seat_driver(self, player)
 	local def = TYPES[self.vkind]
+	player:set_detach()             -- 換掛載的對象要先拆下來，客戶端才會更新位置
 	player:set_attach(self.object, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
 	player:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
 	player:set_camera({mode = "first"})
@@ -1498,7 +1500,7 @@ function V.register(kind, def)
 				local parent = d:get_attach()
 				local pe = parent and parent:get_luaentity()
 				-- 掛在這台車的零件上（作業籠）也算在車上
-				if not (pe == self or (parent and parent:get_attach() == obj) or (self.chase and parent and pe and pe.name == CHASE and pe.vehicle == self)) then
+				if not (pe == self or (parent and parent:get_attach() == obj) or (parent and pe and pe.name == CHASE and pe.vehicle == self)) then
 					hud_clear(self, d)
 					if not parent then
 						d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
