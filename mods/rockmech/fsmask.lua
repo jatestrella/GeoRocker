@@ -419,7 +419,7 @@ local function crack_sound(player, a, center, cells)
 	end
 end
 
--- 節理滑動（slip、shear）不套裂紋，改成偶爾從臨空的那一面噴出一小撮碎屑和粉塵（FS 越接近 1 越常噴、噴越多）
+-- 節理滑動（slip、shear）不套裂紋，改成偶爾從臨空的那一面噴出一小撮碎石（FS 越接近 1 越常噴、噴越多）
 local JOINT_KIND = {slip = true, shear = true}
 local SPURT_TICK = 0.5                 -- 每幾秒擲一次
 local SPURT_MAX = 2                    -- 每位玩家每次最多噴幾處
@@ -463,15 +463,6 @@ local function spurt(name, pos, stage)
 	deb.amount, deb.minexptime, deb.maxexptime, deb.minsize, deb.maxsize = 3 + stage * 2, 0.5, 1.2, 0, 0
 	deb.node = {name = node}
 	core.add_particlespawner(deb)
-	-- 粉塵：慢、輕、往上飄一點
-	local dust = table.copy(common)
-	dust.amount, dust.minexptime, dust.maxexptime, dust.minsize, dust.maxsize = 4 + stage * 2, 0.8, 1.6, 1.5, 3
-	dust.minacc, dust.maxacc = {x = 0, y = -0.3, z = 0}, {x = 0, y = 0.2, z = 0}
-	dust.minvel = {x = n.x * 0.6 - 0.2, y = n.y * 0.6, z = n.z * 0.6 - 0.2}
-	dust.maxvel = {x = n.x * 1.2 + 0.2, y = n.y * 1.2 + 0.4, z = n.z * 1.2 + 0.2}
-	dust.texture = "[fill:4x4:#b8b0a4"
-	dust.collisiondetection = false
-	core.add_particlespawner(dust)
 end
 local spurt_t = 0
 core.register_globalstep(function(dtime)
