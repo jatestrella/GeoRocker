@@ -32,6 +32,8 @@ do
 		core.settings:set("font_shadow", "0")
 	end
 end
+-- 語言：沒設的話用繁中（系統是英文的電腦，遊戲裡的字才不會變英文）。語言要重開遊戲才生效
+if (core.settings:get("language") or "") == "" then core.settings:set("language", "zh_TW") end
 
 -- 上課世界（class_coal）的地形：平地、沒有洞穴和礦物，地形由遊戲自己造
 local MAPGEN = {

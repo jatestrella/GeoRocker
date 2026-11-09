@@ -76,7 +76,8 @@ $conf = @(
 	"server_announce = false",
 	"sound_volume = 0.8",
 	"name = player",
-	"enable_esc_dialog = false"
+	"enable_esc_dialog = false",
+	"language = zh_TW"
 )
 # The pixel font games/mining_sim/fonts/Cubic_11.ttf is set by the start screen (mainmenu.lua) with an absolute path
 [System.IO.File]::WriteAllLines((Join-Path $stage "minetest.conf"), $conf)
