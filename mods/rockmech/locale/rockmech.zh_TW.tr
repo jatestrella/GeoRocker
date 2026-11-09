@@ -114,6 +114,7 @@ Sandstone=砂岩
 Shale=頁岩
 Granite=花崗岩
 Coal=煤
+Broadcast radio=廣播收音機
 Hand cart=手推車
 SUV=休旅車
 Dump truck=卡車
@@ -625,6 +626,12 @@ Today's report $@1=今日報告 $@1
 [Analyst] You have no funds account yet=[分析師] 你還沒有資金帳戶
 [Analyst] Not enough money: the report costs $@1=[分析師] 錢不夠：報告要 $@1
 Cut-off grade and price outlook=截止品位、價格走勢
+Trading day @1=第 @1 個交易日
+News=新聞
+@1: day @2 of @3=@1：第 @2 天，共 @3 天
+No news today=今天沒有新聞
+Notice board=告示板
+Broadcast radio@nKeep it on you to see prices and news at the top right=廣播收音機@n帶在身上，右上角就會顯示價格和新聞
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=監測稜鏡@n還沒有讀數（附近開挖、算過應力後才有）

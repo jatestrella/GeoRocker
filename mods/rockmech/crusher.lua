@@ -169,8 +169,11 @@ local function show_money(player)
 	local team = rockmech.team_of(name)
 	local amount = (m < 0 and "−" or "") .. ("$%.0f"):format(math.abs(m))
 	local text = (team and S("Team @1   Funds @2", team, amount) or S("Funds @1", amount))
-		.. (ore and ("\n" .. price_text(ore)) or "")
-		.. (rockmech.market_hud and ("\n" .. rockmech.market_hud()) or "")
+	-- 價格漲跌：身上帶著廣播收音機才顯示（market.lua）；沒有就去貨櫃辦公室的告示板看
+	if rockmech.has_radio and rockmech.has_radio(player) then
+		text = text .. (ore and ("\n" .. price_text(ore)) or "")
+			.. (rockmech.market_hud and ("\n" .. rockmech.market_hud()) or "")
+	end
 	if money_hud[name] then
 		player:hud_change(money_hud[name], "text", text)
 	else
@@ -179,6 +182,7 @@ local function show_money(player)
 	end
 end
 rockmech.show_money = show_money
+rockmech.coal_price_text = function() local ore = main_ore(); return ore and price_text(ore) or "" end
 
 -- name：玩家名稱或帳戶（"team:A"）
 function rockmech.has_account(name) return storage:contains(MONEY .. rockmech.account_of(name)) end

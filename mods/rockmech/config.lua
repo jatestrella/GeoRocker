@@ -84,6 +84,7 @@ config.ores = {
 config.shop = {
 	{key = "pick", shop = "tools", item = "rockmech:pick", label = TR("Pickaxe"), price = 0},
 	{key = "shovel", shop = "tools", item = "rockmech:shovel", label = TR("Shovel"), price = 100},
+	{key = "broadcast_radio", shop = "tools", item = "rockmech:broadcast_radio", label = TR("Broadcast radio"), price = 500},
 	{key = "cart", shop = "vehicle", item = "rockmech:cart_item", label = TR("Hand cart"), price = 500},
 	{key = "suv", shop = "vehicle", item = "rockmech:suv_item", label = TR("SUV"), price = 3000},
 	{key = "truck", shop = "vehicle", item = "rockmech:truck_item", label = TR("Dump truck"), price = 10000},

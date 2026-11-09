@@ -426,3 +426,112 @@ core.after(3, function()
 		end
 	end
 end)
+
+---------------------------------------------------------------------------
+-- 告示板（貨櫃辦公室 1 樓門旁的外牆）：右鍵看今天的價格、漲跌和新聞。
+-- 廣播收音機：帶在身上，右上角跟著顯示價格和新聞（沒帶就只有資金）
+---------------------------------------------------------------------------
+
+local BOARD = "rockmech:office_news_board"       -- 名字 office_ 開頭：營地地坪保護（camp.lua 的 BUILT）
+local BOARD_FORM = "rockmech:news_board"
+local RADIO = "rockmech:broadcast_radio"
+
+local function board_form()
+	local today = rockmech.market_day()
+	local lines = {}
+	local function add(s, c) lines[#lines + 1] = c and core.colorize(c, s) or s end
+	add(S("Trading day @1", today + 1), "#ffe080")
+	add("")
+	add(rockmech.coal_price_text and rockmech.coal_price_text() or "")
+	add(rockmech.market_hud and rockmech.market_hud():match("^[^\n]*\n?[^\n]*") or "")
+	add("")
+	add(S("News"), "#ffd060")
+	local any
+	for _, a in ipairs(active()) do
+		local e = EVENT_BY_ID[a.id]
+		if e then
+			any = true
+			add(S("@1: day @2 of @3", e.label, today - a.from + 1, a.to - a.from), "#ffd060")
+			add("  " .. e.news)
+			add("  " .. effects_text(e))
+		end
+	end
+	if not any then add(S("No news today")) end
+	return "formspec_version[6]size[11,8]"
+		.. ("label[0.5,0.6;%s]"):format(F(S("Notice board")))
+		.. ("textarea[0.5,1.1;10,6.4;;;%s]"):format(F(table.concat(lines, "\n")))
+end
+
+core.register_node(BOARD, {
+	description = S("Notice board"),
+	drawtype = "nodebox", paramtype = "light", paramtype2 = "wallmounted", sunlight_propagates = true,
+	walkable = false,
+	node_box = {type = "wallmounted", wall_side = {-0.5, -0.45, -0.48, -0.42, 0.45, 0.48},
+		wall_top = {-0.48, 0.42, -0.45, 0.48, 0.5, 0.45}, wall_bottom = {-0.48, -0.5, -0.45, 0.48, -0.42, 0.45}},
+	-- 軟木板、木框、釘著幾張紙
+	tiles = {"[fill:16x16:#6a4a2a^[fill:14x14:1,1:#b08a58^[fill:5x6:2,2:#f4f0e0^[fill:6x4:8,3:#ffe680"
+		.. "^[fill:5x5:9,9:#f4f0e0^[fill:4x4:3,10:#e8c0c0^[fill:3x1:3,4:#606060^[fill:3x1:10,11:#606060"},
+	groups = {not_in_creative_inventory = 1}, diggable = false, on_blast = function() end,
+	is_ground_content = false,
+	on_rightclick = function(pos, node, clicker)
+		if clicker and clicker:is_player() then core.show_formspec(clicker:get_player_name(), BOARD_FORM, board_form()) end
+	end,
+})
+
+-- 放告示板：pos 是板子那一格，wall 是貼著的牆
+function rockmech.news_board_put(pos, wall)
+	core.set_node(pos, {name = BOARD, param2 = core.dir_to_wallmounted(vector.subtract(wall, pos))})
+end
+
+-- 已經蓋好的貨櫃辦公室補告示板（1 樓東牆門旁）：找牆的底樑定高度
+local OFFICE_RX = 6
+core.after(4, function()
+	local dx = rockmech.career_office_dx
+	if not dx then return end
+	for _, x0 in ipairs(rockmech.camp and rockmech.camp.sites() or {}) do
+		if storage:get_string("board1:" .. x0) == "" then
+			local _, at = rockmech.career_placer(x0 + dx, -10, 0)
+			local w0 = at(OFFICE_RX, 0, -1)
+			core.emerge_area(vector.offset(w0, -2, -30, -2), vector.offset(w0, 2, 40, 2), function(_, _, rem)
+				if rem > 0 or storage:get_string("board1:" .. x0) ~= "" then return end
+				for y = 40, -30, -1 do
+					if core.get_node({x = w0.x, y = y, z = w0.z}).name == "rockmech:office_wall_base" then
+						local _, at2 = rockmech.career_placer(x0 + dx, -10, y - 1)
+						local p = at2(OFFICE_RX + 1, 2, -1)
+						if core.get_node(p).name == "air" then rockmech.news_board_put(p, at2(OFFICE_RX, 2, -1)) end
+						storage:set_string("board1:" .. x0, "1")
+						core.log("action", ("[rockmech] 營地 x = %d 的貨櫃辦公室補上告示板"):format(x0))
+						return
+					end
+				end
+			end)
+		end
+	end
+end)
+
+core.register_craftitem(RADIO, {
+	description = S("Broadcast radio\nKeep it on you to see prices and news at the top right"),
+	short_description = S("Broadcast radio"),
+	inventory_image = "[fill:16x16:#00000000^[fill:14x9:1,5:#3a3a3a^[fill:12x7:2,6:#5a5a5a^[fill:5x5:3,7:#9a9a9a"
+		.. "^[fill:1x5:4,7:#6a6a6a^[fill:1x5:6,7:#6a6a6a^[fill:4x2:9,7:#e0b428^[fill:2x2:10,10:#c0c0c0^[fill:1x5:12,0:#8a8a8a",
+	stack_max = 1,
+})
+function rockmech.has_radio(player)
+	local inv = player and player:get_inventory()
+	return inv and inv:contains_item("main", RADIO) or false
+end
+-- 收音機拿進拿出：右上角跟著換（每 2 秒看一次）
+local radio_state, rt = {}, 0
+core.register_globalstep(function(dtime)
+	rt = rt + dtime
+	if rt < 2 then return end
+	rt = 0
+	for _, p in ipairs(core.get_connected_players()) do
+		local name, has = p:get_player_name(), rockmech.has_radio(p)
+		if radio_state[name] ~= has then
+			radio_state[name] = has
+			if rockmech.show_money then rockmech.show_money(p) end
+		end
+	end
+end)
+core.register_on_leaveplayer(function(p) radio_state[p:get_player_name()] = nil end)

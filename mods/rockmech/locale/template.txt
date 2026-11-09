@@ -114,6 +114,7 @@ Sandstone=
 Shale=
 Granite=
 Coal=
+Broadcast radio=
 Hand cart=
 SUV=
 Dump truck=
@@ -625,6 +626,12 @@ Today's report $@1=
 [Analyst] You have no funds account yet=
 [Analyst] Not enough money: the report costs $@1=
 Cut-off grade and price outlook=
+Trading day @1=
+News=
+@1: day @2 of @3=
+No news today=
+Notice board=
+Broadcast radio@nKeep it on you to see prices and news at the top right=
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=
