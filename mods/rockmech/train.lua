@@ -5,8 +5,8 @@
 --   N 節都裝滿就開走，下一班馬上從西邊開進來。按「現在出發」帶著已經裝的先走；20:00 還沒滿就帶著已經裝的開走。
 --   裝車：裝車料斗（放料臂 10 m）、怪手直接裝、卡車在車廂旁邊倒（orders.lua 的倒料對準）。
 --   時鐘：教學地圖的天色跟交易日走：開盤 06:00，一個交易日 24 小時，晚上會暗（不管 time_speed 設多少；不改設定檔）。
---   出發時每節結帳：噸 × 品位 × 回收率 × 當天煤價 − 運費（每噸 FREIGHT，比破碎站的處理費便宜，但要配合班次）。
---   廢石裝上去只會白付運費。
+--   出發時每節結帳（跟收煤站同一套，但照原價）：煤噸 × 回收率 × 當天煤價 − 廢石噸 × 廢石處理費。
+--   收煤站只付 cfg.coal_yard_ratio（坑口價），火車照原價，但要配合班次、湊滿一列。
 -- 鐵路和兩側路肩是路權（camp.lua 的保護）：不能挖、不能蓋、炸不壞，往下 10 m 也不能挖；卡車可以直接開過去。
 --   碎石滾到軌道上會擋住火車（停下來等清），要自己清。
 -- 列車是畫面：狀態（位置、每節的料）存在 mod storage，附近有人才放出來，沒人就收掉（不存進地圖）。
@@ -32,7 +32,6 @@ local N = 4                                      -- 車廂數
 local CAP_M3 = 8                                 -- 每節 m³
 local L_LOCO, PITCH = 9, 7.6                     -- 機車長、車廂間距（中心到中心）
 local HOURS = {8, 20}                            -- 上班時間：這段時間一直有車
-local FREIGHT = 10                               -- 運費（每噸）
 local V_MAX, ACC = 12, 1.2                       -- 最高速度 (m/s ≈ 43 km/h)、加減速 (m/s²)：進站減速停好、出站慢慢加速
 local NEAR = 96                                  -- 離裝車點多近有人才放出列車
 local YAW = -math.pi / 2                         -- 車頭朝 +x
@@ -359,9 +358,9 @@ local function depart(acc)
 		local lv, g = O.load_grade({load = ld.load or {}, loadq = ld.loadq or {}})
 		if lv > 0 then
 			local t = tons_of(lv)
-			local m = math.floor(t * g * rec * price - t * FREIGHT + 0.5)
+			local m = math.floor(t * g * rec * price - t * (1 - g) * cfg.crusher_fee + 0.5)
 			net, total_t = net + m, total_t + t
-			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)), t1(t), ("$%.0f × %.0f%% − $%d"):format(price, rec * 100, FREIGHT),
+			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)), t1(t), ("$%.0f × %.0f%%"):format(price, rec * 100),
 				money_text(m), m >= 0 and 0x80ff80 or 0xff8080}
 		end
 	end

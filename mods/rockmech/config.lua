@@ -154,9 +154,10 @@ config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, lowboy
 	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500,
 	aerial = 150, crane = 250, heavyhaul = 500}
 
--- 破碎站的收入：噸數 ×（品位 × 回收率 × 價格 − 處理費）。ore = nil 是廢石，只付處理費
-function config.crush_income(tons, grade, ore, fee)
-	return tons * ((ore and grade * ore.recovery * ore.price or 0) - fee)
+-- 收煤站的收入：照品位拆成煤和廢石，煤 × 回收率 × 價格 × 收購比例 − 廢石 × 廢石處理費。ore = nil 是廢石（品位當 0）
+function config.crush_income(tons, grade, ore, fee, ratio)
+	if not ore then grade = 0 end
+	return tons * grade * (ore and ore.recovery * ore.price or 0) * (ratio or 1) - tons * (1 - grade) * fee
 end
 
 -- 註冊順序（固定，讓 content id / 測試結果可重現）
@@ -873,7 +874,8 @@ function config.load(get)
 	cfg.coal_joints = parse_bool(get("rockmech_coal_joints")) == true
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_big_rate = math.max(0.1, tonumber(get("rockmech_crusher_big_rate")) or 10)   -- 大型破碎站 (t/s)
-	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)
+	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 10)      -- 廢石處理費（每噸廢石；煤不收）
+	cfg.coal_yard_ratio = math.max(0, math.min(1, tonumber(get("rockmech_coal_yard_ratio")) or 0.7))   -- 收煤站付市價的幾成（有火車的地圖）
 	cfg.dump_fee = math.max(0, tonumber(get("rockmech_dump_fee")) or 0)            -- 破碎站切換成廢石場：每噸棄置費
 	cfg.rubble_density = math.max(0.1, tonumber(get("rockmech_rubble_density")) or 2.5)   -- 計價用的碎石密度 (t/m³)
 	-- 浮動礦價（crusher.lua）：交易日長度 (s，遊戲經過的時間)、每個交易日的波動（對數的標準差）、往基準價拉回的比例、

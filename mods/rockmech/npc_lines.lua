@@ -104,5 +104,13 @@ local LINES = {
 		S("Need me on a machine?"),
 	},
 }
+-- 有火車的地圖（教學地圖，train.lua）：收煤站坑口價、火車原價、晚上沒車
+local cfg = rockmech.cfg
+if cfg.career and cfg.teacher and cfg.coal_seam and cfg.coal_seam.lane_w then
+	local function more(who, list) for _, l in ipairs(list) do table.insert(LINES[who], l) end end
+	more("rockmech:npc_buyer", {S("The coal yard pays less. Load the train yourself and you get more.")})
+	more("rockmech:npc_analyst", {S("The coal yard pays a pit-head price. The train pays full price."), S("No trains at night. Stockpile your coal.")})
+	more("rockmech:vendor_civil", {S("The coal yard buys any time, but not at full price.")})
+end
 LINES.chatter, LINES.own_chatter = chatter, own     -- 不是實體名稱（npc_talk.lua 會跳過）
 return LINES

@@ -2,8 +2,8 @@
 -- 破碎站（賣礦）：放在平地上，朝玩家的方向挖一個受料倉：9×9 m、深 4 m 的階梯漏斗，壁坡 45° 比安息角陡，
 -- 碎石不會留在壁上。底部 3×3 m 是格柵（給料口），只從這裡吃料，上方的料靠碎石流動自己補進來。
 -- 卡車、挖土機、推土機倒進來都一樣；每秒最多 rockmech_crusher_rate 噸，倒太快就在倉裡排隊。
--- 過磅入帳：收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），見 config.crush_income。廢石的品位是 0，
--- 運來破碎只會賠處理費，這就是貧化與截止品位。錢記在放置破碎站的玩家的帳戶（分了組就是整組，見 team.lua）。
+-- 過磅入帳：照品位拆成煤和廢石：煤噸 × 回收率 × 價格 × 收購比例 − 廢石噸 × 廢石處理費（config.crush_income）。
+-- 收購比例：有火車的地圖是 cfg.coal_yard_ratio（坑口價，火車照原價），沒有火車是 1。品位太低就賠錢：截止品位。錢記在放置破碎站的玩家的帳戶（分了組就是整組，見 team.lua）。
 -- 礦價每個交易日（rockmech_price_period 秒）浮動一次：rockmech.ore_price。
 -- 右鍵可以切換成廢石場：倒進來的碎石直接棄置，不收入，每噸付 rockmech_dump_fee（預設 0）。
 -- 受料倉、格柵、強制載入給選礦場（plant.lua）共用：rockmech.hopper_lib
@@ -22,6 +22,10 @@ local HOPPER_BODY = {[CRUSHER] = true, [CRUSHER_BIG] = true, [PLANT] = true}
 local function rate_of(pos)
 	return (core.get_node(pos).name == CRUSHER_BIG and cfg.crusher_big_rate or cfg.crusher_rate)
 		* rockmech.eff_crusher_mult(core.get_meta(pos):get_string("owner"))
+end
+-- 收煤站付市價的幾成：有火車（教學地圖）才打折，火車照原價收
+function rockmech.yard_ratio()
+	return rockmech.train_enabled and rockmech.train_enabled() and cfg.coal_yard_ratio or 1
 end
 local function title_of(pos) return core.get_node(pos).name == CRUSHER_BIG and S("Large crusher") or S("Crusher") end
 local SIZE, FEEDER = 9, 3    -- 受料倉開口（大型破碎站、選礦場）、底部格柵的邊長 (m)
@@ -430,11 +434,12 @@ local function report(meta, owner, dump, day)
 		local ore = main_ore()
 		local rows = {}
 		if ore then
+			local r = rockmech.yard_ratio()
 			rows[#rows + 1] = {S("@1 (grade @2%)", S(ore.label), ("%.0f"):format(100 * bq / bt)), ("%.1f t"):format(bq),
-				("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), rockmech.eff_ore_recovery(owner, ore) * 100), money_text(bg), GREEN}
+				("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), rockmech.eff_ore_recovery(owner, ore) * 100) .. (r < 1 and (" × %.0f%%"):format(r * 100) or ""),
+				money_text(bg), GREEN}
 		end
-		rows[#rows + 1] = {S("Waste rock"), ("%.1f t"):format(bt - bq), "", "", WHITE}
-		rows[#rows + 1] = {S("Processing fee"), ("%.1f t"):format(bt), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
+		rows[#rows + 1] = {S("Waste rock"), ("%.1f t"):format(bt - bq), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
 		-- 人事費（wages.lua：雇員薪水在組員在線時已經陸續扣了，這裡列出來、算進淨收入）
 		local wage = 0
 		local wamt, wsec = (rockmech.wage_take or function() end)(rockmech.account_of(owner), day)
@@ -504,7 +509,7 @@ end
 local function crush(pos, dtime)
 	local meta = core.get_meta(pos)
 	local dump = meta:get_string("mode") == "dump"
-	-- 這一步的帳：礦的噸數、礦的貨款（噸 × 價格 × 回收率）、處理費（全部噸數 × 每噸處理費；廢石場是棄置費）
+	-- 這一步的帳：煤的噸數、煤的貨款（煤噸 × 價格 × 回收率 × 收購比例）、廢石處理費（廢石噸 × 每噸；廢石場是全部噸數 × 棄置費）
 	local ore_t, gross, fee = 0, 0, 0
 	local eaten = eat(pos, dtime, rate_of(pos), nil, function(t, base, p2)
 		local ore = rockmech.ore_of_rubble[base]
@@ -513,8 +518,8 @@ local function crush(pos, dtime)
 		ore_t = ore_t + tons * grade
 		if dump then fee = fee + tons * cfg.dump_fee
 		else
-			if ore then gross = gross + tons * grade * rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * rockmech.ore_price(ore) end
-			fee = fee + tons * cfg.crusher_fee
+			if ore then gross = gross + tons * grade * rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * rockmech.ore_price(ore) * rockmech.yard_ratio() end
+			fee = fee + tons * (1 - grade) * cfg.crusher_fee
 		end
 	end)
 	local income = gross - fee
@@ -563,7 +568,7 @@ local function formspec(pos, viewer)
 		("label[0.5,0.6;%s]"):format(core.formspec_escape(dump and S("Waste dump (rubble dumped here is discarded, no income)") or title_of(pos))),
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(dump
 			and S("Capacity: @1 t/s   Dumping fee: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.dump_fee))
-			or S("Capacity: @1 t/s   Processing fee: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.crusher_fee)))),
+			or S("Capacity: @1 t/s   Waste rock: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.crusher_fee)))),
 		("label[0.5,1.8;%s]"):format(core.formspec_escape(dump and S("Ore dumped here is also discarded as waste") or table.concat(prices, "; "))),
 		("textarea[0.5,6.5;10,1;;;%s]"):format(core.formspec_escape(queue_text)),
 		("button[0.5,5.5;8,0.8;mode;%s]"):format(core.formspec_escape(dump and S("Switch to crusher (sell ore)")
@@ -572,7 +577,7 @@ local function formspec(pos, viewer)
 			("%.0f"):format(capacity_of(size_of(meta)) / V.NLEV), ("%.1f"):format(tons_of(queue))))),
 		("label[0.5,3.0;%s]"):format(core.formspec_escape(S("Total processed: @1 t, average grade @2%", ("%.1f"):format(total),
 			("%.0f"):format(total > 0 and 100 * meta:get_float("total_q") / total or 0)))),
-		("label[0.5,3.6;%s]"):format(core.formspec_escape(S("Totals: sales $@1 − processing fees $@2 = net income $@3", ("%.0f"):format(meta:get_float("total_g")),
+		("label[0.5,3.6;%s]"):format(core.formspec_escape(S("Totals: sales $@1 − waste rock $@2 = net income $@3", ("%.0f"):format(meta:get_float("total_g")),
 			("%.0f"):format(meta:get_float("total_f")), ("%.0f"):format(meta:get_float("total_m"))))),
 		("label[0.5,4.2;%s]"):format(core.formspec_escape(S("Funds (@1): $@2", rockmech.account_label(meta:get_string("owner")),
 			("%.0f"):format(rockmech.money(meta:get_string("owner")))))),

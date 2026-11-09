@@ -115,12 +115,13 @@ describe("經營模式", function()
 end)
 
 describe("config.crush_income", function()
-	it("收入 = 噸數 ×（品位 × 回收率 × 價格 − 處理費），廢石只付處理費，低於截止品位就賠錢", function()
+	it("收入 = 煤噸 × 回收率 × 價格 × 收購比例 − 廢石噸 × 處理費，低於截止品位就賠錢", function()
 		local coal = config.ores.coal
-		assert.near(72 * (0.75 * 0.9 * 120 - 30), config.crush_income(72, 0.75, coal, 30), 1e-9)
-		assert.near(-720, config.crush_income(24, 0, nil, 30), 1e-9)
-		assert.is_true(config.crush_income(1, 0.2, coal, 30) < 0)
-		assert.is_true(config.crush_income(1, 0.3, coal, 30) > 0)
+		assert.near(72 * 0.75 * 0.9 * 120 * 0.7 - 72 * 0.25 * 10, config.crush_income(72, 0.75, coal, 10, 0.7), 1e-9)
+		assert.near(10 * 0.5 * 0.9 * 120 * 0.7 - 10 * 0.5 * 10, config.crush_income(10, 0.5, coal, 10, 0.7), 1e-9)   -- 328
+		assert.near(-240, config.crush_income(24, 0, nil, 10), 1e-9)
+		assert.is_true(config.crush_income(1, 0.05, coal, 10, 0.7) < 0)
+		assert.is_true(config.crush_income(1, 0.15, coal, 10, 0.7) > 0)
 	end)
 end)
 

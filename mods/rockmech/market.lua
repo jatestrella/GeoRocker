@@ -277,14 +277,18 @@ local function report(name)
 	if ore then
 		local p = rockmech.ore_price(ore)
 		local rec = rockmech.eff_ore_recovery and rockmech.eff_ore_recovery(acc, ore) or ore.recovery
-		local fee = cfg.crusher_fee
-		local cut = fee / (p * rec)
+		local fee, r = cfg.crusher_fee, rockmech.yard_ratio()
+		-- 不賺不賠：g × 回收率 × 價格 × 收購比例 = (1 − g) × 廢石處理費
+		local function cutoff(price) return fee / (price * rec * r + fee) end
+		local cut = cutoff(p)
 		local p5 = ore.price * forecast(p / ore.price, target("coal"), cfg.price_revert, 5)
 		add(S("@1 today: $@2/t", S(ore.label), ("%.0f"):format(p)), "#ffe080")
 		add(S("Cut-off grade at the crusher: @1%", ("%.1f"):format(cut * 100)), "#80ff80")
-		add(S("  = processing fee $@1/t ÷ (price $@2 × recovery @3%)", fee, ("%.0f"):format(p), ("%.0f"):format(rec * 100)))
+		local v = p * rec * r + fee
+		add(S("  = waste fee $@1 ÷ $@2", fee, ("%.0f"):format(v)))
+		add(S("  $@1 = price $@2 × recovery @3% × @4% + waste fee", ("%.0f"):format(v), ("%.0f"):format(p), ("%.0f"):format(rec * 100), ("%.0f"):format(r * 100)))
 		add(S("  Rubble below this grade loses money even before hauling and fuel"))
-		add(S("In 5 days: about $@1/t, cut-off @2%", ("%.0f"):format(p5), ("%.1f"):format(fee / (p5 * rec) * 100)))
+		add(S("In 5 days: about $@1/t, cut-off @2%", ("%.0f"):format(p5), ("%.1f"):format(cutoff(p5) * 100)))
 	end
 	add("")
 	for _, key in ipairs(ORDER) do
