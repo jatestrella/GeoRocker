@@ -40,8 +40,8 @@ end
 do
 	local c = def.color
 	local o = ("[fill:16x16:%s"):format(c)
-	local win = ("[fill:16x16:%s^[fill:12x9:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = V.cab_side(c, {win = {x = 3, y = 2, w = 10, h = 8}, sill = "#2a2a2a", doors = {{x = 2, y = 1, w = 12, h = 12.8}}})
+	local win = V.cab_glass(c, 2, 2, 12, 9) .. "^[fill:16x2:0,14:#2a2a2a"
+	local side = V.cab_side(c, {win = {x = 3, y = 2, w = 10, h = 8}, clear = true, sill = "#2a2a2a", doors = {{x = 2, y = 1, w = 12, h = 12.8}}})
 	local side_l = V.flip_side(side)
 	local grille = ("[fill:16x16:%s^[fill:12x8:2,4:#2a2a2a^[fill:12x1:2,6:#4a4a4a^[fill:12x1:2,9:#4a4a4a"):format(c)
 	local mast = "[fill:16x16:#3a3a3a^[fill:4x16:6,0:#5a5a5a^[fill:16x1:0,3:" .. c .. "^[fill:16x1:0,11:" .. c
@@ -51,7 +51,8 @@ do
 		{pos = {x = -1.1, y = -1.0, z = -0.6}, size = {x = 0.7, y = 1.0, z = 4.2}, tex = trk},
 		{pos = {x = 1.1, y = -1.0, z = -0.6}, size = {x = 0.7, y = 1.0, z = 4.2}, tex = trk},
 		{pos = {x = 0, y = -0.35, z = -0.7}, size = {x = 2.2, y = 0.5, z = 4.4}, tex = box_tex("#3a3a3a")},   -- 甲板
-		{pos = {x = -0.5, y = 0.6, z = 0.2}, size = {x = 1.2, y = 1.5, z = 1.4}, tex = {o, "[fill:16x16:#2a2a2a", side, side_l, win, o}},   -- 駕駛室
+		{pos = {x = -0.5, y = 0.6, z = 0.2}, size = {x = 1.2, y = 1.5, z = 1.4}, alpha = true, tex = {o, "[fill:16x16:#2a2a2a", side, side_l, win, o}},   -- 駕駛室（車窗半透明）
+		{pos = {x = -0.5, y = 0.6, z = -0.46}, size = {x = 1.16, y = 1.46, z = 0.04}, tex = box_tex(c)},   -- 駕駛室後牆
 		{pos = {x = 0.4, y = 0.45, z = -1.9}, size = {x = 1.8, y = 1.4, z = 2.0}, tex = {o, o, grille, grille, o, o}},   -- 動力箱
 		{pos = {x = 0, y = -0.2, z = 1.75}, size = {x = 0.6, y = 0.5, z = 1.0}, tex = box_tex(c)},   -- 桅桿臂
 		{pos = {x = 0, y = (MAST_FOOT.y + MAST_TOP) / 2, z = MAST_FOOT.z}, size = {x = 0.35, y = MAST_TOP - MAST_FOOT.y, z = 0.45},
@@ -217,7 +218,7 @@ do
 	local function angle(a) return (a + math.pi) % (2 * math.pi) - math.pi end
 	V.op_setup("drillrig", def, {
 		label = S("Surface drill rig"), verb = S("drill a hole"), working = S("Drilling"), half = def.half,
-		seat = {x = -0.5, y = -0.05, z = -0.1},
+		seat = {x = -0.5, y = 0.1, z = 0.2},
 		busy = function(self) return self.boring ~= nil end,
 		-- 遠：直接開過去；近（桅桿腳距離 + 4 m 內）：原地轉到正對那一格，再前後微調到桅桿腳落在那一格
 		approach = function(self, ctx, p, steer)

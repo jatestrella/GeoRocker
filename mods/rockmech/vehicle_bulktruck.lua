@@ -42,16 +42,17 @@ end
 
 do
 	local c = def.color
-	local cab_front = ("[fill:16x16:%s^[fill:12x6:2,2:#9fd0ff^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"):format(c)
-	local cab_side = V.cab_side(c, {win = {x = 8, y = 2, w = 6, h = 6}, doors = {{x = 6.5, y = 1, w = 8.5, h = 12.5}}})
+	local cab_front = V.cab_glass(c, 2, 2, 12, 6) .. "^[fill:4x2:2,12:#f0e070^[fill:4x2:10,12:#f0e070"
+	local cab_side = V.cab_side(c, {win = {x = 8, y = 2, w = 6, h = 6}, clear = true, doors = {{x = 6.5, y = 1, w = 8.5, h = 12.5}}})
 	local cab_side_l = V.flip_side(cab_side)
 	local tank = "[fill:16x16:#e8e8e0^[fill:16x2:0,9:" .. c .. "^[fill:16x1:0,12:#e890b0"
 	local tank_end = "[fill:16x16:#d8d8d0^[fill:10x10:3,3:#c8c8c0"
 	local wheel = {TREAD, TREAD, WHEEL, WHEEL, TREAD, TREAD}
 	def.parts = {
 		{pos = {x = 0, y = -0.55, z = -2.0}, size = {x = 1.6, y = 0.3, z = 6.6}, tex = box_tex("#2a2a2a")},   -- 底盤
-		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0},
-			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side_l, cab_front, ("[fill:16x16:%s"):format(c)}},   -- 駕駛室
+		{pos = {x = 0, y = 0.6, z = 0.5}, size = {x = 2.4, y = 2.0, z = 2.0}, alpha = true,
+			tex = {("[fill:16x16:%s"):format(c), "[fill:16x16:#2a2a2a", cab_side, cab_side_l, cab_front, ("[fill:16x16:%s"):format(c)}},   -- 駕駛室（車窗半透明）
+		{pos = {x = 0, y = 0.6, z = -0.46}, size = {x = 2.36, y = 1.96, z = 0.04}, tex = box_tex(c)},   -- 駕駛室後牆
 		{pos = {x = 0, y = 0.45, z = -2.9}, size = {x = 2.2, y = 1.6, z = 4.4}, tex = {tank, tank, tank, tank, tank_end, tank_end}},   -- 儲槽
 		{pos = {x = 0, y = 1.45, z = BOOM_BASE.z}, size = {x = 0.8, y = 0.4, z = 0.8}, tex = box_tex("#4a4a4a")},   -- 吊臂迴轉台
 		{id = "boom", pos = {x = 0, y = 0, z = 0}, size = {x = 0.25, y = 1, z = 0.25}, tex = box_tex("#d8b020")},   -- 輸送吊臂
@@ -184,7 +185,7 @@ end
 -- 重機操作員（vehicle_op.lua）：按住 E 點孔 → 開到附近、車尾對著它倒車，吊臂搆得到就把範圍內的孔都灌好
 V.op_setup("bulktruck", def, {
 	label = S("ANFO bulk truck"), verb = S("charge the holes"), working = S("Filling holes"), half = def.half,
-	seat = {x = -0.55, y = -0.25, z = 0.35},
+	seat = {x = -0.55, y = 0.1, z = 0.6},
 	busy = function(self) return self.pumping ~= nil end,
 	approach = function(self, ctx, p, steer)
 		local r = V.to_world(self, BOOM_BASE)
