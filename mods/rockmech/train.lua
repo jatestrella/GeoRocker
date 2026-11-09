@@ -4,7 +4,7 @@
 --   一列 N 節車廂（每節 CAP_M3 m³）從礦帶西邊開進來，停在裝車點（黃黑標示柱，每節一根）不動；
 --   N 節都裝滿就開走，下一班馬上從西邊開進來。按「現在出發」帶著已經裝的先走；20:00 還沒滿就帶著已經裝的開走。
 --   裝車：裝車料斗（放料臂 10 m）、怪手直接裝、卡車在車廂旁邊倒（orders.lua 的倒料對準）。
---   時鐘：天色有在走（time_speed > 0）就看天色；時間停住（time_speed = 0）就用交易日：開盤 06:00，一個交易日 24 小時。
+--   時鐘：教學地圖的天色跟交易日走：開盤 06:00，一個交易日 24 小時，晚上會暗（不管 time_speed 設多少；不改設定檔）。
 --   出發時每節結帳：噸 × 品位 × 回收率 × 當天煤價 − 運費（每噸 FREIGHT，比破碎站的處理費便宜，但要配合班次）。
 --   廢石裝上去只會白付運費。
 -- 鐵路和兩側路肩是路權（camp.lua 的保護）：不能挖、不能蓋、炸不壞，往下 10 m 也不能挖；卡車可以直接開過去。
@@ -50,9 +50,8 @@ local function load_x(x0) return x0 + LOAD_REL + 0.5 end
 local function stop_head(x0) return load_x(x0) + L_LOCO + PITCH / 2 end   -- 停好時的車頭 x：第 1 節在裝車點，後面幾節往西排
 local function wagon_x(x0, i) return math.floor(load_x(x0) - (i - 1) * PITCH) end   -- 停好時第 i 節的中心（標示柱的 x）
 
--- 現在幾點（0～24）
+-- 現在幾點（0～24）：教學地圖的時鐘跟交易日走（開盤 06:00，一個交易日 24 小時），天色也照這個（下面每秒對一次）
 local function hour()
-	if (tonumber(core.settings:get("time_speed")) or 72) > 0 then return core.get_timeofday() * 24 end
 	local p = cfg.price_period
 	local into = core.get_gametime() - rockmech.market_day() * p
 	return (6 + 24 * into / p) % 24
@@ -433,6 +432,7 @@ core.register_globalstep(function(dtime)
 	tick = tick + dtime
 	if tick < 1 then return end
 	tick = 0
+	core.set_timeofday(hour() / 24)
 	for i = 0, cfg.career_teams or 0 do step("team:" .. i) end   -- 0 = 老師組（出生點的營地）
 end)
 
