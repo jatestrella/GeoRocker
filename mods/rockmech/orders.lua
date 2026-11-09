@@ -5,9 +5,7 @@
 --   裝滿（或按收料車叫它先走）→ 取樣驗品位：達標照合約價付款、車開走，SECS_NEXT 秒後下一台來；
 --   不達標整車退貨：料倒回地磅後面，扣退貨運費，同一台車留著重裝。
 --   交完就結案；到期沒交完，沒交的部分 × 單價 × PENALTY 罰款。中途取消也一樣罰。
--- 營地的混凝土地坪（也在這裡）：建築區（講堂、研究帳篷、貨櫃辦公室、長椅的外框）、交車區、收料區鋪混凝土，
---   地坪上不能放東西、建築和地面挖不掉，往下 UNDER m 內也不能挖（碎石、自己放的置物櫃這類還是拿得走）；
---   有 rockmech 權限（老師）的人不受限。新蓋的營地一起鋪，舊的營地補鋪。
+-- 營地的位置、地坪、收料區的地磅在 camp.lua。
 
 local S = rockmech.S
 local cfg = rockmech.cfg
@@ -15,192 +13,9 @@ local V = rockmech.vehicles
 local NLEV = V.NLEV
 local storage = rockmech.collapse.storage
 local F = core.formspec_escape
+local C = rockmech.camp
+local sites, site_of, sy, ground_y, BAY = C.sites, C.site_of, C.sy, C.ground_y, C.BAY
 
----------------------------------------------------------------------------
--- 營地的位置
----------------------------------------------------------------------------
-
--- 地坪範圍（x 相對營地中心 x0，z 是絕對座標）；line：邊上一圈黃色外框
---   建築區：講堂、研究帳篷、貨櫃辦公室、長椅的外框再外推 2 m
---   交車區：delivery.lua 的 YARD（有東西擋著就不交車）
---   收料區：營地南邊外側、礦帶之間的平地走廊上（卡車從礦區往南開就到）。只鋪收料車加地磅那一條（7 m 寬），
---     兩側不鋪：自己放裝車料斗（放料臂 10 m）、接輸送帶裝進收料車
-local PADS = {{x1 = 11, x2 = 32, z1 = -33, z2 = -1},
-	{x1 = 10, x2 = 36, z1 = -54, z2 = -36, line = true},
-	{x1 = -17, x2 = -11, z1 = -72, z2 = -59, line = true}}
--- 舊版鋪過的範圍（第一版整個南半部；之後的收料區在 z −50..−34、交車區到 z −34）：在新範圍外的換回表土
-local OLD_PADS = {{x1 = -21, x2 = 33, z1 = -56, z2 = -1}, {x1 = 10, x2 = 36, z1 = -56, z2 = -34}}
-local UNDER = 10                         -- 地坪下幾公尺內不能挖
--- 收料車：停在地磅上，車頭朝北；車身原點（駕駛艙中心）的位置
-local BAY = {x = -14, z = -62}
-local SCALE = {x1 = -15, x2 = -13, z1 = -69, z2 = -61}     -- 地磅鋼板
-local CONCRETE = "rockmech:camp_concrete"
-local SCALE_NODE = "rockmech:camp_scale"
-local LINE = "rockmech:camp_concrete_line"           -- 黃色外框
-
-local function sites()
-	local out = {}
-	if storage:get_string("career_site") == "2" then out[#out + 1] = cfg.career_camp_dx end
-	if rockmech.team_site_x then
-		for i = 1, cfg.career_teams or 0 do
-			if storage:get_string("team_site:" .. i) == "1" then out[#out + 1] = rockmech.team_site_x(tostring(i)) end
-		end
-	end
-	return out
-end
--- 帳戶的營地：分組是那一組的營地；單人地圖是唯一那座
-local function site_of(acc)
-	local t = acc:match("^team:(%d+)$")
-	if t and rockmech.team_site_x and storage:get_string("team_site:" .. t) == "1" then return rockmech.team_site_x(t) end
-	if storage:get_string("career_site") == "2" then return cfg.career_camp_dx end
-end
-local function sy() return math.floor(cfg.surface_y or 0) end
-local function in_rect(x0, r, x, z) return x >= x0 + r.x1 and x <= x0 + r.x2 and z >= r.z1 and z <= r.z2 end
-local function in_pad(x0, pos)
-	for _, r in ipairs(PADS) do if in_rect(x0, r, pos.x, pos.z) then return true end end
-	return false
-end
--- (x, z) 地面最上面那格的 y（走得上去的方塊）
-local function ground_y(x, z)
-	for y = sy() + 8, sy() - 6, -1 do
-		local n = core.get_node({x = x, y = y, z = z}).name
-		if n == "ignore" then return nil end
-		local d = core.registered_nodes[n]
-		if n ~= "air" and d and d.walkable ~= false and not n:find("leaves") then return y end
-	end
-end
-
----------------------------------------------------------------------------
--- 方塊：混凝土地坪、地磅
----------------------------------------------------------------------------
-
-local function noop() end
-core.register_node(CONCRETE, {
-	description = S("Concrete slab"),
-	tiles = {"[fill:16x16:#a8a49c^[fill:16x1:0,0:#96928a^[fill:1x16:0,0:#96928a^[fill:2x1:5,6:#b8b4ac^[fill:1x1:11,11:#8e8a82"},
-	is_ground_content = false, groups = {not_in_creative_inventory = 1}, on_blast = noop,
-})
-core.register_node(LINE, {
-	description = S("Painted line"),
-	tiles = {"[fill:16x16:#e0b428^[fill:16x1:0,0:#c89c20^[fill:3x1:4,9:#f0cc58^[fill:1x1:12,4:#b8901c",
-		"[fill:16x16:#a8a49c^[fill:16x1:0,0:#96928a"},
-	is_ground_content = false, groups = {not_in_creative_inventory = 1}, on_blast = noop,
-})
-core.register_node(SCALE_NODE, {
-	description = S("Weighbridge"),
-	tiles = {"[fill:16x16:#5a5e64^[fill:16x1:0,7:#3a3e44^[fill:1x16:7,0:#3a3e44^[fill:2x2:2,2:#7a7e84^[fill:2x2:12,12:#7a7e84"},
-	is_ground_content = false, groups = {not_in_creative_inventory = 1}, on_blast = noop,
-})
-
--- 地面方塊（表土、土、岩石）才鋪；建築的地板、家具、樹、玩家放的東西不動
-local function pavable(n)
-	if n == "air" or n == "ignore" then return false end
-	if n:find("^rockmech:office_") or n:find("^rockmech:camp_") or n:find("^rockmech:tent_") or n:find("^rockmech:sign_") then return false end
-	local d = core.registered_nodes[n]
-	local g = d and d.groups or {}
-	return (g.soil or g.crumbly or g.cracky or g.rockmech_topsoil) and not n:find("leaves") and not n:find("tree")
-		and not rockmech.rubble_level[n] or rockmech.rubble_base and rockmech.rubble_base[n] == rockmech.RUBBLE_SOIL
-end
--- 鋪地坪；舊版鋪過的（pad:x0 = 1、沒有 pad3）先把新範圍外面的混凝土換回表土
-local TOPSOIL = "rockmech:topsoil"
-local function pave(x0)
-	local base = sy()
-	if storage:get_string("pad:" .. x0) == "1" then
-		local n = 0
-		for _, o in ipairs(OLD_PADS) do for x = x0 + o.x1, x0 + o.x2 do
-			for z = o.z1, o.z2 do
-				if not in_pad(x0, {x = x, z = z}) then
-					for y = base - 1, base + 2 do
-						local p = {x = x, y = y, z = z}
-						local nn = core.get_node(p).name
-						if nn == CONCRETE or nn == SCALE_NODE or nn == LINE then core.set_node(p, {name = TOPSOIL}); n = n + 1 end
-					end
-				end
-			end
-		end end
-		core.log("action", ("[rockmech] 營地 x = %d 地坪縮小：%d 格混凝土換回表土"):format(x0, n))
-	end
-	-- 每一欄往下找地面那一層：上面有椅子、長椅、樹、看板也照鋪（擺設留在地坪上）；
-	-- 碰到建築的地板或已經鋪好的就停（地板就是建築自己的地面）
-	local PAD_NODE = {[CONCRETE] = true, [SCALE_NODE] = true, [LINE] = true}
-	for _, r in ipairs(PADS) do
-		for x = x0 + r.x1, x0 + r.x2 do
-			for z = r.z1, r.z2 do
-				local want = in_rect(x0, SCALE, x, z) and SCALE_NODE
-					or r.line and (x == x0 + r.x1 or x == x0 + r.x2 or z == r.z1 or z == r.z2) and LINE or CONCRETE
-				for y = base + 2, base - 1, -1 do
-					local p = {x = x, y = y, z = z}
-					local n = core.get_node(p).name
-					if n == "ignore" or n == want or n:find("floor") then break end
-					if PAD_NODE[n] or pavable(n) then core.set_node(p, {name = want}); break end
-				end
-			end
-		end
-	end
-	storage:set_string("pad:" .. x0, "1")
-	storage:set_string("pad6:" .. x0, "1")
-	core.log("action", ("[rockmech] 營地 x = %d 鋪好混凝土地坪、收料區"):format(x0))
-end
-local function done(x0) return storage:get_string("pad6:" .. x0) == "1" end
-local function pave_when_loaded(x0)
-	local a, b = {x = math.huge, y = sy() - 8, z = math.huge}, {x = -math.huge, y = sy() + 10, z = -math.huge}
-	for _, list in ipairs({PADS, OLD_PADS}) do
-		for _, r in ipairs(list) do
-			a.x, a.z = math.min(a.x, x0 + r.x1), math.min(a.z, r.z1)
-			b.x, b.z = math.max(b.x, x0 + r.x2), math.max(b.z, r.z2)
-		end
-	end
-	core.emerge_area(a, b, function(_, _, rem)
-		if rem > 0 or done(x0) then return end
-		local col = rockmech.collapse
-		col.quiet = col.quiet + 1
-		local ok, err = pcall(pave, x0)
-		col.quiet = col.quiet - 1
-		if not ok then core.log("error", "[rockmech] pave: " .. tostring(err)) end
-	end)
-end
--- 新蓋的營地：career.lua 蓋營地時整地完先鋪（rockmech.camp_pave），建築、擺設再蓋在地坪上；
--- 舊的營地開服 4 秒後補鋪（或縮小）
-function rockmech.camp_pave(x0) if not done(x0) then pave(x0) end end
-core.after(4, function()
-	for _, x0 in ipairs(sites()) do
-		if not done(x0) then pave_when_loaded(x0) end
-	end
-end)
-
--- 保護：地坪範圍、地坪下 UNDER m 到上方 40 m。碎石隨時可以清；地面以上玩家自己放的東西（置物櫃…）拿得走
-local BUILT = {"^rockmech:office_", "^rockmech:camp_", "^rockmech:tent_", "^rockmech:sign_", "^doors:", "^default:glass$", "^stairs:"}
-local function pad_protected(pos, name)
-	if not cfg.career then return false end
-	local base = sy()
-	if pos.y < base - UNDER or pos.y > base + 40 then return false end
-	local x0
-	for _, s in ipairs(sites()) do
-		if storage:get_string("pad:" .. s) == "1" and in_pad(s, pos) then x0 = s; break end
-	end
-	if not x0 then return false end
-	if name and name ~= "" and core.check_player_privs(name, {rockmech = true}) then return false end
-	local n = core.get_node(pos).name
-	if rockmech.rubble_level[n] then return false end
-	if n == "air" then return true end                     -- 放東西（放進空格）
-	if pos.y <= base + 1 then return true end              -- 地坪、地面、地下
-	for _, pat in ipairs(BUILT) do if n:find(pat) then return true end end
-	return false
-end
-rockmech.pad_protected = pad_protected
-local old_protected = core.is_protected
-function core.is_protected(pos, name)
-	if pad_protected(pos, name) then return true end
-	return old_protected(pos, name)
-end
-local last_warn = {}
-core.register_on_protection_violation(function(pos, name)
-	if not pad_protected(pos, name) then return end
-	local now = core.get_us_time()
-	if last_warn[name] and now - last_warn[name] < 3e6 then return end
-	last_warn[name] = now
-	rockmech.notify(name, S("Concrete slab: nothing can be built or dug here"))
-end)
 
 ---------------------------------------------------------------------------
 -- 訂單
@@ -245,14 +60,26 @@ local function offers(acc)
 		list[i] = {tons = sz.tons, days = sz.days, spec = spec,
 			price = math.floor(rockmech.ore_price(ore) * spec * premium + 0.5)}
 	end
+	-- 火車（train.lua，教學地圖）：一列 100 t，運費便宜，單價比卡車好
+	if rockmech.train_enabled and rockmech.train_enabled() then
+		local spec = SPECS[r:next(1, #SPECS)]
+		list[#list + 1] = {mode = "train", tons = rockmech.train_tons(), days = 2, spec = spec,
+			price = math.floor(rockmech.ore_price(ore) * spec * (1.35 + r:next(0, 15) / 100) + 0.5)}
+	end
 	return list
 end
 
 local function accept(acc, o)
-	set_order(acc, {tons = o.tons, spec = o.spec, price = o.price, due = today() + o.days, done = 0, paid = 0,
+	set_order(acc, {mode = o.mode, tons = o.tons, spec = o.spec, price = o.price, due = today() + o.days, done = 0, paid = 0,
 		loads = 0, rejected = 0, next_t = 0})
-	tell(acc, S("Accepted: @1 t, grade ≥ @2, @3 days, $@4/t. The pickup truck is on its way to the receiving area",
-		o.tons, pct(o.spec), o.days, o.price))
+	if o.mode == "train" then
+		tell(acc, S("Accepted: train, @1 t, grade ≥ @2, @3 days, $@4/t. The train comes to the loading point by the railway",
+			o.tons, pct(o.spec), o.days, o.price))
+		if rockmech.train_start then rockmech.train_start(acc) end
+	else
+		tell(acc, S("Accepted: @1 t, grade ≥ @2, @3 days, $@4/t. The pickup truck is on its way to the receiving area",
+			o.tons, pct(o.spec), o.days, o.price))
+	end
 end
 
 -- 結案：交完、到期、取消。收料車收走
@@ -262,6 +89,7 @@ local function close(acc, o, why)
 	local fine = math.floor(left * o.price * PENALTY + 0.5)
 	if fine > 0 then rockmech.add_money(acc, -fine) end
 	set_order(acc, nil)
+	if o.mode == "train" and rockmech.train_remove then rockmech.train_remove(acc) end
 	local e = trucks[acc]
 	if e and e.object:get_pos() then
 		V.registry_drop(e.uid); V.snapshot_clear(e.uid)
@@ -275,6 +103,7 @@ local function close(acc, o, why)
 	}
 	if why == "done" then tell(acc, S("Order complete: @1 delivered, received @2", t1(o.done), money_text(o.paid)))
 	elseif why == "late" then tell(acc, S("Order expired: @1 short, penalty @2", t1(left), money_text(-fine)))
+	elseif why == "train" then tell(acc, S("The train has left: @1 short, penalty @2", t1(left), money_text(-fine)))
 	else tell(acc, S("Order cancelled: @1 short, penalty @2", t1(left), money_text(-fine))) end
 	for _, m in ipairs(rockmech.account_members(acc)) do
 		if rockmech.show_bill then rockmech.show_bill(m, S("Order statement"), rows) end
@@ -446,17 +275,25 @@ end
 local SNAP = 3.5
 local dump_to_ground = V.dump_to_ground
 function V.dump_to_ground(self, cells, ytop)
-	if self.vkind ~= KIND and cells[1] then
+	if self.vkind ~= KIND and not (self.vkind and V.TYPES[self.vkind] and V.TYPES[self.vkind].no_dump_snap) and cells[1] then
 		local cx, cz = 0, 0
 		for _, c in ipairs(cells) do cx, cz = cx + c.x, cz + c.z end
 		cx, cz = cx / #cells, cz / #cells
-		for _, e in pairs(trucks) do
-			if e.object:get_pos() and not e.tip then
+		local list = {}
+		for _, e in pairs(trucks) do list[#list + 1] = e end
+		if rockmech.train_wagons then for _, e in ipairs(rockmech.train_wagons()) do list[#list + 1] = e end end
+		for _, e in ipairs(list) do
+			if e.object:get_pos() and not e.tip and e ~= self then
+				local def = V.TYPES[e.vkind]
 				local bt = V.bed_target(e)
-				local half = V.TYPES[KIND].bed.size.z / 2
+				local half = def.bed.size.z / 2
+				-- 換到車身座標：沿車身（along）、橫向（lat）
+				local yaw = e.object:get_yaw()
 				local dx, dz = cx - bt.x, cz - bt.z
-				if math.abs(dx) <= SNAP and math.abs(dz) <= half + 1 and math.abs(ytop - bt.y) < 6 then
-					local room = V.TYPES[KIND].cap - V.load_total(e)
+				local along = -dx * math.sin(yaw) + dz * math.cos(yaw)
+				local lat = dx * math.cos(yaw) + dz * math.sin(yaw)
+				if math.abs(lat) <= SNAP and math.abs(along) <= half + 1 and math.abs(ytop - bt.y) < 6 then
+					local room = def.cap - V.load_total(e)
 					for base, lv in pairs(self.load) do
 						local m = math.min(lv, room)
 						if m > 0 then
@@ -490,6 +327,8 @@ core.register_globalstep(function(dtime)
 		if o then
 			if d >= o.due then
 				close(acc, o, "late")
+			elseif o.mode == "train" then
+				if rockmech.train_step then rockmech.train_step(acc, o) end
 			else
 				local e = truck_of(acc)
 				if e then
@@ -533,13 +372,15 @@ local function buyer_form(name)
 		out[#out + 1] = lbl(0.5, 1.9, S("Delivered @1 / @2 t, @3 loads, @4 rejected", ("%.1f"):format(o.done), o.tons, o.loads, o.rejected))
 		out[#out + 1] = lbl(0.5, 2.4, S("@1 days left, received @2", left, money_text(o.paid)))
 		out[#out + 1] = lbl(0.5, 3.1, S("Short at the deadline: @1% of the price as penalty", PENALTY * 100))
+		if o.mode == "train" and rockmech.train_status then out[#out + 1] = lbl(0.5, 3.8, rockmech.train_status(acc)) end
 		out[#out + 1] = ("button[0.5,5.8;4,0.8;cancel;%s]"):format(F(S("Cancel order")))
 	else
 		out[#out + 1] = lbl(0.5, 1.4, S("Deliver to the pickup truck at the receiving area. Price is locked when you accept"))
 		out[#out + 1] = lbl(0.5, 1.9, S("Below spec: the whole load is rejected. Short at the deadline: @1% penalty", PENALTY * 100))
 		for i, of in ipairs(offers(acc)) do
 			local y = 2.4 + i * 1.0
-			out[#out + 1] = lbl(0.5, y, S("@1 t   grade ≥ @2   @3 days   $@4/t", of.tons, pct(of.spec), of.days, of.price))
+			out[#out + 1] = lbl(0.5, y, of.mode == "train" and S("Train  @1 t   grade ≥ @2   @3 days   $@4/t", of.tons, pct(of.spec), of.days, of.price)
+				or S("@1 t   grade ≥ @2   @3 days   $@4/t", of.tons, pct(of.spec), of.days, of.price))
 			out[#out + 1] = ("button[7.5,%g;3,0.8;take%d;%s]"):format(y - 0.4, i, F(S("Accept")))
 		end
 	end
@@ -588,7 +429,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		core.close_formspec(name, FORM)
 		return true
 	end
-	for i = 1, #SIZES do
+	for i = 1, #SIZES + 1 do
 		if fields["take" .. i] then
 			if not get_order(acc) then
 				local of = offers(acc)[i]
@@ -742,5 +583,7 @@ if cfg.teacher then
 	})
 end
 
-rockmech.orders = {offers = offers, get = get_order, set = set_order, accept = accept, close = close, weigh = weigh,
-	truck_of = truck_of, PADS = PADS, BAY = BAY, site_of = site_of, buyers = buyers}
+rockmech.orders = {sites = sites, sy = sy, ground_y = ground_y,
+	tons_of = tons_of, pct = pct, t1 = t1, money_text = money_text, tell = tell, load_grade = load_grade, PENALTY = PENALTY,
+	REJECT_FEE = REJECT_FEE, CAP_M3 = CAP_M3, get_order = get_order, set_order = set_order, close_order = close, offers = offers, get = get_order, set = set_order, accept = accept, close = close, weigh = weigh,
+	truck_of = truck_of, site_of = site_of, buyers = buyers}

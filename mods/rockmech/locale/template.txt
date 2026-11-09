@@ -26,6 +26,12 @@ Run at or above $/t=
 Set price=
 Conveyor control box@nPlace it next to a belt; right-click to set run, stop or run by ore price=
 
+### camp.lua
+Concrete slab=
+Painted line=
+Weighbridge=
+Concrete slab: nothing can be built or dug here=
+
 ### career.lua
 Holding: core box @1 (depth @2 m)   right-click to put down=
 Holding: log   right-click to put down; right-click a saw bench to saw it, right-click a cart bed to load it=
@@ -773,17 +779,15 @@ Operators resting: @1 (those who don't fit on the bench are in the office)=
 Operators resting: @1=
 
 ### orders.lua
-Concrete slab=
-Painted line=
-Weighbridge=
-Concrete slab: nothing can be built or dug here=
 [Order] @1=
+Accepted: train, @1 t, grade ≥ @2, @3 days, $@4/t. The train comes to the loading point by the railway=
 Accepted: @1 t, grade ≥ @2, @3 days, $@4/t. The pickup truck is on its way to the receiving area=
 Delivered=
 Penalty=
 Total=
 Order complete: @1 delivered, received @2=
 Order expired: @1 short, penalty @2=
+The train has left: @1 short, penalty @2=
 Order cancelled: @1 short, penalty @2=
 Order statement=
 Pickup truck=
@@ -804,6 +808,7 @@ Short at the deadline: @1% of the price as penalty=
 Cancel order=
 Deliver to the pickup truck at the receiving area. Price is locked when you accept=
 Below spec: the whole load is rejected. Short at the deadline: @1% penalty=
+Train  @1 t   grade ≥ @2   @3 days   $@4/t=
 @1 t   grade ≥ @2   @3 days   $@4/t=
 Accept=
 [Order] You have no camp yet=
@@ -1148,6 +1153,28 @@ My assumption (tell me which face doesn't match):=
 ・White (top face): looking down while facing north, a normal 'F' (top of the F points north)=
 ・Dark gray (bottom face): standing below, facing north and looking up, a normal 'F'=
 (The HUD at the top right shows your heading)=
+
+### train.lua
+Railway track=
+Track ballast=
+Loading point=
+[Train] Loading point: wagons stop here=
+Rail wagon=
+Wagon @1  @2 / @3=
+Freight train=
+Wagon @1  rejected  grade @2=
+Wagon @1  grade @2=
+Train shipment=
+The train left with @1 / @2 t=
+The train is arriving at the loading point=
+The track is blocked in front of the train. Clear it=
+The train is at the loading point. Load wagon 1 first; @1 min to load=
+Train: on its way, @1 s=
+Train: arriving=
+Train: loading wagon @1 of @2, @3 min left=
+Train: leaving=
+Next wagon=
+Depart now=
 
 ### ui.lua
 on=
