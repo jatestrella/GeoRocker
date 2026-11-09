@@ -22,14 +22,16 @@ gamedata = gamedata or {}
 -- 每次開都檢查一次（絕對路徑：資料夾搬了也跟著改），舊的安裝 git pull 之後也會換上；字型設定改了引擎會馬上重載
 do
 	local FONT = core.get_builtin_path() .. ".." .. DS .. "games" .. DS .. GAME .. DS .. "fonts" .. DS .. "Cubic_11.ttf"
-	if core.settings:get("font_path") ~= FONT then
+	-- georocker_font：設定版本（改字級時加 1，舊的設定也會跟著換）
+	if core.settings:get("font_path") ~= FONT or core.settings:get("georocker_font") ~= "2" then
 		for _, k in ipairs({"font_path", "font_path_bold", "font_path_italic", "font_path_bold_italic",
 				"mono_font_path", "mono_font_path_bold", "mono_font_path_italic", "mono_font_path_bold_italic"}) do
 			core.settings:set(k, FONT)
 		end
-		core.settings:set("font_size", "22")       -- 字型的格子是 11 px：用 11 的倍數才不會糊
-		core.settings:set("mono_font_size", "22")
+		core.settings:set("font_size", "16")       -- 跟原本的字一樣大：22 會撐破 Luanti 內建選單的按鈕
+		core.settings:set("mono_font_size", "16")
 		core.settings:set("font_shadow", "0")
+		core.settings:set("georocker_font", "2")
 	end
 end
 -- 語言：沒設的話用繁中（系統是英文的電腦，遊戲裡的字才不會變英文）。語言要重開遊戲才生效
