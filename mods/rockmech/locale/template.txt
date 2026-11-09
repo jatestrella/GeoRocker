@@ -292,7 +292,7 @@ Trading day @1   @2 t=
 Waste dump daily statement   @1=
 Dumping fee=
 @1 (grade @2%)=
-Waste rock=
+Gangue=
 Net income=
 [Crusher] Daily total: @1 t, net income @2=
 Crusher daily statement   @1=
@@ -300,13 +300,13 @@ Queue @1 t, about @2 s to process=
 @1 at 100% grade: $@2 per tonne today (base $@3), recovery @4%=
 Waste dump (rubble dumped here is discarded, no income)=
 Capacity: @1 t/s   Dumping fee: $@2 per tonne=
-Capacity: @1 t/s   Waste rock: $@2 per tonne=
+Capacity: @1 t/s   Gangue: $@2 per tonne=
 Ore dumped here is also discarded as waste=
 Switch to crusher (sell ore)=
 Switch to waste dump (discard, $@1 per tonne)=
 Hopper: @1 / @2 m³ (@3 t)=
 Total processed: @1 t, average grade @2%=
-Totals: sales $@1 − waste rock $@2 @= net income $@3=
+Totals: sales $@1 − gangue $@2 @= net income $@3=
 Funds (@1): $@2=
 Stripping ratio: you need to learn mine planning to understand it=
 Stripping ratio @1 (waste @2 t ÷ ore @3 t, team total)=
@@ -612,8 +612,8 @@ No such event: @1=
 That event is already happening=
 @1 today: $@2/t=
 Cut-off grade at the crusher: @1%=
-  @= waste fee $@1 ÷ $@2=
-  $@1 @= price $@2 × recovery @3% × @4% + waste fee=
+  @= gangue fee $@1 ÷ $@2=
+  $@1 @= price $@2 × recovery @3% × @4% + gangue fee=
   Rubble below this grade loses money even before hauling and fuel=
 In 5 days: about $@1/t, cut-off @2%=
 @1: now @2, in 5 days about @3=

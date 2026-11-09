@@ -285,8 +285,8 @@ local function report(name)
 		add(S("@1 today: $@2/t", S(ore.label), ("%.0f"):format(p)), "#ffe080")
 		add(S("Cut-off grade at the crusher: @1%", ("%.1f"):format(cut * 100)), "#80ff80")
 		local v = p * rec * r + fee
-		add(S("  = waste fee $@1 ÷ $@2", fee, ("%.0f"):format(v)))
-		add(S("  $@1 = price $@2 × recovery @3% × @4% + waste fee", ("%.0f"):format(v), ("%.0f"):format(p), ("%.0f"):format(rec * 100), ("%.0f"):format(r * 100)))
+		add(S("  = gangue fee $@1 ÷ $@2", fee, ("%.0f"):format(v)))
+		add(S("  $@1 = price $@2 × recovery @3% × @4% + gangue fee", ("%.0f"):format(v), ("%.0f"):format(p), ("%.0f"):format(rec * 100), ("%.0f"):format(r * 100)))
 		add(S("  Rubble below this grade loses money even before hauling and fuel"))
 		add(S("In 5 days: about $@1/t, cut-off @2%", ("%.0f"):format(p5), ("%.1f"):format(cutoff(p5) * 100)))
 	end

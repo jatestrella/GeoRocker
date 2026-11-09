@@ -360,9 +360,9 @@ rockmech_crusher_rate (Crusher throughput) float 2 0.1 100
 # Large crusher throughput (t/s): same hopper, bought for when the surface miner outpaces the normal crusher.
 rockmech_crusher_big_rate (Large crusher throughput) float 10 0.1 100
 
-# Waste rock fee per tonne at the coal yard (crusher) and on the train. A load is split by grade into coal and waste:
-# income = coal t x recovery x price x yard ratio - waste t x this fee.
-rockmech_crusher_fee (Waste rock fee) float 10 0 100000
+# Gangue fee per tonne at the coal yard (crusher) and on the train. A load is split by grade into coal and gangue:
+# income = coal t x recovery x price x yard ratio - gangue t x this fee.
+rockmech_crusher_fee (Gangue fee) float 30 0 100000
 
 # Share of the coal price the coal yard (crusher) pays on maps with a train (pit-head price). The train pays full price.
 rockmech_coal_yard_ratio (Coal yard price ratio) float 0.7 0 1

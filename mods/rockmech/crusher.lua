@@ -439,7 +439,7 @@ local function report(meta, owner, dump, day)
 				("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), rockmech.eff_ore_recovery(owner, ore) * 100) .. (r < 1 and (" × %.0f%%"):format(r * 100) or ""),
 				money_text(bg), GREEN}
 		end
-		rows[#rows + 1] = {S("Waste rock"), ("%.1f t"):format(bt - bq), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
+		rows[#rows + 1] = {S("Gangue"), ("%.1f t"):format(bt - bq), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
 		-- 人事費（wages.lua：雇員薪水在組員在線時已經陸續扣了，這裡列出來、算進淨收入）
 		local wage = 0
 		local wamt, wsec = (rockmech.wage_take or function() end)(rockmech.account_of(owner), day)
@@ -568,7 +568,7 @@ local function formspec(pos, viewer)
 		("label[0.5,0.6;%s]"):format(core.formspec_escape(dump and S("Waste dump (rubble dumped here is discarded, no income)") or title_of(pos))),
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(dump
 			and S("Capacity: @1 t/s   Dumping fee: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.dump_fee))
-			or S("Capacity: @1 t/s   Waste rock: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.crusher_fee)))),
+			or S("Capacity: @1 t/s   Gangue: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.crusher_fee)))),
 		("label[0.5,1.8;%s]"):format(core.formspec_escape(dump and S("Ore dumped here is also discarded as waste") or table.concat(prices, "; "))),
 		("textarea[0.5,6.5;10,1;;;%s]"):format(core.formspec_escape(queue_text)),
 		("button[0.5,5.5;8,0.8;mode;%s]"):format(core.formspec_escape(dump and S("Switch to crusher (sell ore)")
@@ -577,7 +577,7 @@ local function formspec(pos, viewer)
 			("%.0f"):format(capacity_of(size_of(meta)) / V.NLEV), ("%.1f"):format(tons_of(queue))))),
 		("label[0.5,3.0;%s]"):format(core.formspec_escape(S("Total processed: @1 t, average grade @2%", ("%.1f"):format(total),
 			("%.0f"):format(total > 0 and 100 * meta:get_float("total_q") / total or 0)))),
-		("label[0.5,3.6;%s]"):format(core.formspec_escape(S("Totals: sales $@1 − waste rock $@2 = net income $@3", ("%.0f"):format(meta:get_float("total_g")),
+		("label[0.5,3.6;%s]"):format(core.formspec_escape(S("Totals: sales $@1 − gangue $@2 = net income $@3", ("%.0f"):format(meta:get_float("total_g")),
 			("%.0f"):format(meta:get_float("total_f")), ("%.0f"):format(meta:get_float("total_m"))))),
 		("label[0.5,4.2;%s]"):format(core.formspec_escape(S("Funds (@1): $@2", rockmech.account_label(meta:get_string("owner")),
 			("%.0f"):format(rockmech.money(meta:get_string("owner")))))),

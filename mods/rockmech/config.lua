@@ -874,7 +874,7 @@ function config.load(get)
 	cfg.coal_joints = parse_bool(get("rockmech_coal_joints")) == true
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_big_rate = math.max(0.1, tonumber(get("rockmech_crusher_big_rate")) or 10)   -- 大型破碎站 (t/s)
-	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 10)      -- 廢石處理費（每噸廢石；煤不收）
+	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)      -- 矸石處理費（每噸矸石；煤不收）
 	cfg.coal_yard_ratio = math.max(0, math.min(1, tonumber(get("rockmech_coal_yard_ratio")) or 0.7))   -- 收煤站付市價的幾成（有火車的地圖）
 	cfg.dump_fee = math.max(0, tonumber(get("rockmech_dump_fee")) or 0)            -- 破碎站切換成廢石場：每噸棄置費
 	cfg.rubble_density = math.max(0.1, tonumber(get("rockmech_rubble_density")) or 2.5)   -- 計價用的碎石密度 (t/m³)

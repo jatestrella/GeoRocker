@@ -292,7 +292,7 @@ Trading day @1   @2 t=第 @1 個交易日　@2 t
 Waste dump daily statement   @1=廢石場日結　@1
 Dumping fee=棄置費
 @1 (grade @2%)=@1（品位 @2%）
-Waste rock=廢石
+Gangue=矸石
 Net income=淨收入
 [Crusher] Daily total: @1 t, net income @2=[收煤站] 日結 @1 t，淨收入 @2
 Crusher daily statement   @1=收煤站日結　@1
@@ -300,13 +300,13 @@ Queue @1 t, about @2 s to process=排隊 @1 t，約 @2 秒處理完
 @1 at 100% grade: $@2 per tonne today (base $@3), recovery @4%=@1 品位 100% 今日每噸 $@2（基準 $@3），回收率 @4%
 Waste dump (rubble dumped here is discarded, no income)=廢石場（倒進來的碎石直接棄置，不收入）
 Capacity: @1 t/s   Dumping fee: $@2 per tonne=處理能力：@1 t/s　棄置費：每噸 $@2
-Capacity: @1 t/s   Waste rock: $@2 per tonne=處理能力：@1 t/s　廢石：每噸 $@2
+Capacity: @1 t/s   Gangue: $@2 per tonne=處理能力：@1 t/s　矸石：每噸 $@2
 Ore dumped here is also discarded as waste=礦石倒進來也當廢石丟掉
 Switch to crusher (sell ore)=切換成收煤站（賣礦）
 Switch to waste dump (discard, $@1 per tonne)=切換成廢石場（棄置，每噸 $@1）
 Hopper: @1 / @2 m³ (@3 t)=受料倉：@1 / @2 m³（@3 t）
 Total processed: @1 t, average grade @2%=累計處理：@1 t，平均品位 @2%
-Totals: sales $@1 − waste rock $@2 @= net income $@3=累計：貨款 $@1 − 廢石 $@2 @= 淨收入 $@3
+Totals: sales $@1 − gangue $@2 @= net income $@3=累計：貨款 $@1 − 矸石 $@2 @= 淨收入 $@3
 Funds (@1): $@2=資金（@1）：$@2
 Stripping ratio: you need to learn mine planning to understand it=剝採比：要學會採礦規劃才看得懂
 Stripping ratio @1 (waste @2 t ÷ ore @3 t, team total)=剝採比 @1（廢石 @2 t ÷ 礦石 @3 t，全組累計）
@@ -612,8 +612,8 @@ No such event: @1=沒有這個事件：@1
 That event is already happening=這個事件正在進行中
 @1 today: $@2/t=今天@1 $@2/t
 Cut-off grade at the crusher: @1%=收煤站截止品位：@1%
-  @= waste fee $@1 ÷ $@2=  ＝ 廢石處理費 $@1 ÷ $@2
-  $@1 @= price $@2 × recovery @3% × @4% + waste fee=  $@1 ＝ 價格 $@2 × 回收率 @3% × @4% ＋ 廢石處理費
+  @= gangue fee $@1 ÷ $@2=  ＝ 矸石處理費 $@1 ÷ $@2
+  $@1 @= price $@2 × recovery @3% × @4% + gangue fee=  $@1 ＝ 價格 $@2 × 回收率 @3% × @4% ＋ 矸石處理費
   Rubble below this grade loses money even before hauling and fuel=  低於這個品位，還沒算運費油錢就已經賠錢
 In 5 days: about $@1/t, cut-off @2%=5 天後：約 $@1/t，截止品位 @2%
 @1: now @2, in 5 days about @3=@1：現在 @2，5 天後約 @3
@@ -1728,6 +1728,7 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Waste rock=廢石
 Processing fee=處理費
 Capacity: @1 t/s   Processing fee: $@2 per tonne=處理能力：@1 t/s　處理費：每噸 $@2
 Totals: sales $@1 − processing fees $@2 @= net income $@3=累計：貨款 $@1 − 處理費 $@2 @= 淨收入 $@3
