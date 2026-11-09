@@ -83,7 +83,7 @@ end
 
 -- 燃料費那一行：{項目, 數量, 單價, 金額}
 function rockmech.fuel_row(amt, l)
-	return {S("Fuel (diesel)"), ("%.0f L"):format(l), S("$@1/L", ("%g"):format(cfg.diesel_price)), -amt}
+	return {S("Fuel (diesel)"), ("%.0f L"):format(l), S("$@1/L", ("%.0f"):format(l > 0 and amt / l or rockmech.diesel_price())), -amt}
 end
 
 -- 還沒結的燃料費：{帳戶 → {交易日, ...}}（wages.lua 發單子用）
@@ -100,7 +100,7 @@ end
 local function flush()
 	local day = rockmech.market_day and rockmech.market_day() or 0
 	for acc, l in pairs(pending) do
-		local amt = l * cfg.diesel_price
+		local amt = l * rockmech.diesel_price()      -- 柴油價會波動（market.lua）
 		if amt > 0 then
 			rockmech.add_money(acc, -amt)
 			local k = bucket_key(acc, day)

@@ -155,6 +155,7 @@ dofile(modpath .. "/monitor.lua")
 dofile(modpath .. "/testing.lua")
 dofile(modpath .. "/stereonet.lua")
 dofile(modpath .. "/fuel.lua")
+dofile(modpath .. "/market.lua")           -- 市場：柴油、炸藥、鋼材價格波動、偶發事件、經濟分析師
 dofile(modpath .. "/airq.lua")         -- 空氣品質：柴油廢氣、炮煙、通風、氣體偵測器
 dofile(modpath .. "/knowledge.lua")
 dofile(modpath .. "/coredrill.lua")

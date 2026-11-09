@@ -166,6 +166,7 @@ local function show_money(player)
 	local amount = (m < 0 and "−" or "") .. ("$%.0f"):format(math.abs(m))
 	local text = (team and S("Team @1   Funds @2", team, amount) or S("Funds @1", amount))
 		.. (ore and ("\n" .. price_text(ore)) or "")
+		.. (rockmech.market_hud and ("\n" .. rockmech.market_hud()) or "")
 	if money_hud[name] then
 		player:hud_change(money_hud[name], "text", text)
 	else
@@ -200,14 +201,21 @@ local function open_market()
 	if days <= 0 then return end
 	storage:set_int(PRICE_DAY, today)
 	local lo, hi = math.log(cfg.price_min), math.log(cfg.price_max)
-	for _, ore in pairs(cfg.ores) do
-		local f = factor(ore)
-		storage:set_float(PRICE_PREV .. ore.key, f)
-		local x = math.log(f)
-		for _ = 1, math.min(days, 30) do
-			x = math.max(lo, math.min(hi, x - cfg.price_revert * x + cfg.price_vol * gauss()))
+	for _, ore in pairs(cfg.ores) do storage:set_float(PRICE_PREV .. ore.key, factor(ore)) end
+	-- 每天：市場（market.lua）先走一步（事件、柴油、炸藥、鋼材，事件開始時煤價也會先跳），煤價再往事件的目標走
+	local first = today - math.min(days, 30)
+	for d = first + 1, today do
+		local z_oil = rockmech.market_day_step and rockmech.market_day_step(d)
+		for _, ore in pairs(cfg.ores) do
+			local m = rockmech.market_target and rockmech.market_target(ore.key) or 0
+			local r = z_oil and rockmech.market_coal_oil or 0
+			local z = r * (z_oil or 0) + math.sqrt(1 - r * r) * gauss()
+			local x = math.log(factor(ore))
+			x = math.max(lo, math.min(hi, x - cfg.price_revert * (x - m) + cfg.price_vol * z))
+			storage:set_float(PRICE .. ore.key, math.exp(x))
 		end
-		storage:set_float(PRICE .. ore.key, math.exp(x))
+	end
+	for _, ore in pairs(cfg.ores) do
 		local prev = ore.price * storage:get_float(PRICE_PREV .. ore.key)
 		rockmech.notify_all(S("[Market] Today's @1 price $@2/t (yesterday $@3, @4 @5%)", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)),
 			("%.0f"):format(prev), price_change(ore) >= 0 and "▲" or "▼", ("%.0f"):format(math.abs(price_change(ore)) * 100)))

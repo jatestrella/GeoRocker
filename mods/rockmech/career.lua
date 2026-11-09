@@ -529,6 +529,7 @@ local BOOTHS = {
 		color = "#a0d0ff", tint = "#204a80", sit = true},
 }
 local shop_kind = {}        -- 玩家名稱 → 正在看哪一攤（nil：全部）
+rockmech.shop_price = rockmech.shop_price or function(it) return it.price end    -- market.lua 會換掉
 -- 給 research.lua：其他 NPC（研究員）也登記到 BOOTHS，由 ensure_vendors 一起補人；帳篷的 z、攤主位置的 storage 鍵
 rockmech.career_npcs = BOOTHS
 rockmech.career_tent_z = TENT_Z
@@ -547,7 +548,8 @@ local function shop_form(name, kind)
 	for i, it in ipairs(cfg.shop) do
 		if not kind or it.shop == kind then
 			local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
-			local price = it.price == 0 and S("Free") or ("$%d"):format(it.price)
+			local p = rockmech.shop_price(it)      -- 炸藥、鋼材跟著市場走（market.lua）
+			local price = p == 0 and S("Free") or ("$%d"):format(p)
 			out[#out + 1] = ("item_image[%g,%g;0.8,0.8;%s]"):format(x, y, it.item)
 			out[#out + 1] = ("label[%g,%g;%s%s]"):format(x + 1, y + 0.4, core.formspec_escape(S(it.label)), it.count and (" ×" .. it.count) or "")
 			out[#out + 1] = ("button[%g,%g;2.2,0.8;buy_%d;%s]"):format(x + 3.9, y, i, core.formspec_escape(price))
@@ -573,8 +575,9 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			if operator then stack = rockmech.op_card(rockmech.account_of(name)) end
 			local inv = player:get_inventory()
 			local ok, msg = true, nil
-			if rockmech.money(name) < it.price then
-				rockmech.notify(name, S("[Supplier] Not enough money: @1 costs $@2", S(it.label), ("%d"):format(it.price)))
+			local cost = rockmech.shop_price(it)
+			if rockmech.money(name) < cost then
+				rockmech.notify(name, S("[Supplier] Not enough money: @1 costs $@2", S(it.label), ("%d"):format(cost)))
 				ok = false
 			elseif operator and not inv:room_for_item("main", stack) then
 				rockmech.notify(name, S("[Supplier] Your inventory is full"))
@@ -595,14 +598,14 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				if order then msg = S("The @1 is in your inventory: hold it and right-click the ground to build", rockmech.desc_short(order)) end
 			end
 			if ok then
-				rockmech.add_money(name, -it.price)
+				rockmech.add_money(name, -cost)
 				local acc = rockmech.account_of(name)
 				if acc ~= name then
 					-- 整組共用的錢：組員都看得到誰買了什麼
 					for _, m in ipairs(rockmech.account_members(acc)) do
-						rockmech.notify(m, S("[@1] @2 bought @3 ($@4)", rockmech.account_label(acc), name, S(it.label), ("%d"):format(it.price)))
+						rockmech.notify(m, S("[@1] @2 bought @3 ($@4)", rockmech.account_label(acc), name, S(it.label), ("%d"):format(cost)))
 					end
-					core.log("action", ("[rockmech] %s (%s) bought %s for $%d"):format(name, acc, it.key, it.price))
+					core.log("action", ("[rockmech] %s (%s) bought %s for $%d"):format(name, acc, it.key, cost))
 				else
 					rockmech.notify(name, S("[Supplier] Bought @1", S(it.label)))
 				end

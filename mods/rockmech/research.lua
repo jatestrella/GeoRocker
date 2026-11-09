@@ -121,7 +121,7 @@ local REPAIR_COST, REPAIR_SECS = 0.2, 5 * 60
 local REPAIR = "repair_job:"         -- repair_job:<帳戶> = {uid, kind, left, total}
 local function price_of(kind)
 	local item = kind:find("^rockmech:") and kind or ("rockmech:" .. kind .. "_item")     -- 設施（facilitydamage.lua）的 kind 是方塊名稱
-	for _, it in ipairs(cfg.shop) do if it.item == item then return it.price end end
+	for _, it in ipairs(cfg.shop) do if it.item == item then return rockmech.shop_price(it) end end      -- 鋼材價會波動（market.lua）
 	return 10000
 end
 local function damaged_list(acc)

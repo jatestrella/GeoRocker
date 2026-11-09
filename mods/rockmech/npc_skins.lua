@@ -179,6 +179,18 @@ do
 	SKINS.geotech = p.done()
 end
 
+-- 經濟分析師：深藍西裝外套、白襯衫、紅領帶、灰西裝褲、黑皮鞋、眼鏡
+do
+	local p = painter()
+	p.head("#1a1a1a", 2)
+	p.r(9, 12, 6, 1, "#303030")                                      -- 眼鏡
+	p.top("#25304a")
+	p.r(23, 20, 2, 10, "#f2f2f2")                                    -- 白襯衫前襟
+	p.r(23, 20, 2, 7, "#b02020")                                     -- 領帶
+	p.pants("#4a4e56", "#101010")
+	SKINS.analyst = p.done()
+end
+
 function rockmech.npc_skin(role) return SKINS[role] or "character.png" end
 
 ---------------------------------------------------------------------------

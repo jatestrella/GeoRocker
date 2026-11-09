@@ -30,6 +30,7 @@ local own = {
 	["rockmech:npc_geologist"] = {S("What a beautiful rock. Please don't blast it."), S("We should grab a beer later.")},
 	["rockmech:operator_seated"] = {S("Five more minutes.")},
 	["rockmech:vendor_civil"] = {S("Did you know there are fewer than ten practicing mining engineers in all of Taiwan?")},
+	["rockmech:npc_analyst"] = {S("My last forecast? Let's not talk about it."), S("Past performance does not guarantee future results.")},
 	["rockmech:vendor_geotech"] = {S("I heard someone took ten years to pass the engineer exam.")},
 }
 
@@ -78,6 +79,11 @@ local LINES = {
 	["rockmech:geologist_follower"] = {
 		S("Take me to the rock."),
 		S("Dense joints here. Watch for falls."),
+	},
+	["rockmech:npc_analyst"] = {
+		S("Low grade at a low price is just waste."),
+		S("When prices fall, the cut-off grade rises."),
+		S("Wars move oil; oil moves everything."),
 	},
 	["rockmech:npc_professor"] = {
 		S("Ready for an exam?"),
