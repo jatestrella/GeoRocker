@@ -489,17 +489,23 @@ core.after(4, function()
 	local dx = rockmech.career_office_dx
 	if not dx then return end
 	for _, x0 in ipairs(rockmech.camp and rockmech.camp.sites() or {}) do
-		if storage:get_string("board1:" .. x0) == "" then
+		-- board2：第一版從上往下找底樑，找到 2 樓那根（2 樓地板也是底樑），板子掛到 2 樓去了：拔掉重掛
+		if storage:get_string("board2:" .. x0) == "" then
 			local _, at = rockmech.career_placer(x0 + dx, -10, 0)
 			local w0 = at(OFFICE_RX, 0, -1)
 			core.emerge_area(vector.offset(w0, -2, -30, -2), vector.offset(w0, 2, 40, 2), function(_, _, rem)
-				if rem > 0 or storage:get_string("board1:" .. x0) ~= "" then return end
-				for y = 40, -30, -1 do
+				if rem > 0 or storage:get_string("board2:" .. x0) ~= "" then return end
+				for y = -30, 40 do      -- 從下往上：1 樓的底樑
 					if core.get_node({x = w0.x, y = y, z = w0.z}).name == "rockmech:office_wall_base" then
 						local _, at2 = rockmech.career_placer(x0 + dx, -10, y - 1)
+						for h = 3, 8 do
+							local q = at2(OFFICE_RX + 1, h, -1)
+							if core.get_node(q).name == BOARD then core.remove_node(q) end
+						end
 						local p = at2(OFFICE_RX + 1, 2, -1)
 						if core.get_node(p).name == "air" then rockmech.news_board_put(p, at2(OFFICE_RX, 2, -1)) end
 						storage:set_string("board1:" .. x0, "1")
+						storage:set_string("board2:" .. x0, "1")
 						core.log("action", ("[rockmech] 營地 x = %d 的貨櫃辦公室補上告示板"):format(x0))
 						return
 					end
