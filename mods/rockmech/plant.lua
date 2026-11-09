@@ -1,5 +1,5 @@
 -- rockmech/plant.lua
--- 選礦場（選煤廠，coal preparation plant）：放在平地上，朝玩家的方向挖一個和破碎站一樣的受料倉（crusher.lua 的
+-- 排矸站（預選拋廢，pre-sorting plant；原本叫選礦場）：坑口先把矸石拋掉，少運廢石、省破碎站的處理費。放在平地上，朝玩家的方向挖一個和破碎站一樣的受料倉（crusher.lua 的
 -- rockmech.hopper_lib），機身左右各一座 6 m 高的儲料塔：一座出精煤、一座出矸石。
 -- 分選（重介質分選的分配曲線簡化成兩個數）：原料裡的煤有 rockmech_plant_recovery 進精煤，
 -- 矸石有 rockmech_plant_misplaced 混進精煤，其餘進矸石。品位 30% 的原料 → 精煤約 80%、矸石約 2%。
@@ -186,7 +186,7 @@ local function step(pos, dtime)
 		end
 	end
 	for _, sd in ipairs(SIDES) do show_fill(pos, meta, sd) end
-	meta:set_string("infotext", (stopped and S("Ore plant (stopped) (right-click to view)") or S("Ore plant (right-click to view)"))
+	meta:set_string("infotext", (stopped and S("Pre-sorting plant, stopped. Right-click to view") or S("Pre-sorting plant. Right-click to view"))
 		.. "\n" .. table.concat(info(meta), "\n"))
 end
 
@@ -196,8 +196,8 @@ local function formspec(pos)
 	local stopped = meta:get_int("stopped") == 1
 	return table.concat({
 		"formspec_version[6]size[9,4.5]",
-		("label[0.5,0.6;%s]"):format(core.formspec_escape(stopped and S("Ore plant (coal preparation plant)   Stopped")
-			or S("Ore plant (coal preparation plant)   Running"))),
+		("label[0.5,0.6;%s]"):format(core.formspec_escape(stopped and S("Pre-sorting plant   Stopped")
+			or S("Pre-sorting plant   Running"))),
 		("button[6,0.2;2.6,0.8;toggle;%s]"):format(core.formspec_escape(stopped and S("Start") or S("Stop"))),
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(S("Capacity: @1 t/s   Loading: @2 t/s", ("%g"):format(cfg.plant_rate), ("%g"):format(cfg.plant_load_rate)))),
 		("label[0.5,1.8;%s]"):format(core.formspec_escape(S("Separation: @1% of the coal goes to clean coal, @2% of the waste is misplaced into clean coal",
@@ -332,14 +332,14 @@ for _, sd in ipairs(SIDES) do
 				16 * e / FILL_STEPS, 16 - 16 * e / FILL_STEPS, MATERIAL[k])
 		local top = e == FILL_STEPS and full_tex(MATERIAL[k], PAINT[k]) or bin_tex(PAINT[k])
 		core.register_node(BIN_STAGE[k][e], {
-			description = e > 0 and S("Ore plant @1 tower, @2/8 full", sd.label, tostring(e)) or S("Ore plant @1 tower", sd.label),
+			description = e > 0 and S("Pre-sorting plant @1 tower, @2/8 full", sd.label, tostring(e)) or S("Pre-sorting plant @1 tower", sd.label),
 			tiles = {top, side, side, side, side, side}, groups = {not_in_creative_inventory = 1},
 			diggable = false, is_ground_content = false, drop = "",
 		})
 	end
 end
 core.register_node(CHUTE, {
-	description = S("Ore plant chute"),
+	description = S("Pre-sorting plant chute"),
 	drawtype = "nodebox", paramtype = "light",
 	node_box = {type = "fixed", fixed = {{-0.5, 0, -0.5, 0.5, 0.5, 0.5}, {-0.3, -0.5, -0.3, 0.3, 0, 0.3}}},
 	tiles = {"[fill:16x16:#404040^[fill:16x2:0,7:#c0a020"},
@@ -347,8 +347,8 @@ core.register_node(CHUTE, {
 })
 
 core.register_node(PLANT, {
-	description = S("Ore plant\nRight-click on flat ground to build"),
-	short_description = S("Ore plant"),
+	description = S("Pre-sorting plant\nRight-click on flat ground to build"),
+	short_description = S("Pre-sorting plant"),
 	drawtype = "nodebox",
 	paramtype = "light",
 	node_box = {type = "fixed", fixed = {-1.45, -0.5, -1.45, 1.45, 2.4, 1.45}},
@@ -365,7 +365,7 @@ core.register_node(PLANT, {
 		else dz = look.z > 0 and -1 or 1 end
 		local name = placer:get_player_name()
 		if not build(pos, dx, dz, name) then
-			rockmech.notify(name, S("[Ore plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above",
+			rockmech.notify(name, S("[Pre-sorting plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above",
 				tostring(H.SIZE), tostring(H.SIZE), tostring(TOWER_H)))
 			return itemstack
 		end

@@ -20,10 +20,10 @@ local JOB = "research_job:"
 -- 研發項目。per：每級的效果（顯示用，實際算在 crusher.lua 的 rockmech.eff_*）
 local ITEMS = {
 	{key = "plant_recovery", who = "mechanic", label = TR("Plant recovery"), max = 5, base = 20000, minutes = 10,
-		desc = TR("Share of coal recovered into clean coal at the processing plant +1%"),
+		desc = TR("Share of coal recovered into clean coal at the pre-sorting plant +1%"),
 		value = function(acc) return ("%.0f%%"):format(rockmech.eff_plant_recovery(acc) * 100) end},
 	{key = "plant_misplaced", who = "mechanic", label = TR("Cleaner clean coal"), max = 4, base = 20000, minutes = 10,
-		desc = TR("Share of waste rock misplaced into clean coal at the processing plant −2%"),
+		desc = TR("Share of waste rock misplaced into clean coal at the pre-sorting plant −2%"),
 		value = function(acc) return ("%.0f%%"):format(rockmech.eff_plant_misplaced(acc) * 100) end},
 	{key = "crusher_rate", who = "mechanic", label = TR("Crusher upgrade"), max = 5, base = 30000, minutes = 15,
 		desc = TR("Crushing station throughput +10%"),

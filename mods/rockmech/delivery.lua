@@ -205,7 +205,7 @@ local BADGE = "rockmech_order_badge.png"
 local ORDERS = {      -- 施工單 → 原本的物品、標籤顏色、名稱、有沒有受料倉（要檢查施工範圍）
 	{order = "rockmech:order_crusher", item = "rockmech:crusher", color = "#b08a20", label = S("Crusher"), hopper = true},
 	{order = "rockmech:order_crusher_big", item = "rockmech:crusher_big", color = "#4a5058", label = S("Large crusher"), hopper = true},
-	{order = "rockmech:order_plant", item = "rockmech:plant", color = "#3a7ab0", label = S("Ore plant"), hopper = true, plant = true},
+	{order = "rockmech:order_plant", item = "rockmech:plant", color = "#3a7ab0", label = S("Pre-sorting plant"), hopper = true, plant = true},
 	{order = "rockmech:order_belt", item = "rockmech:belt", color = "#262626", label = S("Conveyor belt"),
 		how = S("same as a conveyor belt: point at a belt to extend it, point at the ground to start on the ground")},
 	{order = "rockmech:order_locker", item = "rockmech:locker", color = "#6a7078", label = S("Locker"), how = S("placed where you point")},
