@@ -87,7 +87,7 @@ local function op_form(self)
 		("button[4.05,3.4;3.4,0.8;rest;%s]"):format(E(S("Rest at base"))),
 		paid and ("label[0.5,4.6;%s]label[0.5,5.1;%s]"):format(
 			E(S("Daily wage $@1 (one trading day = @2 min), deducted pro rata while team members are online",
-				("%g"):format(rockmech.operator_wage()), tostring(math.floor(rockmech.cfg.price_period / 60 + 0.5)))),
+				("%g"):format(rockmech.operator_wage(self.vkind)), tostring(math.floor(rockmech.cfg.price_period / 60 + 0.5)))),
 			E(S("Wages are paid while in the cab or waiting nearby; only resting at base stops them")))
 			or ("label[0.5,4.6;%s]"):format(E(S("Works in place: once the ore within arm reach is dug out, drive the excavator to a new face"))),
 	})
@@ -102,6 +102,14 @@ local function excavator_of(ref)
 	for _ = 1, 3 do                          -- 點到手臂、駕駛室這些零件：往上找車身
 		local e = ref and ref:get_luaentity()
 		if e and e.vkind then return e.vkind:find("excavator", 1, true) and e or nil end
+		ref = ref and ref:get_attach()
+	end
+end
+-- 有重機操作員的車種（鑽機、裝藥車，vehicle_op.lua）
+local function worker_of(ref)
+	for _ = 1, 3 do
+		local e = ref and ref:get_luaentity()
+		if e and e.vkind then return V.TYPES[e.vkind] and V.TYPES[e.vkind].op_work and e or nil end
 		ref = ref and ref:get_attach()
 	end
 end
@@ -121,6 +129,15 @@ end
 function rockmech.radio_click(user, pointed)
 	local name = user:get_player_name()
 	if pointed.type == "object" then
+		local w = worker_of(pointed.ref)
+		if w then
+			if not V.may_use(w, name) then return end
+			if radio_sel[name] == w.uid and V.op_stop(w, name) then return end
+			radio_sel[name] = w.uid
+			radio_tell(name, (w.op and w.op.on) and S("Selected: click the ground to drive there, hold E and click to work")
+				or S("Selected, but it has no operator (send one in with an Operator first)"))
+			return
+		end
 		local h = hauler_of(pointed.ref)
 		if h then
 			if not V.may_use(h, name) then return end
@@ -139,10 +156,13 @@ function rockmech.radio_click(user, pointed)
 		end
 		radio_sel[name] = e.uid
 		radio_tell(name, (e.op and e.op.on) and S("Excavator selected: click the ground to send it there")
-			or S("Excavator selected, but it has no operator (send one in with an Excavator operator first)"))
+			or S("Selected, but it has no operator (send one in with an Operator first)"))
 	elseif pointed.type == "node" then
 		local e = radio_sel[name] and V.by_uid[radio_sel[name]]
-		if not (e and e.object:get_pos()) then radio_tell(name, S("Select an excavator first")); return end
+		if not (e and e.object:get_pos()) then radio_tell(name, S("Select a vehicle first")); return end
+		if V.TYPES[e.vkind] and V.TYPES[e.vkind].op_work then
+			return V.op_order(e, name, pointed, user:get_player_control().aux1)
+		end
 		if not (e.op and e.op.on) then radio_tell(name, S("That excavator has no operator")); return end
 		local g = pointed.above
 		e.op.go, e.op.by, e.op.tries, e.op.esc, e.op.prog = {x = g.x, y = g.y, z = g.z}, name, 0, nil, nil
@@ -153,7 +173,7 @@ function rockmech.radio_click(user, pointed)
 	end
 end
 core.register_craftitem(RADIO, {
-	description = S("Radio\nClick an excavator, then the ground"),
+	description = S("Radio\nClick a vehicle, then the ground; hold E and click to work"),
 	short_description = S("Radio"),
 	inventory_image = "[fill:16x16:#00000000^[fill:6x11:5,4:#303030^[fill:4x3:6,6:#70c070^[fill:1x4:9,0:#303030^[fill:4x3:6,11:#555555",
 	stack_max = 1,
@@ -620,13 +640,13 @@ local function excavator(kind, P)
 		local stack = clicker:get_wielded_item()
 		if not rockmech.op_card_ok(stack, clicker, self) then return true end
 		self.op = {cutoff = op and op.cutoff or 0.5, on = true, t = 0, counted = true}
-		if op_paid(self) then rockmech.wage_hire(self.uid, self.owner) end
+		if op_paid(self) then rockmech.wage_hire(self.uid, self.owner, self.vkind) end
 		if not core.is_creative_enabled(name) then
 			stack:take_item()
 			clicker:set_wielded_item(stack)
 		end
 		op_show(self)
-		rockmech.notify(name, op_paid(self) and S("[Operator] Getting in to work, daily wage $@1 (paid while team members are online)", ("%g"):format(rockmech.operator_wage()))
+		rockmech.notify(name, op_paid(self) and S("[Operator] Getting in to work, daily wage $@1 (paid while team members are online)", ("%g"):format(rockmech.operator_wage(self.vkind)))
 			or S("[Operator] Getting in to work"))
 		op_editing[name] = self
 		core.show_formspec(name, OP_ITEM, op_form(self))

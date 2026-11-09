@@ -139,7 +139,7 @@ Loadout bin=
 Dump hopper=
 Large dump hopper=
 Surface miner=
-Excavator operator=
+Operator=
 Hydraulic breaker=
 Autonomous haulage kit=
 Radio=
@@ -393,7 +393,7 @@ SW=
 W=
 NW=
 [Drone] Get out of the vehicle before taking off=
-[Drone] Take-off! WASD to move, E to speed up, Space to climb, Shift to descend; right-click again to return to the take-off point (limits: @1 m above the take-off point, within @2 m horizontally)=
+[Drone] Take-off! WASD to move, Space to climb, Shift to descend; right-click again to return to the take-off point (limits: @1 m above the take-off point, within @2 m horizontally)=
 Drone   Above ground @1   vs take-off point @2 m (limit +@3)   Distance @4 / @5 m   @6 km/h   Heading @7   Position @8@n@9=
 Maximum flight distance reached, can't fly further out   Right-click again to return to the take-off point=
 Right-click again to return to the take-off point=
@@ -782,11 +782,11 @@ Wrench=
 
 ### operator.lua
 [Operator] @1=
-You already have as many operators as excavators (@1 excavators, @2 operators): buy another excavator first, or dismiss a resting operator at the camp bench=
-Excavator operator (@1)@nHold and right-click an empty excavator: send him to work it@nRight-click the camp bench: let him rest=
-Excavator operator (@1)=
-This operator belongs to another team and cannot be sent to this excavator=
-Someone is driving the excavator; get them out first=
+You already have one operator per vehicle (@1 excavators, drill rigs and bulk trucks, @2 operators): buy another vehicle first, or dismiss a resting operator at the camp bench=
+Operator (@1)@nRight-click an empty excavator, drill rig or bulk truck: send him to work it@nRight-click the camp bench: let him rest=
+Operator (@1)=
+This operator belongs to another team=
+Someone is driving it; get them out first=
 Getting in to work=
 Gone back to camp to rest (wages stopped): find him at the bench south of the camp container office to put him back to work=
 Shift over: the operator is back in your inventory=
@@ -796,19 +796,18 @@ Get in and work=
 Rest at base=
 Bench (operator rest)=
 @1 rest room=
-Resting: @1 (team has hired @2, excavators: @3; no wages while resting)=
+Resting: @1, hired @2, vehicles that need one @3; no wages while resting=
 To work (take an operator)=
 Dismiss one=
-Hold an "Excavator operator" and right-click the bench: let him rest=
+Hold an operator and right-click the bench: let him rest=
 This is another team's camp=
-This operator belongs to another team=
 He is resting now (@1 resting)=
 Nobody is resting=
-The operator is coming with you: hold him and right-click an empty excavator to send him in=
+The operator is coming with you: hold him and right-click an empty vehicle to send him in=
 Your inventory is full=
 Nobody is resting (only resting operators can be dismissed)=
 Dismissed one operator; the slot is free again=
-Excavator operator@nRight-click an excavator=
+Operator@nRight-click an excavator, drill rig or bulk truck=
 You cannot drop an operator on the ground: take him back to the camp bench to rest=
 Operators resting: @1 (those who don't fit on the bench are in the office)=
 Operators resting: @1=
@@ -1440,6 +1439,9 @@ Filled @1 holes; @2 holes have no primer (not enough emulsion)=
 Filled @1 holes=
 Out of ANFO (filled @1 holes)=
 No downward holes to fill within @1 m of the boom=
+charge the holes=
+Filling holes=
+The tank is empty: load ANFO and emulsion first=
 
 ### vehicle_cart.lua
 Cart=
@@ -1488,6 +1490,8 @@ The hole position is blocked=
 Hole depth (bench height + subdrill): @1 m=
 Done=
 Only @1 m of rock below: drilling to the bottom of the rock=
+drill a hole=
+Drilling=
 
 ### vehicle_excavator.lua
 Hydraulic breaker@nRight-click an excavator to fit it=
@@ -1501,14 +1505,15 @@ Daily wage $@1 (one trading day @= @2 min), deducted pro rata while team members
 Wages are paid while in the cab or waiting nearby; only resting at base stops them=
 Works in place: once the ore within arm reach is dug out, drive the excavator to a new face=
 [Radio] @1=
+Selected: click the ground to drive there, hold E and click to work=
+Selected, but it has no operator (send one in with an Operator first)=
 Someone is driving that vehicle=
 Point at an excavator or a truck=
 Excavator selected: click the ground to send it there=
-Excavator selected, but it has no operator (send one in with an Excavator operator first)=
-Select an excavator first=
+Select a vehicle first=
 That excavator has no operator=
 Copy, heading to (@1, @2, @3), @4 m=
-Radio@nClick an excavator, then the ground=
+Radio@nClick a vehicle, then the ground; hold E and click to work=
 Operator: @1 (cut-off grade @2%)=
 [Operator] Stepped down and waiting beside the excavator; right-click him to send him back to work or to rest at base=
 @1 ahead: @2=
@@ -1649,6 +1654,21 @@ Cut 1 m down (off @= level)=
 Bin full: waiting to unload=
 Something ahead can't be cut (facility, conveyor)=
 
+### vehicle_op.lua
+Operator: @1=
+@1 jobs queued=
+Waiting for orders=
+Can't get there; skipping this one (@1 m short)=
+Arrived=
+Radio: click the ground to drive there; hold E and click to @1=
+Clear the jobs=
+[Operator] Stepped down and waiting beside the vehicle; right-click him to send him back to work or to rest at base=
+That vehicle has no operator=
+Already on the list=
+The list is full (@1 jobs)=
+Copy, @1 at (@2, @3, @4); @5 jobs queued=
+[Operator] This vehicle's operator is waiting beside it: right-click him to send him in=
+
 ### vehicle_suv.lua
 4WD SUV=
 Right-click to get in=
@@ -1685,7 +1705,7 @@ Step too high (@1 m > @2 m)=
 Once placed it cannot go back into your inventory; choose the spot first=
 
 ### wages.lua
-Staff cost (excavator operator)=
+Staff cost (operators)=
 @1 person-days=
 $@1/day=
 [Operating costs] Trading day @1 −$@2=

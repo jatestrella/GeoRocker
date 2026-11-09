@@ -212,4 +212,39 @@ function def.action(self, ctx)
 	end
 end
 
+-- 重機操作員（vehicle_op.lua）：按住 E 點岩面 → 開到桅桿腳對準那一格，照設定的孔深鑽一個孔
+do
+	local function angle(a) return (a + math.pi) % (2 * math.pi) - math.pi end
+	V.op_setup("drillrig", def, {
+		label = S("Surface drill rig"), verb = S("drill a hole"), working = S("Drilling"), half = def.half,
+		seat = {x = -0.5, y = -0.05, z = -0.1},
+		busy = function(self) return self.boring ~= nil end,
+		-- 遠：直接開過去；近（桅桿腳距離 + 4 m 內）：原地轉到正對那一格，再前後微調到桅桿腳落在那一格
+		approach = function(self, ctx, p, steer)
+			local foot = V.to_world(self, MAST_FOOT)
+			if math.floor(foot.x + 0.5) == p.x and math.floor(foot.z + 0.5) == p.z then self.op.near = nil; return nil, true end
+			local pos = ctx.pos
+			local dx, dz = p.x - pos.x, p.z - pos.z
+			local d = math.sqrt(dx * dx + dz * dz)
+			if d > MAST_FOOT.z + 4 then return steer(self, ctx, p.x, p.z) end
+			local op = self.op
+			op.near = (op.near or 0) + ctx.dtime
+			if op.near > 30 then op.near = nil; return "stuck" end
+			if d < 1.2 then return {down = true} end
+			local diff = angle(math.atan2(-dx, dz) - ctx.yaw)
+			if diff > 0.08 then return {left = true} elseif diff < -0.08 then return {right = true} end
+			if d > MAST_FOOT.z then return {up = true} end
+			return {down = true}
+		end,
+		form = function(self)
+			return ("label[0.5,3.7;%s]button[7.6,3.35;0.8,0.7;dec;−]button[8.5,3.35;0.8,0.7;inc;+]"):format(
+				core.formspec_escape(S("Hole depth (bench height + subdrill): @1 m", ("%d"):format(depth_setting(self)))))
+		end,
+		fields = function(self, fields)
+			if fields.dec then self.depth = math.max(3, depth_setting(self) - 1) end
+			if fields.inc then self.depth = math.min(10, depth_setting(self) + 1) end
+		end,
+	})
+end
+
 V.register("drillrig", def)

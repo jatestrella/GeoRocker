@@ -1,5 +1,6 @@
 -- rockmech/operator.lua
--- 怪手操作員是真的人（怪手上的作業邏輯在 vehicle_excavator.lua）：
+-- 重機操作員是真的人：開怪手（作業邏輯在 vehicle_excavator.lua）、露天鑽機、裝藥車（vehicle_op.lua）。
+-- 同一種人，日薪看開哪種車（rockmech.operator_wage(車種)，wages.lua）。以下的「怪手」也包括鑽機、裝藥車：
 --   雇用：機械設備課長那裡（免費，照日薪計），拿到一張「怪手操作員」（記著哪個帳戶雇的）。
 --     全組的操作員（在車上、站在怪手旁邊、在營地休息、手上還沒派出去的）不能比全組的怪手多。
 --   派上車：拿著對沒人的怪手按右鍵，這張用掉、他坐上去作業。右鍵有操作員坐著的怪手 → 操作員頁面（不上車）。
@@ -30,7 +31,10 @@ local function geti(k) return storage:get_int(k) end
 local function addi(k, d) storage:set_int(k, math.max(0, storage:get_int(k) + d)) end
 function rockmech.op_rest_count(acc) return geti(REST .. acc) end
 function rockmech.op_hired_count(acc) return geti(HIRED .. acc) end
-local function excavators(acc) return V.count_owned(acc, "excavator") end
+-- 人數上限：全組要操作員的車（怪手、露天鑽機、裝藥車）
+local function excavators(acc)
+	return V.count_owned(acc, "excavator") + V.count_owned(acc, "drillrig") + V.count_owned(acc, "bulktruck")
+end
 
 -- 舊版的操作員（已經坐在怪手上、還沒算進雇用人數）：補算
 function rockmech.op_adopt(acc)
@@ -43,7 +47,7 @@ function rockmech.op_hire(name)
 	local acc = rockmech.account_of(name)
 	local hired, cap = geti(HIRED .. acc), excavators(acc)
 	if hired >= cap then
-		return false, S("You already have as many operators as excavators (@1 excavators, @2 operators): buy another excavator first, or dismiss a resting operator at the camp bench", tostring(cap), tostring(hired))
+		return false, S("You already have one operator per vehicle (@1 excavators, drill rigs and bulk trucks, @2 operators): buy another vehicle first, or dismiss a resting operator at the camp bench", tostring(cap), tostring(hired))
 	end
 	addi(HIRED .. acc, 1)
 	return true
@@ -53,9 +57,9 @@ local function card(acc)
 	if acc then
 		local m = s:get_meta()
 		m:set_string("acc", acc)
-		m:set_string("description", S("Excavator operator (@1)\nHold and right-click an empty excavator: send him to work it\nRight-click the camp bench: let him rest",
+		m:set_string("description", S("Operator (@1)\nRight-click an empty excavator, drill rig or bulk truck: send him to work it\nRight-click the camp bench: let him rest",
 			rockmech.account_label and rockmech.account_label(acc) or acc))
-		m:set_string("short_description", S("Excavator operator (@1)", rockmech.account_label and rockmech.account_label(acc) or acc))
+		m:set_string("short_description", S("Operator (@1)", rockmech.account_label and rockmech.account_label(acc) or acc))
 	end
 	return s
 end
@@ -71,7 +75,7 @@ function rockmech.op_card_ok(stack, player, ex)
 		if not ok then tell(name, msg); return false end
 		return true
 	end
-	if acc ~= ex.owner then tell(name, S("This operator belongs to another team and cannot be sent to this excavator")); return false end
+	if acc ~= ex.owner then tell(name, S("This operator belongs to another team")); return false end
 	return true
 end
 
@@ -95,13 +99,14 @@ end
 function rockmech.op_step_down(ex)
 	local op = ex.op
 	op.on, op.standby, op.msg, op.go, op.esc = false, true, nil, nil, nil
+	op.jobs, op.issued = {}, nil
 	ex.autopilot = nil
 	op_show(ex)
 end
 
 -- 上車作業（站在旁邊的那個）
 local function step_up(ex, name)
-	if ex.driver then tell(name, S("Someone is driving the excavator; get them out first")); return false end
+	if ex.driver then tell(name, S("Someone is driving it; get them out first")); return false end
 	local op = ex.op
 	op.on, op.standby, op.msg, op.t = true, false, nil, 0
 	remove_npc(ex.uid)
@@ -115,6 +120,7 @@ function rockmech.op_send_rest(ex, player)
 	local name = player and player:is_player() and player:get_player_name()
 	local op = ex.op
 	op.on, op.standby, op.msg, op.go, op.esc = false, false, nil, nil, nil
+	op.jobs, op.issued = {}, nil
 	ex.autopilot = nil
 	remove_npc(ex.uid)
 	if rockmech.wage_fire then rockmech.wage_fire(ex.uid) end
@@ -195,7 +201,7 @@ core.register_entity(NPC, {
 	initial_properties = {
 		physical = true, collide_with_objects = false, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
 		visual = "mesh", mesh = "character.b3d", textures = {rockmech.npc_skin("operator")},
-		nametag = S("Excavator operator"), nametag_color = "#ffe080", static_save = false, stepheight = 0.6,
+		nametag = S("Operator"), nametag_color = "#ffe080", static_save = false, stepheight = 0.6,
 	},
 	on_activate = function(self)
 		self.object:set_armor_groups({immortal = 1})
@@ -293,12 +299,12 @@ local function rest_form(name, acc)
 	local out = {
 		"formspec_version[6]size[11,4.4]",
 		("label[0.5,0.6;%s]"):format(E(S("@1 rest room", rockmech.account_label and rockmech.account_label(acc) or acc))),
-		("label[0.5,1.2;%s]"):format(E(S("Resting: @1 (team has hired @2, excavators: @3; no wages while resting)", tostring(n), tostring(hired), tostring(cap)))),
+		("label[0.5,1.2;%s]"):format(E(S("Resting: @1, hired @2, vehicles that need one @3; no wages while resting", tostring(n), tostring(hired), tostring(cap)))),
 	}
 	if mine then
 		out[#out + 1] = ("button[0.5,2;3.2,0.8;work;%s]"):format(E(S("To work (take an operator)")))
 		out[#out + 1] = ("button[3.9,2;3.2,0.8;fire;%s]"):format(E(S("Dismiss one")))
-		out[#out + 1] = ("label[0.5,3.4;%s]"):format(E(S("Hold an \"Excavator operator\" and right-click the bench: let him rest")))
+		out[#out + 1] = ("label[0.5,3.4;%s]"):format(E(S("Hold an operator and right-click the bench: let him rest")))
 	else
 		out[#out + 1] = ("label[0.5,2.3;%s]"):format(E(S("This is another team's camp")))
 	end
@@ -339,7 +345,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			local left = player:get_inventory():add_item("main", card(acc))
 			if left:is_empty() then
 				addi(REST .. acc, -1)
-				tell(name, S("The operator is coming with you: hold him and right-click an empty excavator to send him in"))
+				tell(name, S("The operator is coming with you: hold him and right-click an empty vehicle to send him in"))
 			else tell(name, S("Your inventory is full")) end
 		end
 	elseif fields.fire then
@@ -358,8 +364,8 @@ end)
 
 -- 卡片不能丟在地上（人不會被丟在路邊）
 core.register_craftitem(OP_ITEM, {
-	description = S("Excavator operator\nRight-click an excavator"),
-	short_description = S("Excavator operator"),
+	description = S("Operator\nRight-click an excavator, drill rig or bulk truck"),
+	short_description = S("Operator"),
 	inventory_image = "[fill:16x16:#00000000^[fill:6x6:5,1:#e0b080^[fill:8x7:4,7:#e8a818^[fill:8x2:4,7:#303030^[fill:2x2:7,3:#303030",
 	stack_max = 1,
 	on_drop = function(itemstack, dropper)

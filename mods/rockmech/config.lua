@@ -111,7 +111,7 @@ config.shop = {
 	{key = "dump_hopper_big", shop = "civil", item = "rockmech:dump_hopper_big", label = TR("Large dump hopper"), price = 30000},
 	-- 終極目標：買下時全服廣播（career.lua）
 	{key = "miner", shop = "vehicle", item = "rockmech:miner_item", label = TR("Surface miner"), price = 1500000, final = true},
-	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = TR("Excavator operator"), price = 0},
+	{key = "operator", shop = "vehicle", item = "rockmech:operator", label = TR("Operator"), price = 0},
 	{key = "breaker_kit", shop = "vehicle", item = "rockmech:breaker_kit", label = TR("Hydraulic breaker"), price = 20000},
 	{key = "ahs_module", shop = "vehicle", item = "rockmech:ahs_module", label = TR("Autonomous haulage kit"), price = 8000},
 	{key = "radio", shop = "vehicle", item = "rockmech:radio", label = TR("Radio"), price = 0},
@@ -870,6 +870,8 @@ function config.load(get)
 	cfg.ahs_max_dist = math.max(10, tonumber(get("rockmech_ahs_max_dist")) or 60)
 	-- 怪手操作員日薪（wages.lua）：每個交易日 $，按雇用時間比例、只在組員在線時計
 	cfg.operator_wage = math.max(0, tonumber(get("rockmech_operator_wage")) or 3000)
+	-- 開不同車的日薪倍數（車種名稱含這幾個字）：怪手 1、露天鑽機 1.2、裝藥車 1.5（要爆炸物執照）
+	cfg.operator_wage_mult = {drillrig = 1.2, bulktruck = 1.5}
 	cfg.diesel_price = math.max(0, tonumber(get("rockmech_diesel_price")) or 50)   -- 柴油價（$/L，fuel.lua）
 	-- 煤層帶不帶節理（預設不帶：節理組只在頁岩裡）
 	cfg.coal_joints = parse_bool(get("rockmech_coal_joints")) == true

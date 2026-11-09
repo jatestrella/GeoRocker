@@ -181,4 +181,23 @@ function def.action(self, ctx)
 	end
 end
 
+-- 重機操作員（vehicle_op.lua）：按住 E 點孔 → 開到附近、車尾對著它倒車，吊臂搆得到就把範圍內的孔都灌好
+V.op_setup("bulktruck", def, {
+	label = S("ANFO bulk truck"), verb = S("charge the holes"), working = S("Filling holes"), half = def.half,
+	seat = {x = -0.55, y = -0.25, z = 0.35},
+	busy = function(self) return self.pumping ~= nil end,
+	approach = function(self, ctx, p, steer)
+		local r = V.to_world(self, BOOM_BASE)
+		if math.sqrt((p.x - r.x) ^ 2 + (p.z - r.z) ^ 2) <= BOOM_LEN - 2 then return nil, true end
+		local d = math.sqrt((p.x - ctx.pos.x) ^ 2 + (p.z - ctx.pos.z) ^ 2)
+		if d > BOOM_LEN + 1 then return steer(self, ctx, p.x, p.z) end
+		return steer(self, ctx, p.x, p.z, true, 0.3)
+	end,
+	can_work = function(self)
+		if V.store_count(self, ANFO) < 1 and V.store_count(self, EMULSION) < 1 then
+			return S("The tank is empty: load ANFO and emulsion first")
+		end
+	end,
+})
+
 V.register("bulktruck", def)

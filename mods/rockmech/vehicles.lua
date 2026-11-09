@@ -1945,6 +1945,7 @@ dofile(rockmech.modpath .. "/vehicle_haul.lua")
 dofile(rockmech.modpath .. "/vehicle_cart.lua")
 dofile(rockmech.modpath .. "/vehicle_dozer.lua")
 dofile(rockmech.modpath .. "/vehicle_jumbo.lua")
+dofile(rockmech.modpath .. "/vehicle_op.lua")        -- 重機操作員開鑽機、裝藥車
 dofile(rockmech.modpath .. "/vehicle_drillrig.lua")
 dofile(rockmech.modpath .. "/vehicle_bulktruck.lua")
 dofile(rockmech.modpath .. "/vehicle_suv.lua")

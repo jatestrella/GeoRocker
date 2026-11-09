@@ -1,7 +1,7 @@
 -- rockmech/drone.lua
 -- 無人機（遙控器 rockmech:drone_remote）：從空中看礦場、看別組挖得怎樣。
 --   拿著遙控器按右鍵起飛：無人機從身邊升起，玩家附在無人機上看第一人稱畫面（身體先藏起來，別人看到的是無人機）。
---   WASD 照視線方向水平移動 SPEED m/s，按住 E 加速到 BOOST 倍；空白鍵上升、Shift 下降 CLIMB m/s；會撞到地形。
+--   WASD 照視線方向水平移動 SPEED m/s（E 不加速：指揮無人機按住 E 點是作業指令）；空白鍵上升、Shift 下降 CLIMB m/s；會撞到地形。
 --   高度上限：起飛點上方 CEILING m；最大飛行距離：離起飛點水平 rockmech_drone_range m。再按一次右鍵就回到起飛點。
 --   HUD：對地高度、比起飛點高多少、速度、方位、座標。旋翼聲 rockmech_drone（devtools/synth_sounds.lua 合成），移動時大聲一點。
 --   飛行時暫時強制載入下方 ±LOAD_R m 的區塊：玩家飛高了，地上的區塊離玩家太遠會停用，上面的車就看不到了。
@@ -12,7 +12,7 @@ local S = rockmech.S
 local DRONE, PART, REMOTE = "rockmech:drone", "rockmech:drone_part", "rockmech:drone_remote"
 local CMD = "rockmech:drone_cmd"     -- 指揮無人機（無人機＋對講機，檔案最後）
 local CMD_RANGE = 128
-local SPEED, BOOST, CLIMB = 12, 2, 6      -- 水平速度 (m/s)、E 加速倍數、升降速度 (m/s)
+local SPEED, CLIMB = 12, 6      -- 水平速度、升降速度 (m/s)
 local CEILING = 80          -- 高度上限：起飛點上方 (m)
 local LOAD_R = 40           -- 飛行時強制載入下方 ±LOAD_R m（約 80 × 80 m）
 local LOAD_DOWN, LOAD_UP = 32, 16   -- 強制載入的高度範圍：起飛點下方、上方 (m)
@@ -221,7 +221,7 @@ local function take_off(player)
 		f.psnd_move = core.sound_play("rockmech_drone", {to_player = name, loop = true, gain = SOUND_OFF, pitch = PITCH_MOVE})
 		f.moving = false
 	end
-	rockmech.notify(name, S("[Drone] Take-off! WASD to move, E to speed up, Space to climb, Shift to descend; right-click again to return to the take-off point (limits: @1 m above the take-off point, within @2 m horizontally)",
+	rockmech.notify(name, S("[Drone] Take-off! WASD to move, Space to climb, Shift to descend; right-click again to return to the take-off point (limits: @1 m above the take-off point, within @2 m horizontally)",
 		("%d"):format(CEILING), ("%d"):format(cfg.drone_range)))
 end
 
@@ -242,7 +242,7 @@ core.register_globalstep(function(dtime)
 			d:set_yaw(yaw)
 			local fwd = (ctrl.up and 1 or 0) - (ctrl.down and 1 or 0)
 			local side = (ctrl.right and 1 or 0) - (ctrl.left and 1 or 0)
-			local v = SPEED * (ctrl.aux1 and BOOST or 1)
+			local v = SPEED
 			-- 視線方向（yaw 0 = +z）與右手邊
 			local fx, fz = -math.sin(yaw), math.cos(yaw)
 			local rx, rz = math.cos(yaw), math.sin(yaw)
