@@ -359,7 +359,7 @@ end
 
 local function step(acc)
 	local x0 = site_of(acc)
-	if not x0 or storage:get_string("rail:" .. x0) ~= "1" then return end
+	if not x0 or storage:get_string("rail:" .. x0) ~= "1" or not rockmech.has_account(acc) then return end
 	local st = state(acc)
 	if not st then
 		-- 每個交易日一班
@@ -410,7 +410,7 @@ core.register_globalstep(function(dtime)
 	tick = tick + dtime
 	if tick < 1 then return end
 	tick = 0
-	for i = 1, cfg.career_teams or 0 do step("team:" .. i) end
+	for i = 0, cfg.career_teams or 0 do step("team:" .. i) end   -- 0 = 老師組（出生點的營地）
 end)
 
 -- 移動（0.1 秒）：畫面在的列車往目標開；前面軌道上有東西就停

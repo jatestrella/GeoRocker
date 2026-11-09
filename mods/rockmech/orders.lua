@@ -307,7 +307,7 @@ core.register_globalstep(function(dtime)
 	local now = core.get_gametime()
 	local accs = {}
 	for _, p in ipairs(core.get_connected_players()) do accs[rockmech.account_of(p:get_player_name())] = true end
-	for i = 1, cfg.career_teams or 0 do accs["team:" .. i] = true end      -- 組員都不在線也要到期結案
+	for i = 0, cfg.career_teams or 0 do accs["team:" .. i] = true end      -- 組員都不在線也要到期結案
 	for acc in pairs(accs) do
 		local o = get_order(acc)
 		if o then
@@ -553,7 +553,7 @@ if cfg.teacher then
 			local ore = cfg.ores.coal
 			price = tonumber(price) or math.floor(rockmech.ore_price(ore) * spec * 1.25 + 0.5)
 			local n, skip = 0, 0
-			for i = 1, cfg.career_teams or 0 do
+			for i = 0, cfg.career_teams or 0 do
 				local acc = "team:" .. i
 				if site_of(acc) then
 					if get_order(acc) then skip = skip + 1
