@@ -104,10 +104,43 @@ local LINES = {
 		S("Need me on a machine?"),
 	},
 }
+-- 考試科目的重點：不給題庫，分給跟它有關的 NPC 在閒聊裡講
+local function more(who, list) for _, l in ipairs(list) do table.insert(LINES[who], l) end end
+more("rockmech:npc_geologist", {
+	S("Waste mixed into ore dilutes the grade. That is dilution."),
+	S("A blended grade is weighted by tonnes, not a plain average."),
+})
+more("rockmech:npc_mechanic", {
+	S("Recovery is the valuable part in the product over the valuable part in the feed."),
+})
+more("rockmech:vendor_geo", {
+	S("RQD only counts intact core pieces of 10 cm or more."),
+	S("GSI looks at two things: the rock structure and the joint surfaces."),
+	S("A joint's attitude is its dip and dip direction."),
+})
+more("rockmech:vendor_geotech", {
+	S("Vertical stress is about unit weight times depth."),
+	S("A safety factor below 1 means the driving force wins."),
+	S("Planar sliding needs a joint flatter than the slope but steeper than its friction angle."),
+	S("If the joint strikes far off the slope face, the block cannot slide out."),
+	S("Toppling comes from steep joints dipping into the slope."),
+	S("For a wedge, look at the line where the two joints meet."),
+})
+more("rockmech:npc_professor", {
+	S("Rock is weak in tension, about a tenth of its compressive strength."),
+	S("The Mohr circle's centre is the mean of σ1 and σ3; its radius is half their difference."),
+	S("Once the circle touches the envelope, the rock fails."),
+	S("Raise σ3 and the circle shrinks away from the envelope."),
+	S("Pore pressure pushes the Mohr circle toward failure."),
+})
+more("rockmech:vendor_civil", {
+	S("The stripping ratio is waste over ore. It usually grows as the pit deepens."),
+	S("When stripping costs too much, think about going underground."),
+	S("Steeper walls mean less stripping. Check the safety factor first."),
+})
 -- 有火車的地圖（教學地圖，train.lua）：收煤站坑口價、火車原價、晚上沒車
 local cfg = rockmech.cfg
 if cfg.career and cfg.teacher and cfg.coal_seam and cfg.coal_seam.lane_w then
-	local function more(who, list) for _, l in ipairs(list) do table.insert(LINES[who], l) end end
 	more("rockmech:npc_buyer", {S("The coal yard pays less. Load the train yourself and you get more.")})
 	more("rockmech:npc_analyst", {S("The coal yard pays a pit-head price. The train pays full price."), S("No trains at night. Stockpile your coal.")})
 	more("rockmech:vendor_civil", {S("The coal yard buys any time, but not at full price.")})
