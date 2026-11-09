@@ -7,7 +7,8 @@ local S = rockmech.S
 
 core.register_on_mods_loaded(function()
 	for name in pairs(core.registered_items) do
-		if name ~= "" then core.clear_craft({output = name}) end
+		-- 沒有配方的不用清（clear_craft 會對每一個印警告）
+		if name ~= "" and core.get_all_craft_recipes(name) then core.clear_craft({output = name}) end
 	end
 end)
 

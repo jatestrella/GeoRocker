@@ -31,6 +31,7 @@ local own = {
 	["rockmech:operator_seated"] = {S("Five more minutes.")},
 	["rockmech:vendor_civil"] = {S("Did you know there are fewer than ten practicing mining engineers in all of Taiwan?")},
 	["rockmech:npc_analyst"] = {S("My last forecast? Let's not talk about it."), S("Past performance does not guarantee future results.")},
+	["rockmech:npc_buyer"] = {S("The plant burns two thousand tons a day."), S("Our boilers do not like shale.")},
 	["rockmech:vendor_geotech"] = {S("I heard someone took ten years to pass the engineer exam.")},
 }
 
@@ -84,6 +85,11 @@ local LINES = {
 		S("Low grade at a low price is just waste."),
 		S("When prices fall, the cut-off grade rises."),
 		S("Wars move oil; oil moves everything."),
+	},
+	["rockmech:npc_buyer"] = {
+		S("Need an order? The price is locked when you sign."),
+		S("Below spec and the whole truck goes back."),
+		S("Mix high and low grade, just above spec."),
 	},
 	["rockmech:npc_professor"] = {
 		S("Ready for an exam?"),

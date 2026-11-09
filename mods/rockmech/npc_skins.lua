@@ -191,6 +191,20 @@ do
 	SKINS.analyst = p.done()
 end
 
+-- 電廠採購員：白色安全帽、淺藍工作襯衫、綠色背心（電廠的顏色）、卡其褲
+do
+	local p = painter()
+	p.head("#2a2018", 2)
+	p.hat("#f0f0f0", 2)
+	p.top("#8ab4d8")
+	p.r(16, 20, 24, 10, "#2f7a46")                                   -- 背心
+	p.r(23, 20, 2, 10, "#8ab4d8")                                    -- 前襟
+	p.r(16, 25, 24, 1, "#e0e0e0"); p.r(28, 25, 12, 1, "#e0e0e0")     -- 反光條
+	p.r(28, 20, 4, 10, "#2f7a46"); p.r(32, 20, 8, 10, "#2f7a46")
+	p.pants("#a8946a", "#3a2a18")
+	SKINS.buyer = p.done()
+end
+
 function rockmech.npc_skin(role) return SKINS[role] or "character.png" end
 
 ---------------------------------------------------------------------------
