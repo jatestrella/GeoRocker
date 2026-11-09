@@ -229,8 +229,8 @@ do
 	end
 	local DECK_Z, DECK_TOP = -7.1, -1.0
 	local paint = ("[fill:16x16:%s"):format(c)
-	local glass = ("[fill:16x16:%s^[fill:12x8:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = V.cab_side(c, {win = {x = 2, y = 2, w = 12, h = 8}, sill = "#2a2a2a", doors = {{x = 1, y = 1, w = 14, h = 12.8}}})
+	local glass = V.cab_glass(c, 2, 2, 12, 8) .. "^[fill:16x2:0,14:#2a2a2a"
+	local side = V.cab_side(c, {win = {x = 2, y = 2, w = 12, h = 8}, clear = true, sill = "#2a2a2a", doors = {{x = 1, y = 1, w = 14, h = 12.8}}})
 	local side_l = V.flip_side(side)
 	local nose = ("[fill:16x16:%s^[fill:12x7:2,5:#2a2a2a^[fill:12x1:2,7:#4a4a4a^[fill:12x1:2,10:#4a4a4a^[fill:3x2:1,1:#f0e070^[fill:3x2:12,1:#f0e070"):format(c)
 	local deck = "[fill:16x16:#4a4c50^[fill:16x1:0,4:#3a3c40^[fill:16x1:0,9:#3a3c40^[fill:16x1:0,14:#3a3c40"
@@ -240,7 +240,8 @@ do
 	def.parts = {
 		{pos = {x = 0, y = -0.9, z = -0.4}, size = {x = 1.6, y = 0.4, z = 3.6}, tex = steel},                     -- 牽引車車架
 		{pos = {x = 0, y = -0.2, z = 1.0}, size = {x = 2.3, y = 1.0, z = 1.0}, tex = {paint, paint, paint, paint, nose, paint}},  -- 引擎蓋
-		{pos = {x = 0, y = 0.4, z = -0.1}, size = {x = 2.4, y = 1.8, z = 1.3}, tex = {paint, steel[2], side, side_l, glass, paint}}, -- 駕駛室
+		{pos = {x = 0, y = 0.4, z = -0.1}, size = {x = 2.4, y = 1.8, z = 1.3}, alpha = true, tex = {paint, steel[2], side, side_l, glass, paint}}, -- 駕駛室（車窗半透明）
+		{pos = {x = 0, y = 0.4, z = -0.71}, size = {x = 2.36, y = 1.76, z = 0.04}, tex = box_tex(c)},   -- 駕駛室後牆
 		{pos = {x = 0.8, y = 1.2, z = -0.85}, size = {x = 0.14, y = 1.2, z = 0.14}, tex = box_tex("#202020")},  -- 排氣管
 		{pos = {x = 0, y = -0.55, z = -1.9}, size = {x = 2.6, y = 0.5, z = 1.4}, tex = steel},                   -- 鵝頸
 		{pos = {x = 0, y = DECK_TOP - 0.12, z = DECK_Z}, size = {x = 2.9, y = 0.25, z = 10.0}, tex = {deck, steel[2], stripe, stripe, stripe, stripe}},  -- 平板
@@ -283,8 +284,8 @@ do
 	end
 	local DECK_Z, DECK_TOP = -9.0, -0.5
 	local paint = ("[fill:16x16:%s"):format(c)
-	local glass = ("[fill:16x16:%s^[fill:12x8:2,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = V.cab_side(c, {win = {x = 2, y = 2, w = 12, h = 8}, sill = "#2a2a2a", doors = {{x = 1, y = 1, w = 14, h = 12.8}}})
+	local glass = V.cab_glass(c, 2, 2, 12, 8) .. "^[fill:16x2:0,14:#2a2a2a"
+	local side = V.cab_side(c, {win = {x = 2, y = 2, w = 12, h = 8}, clear = true, sill = "#2a2a2a", doors = {{x = 1, y = 1, w = 14, h = 12.8}}})
 	local side_l = V.flip_side(side)
 	local nose = ("[fill:16x16:%s^[fill:12x8:2,4:#2a2a2a^[fill:12x1:2,6:#4a4a4a^[fill:12x1:2,9:#4a4a4a^[fill:3x2:1,1:#f0e070^[fill:3x2:12,1:#f0e070"):format(c)
 	local deck = "[fill:16x16:#4a4c50^[fill:16x1:0,4:#3a3c40^[fill:16x1:0,9:#3a3c40^[fill:16x1:0,14:#3a3c40"
@@ -294,7 +295,8 @@ do
 	def.parts = {
 		{pos = {x = 0, y = -0.85, z = -0.5}, size = {x = 1.8, y = 0.5, z = 3.8}, tex = steel},                    -- 牽引車車架
 		{pos = {x = 0, y = 0.0, z = 1.0}, size = {x = 2.6, y = 1.4, z = 1.0}, tex = {paint, paint, paint, paint, nose, paint}},   -- 引擎蓋
-		{pos = {x = 0, y = 0.7, z = -0.15}, size = {x = 2.7, y = 2.2, z = 1.4}, tex = {paint, steel[2], side, side_l, glass, paint}},  -- 駕駛室
+		{pos = {x = 0, y = 0.7, z = -0.15}, size = {x = 2.7, y = 2.2, z = 1.4}, alpha = true, tex = {paint, steel[2], side, side_l, glass, paint}},  -- 駕駛室（車窗半透明）
+		{pos = {x = 0, y = 0.7, z = -0.81}, size = {x = 2.66, y = 2.16, z = 0.04}, tex = box_tex(c)},   -- 駕駛室後牆
 		{pos = {x = 0.95, y = 1.6, z = -0.95}, size = {x = 0.16, y = 1.4, z = 0.16}, tex = box_tex("#202020")},  -- 排氣管
 		{pos = {x = -0.95, y = 1.6, z = -0.95}, size = {x = 0.16, y = 1.4, z = 0.16}, tex = box_tex("#202020")},
 		{pos = {x = 0, y = -0.4, z = -2.2}, size = {x = 3.0, y = 0.6, z = 1.4}, tex = steel},                    -- 鵝頸

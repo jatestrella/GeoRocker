@@ -34,13 +34,13 @@ do
 	-- 車廂側面（z −3..0，16 格 = 3 m）：車窗、B 柱在前後門的分界（z −1.1 → 10.1 格）
 	local function zc(z) return (z + 3) / 3 * 16 end
 	local function zl(z) return (z + 3.5) / 4.5 * 16 end
-	local side = V.cab_side(c, {win = {x = 2, y = 2, w = 13, h = 9}, pillars = {{x = zc(-1.1) - 0.5, w = 1}},
+	local side = V.cab_side(c, {win = {x = 2, y = 2, w = 13, h = 9}, clear = true, pillars = {{x = zc(-1.1) - 0.5, w = 1}},
 		doors = {{x = zc(-2.2), y = 0.5, w = zc(-1.1) - zc(-2.2), h = 15.5, no_bottom = true, no_handle = true},
 			{x = zc(-1.1), y = 0.5, w = 16 - zc(-1.1), h = 15.5, no_bottom = true, no_front = true, no_handle = true}}})
 	-- 下半車身側面（z −3.5..1，16 格 = 4.5 m）：門的下半段、門把
 	local lower = V.cab_side(c, {doors = {{x = zl(-2.2), y = 0, w = zl(-1.1) - zl(-2.2), h = 13, no_top = true, handle_y = 2},
 		{x = zl(-1.1), y = 0, w = zl(0) - zl(-1.1), h = 13, no_top = true, handle_y = 2}}})
-	local front = (glass):format(c)
+	local front = V.cab_glass(c, 2, 2, 12, 9)
 	local nose = ("[fill:16x16:%s^[fill:4x3:1,4:#f0e070^[fill:4x3:11,4:#f0e070^[fill:6x2:5,10:#2a2a2a"):format(c)
 	local tail = ("[fill:16x16:%s^[fill:3x3:1,4:#c03030^[fill:3x3:12,4:#c03030"):format(c)
 	local paint = ("[fill:16x16:%s"):format(c)
@@ -49,7 +49,7 @@ do
 		-- 下半車身（車頭 z +1.0 到車尾 −3.5）
 		{pos = {x = 0, y = -0.3, z = -1.25}, size = {x = 2.0, y = 0.7, z = 4.5}, tex = {paint, "[fill:16x16:#2a2a2a", lower, V.flip_side(lower), tail, nose}},
 		-- 車廂（擋風玻璃在 z = 0，相機在它前面、引擎蓋上方）
-		{pos = {x = 0, y = 0.4, z = -1.5}, size = {x = 1.9, y = 0.7, z = 3.0}, tex = {paint, paint, side, V.flip_side(side), front, front}},
+		{pos = {x = 0, y = 0.4, z = -1.5}, size = {x = 1.9, y = 0.7, z = 3.0}, alpha = true, tex = {paint, paint, side, V.flip_side(side), front, front}},
 	}
 	for _, w in ipairs({{x = -0.95, z = 0.35}, {x = 0.95, z = 0.35}, {x = -0.95, z = -2.6}, {x = 0.95, z = -2.6}}) do
 		def.parts[#def.parts + 1] = {pos = {x = w.x, y = -0.62, z = w.z}, size = {x = 0.3, y = 0.75, z = 0.75}, tex = wheel}

@@ -31,8 +31,8 @@ local function carrier(def, extra_parts)
 	def.speed = 2.5
 	local c = def.color
 	local o = ("[fill:16x16:%s"):format(c)
-	local win = ("[fill:16x16:%s^[fill:14x9:1,2:#9fd0ff^[fill:16x2:0,14:#2a2a2a"):format(c)
-	local side = V.cab_side(c, {win = {x = 3, y = 2, w = 11, h = 8}, sill = "#2a2a2a", doors = {{x = 2, y = 1, w = 13, h = 12.8}}})
+	local win = V.cab_glass(c, 1, 2, 14, 9) .. "^[fill:16x2:0,14:#2a2a2a"
+	local side = V.cab_side(c, {win = {x = 3, y = 2, w = 11, h = 8}, clear = true, sill = "#2a2a2a", doors = {{x = 2, y = 1, w = 13, h = 12.8}}})
 	local side_l = V.flip_side(side)
 	local grille = ("[fill:16x16:%s^[fill:14x8:1,4:#2a2a2a^[fill:14x1:1,6:#4a4a4a^[fill:14x1:1,9:#4a4a4a"):format(c)
 	local reel = "[fill:16x16:#2c2c2c^[fill:12x12:2,2:#3c3c3c^[fill:4x4:6,6:#1c1c1c"
@@ -43,7 +43,8 @@ local function carrier(def, extra_parts)
 		{pos = {x = 0, y = -0.8, z = -2.8}, size = {x = 1.0, y = 0.5, z = 0.7}, tex = box_tex("#1e1e1e")},     -- 鉸接
 		{pos = {x = 0, y = -0.85, z = -6.2}, size = {x = 2.4, y = 0.6, z = 6.4}, tex = box_tex("#2a2a2a")},    -- 後段底盤
 		{pos = {x = 0, y = -0.4, z = 1.4}, size = {x = 2.2, y = 0.9, z = 0.8}, tex = box_tex("#4a4a4a")},      -- 作業裝置座
-		{pos = {x = 0, y = 0.45, z = -0.5}, size = {x = 2.4, y = 1.9, z = 2.2}, tex = {o, "[fill:16x16:#2a2a2a", side, side_l, win, o}},   -- 駕駛室
+		{pos = {x = 0, y = 0.45, z = -0.5}, size = {x = 2.4, y = 1.9, z = 2.2}, alpha = true, tex = {o, "[fill:16x16:#2a2a2a", side, side_l, win, o}},   -- 駕駛室（車窗半透明）
+		{pos = {x = 0, y = 0.45, z = -1.56}, size = {x = 2.36, y = 1.86, z = 0.04}, tex = box_tex(c)},   -- 駕駛室後牆
 		{pos = {x = 0, y = 0.2, z = -5.0}, size = {x = 2.4, y = 1.6, z = 3.2}, tex = {o, o, grille, grille, o, o}},   -- 動力箱
 		{pos = {x = 0, y = 0.45, z = -8.4}, size = {x = 2.2, y = 1.9, z = 1.6}, tex = {reel, reel, reel, reel, reel, reel}},   -- 電纜捲盤
 	}

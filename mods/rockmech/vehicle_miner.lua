@@ -59,8 +59,8 @@ do
 	local body_t = {body, "[fill:16x16:#3a3a3a", body, body, body, body}
 	local plain = box_tex(c)
 	local dark = box_tex("#3a3a3a")
-	local win = ("[fill:16x16:%s^[fill:12x9:2,2:#9fd0ff^[fill:16x2:0,14:#3a3a3a"):format(c)
-	local side = V.cab_side(c, {win = {x = 2, y = 2, w = 12, h = 9}, sill = "#3a3a3a", doors = {{x = 1, y = 1, w = 14, h = 12.8}}})
+	local win = V.cab_glass(c, 2, 2, 12, 9) .. "^[fill:16x2:0,14:#3a3a3a"
+	local side = V.cab_side(c, {win = {x = 2, y = 2, w = 12, h = 9}, clear = true, sill = "#3a3a3a", doors = {{x = 1, y = 1, w = 14, h = 12.8}}})
 	local side_l = V.flip_side(side)
 	local drum = "[fill:16x16:#4a4a4a^[fill:2x2:2,2:#c0c0c0^[fill:2x2:8,5:#c0c0c0^[fill:2x2:13,9:#c0c0c0^[fill:2x2:5,12:#c0c0c0"
 	local bin = "[fill:16x16:#6a6e72^[fill:16x2:0,0:#4a4e52^[fill:2x16:0,0:#4a4e52^[fill:2x16:14,0:#4a4e52"
@@ -89,7 +89,7 @@ do
 		{pos = {x = 0.5, y = 0.6, z = 0.6}, size = {x = 3.0, y = 1.6, z = 2.6}, tex = {bin, bin, bin, bin, bin, bin}},
 		{id = "fill", pos = {x = 0.5, y = -0.15, z = 0.6}, size = {x = 2.7, y = 0.05, z = 2.3}, tex = box_tex("#3a3a3a")},
 		-- 駕駛室（左前）、頂蓋
-		{pos = {x = -1.6, y = 0.9, z = 1.8}, size = {x = 1.4, y = 2.0, z = 1.4}, tex = {plain, dark, side, side_l, win, win}},
+		{pos = {x = -1.6, y = 0.9, z = 1.8}, size = {x = 1.4, y = 2.0, z = 1.4}, alpha = true, tex = {plain, dark, side, side_l, win, win}},
 		{pos = {x = -1.6, y = 1.95, z = 1.8}, size = {x = 1.7, y = 0.1, z = 1.7}, tex = dark},
 		-- 欄杆（黃色）
 		{pos = {x = 2.15, y = 0.4, z = -1.0}, size = {x = 0.06, y = 0.06, z = 6.4}, tex = rail},
