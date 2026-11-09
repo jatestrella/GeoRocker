@@ -78,6 +78,7 @@ $conf = @(
 	"name = player",
 	"enable_esc_dialog = false"
 )
+# The pixel font games/mining_sim/fonts/Cubic_11.ttf is set by the start screen (mainmenu.lua) with an absolute path
 [System.IO.File]::WriteAllLines((Join-Path $stage "minetest.conf"), $conf)
 
 # Start file name in Chinese ("start game"), built from char codes to keep this script ASCII
@@ -89,7 +90,8 @@ $notice = @(
 	"This package contains the Luanti engine 5.15.1 (https://www.luanti.org),",
 	"licensed under the GNU LGPL 2.1 or later. Source code: https://github.com/luanti-org/luanti",
 	"Mods taken from Minetest Game keep their own license files inside games\mining_sim\mods\<mod>.",
-	"The start screen (builtin\mainmenu\init.lua) is replaced; the original is builtin\mainmenu\init_luanti.lua."
+	"The start screen (builtin\mainmenu\init.lua) is replaced; the original is builtin\mainmenu\init_luanti.lua.",
+	"Font: Cubic 11 by ACh-K (https://github.com/ACh-K/Cubic-11), SIL Open Font License, see games\mining_sim\fonts\Cubic_11_OFL.txt."
 )
 [System.IO.File]::WriteAllLines((Join-Path $stage "LICENSE-NOTICE.txt"), $notice)
 

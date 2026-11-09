@@ -18,6 +18,21 @@ local DS = DIR_DELIM
 
 gamedata = gamedata or {}
 
+-- 點陣字型（俐方體11號 Cubic 11，OFL，games/mining_sim/fonts）：整個遊戲的文字都用它。
+-- 每次開都檢查一次（絕對路徑：資料夾搬了也跟著改），舊的安裝 git pull 之後也會換上；字型設定改了引擎會馬上重載
+do
+	local FONT = core.get_builtin_path() .. ".." .. DS .. "games" .. DS .. GAME .. DS .. "fonts" .. DS .. "Cubic_11.ttf"
+	if core.settings:get("font_path") ~= FONT then
+		for _, k in ipairs({"font_path", "font_path_bold", "font_path_italic", "font_path_bold_italic",
+				"mono_font_path", "mono_font_path_bold", "mono_font_path_italic", "mono_font_path_bold_italic"}) do
+			core.settings:set(k, FONT)
+		end
+		core.settings:set("font_size", "22")       -- 字型的格子是 11 px：用 11 的倍數才不會糊
+		core.settings:set("mono_font_size", "22")
+		core.settings:set("font_shadow", "0")
+	end
+end
+
 -- 上課世界（class_coal）的地形：平地、沒有洞穴和礦物，地形由遊戲自己造
 local MAPGEN = {
 	fixed_map_seed = "42", mg_name = "flat",
