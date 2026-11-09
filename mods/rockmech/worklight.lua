@@ -35,3 +35,35 @@ core.register_node(ITEM, {
 	is_ground_content = false,
 	sounds = default and default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil,
 })
+
+-- 裝在木柱上：對著木柱放，換成貼著柱子的樣子（柱頂是燈頭，柱邊是一支短臂伸出燈頭）；挖起來還是工作照明燈
+local POLE = "rockmech:work_light_pole"
+local pole_box = {
+	type = "wallmounted",
+	wall_bottom = {{-0.04, -0.5, -0.04, 0.04, -0.25, 0.04}, {-0.22, -0.25, -0.22, 0.22, 0.1, 0.22}},
+	wall_top = {-0.2, 0.0, -0.2, 0.2, 0.5, 0.2},
+	wall_side = {{-0.9, -0.04, -0.04, -0.3, 0.04, 0.04}, {-0.35, -0.2, -0.2, 0.05, 0.2, 0.2}},
+}
+local def = table.copy(core.registered_nodes[ITEM])
+def.description, def.short_description = nil, nil
+def.node_box = pole_box
+def.selection_box = {type = "wallmounted",
+	wall_bottom = {-0.25, -0.5, -0.25, 0.25, 0.1, 0.25},
+	wall_top = {-0.2, 0.0, -0.2, 0.2, 0.5, 0.2},
+	wall_side = {-0.9, -0.2, -0.2, 0.05, 0.2, 0.2}}
+def.groups = table.copy(def.groups)
+def.groups.not_in_creative_inventory = 1
+def.drop = ITEM
+def.inventory_image, def.wield_image = nil, nil
+core.register_node(POLE, def)
+
+core.override_item(ITEM, {
+	on_place = function(itemstack, placer, pointed)
+		local out, pos = core.item_place(itemstack, placer, pointed)
+		if pos and pointed.type == "node" and core.get_item_group(core.get_node(pointed.under).name, "timber_post") > 0 then
+			local n = core.get_node(pos)
+			if n.name == ITEM and n.param2 ~= 0 then core.swap_node(pos, {name = POLE, param2 = n.param2}) end   -- 0 = 吊在下面：照原樣
+		end
+		return out
+	end,
+})
