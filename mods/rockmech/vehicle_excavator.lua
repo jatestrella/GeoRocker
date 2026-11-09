@@ -66,6 +66,10 @@ core.register_craftitem("rockmech:breaker_kit", {
 })
 local OP_ITEM = "rockmech:operator"
 local OP_THINK, OP_IDLE = 0.5, 2     -- 每隔幾秒想下一步；沒東西可挖時隔久一點再找 (s)
+-- 自動找礦（操作員頁面的開關）：手臂範圍內挖完了，在工作中心（最後用對講機叫他去的地方，或打開開關時的位置）
+-- 水平 SEEK_R m、上下 SEEK_DY m 內找表面露出、品位 ≥ 截止品位、沒壓實的碎石，開到搆得到的地方繼續挖。
+-- 壓實的碎石（車子常走的坡道、路）、廢石（品位低於截止品位）都不碰，整好的斜坡才不會被挖掉
+local SEEK_R, SEEK_DY = 10, 3
 local op_editing = {}                -- 玩家名稱 → 正在設定的怪手
 -- 經營模式（車子有主人）：操作員付日薪（wages.lua），在車上、站在旁邊等都計薪，回基地休息才停
 local function op_paid(self) return rockmech.cfg.career and self.owner and self.owner ~= "" and rockmech.wage_hire end
@@ -83,6 +87,7 @@ local function op_form(self)
 		("label[0.5,1.2;%s]"):format(E(S("Status: @1", op.on and (op.msg or S("Working")) or S("No operator")))),
 		("label[0.5,1.9;%s]"):format(E(S("Cut-off grade (only digs rubble with grade ≥ this)"))),
 		("dropdown[0.5,2.2;3,0.8;cutoff;%s;%d;false]"):format(table.concat(items, ","), sel),
+		("checkbox[4.0,2.6;auto;%s;%s]"):format(E(S("Find ore nearby, within @1 m of the work centre", SEEK_R)), op.auto and "true" or "false"),
 		("button[0.5,3.4;3.4,0.8;off;%s]"):format(E(S("Step down (so a player can drive)"))),
 		("button[4.05,3.4;3.4,0.8;rest;%s]"):format(E(S("Rest at base"))),
 		paid and ("label[0.5,4.6;%s]label[0.5,5.1;%s]"):format(
@@ -151,7 +156,12 @@ function rockmech.radio_click(user, pointed)
 		if e.op and e.op.go and radio_sel[name] == e.uid then
 			e.op.go, e.op.esc, e.op.msg = nil, nil, nil
 			e.autopilot = {}
-			radio_tell(name, S("Stopped"))
+			if e.op.auto then      -- 停下也關掉自動找礦（不然下一秒又自己開走）
+				e.op.auto, e.op.seeking = false, nil
+				radio_tell(name, S("Stopped; finding ore nearby is off"))
+			else
+				radio_tell(name, S("Stopped"))
+			end
 			return
 		end
 		radio_sel[name] = e.uid
@@ -166,6 +176,7 @@ function rockmech.radio_click(user, pointed)
 		if not (e.op and e.op.on) then radio_tell(name, S("That excavator has no operator")); return end
 		local g = pointed.above
 		e.op.go, e.op.by, e.op.tries, e.op.esc, e.op.prog = {x = g.x, y = g.y, z = g.z}, name, 0, nil, nil
+		e.op.anchor, e.op.seeking, e.op.skip = {x = g.x, y = g.y, z = g.z}, nil, nil     -- 自動找礦的工作中心
 		core.add_particlespawner({amount = 30, time = 2, pos = {min = vector.subtract(g, 0.3), max = vector.add(g, {x = 0.3, y = 2, z = 0.3})},
 			vel = {x = 0, y = 1, z = 0}, exptime = 1, size = 3, texture = "[fill:4x4:#40a0ff", glow = 14, playername = name})
 		radio_tell(name, S("Copy, heading to (@1, @2, @3), @4 m", ("%d"):format(g.x), ("%d"):format(g.y), ("%d"):format(g.z),
@@ -200,6 +211,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local op = self.op or {cutoff = 0.5}
 	self.op = op
 	if fields.cutoff then op.cutoff = (tonumber(fields.cutoff:match("^(%d+)")) or 50) / 100 end
+	if fields.auto then
+		op.auto = fields.auto == "true"
+		if op.auto then local p = self.object:get_pos(); op.anchor = {x = p.x, y = p.y, z = p.z} end
+		op.skip, op.seeking = nil, nil
+	end
 	if fields.off and op.on then
 		-- 叫下車：站到怪手旁邊等（照樣計薪），人才能上車
 		rockmech.op_step_down(self)
@@ -676,8 +692,14 @@ local function excavator(kind, P)
 	-- 手臂範圍內表面露出、品位 ≥ 截止品位、不在車子底下的碎石，最近的那格。
 	-- 鏟斗會挖起目標周圍 dig_r 格、上下各 1 層：車子底下再往外留這一圈，才不會把車子的地基挖空
 	local SAFE = P.dig_r + 0.5
-	local function op_target(self, pos, cutoff)
+	-- seek（自動找礦）：改在工作中心 seek.c 水平 SEEK_R m、上下 SEEK_DY m 內找，不管搆不搆得到、不挖壓實的、跳過開不到的格子
+	local function op_target(self, pos, cutoff, seek)
 		local R = math.ceil(ARM_REACH)
+		local lo, hi
+		if seek then
+			local c0 = vector.round(seek.c)
+			lo, hi = vector.subtract(c0, {x = SEEK_R, y = SEEK_DY, z = SEEK_R}), vector.add(c0, {x = SEEK_R, y = SEEK_DY, z = SEEK_R})
+		end
 		local cars = {}
 		for _, o in ipairs(core.get_objects_inside_radius(pos, R + 12)) do
 			local e = o:get_luaentity()
@@ -685,11 +707,14 @@ local function excavator(kind, P)
 		end
 		local p0 = vector.round(pos)
 		local best, bd
-		for _, c in ipairs(core.find_nodes_in_area(vector.subtract(p0, {x = R, y = R, z = R}), vector.add(p0, {x = R, y = 4, z = R}), rockmech.rubble_nodes)) do
+		if not seek then lo, hi = vector.subtract(p0, {x = R, y = R, z = R}), vector.add(p0, {x = R, y = 4, z = R}) end
+		for _, c in ipairs(core.find_nodes_in_area(lo, hi, rockmech.rubble_nodes)) do
 			local node = core.get_node(c)
 			local ore = rockmech.ore_of_rubble[rockmech.rubble_base[node.name]]
 			local g = ore and node.param2 / 255 or 0
-			if g >= cutoff - 1e-6 and V.passable(core.get_node({x = c.x, y = c.y + 1, z = c.z}).name) then
+			local ok = not seek or (not rockmech.compacted[node.name] and not (seek.skip and seek.skip[core.hash_node_position(c)])
+				and (c.x - seek.c.x) ^ 2 + (c.z - seek.c.z) ^ 2 <= SEEK_R * SEEK_R)
+			if ok and g >= cutoff - 1e-6 and V.passable(core.get_node({x = c.x, y = c.y + 1, z = c.z}).name) then
 				local under = false
 				for _, car in ipairs(cars) do
 					local cp, yaw, td = car[1], car[2], car[3]
@@ -700,7 +725,7 @@ local function excavator(kind, P)
 						and lz >= -(td.rear or td.half) - SAFE and lz <= td.half + SAFE then under = true; break end
 				end
 				local d = vector.distance(pos, c)
-				if not under and (not bd or d < bd) and in_reach(self, c) then best, bd = c, d end
+				if not under and (not bd or d < bd) and (seek or in_reach(self, c)) then best, bd = c, d end
 			end
 		end
 		return best
@@ -717,6 +742,12 @@ local function excavator(kind, P)
 		local g = op.go
 		local dx, dz = g.x - pos.x, g.z - pos.z
 		local dist = math.sqrt(dx * dx + dz * dz)
+		if op.seeking and in_reach(self, g) then
+			op.go, op.esc, op.prog, op.seeking = nil, nil, nil, nil
+			self.autopilot = {}
+			op_say(self, nil)
+			return
+		end
 		if dist < ARRIVE then
 			op.go, op.esc, op.prog = nil, nil, nil
 			self.autopilot = {}
@@ -749,6 +780,12 @@ local function excavator(kind, P)
 					op.go = nil
 					self.autopilot = {}
 					op_say(self, nil)
+					if op.seeking then          -- 自動找礦開不到：記下來不再去，找下一堆
+						op.skip = op.skip or {}
+						op.skip[core.hash_node_position(vector.round(g))] = true
+						op.seeking = nil
+						return
+					end
 					radio_tell(op.by, S("Can't get through; stopping here (@1 m short)", ("%d"):format(dist + 0.5)))
 					return
 				end
@@ -788,11 +825,21 @@ local function excavator(kind, P)
 		if target then
 			self.autopilot = {aux1 = true, target = target}
 			op_say(self, nil)
-		else
-			self.autopilot = {}
-			op.t = OP_IDLE
-			op_say(self, S("No rubble with grade ≥ @1% within arm reach", ("%d"):format(op.cutoff * 100 + 0.5)))
+			return
 		end
+		if op.auto then
+			op.anchor = op.anchor or {x = pos.x, y = pos.y, z = pos.z}
+			local far = op_target(self, pos, op.cutoff, {c = op.anchor, skip = op.skip})
+			if far then
+				op.go, op.seeking, op.tries, op.esc, op.prog = {x = far.x, y = far.y, z = far.z}, true, 0, nil, nil
+				op.idle = false
+				return
+			end
+		end
+		self.autopilot = {}
+		op.t = OP_IDLE
+		op_say(self, op.auto and S("No rubble with grade ≥ @1% within @2 m of the work centre", ("%d"):format(op.cutoff * 100 + 0.5), SEEK_R)
+			or S("No rubble with grade ≥ @1% within arm reach", ("%d"):format(op.cutoff * 100 + 0.5)))
 	end
 
 	-- 目標周圍 dig_r 格內的欄（離中心近的先）
