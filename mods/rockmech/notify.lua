@@ -1,8 +1,10 @@
 -- rockmech/notify.lua
--- 遊戲訊息顯示在畫面左下角（聊天區在左上，是 client 自己畫的，伺服器移不動）：
+-- 遊戲訊息顯示在畫面左下角：
 --   rockmech.notify(玩家, 訊息)、rockmech.notify_all(訊息)。訊息可以是翻譯過的字串（S(...)）、可以有 core.colorize。
 --   每則一行 HUD 文字，新的在最下面，最多 MAX 則；每則顯示 BASE 秒，字多的多留一點，到時間自己消失。
--- 玩家之間的聊天、指令的回覆、長的報告（地質羅盤的完整資料、老師的名單）照樣走聊天區。
+-- 聊天也放到這裡：client 自己畫的聊天區在左上、伺服器移不動，所以關掉它（HUD 旗標 chat = false），
+--   玩家說的話、chat_send_player／chat_send_all（指令的回覆、長的報告）都改用 notify 顯示；完整的紀錄還是在 F10 主控台。
+--   很長的（超過 MAX_LINES 行）只顯示前面幾行，提示按 F10 看全部。
 
 local MAX = 6
 local BASE, PER_CHAR, LONGEST = 6, 0.04, 16
@@ -43,6 +45,38 @@ end
 function rockmech.notify_all(text)
 	for _, p in ipairs(core.get_connected_players()) do rockmech.notify(p:get_player_name(), text) end
 end
+
+-- 聊天改到左下角
+local MAX_LINES = 8
+local S = rockmech.S
+local function short(text)
+	text = tostring(text or "")
+	local n, cut = 0, nil
+	for i = 1, #text do
+		if text:byte(i) == 10 then
+			n = n + 1
+			if n == MAX_LINES then cut = i; break end
+		end
+	end
+	if cut then return text:sub(1, cut) .. core.colorize("#a0a0a0", S("… press F10 for the rest")) end
+	return text
+end
+local send_player, send_all = core.chat_send_player, core.chat_send_all
+function core.chat_send_player(name, text)
+	send_player(name, text)
+	rockmech.notify(name, short(text))
+end
+function core.chat_send_all(text)
+	send_all(text)
+	rockmech.notify_all(short(text))
+end
+-- 玩家說的話（不是指令）：引擎照樣送進主控台，左下角另外顯示
+core.register_on_chat_message(function(name, message)
+	if message:sub(1, 1) == "/" then return false end
+	rockmech.notify_all("<" .. name .. "> " .. message)
+	return false
+end)
+core.register_on_joinplayer(function(player) player:hud_set_flags({chat = false}) end)
 
 local acc = 0
 core.register_globalstep(function(dtime)

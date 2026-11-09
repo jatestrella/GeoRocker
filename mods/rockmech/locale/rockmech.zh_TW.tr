@@ -678,6 +678,9 @@ Mixed rubble=混合碎石
 @1 (compacted)=@1（夯實）
 Compacted rubble=夯實碎石
 
+### notify.lua
+… press F10 for the rest=… 按 F10 看全部
+
 ### npc_lines.lua
 Pork chop lunch box again today.=今天便當又是排骨。
 Is it going to rain this afternoon?=下午會不會下雨啊？

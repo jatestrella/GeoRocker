@@ -678,6 +678,9 @@ Mixed rubble=
 @1 (compacted)=
 Compacted rubble=
 
+### notify.lua
+… press F10 for the rest=
+
 ### npc_lines.lua
 Pork chop lunch box again today.=
 Is it going to rain this afternoon?=
