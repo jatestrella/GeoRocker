@@ -2,7 +2,7 @@
 -- 大東西不進背包（人身上只放小東西）：
 --   車輛：買了就停在自己營地東南邊的交車區（營地中心往東 YARD.x1..x2、z = YARD.z1..z2），要自己開去工地。
 --     兩排：北排車頭朝北、南排車頭朝南，車頭都貼著交車區的邊，前面是空地；左右隔 1 m。
---     交車區要整個淨空（混凝土地坪上沒有車、人、碎石）才賣，有東西擋著就跳警示（rockmech.yard_obstacle）。
+--     一台一個車位：找得到空車位（車身加左右 1 m 沒有車、人，地平、上面沒有碎石）就交車，停滿了才跳警示。
 --   設施（破碎站、大型破碎站、選礦場、輸送帶、置物箱）：買了拿到「施工單」（一張紙），拿著對地面按右鍵，照原本的放置規則在那裡施工。
 --     施工前先檢查施工範圍（機身、受料倉、塔）裡有沒有人或車：有就不施工（人會掉進挖開的倉裡）。
 --     放置預覽（preview.lua）跟著施工單走，範圍內有人或車也標紅色。
@@ -174,11 +174,9 @@ function rockmech.deliver_vehicle(name, kind)
 	local def = V.TYPES[kind]
 	if not def then return false, S("No such vehicle") end
 	local x0 = camp_x(name)
-	-- 交車區要整個淨空（車、人、碎石…都不能有）才交車
-	local what = rockmech.yard_obstacle(x0)
-	if what then return false, S("The delivery yard is not clear (@1). Clear it before buying a vehicle", what), true end
+	-- 找空車位（別的車、人、碎石佔著的位置跳過），沒有空位才不交車
 	local pos, why, yaw = find_slot(x0, kind)
-	if not pos then return false, S("@1: drive the vehicles out of the delivery yard first", why) end
+	if not pos then return false, S("@1: drive the vehicles out of the delivery yard first", why), true end
 	local obj = core.add_entity(pos, "rockmech:" .. kind)
 	if not obj then return false, S("Delivery failed (that area is not loaded yet)") end
 	obj:set_yaw(yaw)

@@ -328,7 +328,6 @@ The delivery yard is not loaded yet=交車區還沒載入
 The delivery yard has no free space=交車區沒有空位
 The delivery yard is full (@1 is in the way)=交車區停滿了（有@1擋著）
 No such vehicle=沒有這種車
-The delivery yard is not clear (@1). Clear it before buying a vehicle=交車區有東西擋著：@1。先把交車區淨空才能買車
 @1: drive the vehicles out of the delivery yard first=@1：先把交車區的車開走
 Delivery failed (that area is not loaded yet)=交車失敗（那裡還沒載入）
 @1 is parked in the delivery yard southeast of the camp (@2, @3), facing north=@1停在營地東南邊的交車區 (@2, @3)，車頭朝北
@@ -1778,6 +1777,7 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+The delivery yard is not clear (@1). Clear it before buying a vehicle=交車區有東西擋著：@1。先把交車區淨空才能買車
 Excavator operator=怪手操作員
 [Drone] Take-off! WASD to move, E to speed up, Space to climb, Shift to descend; right-click again to return to the take-off point (limits: @1 m above the take-off point, within @2 m horizontally)=[無人機] 起飛！WASD 移動、E 加速、空白鍵上升、Shift 下降；再按右鍵回到起飛點（上限：起飛點上方 @1 m、水平 @2 m 內）
 You already have as many operators as excavators (@1 excavators, @2 operators): buy another excavator first, or dismiss a resting operator at the camp bench=操作員已經跟怪手一樣多了（@1 台怪手、@2 個操作員）：先買怪手，或到營地長椅解雇休息中的操作員

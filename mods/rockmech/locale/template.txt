@@ -328,7 +328,6 @@ The delivery yard is not loaded yet=
 The delivery yard has no free space=
 The delivery yard is full (@1 is in the way)=
 No such vehicle=
-The delivery yard is not clear (@1). Clear it before buying a vehicle=
 @1: drive the vehicles out of the delivery yard first=
 Delivery failed (that area is not loaded yet)=
 @1 is parked in the delivery yard southeast of the camp (@2, @3), facing north=

@@ -592,7 +592,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				ok, msg, alert = rockmech.deliver_vehicle(name, vkind)
 				if not ok then
 					rockmech.notify(name, S("[Supplier] @1", msg))
-					-- 交車區沒淨空：跳出警示視窗（蓋掉商店）
+					-- 交車區停滿了：跳出警示視窗（蓋掉商店）
 					if alert then
 						core.show_formspec(name, "rockmech:yard_alert", "formspec_version[6]size[9,3.2]"
 							.. ("label[0.5,0.7;%s]"):format(core.colorize("#ff8060", core.formspec_escape(S("Cannot deliver the vehicle"))))
