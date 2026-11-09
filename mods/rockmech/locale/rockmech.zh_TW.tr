@@ -1163,15 +1163,11 @@ Wagon @1  grade @2=第 @1 節  品位 @2
 Train shipment=火車出貨
 The train left with @1, income @2=火車開走了，載走 @1，收入 @2
 The train left empty=火車空車開走了
-The train is arriving at the loading point=火車進站了，開往裝車點
 The track is blocked in front of the train. Clear it=火車前面的軌道被擋住了，要清掉
-The train is at the loading point. Load wagon 1 first; @1 min to load=火車停在裝車點，先裝第 1 節；裝車時間 @1 分鐘
-Train: the next one comes on the next trading day=火車：下一班在下一個交易日
-Train: on its way, @1 s=火車：還有 @1 秒進站
 Train: arriving=火車：進站中
-Train: loading wagon @1 of @2, @3 min left=火車：裝第 @1 / @2 節，剩 @3 分
+Train: no trains at night; the first one comes at @1:00=火車：晚上沒車，早上 @1:00 第一班
+Train: loading @1 / @2, leaves when all wagons are full=火車：裝車中 @1 / @2，全部裝滿就開
 Train: leaving=火車：出站中
-Next wagon=下一節
 Depart now=現在出發
 
 ### ui.lua
@@ -1727,6 +1723,12 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+The train is arriving at the loading point=火車進站了，開往裝車點
+The train is at the loading point. Load wagon 1 first; @1 min to load=火車停在裝車點，先裝第 1 節；裝車時間 @1 分鐘
+Train: the next one comes on the next trading day=火車：下一班在下一個交易日
+Train: on its way, @1 s=火車：還有 @1 秒進站
+Train: loading wagon @1 of @2, @3 min left=火車：裝第 @1 / @2 節，剩 @3 分
+Next wagon=下一節
 Accepted: train, @1 t, grade ≥ @2, @3 days, $@4/t. The train comes to the loading point by the railway=已接單：火車，@1 噸、品位 ≥ @2、@3 天內、每噸 $@4。火車會開到鐵路旁的裝車點
 The train has left: @1 short, penalty @2=火車開走了：還差 @1，違約金 @2
 Train  @1 t   grade ≥ @2   @3 days   $@4/t=火車  @1 噸   品位 ≥ @2   @3 天   每噸 $@4

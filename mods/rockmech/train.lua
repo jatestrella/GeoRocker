@@ -1,10 +1,10 @@
 -- rockmech/train.lua
 -- 火車出貨（原型，只在教學地圖：分組礦帶）：營地南邊的走廊鋪一條東西向的鐵路（每組礦帶一段，連起來貫穿全圖）。
--- 火車是賣礦的管道（不是訂單）：每個交易日一班，開到每一組的裝車點，裝上去的礦照市價變收入。
---   交易日開始 ARRIVE 秒後，一列 N 節車廂（每節 CAP_M3 m³）從礦帶西邊開進來，第 1 節停在裝車點（黃黑標示柱）旁；
---   裝滿就往前挪一節，全部裝滿就出發。
+-- 火車是賣礦的管道（不是訂單）：上班時間（HOURS，08:00–20:00）一直有車，晚上沒車 → 學生要自己堆料（倉儲）。
+--   一列 N 節車廂（每節 CAP_M3 m³）從礦帶西邊開進來，停在裝車點（黃黑標示柱，每節一根）不動；
+--   N 節都裝滿就開走，下一班馬上從西邊開進來。按「現在出發」帶著已經裝的先走；20:00 還沒滿就帶著已經裝的開走。
 --   裝車：裝車料斗（放料臂 10 m）、怪手直接裝、卡車在車廂旁邊倒（orders.lua 的倒料對準）。
---   最多等 WAIT 秒：時間到、或按「出發」，就帶著已經裝的開走。
+--   時鐘：天色有在走（time_speed > 0）就看天色；時間停住（time_speed = 0）就用交易日：開盤 06:00，一個交易日 24 小時。
 --   出發時每節結帳：噸 × 品位 × 回收率 × 當天煤價 − 運費（每噸 FREIGHT，比破碎站的處理費便宜，但要配合班次）。
 --   廢石裝上去只會白付運費。
 -- 鐵路和兩側路肩是路權（camp.lua 的保護）：不能挖、不能蓋、炸不壞，往下 10 m 也不能挖；卡車可以直接開過去。
@@ -28,13 +28,12 @@ end
 local RAIL_Z = -80                               -- 鐵路中心線的 z
 local LOAD_REL = -14                             -- 裝車點（相對營地中心 x0）
 local LINE = {x1 = -(cfg.career_camp_dx or 0) - lanes / 2, x2 = -(cfg.career_camp_dx or 0) + lanes / 2 - 1}   -- 這一組礦帶的那一段
-local N = 5                                      -- 車廂數
+local N = 4                                      -- 車廂數
 local CAP_M3 = 8                                 -- 每節 m³
 local L_LOCO, PITCH = 9, 7.6                     -- 機車長、車廂間距（中心到中心）
-local ARRIVE = 60                                -- 交易日開始後幾秒火車進站
+local HOURS = {8, 20}                            -- 上班時間：這段時間一直有車
 local FREIGHT = 10                               -- 運費（每噸）
-local WAIT = 600                                 -- 裝車最多等幾秒
-local V_IN, V_INDEX, V_OUT = 4, 1.2, 4           -- 進站、挪一節、出站的速度 (m/s)
+local V_IN, V_OUT = 4, 4                         -- 進站、出站的速度 (m/s)
 local NEAR = 96                                  -- 離裝車點多近有人才放出列車
 local YAW = -math.pi / 2                         -- 車頭朝 +x
 local RAIL, BALLAST, MARK = "rockmech:rail", "rockmech:rail_ballast", "rockmech:rail_marker"
@@ -48,7 +47,24 @@ function rockmech.train_enabled() return true end
 local function site_of(acc) return O.site_of(acc) end
 local function rail_y() return O.sy() + 1 end                -- 軌道方塊的 y
 local function load_x(x0) return x0 + LOAD_REL + 0.5 end
-local function head_for(x0, i) return load_x(x0) + L_LOCO + (i - 1) * PITCH + PITCH / 2 end   -- 第 i 節停在裝車點時的車頭 x
+local function stop_head(x0) return load_x(x0) + L_LOCO + PITCH / 2 end   -- 停好時的車頭 x：第 1 節在裝車點，後面幾節往西排
+local function wagon_x(x0, i) return math.floor(load_x(x0) - (i - 1) * PITCH) end   -- 停好時第 i 節的中心（標示柱的 x）
+
+-- 現在幾點（0～24）
+local function hour()
+	if (tonumber(core.settings:get("time_speed")) or 72) > 0 then return core.get_timeofday() * 24 end
+	local p = cfg.price_period
+	local into = core.get_gametime() - rockmech.market_day() * p
+	return (6 + 24 * into / p) % 24
+end
+local function in_hours()
+	local h = hour()
+	return h >= HOURS[1] and h < HOURS[2]
+end
+local function clock_text()
+	local h = hour()
+	return ("%02d:%02d"):format(math.floor(h), math.floor((h % 1) * 60))
+end
 local function start_head(x0) return x0 + LINE.x1 + 2 + L_LOCO + N * PITCH end
 local function end_head(x0) return x0 + LINE.x2 - 1 end
 
@@ -99,19 +115,29 @@ local function lay(x0)
 			end
 		end
 	end
-	core.set_node({x = x0 + LOAD_REL, y = y + 1, z = RAIL_Z - 2}, {name = MARK})
 	storage:set_string("rail:" .. x0, "1")
 	core.log("action", ("[rockmech] 營地 x = %d 鋪好鐵路"):format(x0))
 end
+-- 每節一根標示柱（舊的世界：補上第 2～N 節的）
+local function posts(x0)
+	local y = rail_y()
+	for i = 1, N do core.set_node({x = wagon_x(x0, i), y = y + 1, z = RAIL_Z - 2}, {name = MARK}) end
+	storage:set_string("rail_posts:" .. x0, tostring(N))
+end
 core.after(6, function()
 	for _, x0 in ipairs(O.sites()) do
-		if storage:get_string("rail:" .. x0) ~= "1" then
+		if storage:get_string("rail:" .. x0) == "1" and storage:get_string("rail_posts:" .. x0) ~= tostring(N) then
+			local y = rail_y()
+			core.emerge_area({x = wagon_x(x0, N) - 1, y = y, z = RAIL_Z - 3}, {x = wagon_x(x0, 1) + 1, y = y + 2, z = RAIL_Z - 1}, function(_, _, rem)
+				if rem == 0 then posts(x0) end
+			end)
+		elseif storage:get_string("rail:" .. x0) ~= "1" then
 			local y = rail_y()
 			core.emerge_area({x = x0 + LINE.x1, y = y - 4, z = RAIL_Z - 3}, {x = x0 + LINE.x2, y = y + 7, z = RAIL_Z + 2}, function(_, _, rem)
 				if rem > 0 or storage:get_string("rail:" .. x0) == "1" then return end
 				local col = rockmech.collapse
 				col.quiet = col.quiet + 1
-				local ok, err = pcall(lay, x0)
+				local ok, err = pcall(function() lay(x0); posts(x0) end)
 				col.quiet = col.quiet - 1
 				if not ok then core.log("error", "[rockmech] rail: " .. tostring(err)) end
 			end)
@@ -287,12 +313,11 @@ function rockmech.train_wagons()
 	return out
 end
 
-local DAY = "train_day:"         -- 帳戶 → 最近一班是哪個交易日（每天一班）
+-- 下一班從西邊開進來
 local function start(acc)
 	local x0 = site_of(acc)
 	if not x0 then return end
-	storage:set_int(DAY .. acc, rockmech.market_day() + 1)
-	states[acc] = {phase = "coming", arrive = core.get_gametime() + ARRIVE, head = start_head(x0), idx = 1, loads = {}}
+	states[acc] = {phase = "in", head = start_head(x0), loads = {}}
 	save(acc)
 end
 function rockmech.train_remove(acc)
@@ -304,6 +329,15 @@ end
 local function wagon_total(st, i)
 	local t = 0
 	for _, lv in pairs((st.loads[i] or {}).load or {}) do t = t + lv end
+	return t
+end
+local function all_full(st)
+	for i = 1, N do if wagon_total(st, i) < CAP_M3 * NLEV then return false end end
+	return true
+end
+local function train_total(st)
+	local t = 0
+	for i = 1, N do t = t + wagon_total(st, i) end
 	return t
 end
 
@@ -362,44 +396,33 @@ local function step(acc)
 	if not x0 or storage:get_string("rail:" .. x0) ~= "1" or not rockmech.has_account(acc) then return end
 	local st = state(acc)
 	if not st then
-		-- 每個交易日一班
-		if storage:get_int(DAY .. acc) ~= rockmech.market_day() + 1 then start(acc) end
+		-- 上班時間一直有車；晚上沒車
+		if in_hours() then start(acc) end
 		st = states[acc]
 		if not st then return end
 	end
-	local now = core.get_gametime()
 	local lp = {x = load_x(x0), y = rail_y(), z = RAIL_Z}
 	local active = (rockmech.train_debug.force or players_near(lp)) and core.get_node(lp).name ~= "ignore"   -- force：測試用
-	if st.phase == "coming" then
-		if now >= st.arrive then
-			st.phase = "in"
-			save(acc)
-			tell(acc, S("The train is arriving at the loading point"))
-		end
-		return
-	end
+	if st.phase == "coming" then st.phase = "in" end   -- 舊版的狀態
 	-- 畫面：附近有人才放
 	if active and not trains[acc] then spawn(acc)
 	elseif not active and trains[acc] then despawn(acc) end
 	sync(acc)
 	if st.phase == "load" then
-		if wagon_total(st, st.idx) >= CAP_M3 * NLEV and not st.moving then
-			if st.idx >= N then depart(acc)
-			else st.idx = st.idx + 1; st.moving = true end
-		elseif now >= (st.until_t or math.huge) then
-			depart(acc)
-		end
+		-- 都裝滿就走；下班（20:00）還沒滿也帶著已經裝的走
+		if all_full(st) or not in_hours() then depart(acc) end
 	end
 	-- 沒人在附近時也照樣「開」：直接跳到目標（畫面不在）
 	if not trains[acc] then
-		if st.phase == "in" then st.head = head_for(x0, 1); st.phase = "load"; st.until_t = now + WAIT
-		elseif st.phase == "load" and st.moving then st.head = head_for(x0, st.idx); st.moving = false
+		if st.phase == "in" then st.head = stop_head(x0); st.phase = "load"
 		elseif st.phase == "leaving" then st.head = end_head(x0) end
 	end
 	if st.phase == "leaving" and st.head >= end_head(x0) - 0.01 then
 		despawn(acc)
 		states[acc] = nil
 		set_state(acc, nil)
+		-- 下一班馬上來（上班時間內）
+		if in_hours() then start(acc) end
 		return
 	end
 	save(acc)
@@ -426,8 +449,7 @@ core.register_globalstep(function(dtime)
 		local x0 = site_of(acc)
 		if st and x0 then
 			local target, speed
-			if st.phase == "in" then target, speed = head_for(x0, 1), V_IN
-			elseif st.phase == "load" then target, speed = head_for(x0, st.idx), V_INDEX
+			if st.phase == "in" then target, speed = stop_head(x0), V_IN
 			elseif st.phase == "leaving" then target, speed = end_head(x0), V_OUT end
 			if target and st.head < target - 0.01 then
 				-- 車頭前面 2 m 的軌道上方有東西（碎石…）：停下來
@@ -449,10 +471,8 @@ core.register_globalstep(function(dtime)
 				end
 			elseif target then
 				if st.phase == "in" then
-					st.phase = "load"; st.until_t = core.get_gametime() + WAIT
-					tell(acc, S("The train is at the loading point. Load wagon 1 first; @1 min to load", WAIT / 60))
-				elseif st.phase == "load" and st.moving then
-					st.moving = false
+					st.phase = "load"
+					save(acc)
 				end
 			end
 		end
@@ -466,25 +486,26 @@ end)
 local FORM = "rockmech:train"
 function rockmech.train_status(acc)
 	local st = state(acc)
-	if not st then return S("Train: the next one comes on the next trading day") end
-	if st.phase == "coming" then return S("Train: on its way, @1 s", math.max(0, math.ceil(st.arrive - core.get_gametime()))) end
-	if st.phase == "in" then return S("Train: arriving") end
+	if not st then
+		if in_hours() then return S("Train: arriving") end
+		return S("Train: no trains at night; the first one comes at @1:00", ("%02d"):format(HOURS[1]))
+	end
+	if st.phase ~= "load" and st.phase ~= "leaving" then return S("Train: arriving") end
 	if st.phase == "load" then
-		return S("Train: loading wagon @1 of @2, @3 min left", st.idx, N, math.max(0, math.ceil(((st.until_t or 0) - core.get_gametime()) / 60)))
+		return S("Train: loading @1 / @2, leaves when all wagons are full", t1(tons_of(train_total(st))), t1(tons_of(N * CAP_M3 * NLEV)))
 	end
 	return S("Train: leaving")
 end
 local function form(acc)
 	local st = state(acc)
-	local out = {"formspec_version[6]size[9,6.4]", ("label[0.5,0.6;%s]"):format(F(S("Freight train"))),
+	local out = {"formspec_version[6]size[9,6.4]", ("label[0.5,0.6;%s]"):format(F(S("Freight train") .. "   " .. clock_text())),
 		("label[0.5,1.2;%s]"):format(F(rockmech.train_status(acc)))}
 	if st then
 		for i = 1, N do
 			out[#out + 1] = ("label[0.5,%g;%s]"):format(1.6 + i * 0.5, F(S("Wagon @1  @2 / @3", i, t1(tons_of(wagon_total(st, i))),
-				t1(tons_of(CAP_M3 * NLEV))) .. (st.phase == "load" and i == st.idx and "  ◀" or "")))
+				t1(tons_of(CAP_M3 * NLEV)))))
 		end
 		if st.phase == "load" then
-			out[#out + 1] = ("button[0.5,5.2;3.8,0.8;next;%s]"):format(F(S("Next wagon")))
 			out[#out + 1] = ("button[4.7,5.2;3.8,0.8;go;%s]"):format(F(S("Depart now")))
 		end
 	end
@@ -504,15 +525,12 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if fields.quit then open_for[name] = nil; return true end
 	local st = acc and state(acc)
 	if not (st and st.phase == "load" and rockmech.account_of(name) == acc) then return true end
-	if fields.next and not st.moving then
-		if st.idx >= N then depart(acc) else st.idx = st.idx + 1; st.moving = true end
-		save(acc)
-	elseif fields.go then
+	if fields.go then
 		depart(acc)
 	end
 	core.close_formspec(name, FORM)
 	return true
 end)
 
-rockmech.train_debug = {spawn = spawn, despawn = despawn, states = states, trains = trains, head_for = head_for,
-	load_x = load_x, RAIL_Z = RAIL_Z, LINE = LINE}
+rockmech.train_debug = {spawn = spawn, despawn = despawn, states = states, trains = trains, stop_head = stop_head,
+	load_x = load_x, RAIL_Z = RAIL_Z, LINE = LINE, hour = hour, in_hours = in_hours, N = N}
