@@ -81,7 +81,8 @@ local function resolve(pos, prev)
 end
 
 -- 拆掉一根木柱（從 base 往上 len 格）；give：退還給誰（nil = 掉在地上）
-local function remove_post(base, len, give)
+local remove_post
+function remove_post(base, len, give)
 	local top = {x = base.x, y = base.y + len - 1, z = base.z}
 	for s = 0, len - 1 do
 		local p = {x = base.x, y = base.y + s, z = base.z}
@@ -96,6 +97,14 @@ local function remove_post(base, len, give)
 		core.add_item(base, ItemStack(POST))
 	end
 	resolve(top, POST_TOP)
+	-- 掛在柱子上的東西（工作照明燈…，attached_node）跟著掉下來
+	for s = 0, len - 1 do core.check_for_falling({x = base.x, y = base.y + s, z = base.z}) end
+	-- 疊在上面的另一根木柱底下空了：一起倒（掉成物品）
+	local above = {x = base.x, y = base.y + len, z = base.z}
+	if IS_POST[core.get_node(above).name] then
+		local b2, l2 = post_of(above)
+		if b2.y == above.y then remove_post(b2, l2, nil) end
+	end
 end
 
 -- 外觀：圓木（兩個交叉的方柱近似），樹皮側面、年輪端面

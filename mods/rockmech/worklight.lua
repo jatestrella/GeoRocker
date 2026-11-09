@@ -36,33 +36,40 @@ core.register_node(ITEM, {
 	sounds = default and default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil,
 })
 
--- 裝在木柱上：對著木柱放，換成貼著柱子的樣子（柱頂是燈頭，柱邊是一支短臂伸出燈頭）；挖起來還是工作照明燈
-local POLE = "rockmech:work_light_pole"
-local pole_box = {
-	type = "wallmounted",
-	wall_bottom = {{-0.04, -0.5, -0.04, 0.04, -0.25, 0.04}, {-0.22, -0.25, -0.22, 0.22, 0.1, 0.22}},
-	wall_top = {-0.2, 0.0, -0.2, 0.2, 0.5, 0.2},
-	wall_side = {{-0.9, -0.04, -0.04, -0.3, 0.04, 0.04}, {-0.35, -0.2, -0.2, 0.05, 0.2, 0.2}},
+-- 裝在木柱、木樑上：對著木頭放，換成貼著木頭的樣子；挖起來還是工作照明燈。
+-- 木頭是格子中央直徑 20 cm 的圓木：柱頂貼著格子邊界（−0.5），樑的上下面、柱和樑的側面離燈那一格的邊界 0.4（−0.9）。
+-- wallmounted 的 node_box 每個方向只能一個方框
+local SIDE = {-0.9, -0.14, -0.14, 0.0, 0.14, 0.14}           -- 側面：燈身從木頭表面伸出來
+local VARIANTS = {
+	{name = "rockmech:work_light_pole", group = "timber_post",
+		bottom = {-0.18, -0.5, -0.18, 0.18, 0.1, 0.18}, top = {-0.2, 0.0, -0.2, 0.2, 0.5, 0.2}},
+	{name = "rockmech:work_light_beam", group = "timber_stick",
+		bottom = {-0.18, -0.9, -0.18, 0.18, -0.3, 0.18}, top = {-0.18, 0.3, -0.18, 0.18, 0.9, 0.18}},
 }
-local def = table.copy(core.registered_nodes[ITEM])
-def.description, def.short_description = nil, nil
-def.node_box = pole_box
-def.selection_box = {type = "wallmounted",
-	wall_bottom = {-0.25, -0.5, -0.25, 0.25, 0.1, 0.25},
-	wall_top = {-0.2, 0.0, -0.2, 0.2, 0.5, 0.2},
-	wall_side = {-0.9, -0.2, -0.2, 0.05, 0.2, 0.2}}
-def.groups = table.copy(def.groups)
-def.groups.not_in_creative_inventory = 1
-def.drop = ITEM
-def.inventory_image, def.wield_image = nil, nil
-core.register_node(POLE, def)
+for _, v in ipairs(VARIANTS) do
+	local def = table.copy(core.registered_nodes[ITEM])
+	def.description, def.short_description = nil, nil
+	local box = {type = "wallmounted", wall_bottom = v.bottom, wall_top = v.top, wall_side = SIDE}
+	def.node_box, def.selection_box = box, table.copy(box)
+	def.groups = table.copy(def.groups)
+	def.groups.not_in_creative_inventory = 1
+	def.drop = ITEM
+	def.inventory_image, def.wield_image = nil, nil
+	core.register_node(v.name, def)
+end
 
 core.override_item(ITEM, {
 	on_place = function(itemstack, placer, pointed)
 		local out, pos = core.item_place(itemstack, placer, pointed)
-		if pos and pointed.type == "node" and core.get_item_group(core.get_node(pointed.under).name, "timber_post") > 0 then
-			local n = core.get_node(pos)
-			if n.name == ITEM and n.param2 ~= 0 then core.swap_node(pos, {name = POLE, param2 = n.param2}) end   -- 0 = 吊在下面：照原樣
+		if pos and pointed.type == "node" then
+			local un = core.get_node(pointed.under).name
+			for _, v in ipairs(VARIANTS) do    -- 木柱先（木柱也有 timber_stick）
+				if core.get_item_group(un, v.group) > 0 then
+					local n = core.get_node(pos)
+					if n.name == ITEM then core.swap_node(pos, {name = v.name, param2 = n.param2}) end
+					break
+				end
+			end
 		end
 		return out
 	end,
