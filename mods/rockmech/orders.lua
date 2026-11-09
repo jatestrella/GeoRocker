@@ -60,26 +60,14 @@ local function offers(acc)
 		list[i] = {tons = sz.tons, days = sz.days, spec = spec,
 			price = math.floor(rockmech.ore_price(ore) * spec * premium + 0.5)}
 	end
-	-- 火車（train.lua，教學地圖）：一列 100 t，運費便宜，單價比卡車好
-	if rockmech.train_enabled and rockmech.train_enabled() then
-		local spec = SPECS[r:next(1, #SPECS)]
-		list[#list + 1] = {mode = "train", tons = rockmech.train_tons(), days = 2, spec = spec,
-			price = math.floor(rockmech.ore_price(ore) * spec * (1.35 + r:next(0, 15) / 100) + 0.5)}
-	end
 	return list
 end
 
 local function accept(acc, o)
-	set_order(acc, {mode = o.mode, tons = o.tons, spec = o.spec, price = o.price, due = today() + o.days, done = 0, paid = 0,
+	set_order(acc, {tons = o.tons, spec = o.spec, price = o.price, due = today() + o.days, done = 0, paid = 0,
 		loads = 0, rejected = 0, next_t = 0})
-	if o.mode == "train" then
-		tell(acc, S("Accepted: train, @1 t, grade ≥ @2, @3 days, $@4/t. The train comes to the loading point by the railway",
-			o.tons, pct(o.spec), o.days, o.price))
-		if rockmech.train_start then rockmech.train_start(acc) end
-	else
-		tell(acc, S("Accepted: @1 t, grade ≥ @2, @3 days, $@4/t. The pickup truck is on its way to the receiving area",
-			o.tons, pct(o.spec), o.days, o.price))
-	end
+	tell(acc, S("Accepted: @1 t, grade ≥ @2, @3 days, $@4/t. The pickup truck is on its way to the receiving area",
+		o.tons, pct(o.spec), o.days, o.price))
 end
 
 -- 結案：交完、到期、取消。收料車收走
@@ -89,7 +77,6 @@ local function close(acc, o, why)
 	local fine = math.floor(left * o.price * PENALTY + 0.5)
 	if fine > 0 then rockmech.add_money(acc, -fine) end
 	set_order(acc, nil)
-	if o.mode == "train" and rockmech.train_remove then rockmech.train_remove(acc) end
 	local e = trucks[acc]
 	if e and e.object:get_pos() then
 		V.registry_drop(e.uid); V.snapshot_clear(e.uid)
@@ -103,7 +90,6 @@ local function close(acc, o, why)
 	}
 	if why == "done" then tell(acc, S("Order complete: @1 delivered, received @2", t1(o.done), money_text(o.paid)))
 	elseif why == "late" then tell(acc, S("Order expired: @1 short, penalty @2", t1(left), money_text(-fine)))
-	elseif why == "train" then tell(acc, S("The train has left: @1 short, penalty @2", t1(left), money_text(-fine)))
 	else tell(acc, S("Order cancelled: @1 short, penalty @2", t1(left), money_text(-fine))) end
 	for _, m in ipairs(rockmech.account_members(acc)) do
 		if rockmech.show_bill then rockmech.show_bill(m, S("Order statement"), rows) end
@@ -327,8 +313,6 @@ core.register_globalstep(function(dtime)
 		if o then
 			if d >= o.due then
 				close(acc, o, "late")
-			elseif o.mode == "train" then
-				if rockmech.train_step then rockmech.train_step(acc, o) end
 			else
 				local e = truck_of(acc)
 				if e then
@@ -372,15 +356,13 @@ local function buyer_form(name)
 		out[#out + 1] = lbl(0.5, 1.9, S("Delivered @1 / @2 t, @3 loads, @4 rejected", ("%.1f"):format(o.done), o.tons, o.loads, o.rejected))
 		out[#out + 1] = lbl(0.5, 2.4, S("@1 days left, received @2", left, money_text(o.paid)))
 		out[#out + 1] = lbl(0.5, 3.1, S("Short at the deadline: @1% of the price as penalty", PENALTY * 100))
-		if o.mode == "train" and rockmech.train_status then out[#out + 1] = lbl(0.5, 3.8, rockmech.train_status(acc)) end
 		out[#out + 1] = ("button[0.5,5.8;4,0.8;cancel;%s]"):format(F(S("Cancel order")))
 	else
 		out[#out + 1] = lbl(0.5, 1.4, S("Deliver to the pickup truck at the receiving area. Price is locked when you accept"))
 		out[#out + 1] = lbl(0.5, 1.9, S("Below spec: the whole load is rejected. Short at the deadline: @1% penalty", PENALTY * 100))
 		for i, of in ipairs(offers(acc)) do
 			local y = 2.4 + i * 1.0
-			out[#out + 1] = lbl(0.5, y, of.mode == "train" and S("Train  @1 t   grade ≥ @2   @3 days   $@4/t", of.tons, pct(of.spec), of.days, of.price)
-				or S("@1 t   grade ≥ @2   @3 days   $@4/t", of.tons, pct(of.spec), of.days, of.price))
+			out[#out + 1] = lbl(0.5, y, S("@1 t   grade ≥ @2   @3 days   $@4/t", of.tons, pct(of.spec), of.days, of.price))
 			out[#out + 1] = ("button[7.5,%g;3,0.8;take%d;%s]"):format(y - 0.4, i, F(S("Accept")))
 		end
 	end
@@ -429,7 +411,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		core.close_formspec(name, FORM)
 		return true
 	end
-	for i = 1, #SIZES + 1 do
+	for i = 1, #SIZES do
 		if fields["take" .. i] then
 			if not get_order(acc) then
 				local of = offers(acc)[i]

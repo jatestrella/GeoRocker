@@ -1,10 +1,12 @@
 -- rockmech/train.lua
 -- 火車出貨（原型，只在教學地圖：分組礦帶）：營地南邊的走廊鋪一條東西向的鐵路（每組礦帶一段，連起來貫穿全圖）。
--- 採購員多一張「火車」單（orders.lua 的 offers）：一列 N 節車廂、每節 CAP_M3 m³，運費便宜所以單價比卡車好。
---   接單後 ARRIVE 秒，火車從礦帶西邊開進來，第 1 節停在裝車點（黃黑標示柱）旁；裝滿就往前挪一節，全部裝滿就出發。
+-- 火車是賣礦的管道（不是訂單）：每個交易日一班，開到每一組的裝車點，裝上去的礦照市價變收入。
+--   交易日開始 ARRIVE 秒後，一列 N 節車廂（每節 CAP_M3 m³）從礦帶西邊開進來，第 1 節停在裝車點（黃黑標示柱）旁；
+--   裝滿就往前挪一節，全部裝滿就出發。
 --   裝車：裝車料斗（放料臂 10 m）、怪手直接裝、卡車在車廂旁邊倒（orders.lua 的倒料對準）。
---   最多等 WAIT 秒：時間到、或按「出發」，就帶著已經裝的開走。出發時每節分別驗品位：達標照合約價、不達標扣運費、料沒收。
---   火車開走就結案：沒交滿的部分照訂單罰違約金。
+--   最多等 WAIT 秒：時間到、或按「出發」，就帶著已經裝的開走。
+--   出發時每節結帳：噸 × 品位 × 回收率 × 當天煤價 − 運費（每噸 FREIGHT，比破碎站的處理費便宜，但要配合班次）。
+--   廢石裝上去只會白付運費。
 -- 鐵路和兩側路肩是路權（camp.lua 的保護）：不能挖、不能蓋、炸不壞，往下 10 m 也不能挖；卡車可以直接開過去。
 --   碎石滾到軌道上會擋住火車（停下來等清），要自己清。
 -- 列車是畫面：狀態（位置、每節的料）存在 mod storage，附近有人才放出來，沒人就收掉（不存進地圖）。
@@ -29,7 +31,8 @@ local LINE = {x1 = -(cfg.career_camp_dx or 0) - lanes / 2, x2 = -(cfg.career_cam
 local N = 5                                      -- 車廂數
 local CAP_M3 = 8                                 -- 每節 m³
 local L_LOCO, PITCH = 9, 7.6                     -- 機車長、車廂間距（中心到中心）
-local ARRIVE = 30                                -- 接單後幾秒火車進站
+local ARRIVE = 60                                -- 交易日開始後幾秒火車進站
+local FREIGHT = 10                               -- 運費（每噸）
 local WAIT = 600                                 -- 裝車最多等幾秒
 local V_IN, V_INDEX, V_OUT = 4, 1.2, 4           -- 進站、挪一節、出站的速度 (m/s)
 local NEAR = 96                                  -- 離裝車點多近有人才放出列車
@@ -41,7 +44,6 @@ local LOCO = "rockmech:train_loco"
 local tons_of, pct, t1, money_text, tell = O.tons_of, O.pct, O.t1, O.money_text, O.tell
 
 function rockmech.train_enabled() return true end
-function rockmech.train_tons() return math.floor(N * O.tons_of(CAP_M3 * NLEV) + 0.5) end
 
 local function site_of(acc) return O.site_of(acc) end
 local function rail_y() return O.sy() + 1 end                -- 軌道方塊的 y
@@ -285,9 +287,11 @@ function rockmech.train_wagons()
 	return out
 end
 
-function rockmech.train_start(acc)
+local DAY = "train_day:"         -- 帳戶 → 最近一班是哪個交易日（每天一班）
+local function start(acc)
 	local x0 = site_of(acc)
 	if not x0 then return end
+	storage:set_int(DAY .. acc, rockmech.market_day() + 1)
 	states[acc] = {phase = "coming", arrive = core.get_gametime() + ARRIVE, head = start_head(x0), idx = 1, loads = {}}
 	save(acc)
 end
@@ -303,42 +307,37 @@ local function wagon_total(st, i)
 	return t
 end
 
--- 出發：每節驗品位、結帳
+-- 出發：每節照市價結帳
 local function depart(acc)
 	local st = states[acc]
-	local o = O.get_order(acc)
-	if not (st and o) then return end
+	if not st then return end
 	sync(acc)
-	local rows, paid, freight = {}, 0, 0
+	local ore = cfg.ores.coal
+	local price = ore and rockmech.ore_price(ore) or 0
+	local rec = ore and (rockmech.eff_ore_recovery and rockmech.eff_ore_recovery(acc, ore) or ore.recovery) or 0
+	local rows, net, total_t = {}, 0, 0
 	for i = 1, N do
 		local ld = st.loads[i] or {}
-		local fake = {load = ld.load or {}, loadq = ld.loadq or {}}
-		local lv, g = O.load_grade(fake)
+		local lv, g = O.load_grade({load = ld.load or {}, loadq = ld.loadq or {}})
 		if lv > 0 then
 			local t = tons_of(lv)
-			if g + 1e-6 < o.spec then
-				local fee = math.floor(t * O.REJECT_FEE + 0.5)
-				freight = freight + fee
-				o.rejected = o.rejected + 1
-				rows[#rows + 1] = {S("Wagon @1  rejected  grade @2", i, pct(g)), t1(t), ("$%d"):format(O.REJECT_FEE), money_text(-fee), 0xff8080}
-			else
-				local pay_t = math.min(t, o.tons - o.done)
-				local pay = math.floor(pay_t * o.price + 0.5)
-				o.done, o.paid, o.loads = o.done + pay_t, o.paid + pay, o.loads + 1
-				paid = paid + pay
-				rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)), t1(t), ("$%d"):format(o.price), money_text(pay), 0x80ff80}
-			end
+			local m = math.floor(t * g * rec * price - t * FREIGHT + 0.5)
+			net, total_t = net + m, total_t + t
+			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)), t1(t), ("$%.0f × %.0f%% − $%d"):format(price, rec * 100, FREIGHT),
+				money_text(m), m >= 0 and 0x80ff80 or 0xff8080}
 		end
 	end
-	if paid - freight ~= 0 then rockmech.add_money(acc, paid - freight) end
-	o.paid = o.paid - freight
-	O.set_order(acc, o)
-	rows[#rows + 1] = {S("Order progress"), ("%s / %d t"):format(("%.1f"):format(o.done), o.tons), "", money_text(paid - freight), 0xffffff}
-	for _, m in ipairs(rockmech.account_members(acc)) do
-		core.sound_play("rockmech_coin", {to_player = m, gain = 0.8}, true)
-		if rockmech.show_bill then rockmech.show_bill(m, S("Train shipment"), rows) end
+	if #rows > 0 then
+		rockmech.add_money(acc, net)
+		rows[#rows + 1] = {S("Total"), t1(total_t), "", money_text(net), net >= 0 and 0x80ff80 or 0xff8080}
+		for _, m in ipairs(rockmech.account_members(acc)) do
+			core.sound_play("rockmech_coin", {to_player = m, gain = 0.8}, true)
+			if rockmech.show_bill then rockmech.show_bill(m, S("Train shipment"), rows) end
+		end
+		tell(acc, S("The train left with @1, income @2", t1(total_t), money_text(net)))
+	else
+		tell(acc, S("The train left empty"))
 	end
-	tell(acc, S("The train left with @1 / @2 t", ("%.1f"):format(o.done), o.tons))
 	-- 車廂的料跟著火車走了：畫面上清空
 	st.loads = {}
 	local tr = trains[acc]
@@ -358,11 +357,16 @@ local function players_near(p)
 	return false
 end
 
-function rockmech.train_step(acc, o)
+local function step(acc)
 	local x0 = site_of(acc)
-	if not x0 then return end
+	if not x0 or storage:get_string("rail:" .. x0) ~= "1" then return end
 	local st = state(acc)
-	if not st then rockmech.train_start(acc); st = states[acc] end
+	if not st then
+		-- 每個交易日一班
+		if storage:get_int(DAY .. acc) ~= rockmech.market_day() + 1 then start(acc) end
+		st = states[acc]
+		if not st then return end
+	end
 	local now = core.get_gametime()
 	local lp = {x = load_x(x0), y = rail_y(), z = RAIL_Z}
 	local active = (rockmech.train_debug.force or players_near(lp)) and core.get_node(lp).name ~= "ignore"   -- force：測試用
@@ -394,14 +398,20 @@ function rockmech.train_step(acc, o)
 	end
 	if st.phase == "leaving" and st.head >= end_head(x0) - 0.01 then
 		despawn(acc)
-		local o2 = O.get_order(acc)
 		states[acc] = nil
 		set_state(acc, nil)
-		if o2 then O.close_order(acc, o2, o2.done >= o2.tons - 1e-6 and "done" or "train") end
 		return
 	end
 	save(acc)
 end
+-- 每秒：各組的火車（組員不在線也照樣跑班次）
+local tick = 0
+core.register_globalstep(function(dtime)
+	tick = tick + dtime
+	if tick < 1 then return end
+	tick = 0
+	for i = 1, cfg.career_teams or 0 do step("team:" .. i) end
+end)
 
 -- 移動（0.1 秒）：畫面在的列車往目標開；前面軌道上有東西就停
 local BLOCK_WARN = 10
@@ -456,7 +466,7 @@ end)
 local FORM = "rockmech:train"
 function rockmech.train_status(acc)
 	local st = state(acc)
-	if not st then return "" end
+	if not st then return S("Train: the next one comes on the next trading day") end
 	if st.phase == "coming" then return S("Train: on its way, @1 s", math.max(0, math.ceil(st.arrive - core.get_gametime()))) end
 	if st.phase == "in" then return S("Train: arriving") end
 	if st.phase == "load" then
