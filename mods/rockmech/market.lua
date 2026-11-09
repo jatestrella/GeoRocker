@@ -102,6 +102,48 @@ local function effects_text(e)
 	return table.concat(out, "  ")
 end
 
+-- 新聞快訊卡：螢幕右邊中間，點陣新聞畫面（tools/news_art.py 畫的 80×50，放大 4 倍）＋疊字，NEWS_SECS 秒後收掉
+--   圖：上面台標條、中間畫面、下面標題條（左邊紅底疊「快訊」、右邊白底疊事件名稱）；圖下面一條黑底寫新聞和漲跌
+local NEWS_SECS, NEWS_SCALE = 15, 4
+local news_hud = {}         -- 玩家 → {hud id...}
+local function news_clear(player)
+	local name = player:get_player_name()
+	for _, id in ipairs(news_hud[name] or {}) do player:hud_remove(id) end
+	news_hud[name] = nil
+end
+function rockmech.news_card(player, e)
+	news_clear(player)
+	local name = player:get_player_name()
+	local w, h = 80 * NEWS_SCALE, 50 * NEWS_SCALE
+	local right = -16
+	local left = right - w
+	local function add(def)
+		def.position, def.z_index = {x = 1, y = 0.5}, 900
+		return player:hud_add(def)
+	end
+	local ids = {}
+	ids[#ids + 1] = add({type = "image", text = "rockmech_news_" .. e.id .. ".png", scale = {x = NEWS_SCALE, y = NEWS_SCALE},
+		alignment = {x = -1, y = 0}, offset = {x = right, y = 0}})
+	local bar_y = h / 2 - 4 * NEWS_SCALE
+	ids[#ids + 1] = add({type = "text", text = S("Breaking"), number = 0xFFFFFF, style = 1,
+		alignment = {x = 0, y = 0}, offset = {x = left + 9 * NEWS_SCALE, y = bar_y}})
+	ids[#ids + 1] = add({type = "text", text = e.label, number = 0x101010, style = 1,
+		alignment = {x = 1, y = 0}, offset = {x = left + 18 * NEWS_SCALE + 8, y = bar_y}})
+	-- 黑底兩行：新聞內容、漲跌
+	ids[#ids + 1] = add({type = "image", text = "[fill:1x1:#000000", scale = {x = w, y = 48},
+		alignment = {x = -1, y = 1}, offset = {x = right, y = h / 2}})
+	ids[#ids + 1] = add({type = "text", text = e.news, number = 0xFFFFFF,
+		alignment = {x = 1, y = 1}, offset = {x = left + 8, y = h / 2 + 4}})
+	ids[#ids + 1] = add({type = "text", text = effects_text(e), number = 0xFFD060,
+		alignment = {x = 1, y = 1}, offset = {x = left + 8, y = h / 2 + 26}})
+	news_hud[name] = ids
+	core.after(NEWS_SECS, function()
+		local p = core.get_player_by_name(name)
+		if p and news_hud[name] == ids then news_clear(p) end
+	end)
+end
+core.register_on_leaveplayer(function(player) news_hud[player:get_player_name()] = nil end)
+
 -- 開始一個事件：煤價先跳一下（crusher.lua 存的倍率），其他指數也跳
 local function start_event(e, today)
 	local list = active()
@@ -114,6 +156,7 @@ local function start_event(e, today)
 		storage:set_float(k, f * math.exp(JUMP * v))
 	end
 	rockmech.notify_all(core.colorize("#ffd060", S("[News] @1: @2", e.label, e.news)) .. "  " .. effects_text(e))
+	for _, p in ipairs(core.get_connected_players()) do rockmech.news_card(p, e) end
 	core.log("action", "[rockmech] market event " .. e.id)
 	return true
 end
