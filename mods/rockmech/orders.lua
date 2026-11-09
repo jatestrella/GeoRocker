@@ -5,7 +5,7 @@
 --   裝滿（或按收料車叫它先走）→ 取樣驗品位：達標照合約價付款、車開走，SECS_NEXT 秒後下一台來；
 --   不達標整車退貨：料倒回地磅後面，扣退貨運費，同一台車留著重裝。
 --   交完就結案；到期沒交完，沒交的部分 × 單價 × PENALTY 罰款。中途取消也一樣罰。
--- 營地的混凝土地坪（也在這裡）：營地南半部（建築、交車區、收料區）鋪混凝土，
+-- 營地的混凝土地坪（也在這裡）：建築區（講堂、研究帳篷、貨櫃辦公室、長椅的外框）和收料區兩塊鋪混凝土，
 --   地坪上不能放東西、建築和地面挖不掉，往下 UNDER m 內也不能挖（碎石、自己放的置物櫃這類還是拿得走）；
 --   有 rockmech 權限（老師）的人不受限。新蓋的營地一起鋪，舊的營地補鋪。
 
@@ -20,8 +20,9 @@ local F = core.formspec_escape
 -- 營地的位置
 ---------------------------------------------------------------------------
 
--- 地坪範圍（x 相對營地中心 x0，z 是絕對座標）
-local PAD = {x1 = -21, x2 = 33, z1 = -56, z2 = -1}
+-- 地坪範圍（x 相對營地中心 x0，z 是絕對座標）：建築區（建築外框再外推 2 m）、收料區
+local PADS = {{x1 = 11, x2 = 32, z1 = -33, z2 = -1}, {x1 = -18, x2 = -10, z1 = -50, z2 = -34}}
+local OLD_PAD = {x1 = -21, x2 = 33, z1 = -56, z2 = -1}    -- 第一版（整個南半部，太大）：鋪過的世界縮回來
 local UNDER = 10                         -- 地坪下幾公尺內不能挖
 -- 收料車：停在地磅上，車頭朝北；車身原點（駕駛艙中心）的位置
 local BAY = {x = -14, z = -39}
@@ -46,8 +47,10 @@ local function site_of(acc)
 	if storage:get_string("career_site") == "2" then return cfg.career_camp_dx end
 end
 local function sy() return math.floor(cfg.surface_y or 0) end
+local function in_rect(x0, r, x, z) return x >= x0 + r.x1 and x <= x0 + r.x2 and z >= r.z1 and z <= r.z2 end
 local function in_pad(x0, pos)
-	return pos.x >= x0 + PAD.x1 and pos.x <= x0 + PAD.x2 and pos.z >= PAD.z1 and pos.z <= PAD.z2
+	for _, r in ipairs(PADS) do if in_rect(x0, r, pos.x, pos.z) then return true end end
+	return false
 end
 -- (x, z) 地面最上面那格的 y（走得上去的方塊）
 local function ground_y(x, z)
@@ -84,26 +87,46 @@ local function pavable(n)
 	return (g.soil or g.crumbly or g.cracky or g.rockmech_topsoil) and not n:find("leaves") and not n:find("tree")
 		and not rockmech.rubble_level[n] or rockmech.rubble_base and rockmech.rubble_base[n] == rockmech.RUBBLE_SOIL
 end
+-- 鋪地坪；第一版鋪過的（pad:x0 = 1、沒有 pad2）先把新範圍外面的混凝土換回表土
+local TOPSOIL = "rockmech:topsoil"
 local function pave(x0)
 	local base = sy()
-	for x = x0 + PAD.x1, x0 + PAD.x2 do
-		for z = PAD.z1, PAD.z2 do
-			local y = ground_y(x, z)
-			if y and y >= base - 1 and y <= base + 2 then
-				local p = {x = x, y = y, z = z}
-				if pavable(core.get_node(p).name) then
-					local scale = x >= x0 + SCALE.x1 and x <= x0 + SCALE.x2 and z >= SCALE.z1 and z <= SCALE.z2
-					core.set_node(p, {name = scale and SCALE_NODE or CONCRETE})
+	if storage:get_string("pad:" .. x0) == "1" then
+		local n = 0
+		for x = x0 + OLD_PAD.x1, x0 + OLD_PAD.x2 do
+			for z = OLD_PAD.z1, OLD_PAD.z2 do
+				if not in_pad(x0, {x = x, z = z}) then
+					for y = base - 1, base + 2 do
+						local p = {x = x, y = y, z = z}
+						local nn = core.get_node(p).name
+						if nn == CONCRETE or nn == SCALE_NODE then core.set_node(p, {name = TOPSOIL}); n = n + 1 end
+					end
+				end
+			end
+		end
+		core.log("action", ("[rockmech] 營地 x = %d 地坪縮小：%d 格混凝土換回表土"):format(x0, n))
+	end
+	for _, r in ipairs(PADS) do
+		for x = x0 + r.x1, x0 + r.x2 do
+			for z = r.z1, r.z2 do
+				local y = ground_y(x, z)
+				if y and y >= base - 1 and y <= base + 2 then
+					local p = {x = x, y = y, z = z}
+					if pavable(core.get_node(p).name) then
+						core.set_node(p, {name = in_rect(x0, SCALE, x, z) and SCALE_NODE or CONCRETE})
+					end
 				end
 			end
 		end
 	end
 	storage:set_string("pad:" .. x0, "1")
+	storage:set_string("pad2:" .. x0, "1")
 	core.log("action", ("[rockmech] 營地 x = %d 鋪好混凝土地坪、收料區"):format(x0))
 end
+local function done(x0) return storage:get_string("pad2:" .. x0) == "1" end
 local function pave_when_loaded(x0)
-	core.emerge_area({x = x0 + PAD.x1, y = sy() - 8, z = PAD.z1}, {x = x0 + PAD.x2, y = sy() + 10, z = PAD.z2}, function(_, _, rem)
-		if rem > 0 or storage:get_string("pad:" .. x0) == "1" then return end
+	core.emerge_area({x = x0 + OLD_PAD.x1, y = sy() - 8, z = OLD_PAD.z1}, {x = x0 + OLD_PAD.x2, y = sy() + 10, z = OLD_PAD.z2}, function(_, _, rem)
+		if rem > 0 or done(x0) then return end
 		local col = rockmech.collapse
 		col.quiet = col.quiet + 1
 		local ok, err = pcall(pave, x0)
@@ -111,17 +134,17 @@ local function pave_when_loaded(x0)
 		if not ok then core.log("error", "[rockmech] pave: " .. tostring(err)) end
 	end)
 end
--- 新蓋的營地：研究帳篷蓋好之後（營地最後幾棟）一起鋪；舊的營地開服 4 秒後補鋪
+-- 新蓋的營地：研究帳篷蓋好之後（營地最後幾棟）一起鋪；舊的營地開服 4 秒後補鋪（或縮小）
 local build = rockmech.career_build_research
 if build then
 	function rockmech.career_build_research(x0)
 		build(x0)
-		if storage:get_string("pad:" .. x0) ~= "1" then pave_when_loaded(x0) end
+		if not done(x0) then pave_when_loaded(x0) end
 	end
 end
 core.after(4, function()
 	for _, x0 in ipairs(sites()) do
-		if storage:get_string("pad:" .. x0) ~= "1" then pave_when_loaded(x0) end
+		if not done(x0) then pave_when_loaded(x0) end
 	end
 end)
 
@@ -700,4 +723,4 @@ if cfg.teacher then
 end
 
 rockmech.orders = {offers = offers, get = get_order, set = set_order, accept = accept, close = close, weigh = weigh,
-	truck_of = truck_of, PAD = PAD, BAY = BAY, site_of = site_of, buyers = buyers}
+	truck_of = truck_of, PADS = PADS, BAY = BAY, site_of = site_of, buyers = buyers}
