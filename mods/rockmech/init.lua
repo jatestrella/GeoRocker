@@ -127,6 +127,7 @@ dofile(modpath .. "/rubble_tool.lua")
 dofile(modpath .. "/vehicles.lua")
 dofile(modpath .. "/vehicle_lights.lua")   -- 車燈：引擎發動時照亮車頭前方
 dofile(modpath .. "/worklight.lua")        -- 工作照明燈（像火把一樣放）
+dofile(modpath .. "/nocraft.lua")          -- 拿掉內建合成（只靠商店、鋸木台、木工桌）
 dofile(modpath .. "/impact.lua")
 dofile(modpath .. "/crusher.lua")
 dofile(modpath .. "/plant.lua")
