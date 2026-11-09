@@ -26,7 +26,7 @@ if not (cfg.career and cfg.teacher and lanes and O) then
 end
 
 local RAIL_Z = -80                               -- 鐵路中心線的 z
-local LOAD_REL = -14                             -- 裝車點（相對營地中心 x0）
+local LOAD_REL = -26                             -- 裝車點＝第 1 節（相對營地中心 x0）：收料區（x0−17..−11）的西邊，4 節的北邊都是空地
 local LINE = {x1 = -(cfg.career_camp_dx or 0) - lanes / 2, x2 = -(cfg.career_camp_dx or 0) + lanes / 2 - 1}   -- 這一組礦帶的那一段
 local N = 4                                      -- 車廂數
 local CAP_M3 = 8                                 -- 每節 m³
@@ -117,17 +117,22 @@ local function lay(x0)
 	storage:set_string("rail:" .. x0, "1")
 	core.log("action", ("[rockmech] 營地 x = %d 鋪好鐵路"):format(x0))
 end
--- 每節一根標示柱（舊的世界：補上第 2～N 節的）
+-- 每節一根標示柱（舊的世界：舊位置的柱子先拔掉，再照現在的節數、裝車點重插）
+local POSTS_VER = N .. "@" .. LOAD_REL
 local function posts(x0)
 	local y = rail_y()
+	for x = x0 + LINE.x1, x0 + LINE.x2 do
+		local p = {x = x, y = y + 1, z = RAIL_Z - 2}
+		if core.get_node(p).name == MARK then core.remove_node(p) end
+	end
 	for i = 1, N do core.set_node({x = wagon_x(x0, i), y = y + 1, z = RAIL_Z - 2}, {name = MARK}) end
-	storage:set_string("rail_posts:" .. x0, tostring(N))
+	storage:set_string("rail_posts:" .. x0, POSTS_VER)
 end
 core.after(6, function()
 	for _, x0 in ipairs(O.sites()) do
-		if storage:get_string("rail:" .. x0) == "1" and storage:get_string("rail_posts:" .. x0) ~= tostring(N) then
+		if storage:get_string("rail:" .. x0) == "1" and storage:get_string("rail_posts:" .. x0) ~= POSTS_VER then
 			local y = rail_y()
-			core.emerge_area({x = wagon_x(x0, N) - 1, y = y, z = RAIL_Z - 3}, {x = wagon_x(x0, 1) + 1, y = y + 2, z = RAIL_Z - 1}, function(_, _, rem)
+			core.emerge_area({x = x0 + LINE.x1, y = y, z = RAIL_Z - 3}, {x = x0 + LINE.x2, y = y + 2, z = RAIL_Z - 1}, function(_, _, rem)
 				if rem == 0 then posts(x0) end
 			end)
 		elseif storage:get_string("rail:" .. x0) ~= "1" then
