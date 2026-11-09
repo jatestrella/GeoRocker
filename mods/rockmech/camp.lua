@@ -183,18 +183,31 @@ local function pad_protected(pos, name)
 	return false
 end
 rockmech.pad_protected = pad_protected
+-- 地圖四邊的山（礦帶地圖，stress.edge_rise）：山腳以外整片不能挖、不能放（碎石可以清）
+local function edge_protected(pos, name)
+	if not (cfg.lane_terrain and cfg.lane_terrain.edge) then return false end
+	local _, far = rockmech.stress.edge_rise(cfg, pos.x, pos.z)
+	if far <= 0 then return false end
+	if name and name ~= "" and core.check_player_privs(name, {rockmech = true}) then return false end
+	if rockmech.rubble_level[core.get_node(pos).name] then return false end
+	return true
+end
+rockmech.edge_protected = edge_protected
 local old_protected = core.is_protected
 function core.is_protected(pos, name)
-	if pad_protected(pos, name) then return true end
+	if pad_protected(pos, name) or edge_protected(pos, name) then return true end
 	return old_protected(pos, name)
 end
 local last_warn = {}
 core.register_on_protection_violation(function(pos, name)
-	if not pad_protected(pos, name) then return end
+	local msg
+	if pad_protected(pos, name) then msg = S("Concrete slab: nothing can be built or dug here")
+	elseif edge_protected(pos, name) then msg = S("Edge of the map: nothing can be built or dug here") end
+	if not msg then return end
 	local now = core.get_us_time()
 	if last_warn[name] and now - last_warn[name] < 3e6 then return end
 	last_warn[name] = now
-	rockmech.notify(name, S("Concrete slab: nothing can be built or dug here"))
+	rockmech.notify(name, msg)
 end)
 
 rockmech.camp = {sites = sites, site_of = site_of, sy = sy, ground_y = ground_y, in_pad = in_pad,

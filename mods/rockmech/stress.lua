@@ -168,16 +168,39 @@ stress.terrain_noise = fbm
 local HILL_PERIOD = 320     -- 礦區山丘段＋平地段一個循環的長度 (m)
 local HILL_PHASE = -60      -- 山丘段從這個 z 開始：營地（z ≈ 0）旁邊是山丘，平地段在北邊遠一點的地方
 
+-- 地圖四邊的山（cfg.lane_terrain.edge）：南（鐵路外）、北、東西（最外側礦帶的外緣）。
+-- 山腳以外 beyond > 0；回傳 (高度, 離山腳最遠的那一邊超過幾公尺)
+function stress.edge_rise(cfg, x, z)
+	local T, s = cfg.lane_terrain, cfg.coal_seam
+	local E = T and T.edge
+	if not (E and s and s.lane_w) then return 0, -math.huge end
+	local xw, xe = (s.lane_min - 0.5) * s.lane_w, (s.lane_max + 0.5) * s.lane_w
+	local h, far = 0, -math.huge
+	local function side(beyond, along, seed)
+		if beyond > far then far = beyond end
+		if beyond <= 0 then return end
+		local H = E.h * (0.75 + 0.5 * vnoise(along / 110, 0.5, seed))
+		local r = (H + 4 * (fbm(along / 14, beyond / 14, seed + 2) - 0.5)) * smooth(beyond / E.ramp)
+		if r > h then h = r end
+	end
+	side(E.south - z, x, 41)
+	side(z - E.north, x, 45)
+	side(xw - x, z, 49)
+	side(x - xe, z, 53)
+	return math.max(0, h), far
+end
+
 function stress.lane_terrain(cfg, x, z)
 	local T, s = cfg.lane_terrain, cfg.coal_seam
 	if not (T and s and s.lane_w) then return 0 end
+	local edge = stress.edge_rise(cfg, x, z)
 	local W = s.lane_w
 	local k = math.floor((x + W / 2) / W)
-	if k < s.lane_min - 1 or k > s.lane_max + 1 then return 0 end
+	if k < s.lane_min - 1 or k > s.lane_max + 1 then return edge, 0 end
 	local lx = x - k * W
 	-- 走廊：z0 以南漸變成平地
 	local zf = z >= T.z0 and 1 or bump((T.z0 - z) / T.taper)
-	if zf <= 0 then return 0 end
+	if zf <= 0 then return edge, 0 end
 	local h = 0
 	-- 礦區的山丘：像 career_seam 的丘陵，雜訊超過門檻的地方隆起，煤層從山中間切過；兩側漸變
 	if k >= s.lane_min and k <= s.lane_max then
@@ -207,7 +230,7 @@ function stress.lane_terrain(cfg, x, z)
 			h = math.max(h, (H + rough) * r)
 		end
 	end
-	return h * zf, hill * zf
+	return math.max(h * zf, edge), hill * zf
 end
 
 ---------------------------------------------------------------------------

@@ -475,6 +475,11 @@ core.register_on_leaveplayer(function(player) drilling[player:get_player_name()]
 -- 裝藥：pointed 是鑽孔 → 裝進去；已裝藥 → 加一條；沒有鑽孔的實心面 → 貼面裝藥。回傳 true 表示用掉一條
 -- 在別組的礦帶：炸藥無效（team.lua）
 local function forbidden(player, pos)
+	if rockmech.edge_protected and player and player.is_player and player:is_player()
+		and rockmech.edge_protected(pos, player:get_player_name()) then
+		tell(player, S("Edge of the map: nothing can be built or dug here"))
+		return true
+	end
 	local t = rockmech.blast_forbidden and rockmech.blast_forbidden(player, pos)
 	if t then tell(player, t == "0" and S("This is the teacher's demo area: explosives have no effect here")
 		or S("This is team @1's area: explosives have no effect here", t)) end

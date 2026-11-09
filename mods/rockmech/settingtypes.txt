@@ -104,6 +104,9 @@ rockmech_coal_seam_lanes (Coal seam lanes) string
 # cuts through (hill and flat segments alternate along z); z < corridor z is a flat corridor joining the lanes, without coal.
 rockmech_lane_terrain (Lane terrain) string
 
+# Mountains closing the four sides of a lane map: south foot z, north foot z, height, ramp length (m). East and west feet are the outer edges of the outermost lanes. Nothing can be dug or placed beyond a foot. Height 0 = no mountains. Default -92,400,35,28.
+rockmech_lane_edges (Map edge mountains) string
+
 # Open pit cut into new terrain: x0,z0,floor radius,depth,bench height,bench width[,ramp grade %, default 10]. Horizontal benches, crossed by one spiral haul ramp. Empty = no pit.
 rockmech_open_pit (Open pit) string
 

@@ -584,6 +584,9 @@ function config.load(get)
 				-- 煤層離帶的西邊界留幾公尺：隔壁帶的煤不會在交界上露出來
 				cfg.coal_seam.lane_margin = 12
 				cfg.coal_seam.z_min = t[6] - t[7] / 2
+				-- 地圖四邊的山 rockmech_lane_edges = 南山腳z,北山腳z,山高,爬升長（m）：山腳以外不能挖、不能放東西（camp.lua）
+				local e = numbers("rockmech_lane_edges", 4) or {-92, 400, 35, 28}
+				if e[3] > 0 then cfg.lane_terrain.edge = {south = e[1], north = e[2], h = e[3], ramp = math.max(1, e[4])} end
 			end
 		end
 	end

@@ -31,6 +31,7 @@ Concrete slab=混凝土地坪
 Painted line=黃線
 Weighbridge=地磅
 Concrete slab: nothing can be built or dug here=混凝土地坪：這裡不能施工也不能挖
+Edge of the map: nothing can be built or dug here=地圖邊界：不能挖、不能蓋
 
 ### career.lua
 Holding: core box @1 (depth @2 m)   right-click to put down=手上：岩芯箱 @1（深 @2 m）　右鍵放下

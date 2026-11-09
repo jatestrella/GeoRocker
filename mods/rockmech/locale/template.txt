@@ -31,6 +31,7 @@ Concrete slab=
 Painted line=
 Weighbridge=
 Concrete slab: nothing can be built or dug here=
+Edge of the map: nothing can be built or dug here=
 
 ### career.lua
 Holding: core box @1 (depth @2 m)   right-click to put down=
