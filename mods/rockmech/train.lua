@@ -33,7 +33,7 @@ local CAP_M3 = 8                                 -- 每節 m³
 local L_LOCO, PITCH = 9, 7.6                     -- 機車長、車廂間距（中心到中心）
 local HOURS = {8, 20}                            -- 上班時間：這段時間一直有車
 local FREIGHT = 10                               -- 運費（每噸）
-local V_IN, V_OUT = 4, 4                         -- 進站、出站的速度 (m/s)
+local V_MAX, ACC = 12, 1.2                       -- 最高速度 (m/s ≈ 43 km/h)、加減速 (m/s²)：進站減速停好、出站慢慢加速
 local NEAR = 96                                  -- 離裝車點多近有人才放出列車
 local YAW = -math.pi / 2                         -- 車頭朝 +x
 local RAIL, BALLAST, MARK = "rockmech:rail", "rockmech:rail_ballast", "rockmech:rail_marker"
@@ -454,8 +454,13 @@ core.register_globalstep(function(dtime)
 		local x0 = site_of(acc)
 		if st and x0 then
 			local target, speed
-			if st.phase == "in" then target, speed = stop_head(x0), V_IN
-			elseif st.phase == "leaving" then target, speed = end_head(x0), V_OUT end
+			if st.phase == "in" then
+				target = stop_head(x0)
+				speed = math.max(1, math.min(V_MAX, math.sqrt(2 * ACC * math.max(0, target - st.head))))
+			elseif st.phase == "leaving" then
+				target = end_head(x0)
+				speed = math.max(1.5, math.min(V_MAX, math.sqrt(2 * ACC * math.max(0, st.head - stop_head(x0)))))
+			end
 			if target and st.head < target - 0.01 then
 				-- 車頭前面 2 m 的軌道上方有東西（碎石…）：停下來
 				local y = rail_y() + 1
