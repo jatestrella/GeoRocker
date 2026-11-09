@@ -774,6 +774,7 @@ Operators resting: @1=操作員休息中 @1 人
 
 ### orders.lua
 Concrete slab=混凝土地坪
+Painted line=黃線
 Weighbridge=地磅
 Concrete slab: nothing can be built or dug here=混凝土地坪：這裡不能施工也不能挖
 [Order] @1=【訂單】@1

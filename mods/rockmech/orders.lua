@@ -1,7 +1,7 @@
 -- rockmech/orders.lua
 -- 訂單：電廠的採購員在營地裡走來走去，找他接訂單（○ 噸、品位 ≥ ○ %、○ 天內交完、每噸 $○，接單時鎖價）。
--- 接了單，電廠的收料車開到營地西南角的收料區停在地磅上等裝料（跟破碎站完全分開）：
---   卡車、手推車在車斗旁邊倒料（自動對準車斗）、怪手直接裝進車斗。
+-- 接了單，電廠的收料車開到營地南邊外側的收料區停在地磅上等裝料（跟破碎站完全分開）：
+--   卡車、手推車在車斗旁邊倒料（自動對準車斗）、怪手直接裝進車斗、裝車料斗＋輸送帶也可以。
 --   裝滿（或按收料車叫它先走）→ 取樣驗品位：達標照合約價付款、車開走，SECS_NEXT 秒後下一台來；
 --   不達標整車退貨：料倒回地磅後面，扣退貨運費，同一台車留著重裝。
 --   交完就結案；到期沒交完，沒交的部分 × 單價 × PENALTY 罰款。中途取消也一樣罰。
@@ -20,16 +20,23 @@ local F = core.formspec_escape
 -- 營地的位置
 ---------------------------------------------------------------------------
 
--- 地坪範圍（x 相對營地中心 x0，z 是絕對座標）：建築區（建築外框再外推 2 m）、收料區、交車區
-local PADS = {{x1 = 11, x2 = 32, z1 = -33, z2 = -1}, {x1 = -18, x2 = -10, z1 = -50, z2 = -34},
-	{x1 = 10, x2 = 36, z1 = -54, z2 = -34}}     -- 交車區（delivery.lua 的 YARD）：有東西擋著就不交車
-local OLD_PAD = {x1 = -21, x2 = 33, z1 = -56, z2 = -1}    -- 第一版（整個南半部，太大）：鋪過的世界縮回來
+-- 地坪範圍（x 相對營地中心 x0，z 是絕對座標）；line：邊上一圈黃色外框
+--   建築區：講堂、研究帳篷、貨櫃辦公室、長椅的外框再外推 2 m
+--   交車區：delivery.lua 的 YARD（有東西擋著就不交車）
+--   收料區：營地南邊外側、礦帶之間的平地走廊上（卡車從礦區往南開就到）。只鋪收料車加地磅那一條（7 m 寬），
+--     兩側不鋪：自己放裝車料斗（放料臂 10 m）、接輸送帶裝進收料車
+local PADS = {{x1 = 11, x2 = 32, z1 = -33, z2 = -1},
+	{x1 = 10, x2 = 36, z1 = -54, z2 = -36, line = true},
+	{x1 = -17, x2 = -11, z1 = -72, z2 = -59, line = true}}
+-- 舊版鋪過的範圍（第一版整個南半部；之後的收料區在 z −50..−34、交車區到 z −34）：在新範圍外的換回表土
+local OLD_PADS = {{x1 = -21, x2 = 33, z1 = -56, z2 = -1}, {x1 = 10, x2 = 36, z1 = -56, z2 = -34}}
 local UNDER = 10                         -- 地坪下幾公尺內不能挖
 -- 收料車：停在地磅上，車頭朝北；車身原點（駕駛艙中心）的位置
-local BAY = {x = -14, z = -39}
-local SCALE = {x1 = -15, x2 = -13, z1 = -46, z2 = -37}     -- 地磅鋼板
+local BAY = {x = -14, z = -62}
+local SCALE = {x1 = -15, x2 = -13, z1 = -69, z2 = -61}     -- 地磅鋼板
 local CONCRETE = "rockmech:camp_concrete"
 local SCALE_NODE = "rockmech:camp_scale"
+local LINE = "rockmech:camp_concrete_line"           -- 黃色外框
 
 local function sites()
 	local out = {}
@@ -73,6 +80,12 @@ core.register_node(CONCRETE, {
 	tiles = {"[fill:16x16:#a8a49c^[fill:16x1:0,0:#96928a^[fill:1x16:0,0:#96928a^[fill:2x1:5,6:#b8b4ac^[fill:1x1:11,11:#8e8a82"},
 	is_ground_content = false, groups = {not_in_creative_inventory = 1}, on_blast = noop,
 })
+core.register_node(LINE, {
+	description = S("Painted line"),
+	tiles = {"[fill:16x16:#e0b428^[fill:16x1:0,0:#c89c20^[fill:3x1:4,9:#f0cc58^[fill:1x1:12,4:#b8901c",
+		"[fill:16x16:#a8a49c^[fill:16x1:0,0:#96928a"},
+	is_ground_content = false, groups = {not_in_creative_inventory = 1}, on_blast = noop,
+})
 core.register_node(SCALE_NODE, {
 	description = S("Weighbridge"),
 	tiles = {"[fill:16x16:#5a5e64^[fill:16x1:0,7:#3a3e44^[fill:1x16:7,0:#3a3e44^[fill:2x2:2,2:#7a7e84^[fill:2x2:12,12:#7a7e84"},
@@ -94,39 +107,50 @@ local function pave(x0)
 	local base = sy()
 	if storage:get_string("pad:" .. x0) == "1" then
 		local n = 0
-		for x = x0 + OLD_PAD.x1, x0 + OLD_PAD.x2 do
-			for z = OLD_PAD.z1, OLD_PAD.z2 do
+		for _, o in ipairs(OLD_PADS) do for x = x0 + o.x1, x0 + o.x2 do
+			for z = o.z1, o.z2 do
 				if not in_pad(x0, {x = x, z = z}) then
 					for y = base - 1, base + 2 do
 						local p = {x = x, y = y, z = z}
 						local nn = core.get_node(p).name
-						if nn == CONCRETE or nn == SCALE_NODE then core.set_node(p, {name = TOPSOIL}); n = n + 1 end
+						if nn == CONCRETE or nn == SCALE_NODE or nn == LINE then core.set_node(p, {name = TOPSOIL}); n = n + 1 end
 					end
 				end
 			end
-		end
+		end end
 		core.log("action", ("[rockmech] 營地 x = %d 地坪縮小：%d 格混凝土換回表土"):format(x0, n))
 	end
+	-- 每一欄往下找地面那一層：上面有椅子、長椅、樹、看板也照鋪（擺設留在地坪上）；
+	-- 碰到建築的地板或已經鋪好的就停（地板就是建築自己的地面）
+	local PAD_NODE = {[CONCRETE] = true, [SCALE_NODE] = true, [LINE] = true}
 	for _, r in ipairs(PADS) do
 		for x = x0 + r.x1, x0 + r.x2 do
 			for z = r.z1, r.z2 do
-				local y = ground_y(x, z)
-				if y and y >= base - 1 and y <= base + 2 then
+				local want = in_rect(x0, SCALE, x, z) and SCALE_NODE
+					or r.line and (x == x0 + r.x1 or x == x0 + r.x2 or z == r.z1 or z == r.z2) and LINE or CONCRETE
+				for y = base + 2, base - 1, -1 do
 					local p = {x = x, y = y, z = z}
-					if pavable(core.get_node(p).name) then
-						core.set_node(p, {name = in_rect(x0, SCALE, x, z) and SCALE_NODE or CONCRETE})
-					end
+					local n = core.get_node(p).name
+					if n == "ignore" or n == want or n:find("floor") then break end
+					if PAD_NODE[n] or pavable(n) then core.set_node(p, {name = want}); break end
 				end
 			end
 		end
 	end
 	storage:set_string("pad:" .. x0, "1")
-	storage:set_string("pad3:" .. x0, "1")
+	storage:set_string("pad6:" .. x0, "1")
 	core.log("action", ("[rockmech] 營地 x = %d 鋪好混凝土地坪、收料區"):format(x0))
 end
-local function done(x0) return storage:get_string("pad3:" .. x0) == "1" end
+local function done(x0) return storage:get_string("pad6:" .. x0) == "1" end
 local function pave_when_loaded(x0)
-	core.emerge_area({x = x0 + OLD_PAD.x1, y = sy() - 8, z = OLD_PAD.z1}, {x = x0 + OLD_PAD.x2, y = sy() + 10, z = OLD_PAD.z2}, function(_, _, rem)
+	local a, b = {x = math.huge, y = sy() - 8, z = math.huge}, {x = -math.huge, y = sy() + 10, z = -math.huge}
+	for _, list in ipairs({PADS, OLD_PADS}) do
+		for _, r in ipairs(list) do
+			a.x, a.z = math.min(a.x, x0 + r.x1), math.min(a.z, r.z1)
+			b.x, b.z = math.max(b.x, x0 + r.x2), math.max(b.z, r.z2)
+		end
+	end
+	core.emerge_area(a, b, function(_, _, rem)
 		if rem > 0 or done(x0) then return end
 		local col = rockmech.collapse
 		col.quiet = col.quiet + 1
@@ -135,14 +159,9 @@ local function pave_when_loaded(x0)
 		if not ok then core.log("error", "[rockmech] pave: " .. tostring(err)) end
 	end)
 end
--- 新蓋的營地：研究帳篷蓋好之後（營地最後幾棟）一起鋪；舊的營地開服 4 秒後補鋪（或縮小）
-local build = rockmech.career_build_research
-if build then
-	function rockmech.career_build_research(x0)
-		build(x0)
-		if not done(x0) then pave_when_loaded(x0) end
-	end
-end
+-- 新蓋的營地：career.lua 蓋營地時整地完先鋪（rockmech.camp_pave），建築、擺設再蓋在地坪上；
+-- 舊的營地開服 4 秒後補鋪（或縮小）
+function rockmech.camp_pave(x0) if not done(x0) then pave(x0) end end
 core.after(4, function()
 	for _, x0 in ipairs(sites()) do
 		if not done(x0) then pave_when_loaded(x0) end
@@ -587,8 +606,8 @@ end)
 
 local WHO = "buyer"
 local NPC = "rockmech:npc_buyer"
--- 路線（x 相對營地中心、z 絕對）：收料區 → 看板旁 → 講堂和研究帳篷之間 → 貨櫃辦公室前 → 出生點
-local ROUTE = {{-11, -37}, {-3, -36}, {8, -34}, {11, -21}, {15, -10}, {4, -7}}
+-- 路線（x 相對營地中心、z 絕對）：收料區旁 → 看板西邊 → 講堂和研究帳篷之間 → 貨櫃辦公室前 → 出生點
+local ROUTE = {{-9, -58}, {-8, -44}, {8, -34}, {11, -21}, {15, -10}, {4, -7}}
 local WALK = 1.4
 local NEAR_SPAWN, FAR_DROP = 48, 72
 local buyers = {}                -- 營地 x0 → entity

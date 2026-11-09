@@ -1073,6 +1073,8 @@ local function build_camp_now(owner, x0)
 	end
 	storage:set_string("sign3:" .. x0, "1")
 	x0 = x0 or 0
+	-- 混凝土地坪先鋪（orders.lua），建築、擺設再蓋在上面（先蓋的話擺設底下會留洞）
+	if rockmech.camp_pave then rockmech.camp_pave(x0) end
 	storage:set_string("camp_layout2:" .. x0, "1")       -- 新配置（建築在破碎站那一排、面向西）
 	build_market(x0)
 	if rockmech.career_build_research then rockmech.career_build_research(x0) end      -- 研究帳篷（research.lua）

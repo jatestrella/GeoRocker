@@ -774,6 +774,7 @@ Operators resting: @1=
 
 ### orders.lua
 Concrete slab=
+Painted line=
 Weighbridge=
 Concrete slab: nothing can be built or dug here=
 [Order] @1=
