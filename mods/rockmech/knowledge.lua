@@ -1122,7 +1122,7 @@ if cfg.career then
 end
 
 ---------------------------------------------------------------------------
--- 個人資料頁（背包 I 的分頁）：組別、資金、三種能力有沒有、從哪來、怎麼取得
+-- 個人資料：畫在背包（I）第一頁物品欄的上面（nocraft.lua）：組別、資金、能力有沒有、從哪來、怎麼取得
 ---------------------------------------------------------------------------
 
 if core.get_modpath("sfinv") and sfinv and cfg.career then
@@ -1133,6 +1133,7 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 		mechanics = S("Buy a geological compass, hire a geologist, or take the professor's exam"),
 		kinematics = S("Only by passing the professor's exam (cannot be bought or hired)"),
 		mohr = S("Only by passing the professor's exam (cannot be bought or hired)"),
+		planning = S("Only by passing the professor's exam (cannot be bought or hired)"),
 	}
 	-- 個人資料頁的勾選框、鉛筆
 	core.register_on_player_receive_fields(function(player, formname, fields)
@@ -1148,27 +1149,29 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 		end
 		if changed then sfinv.set_player_inventory_formspec(player); return true end
 	end)
-	sfinv.register_page("rockmech:profile", {
-		title = S("Profile"),
-		get = function(self, player, context)
+	-- 回傳一段 formspec（sfinv 舊座標，y 0–4.9；物品欄從 5.2 開始）
+	function rockmech.profile_fs(player)
 			local name = player:get_player_name()
 			local team = rockmech.team_of and rockmech.team_of(name)
 			-- 名字（暱稱）旁邊一枝鉛筆：按下去改暱稱
 			local shown = rockmech.nick_of and rockmech.nick_of(name) or name
 			local who = shown ~= name and ("%s (%s)"):format(shown, name) or name
 			local fs
+			local y = 0               -- 下一行的高度
 			if not rockmech.cfg.teacher then
 				fs = {}                    -- 不是教學地圖：沒有分組、名牌，不顯示名字和改暱稱
 			else
 				fs = {("label[0,0;%s]"):format(F(("%s  %s"):format(who, team and S("Team @1", tostring(team)) or S("No team")))),
-					("image_button[%g,-0.15;0.5,0.5;%s;rm_nick_edit;]"):format(math.min(6.5, 0.13 * #who + 1.6), F(rockmech.PENCIL or "blank.png")),
+					("image_button[%g,-0.15;0.5,0.5;%s;rm_nick_edit;]"):format(math.min(4.4, 0.13 * #who + 1.6), F(rockmech.PENCIL or "blank.png")),
 					("tooltip[rm_nick_edit;%s]"):format(F(S("Change nickname")))}
 			end
 			if rockmech.has_account and rockmech.has_account(name) then
-				fs[#fs + 1] = ("label[0,0.5;%s]"):format(F(S("Funds: $@1", ("%.0f"):format(rockmech.money(name)))))
+				-- 教學地圖：資金跟名字同一行（右邊）
+				fs[#fs + 1] = ("label[%g,0;%s]"):format(rockmech.cfg.teacher and 5 or 0, F(S("Funds: $@1", ("%.0f"):format(rockmech.money(name)))))
 			end
-			fs[#fs + 1] = ("label[0,1.2;%s]"):format(F(S("Your abilities")))
-			local y = 1.7
+			if #fs > 0 then y = 0.5 end
+			fs[#fs + 1] = ("label[0,%g;%s]"):format(y, F(S("Your abilities")))
+			y = y + 0.5
 			for _, a in ipairs(ABILITIES) do
 				local has, src = ability_status(name, a.key)
 				if has then
@@ -1185,13 +1188,12 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 					local how = HOW[a.key] or ""
 				fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F(cd > 0 and S("@1 (retake in @2)", how, mmss(cd)) or how))
 				end
-				y = y + 0.6
+				y = y + 0.45
 			end
-			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.3, F(S("Grade assessment: grades   Rock mass classification: lithology, GSI, overburden thickness   Rock mechanics: stress, factor of safety, cracks")))
-			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.75, F(S("Untick an ability to hide what it shows automatically (instruments still work)")))
+			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.1, F(S("Grade assessment: grades   Rock mass classification: lithology, GSI, overburden thickness   Rock mechanics: stress, factor of safety, cracks")))
+			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.5, F(S("Untick an ability to hide what it shows automatically (instruments still work)")))
 			local m = rockmech.nick_message and rockmech.nick_message(name)
-			if m then fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 1.3, F(m)) end
-			return sfinv.make_formspec(player, context, table.concat(fs), false)
-		end,
-	})
+			if m then fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.9, F(m)) end
+			return table.concat(fs)
+	end
 end

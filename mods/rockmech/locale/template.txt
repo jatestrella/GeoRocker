@@ -542,7 +542,6 @@ Buy an XRF analyzer, hire a geologist, or take the professor's exam=
 Buy a GSI chart, hire a geologist, or take the professor's exam=
 Buy a geological compass, hire a geologist, or take the professor's exam=
 Only by passing the professor's exam (cannot be bought or hired)=
-Profile=
 No team=
 Change nickname=
 Funds: $@1=

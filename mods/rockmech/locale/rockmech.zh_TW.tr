@@ -542,7 +542,6 @@ Buy an XRF analyzer, hire a geologist, or take the professor's exam=買 XRF 分�
 Buy a GSI chart, hire a geologist, or take the professor's exam=買 GSI 評估圖卡、雇用地質學家，或找大學教授考試
 Buy a geological compass, hire a geologist, or take the professor's exam=買地質羅盤、雇用地質學家，或找大學教授考試
 Only by passing the professor's exam (cannot be bought or hired)=只能通過教授的考試學會（買不到、雇人也不行）
-Profile=個人資料
 No team=沒有分組
 Change nickname=改暱稱
 Funds: $@1=資金 $@1
@@ -1601,6 +1600,7 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Profile=個人資料
 Vehicles · crushers · conveyor belts=車輛・破碎站・輸送帶
 Close=關閉
 Rebound R=回彈值 R
