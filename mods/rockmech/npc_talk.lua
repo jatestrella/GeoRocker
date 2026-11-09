@@ -15,6 +15,10 @@ local CREAM, FRAME = "#f4f0e0", "#5a4630"
 local FS, RING_FS = 32, 8    -- 泡泡字的大小；框用的字大小（框的粗細約一個 RING_FS 的字）
 local K = FS / RING_FS
 local PAD = "　"      -- 全形空白：泡泡四周的留白
+-- 名牌在螢幕上是固定字級、不會隨距離變小：每 SCALE_T 秒照看的人離多遠調字級。
+-- NEAR m 內原尺寸，越遠越小（跟距離成反比），最小 RING_MIN／RING_FS。框的字級跟泡泡維持 1：K（框才對得齊），
+-- 所以字級是一格一格的：框 RING_MIN..RING_FS、泡泡 ×K
+local NEAR, SCALE_T, RING_MIN = 6, 0.25, 3
 
 core.register_entity(BUBBLE, {
 	initial_properties = {
@@ -25,7 +29,19 @@ core.register_entity(BUBBLE, {
 	},
 	on_step = function(self, dtime)
 		self.t = (self.t or 0) + dtime
-		if self.t >= SHOW or not self.object:get_attach() then self.object:remove() end
+		if self.t >= SHOW or not self.object:get_attach() then self.object:remove(); return end
+		self.st = (self.st or SCALE_T) + dtime
+		if self.st < SCALE_T or not self.viewer then return end
+		self.st = 0
+		local pl = core.get_player_by_name(self.viewer)
+		local p = self.object:get_pos()
+		if not (pl and p) then return end
+		local d = vector.distance(pl:get_pos(), p)
+		local r = math.max(RING_MIN, math.min(RING_FS, math.floor(RING_FS * NEAR / math.max(d, 0.1) + 0.5)))
+		if r ~= self.r then
+			self.r = r
+			self.object:set_properties({nametag_fontsize = self.ring and r or r * K})
+		end
 	end,
 })
 
@@ -71,9 +87,11 @@ local function bubble_texts(text)
 	return table.concat(inner, "\n"), table.concat(ring, "\n")
 end
 
-local function add_part(o, name, props)
+local function add_part(o, name, props, ring)
 	local b = core.add_entity(o:get_pos(), BUBBLE)
 	if not b then return end
+	local e = b:get_luaentity()
+	if e then e.viewer, e.ring = name, ring end
 	b:set_attach(o, "", {x = 0, y = HEIGHT * 10, z = 0}, {x = 0, y = 0, z = 0})
 	b:set_properties(props)
 	b:set_observers({[name] = true})
@@ -115,7 +133,7 @@ function rockmech.npc_say(o, player, text)
 		if old:get_pos() then old:remove() end
 	end
 	local inner, ring_txt = bubble_texts(text)
-	local ring = add_part(o, name, {nametag = ring_txt, nametag_color = "#00000000", nametag_bgcolor = FRAME, nametag_fontsize = RING_FS})
+	local ring = add_part(o, name, {nametag = ring_txt, nametag_color = "#00000000", nametag_bgcolor = FRAME, nametag_fontsize = RING_FS}, true)
 	local b = add_part(o, name, {})
 	bubbles[o][name] = {b, ring}
 	-- 泡泡晚一點才填字：讓它的名牌排在框後面（畫在框上面）
