@@ -5,7 +5,7 @@
 --   裝滿（或按收料車叫它先走）→ 取樣驗品位：達標照合約價付款、車開走，SECS_NEXT 秒後下一台來；
 --   不達標整車退貨：料倒回地磅後面，扣退貨運費，同一台車留著重裝。
 --   交完就結案；到期沒交完，沒交的部分 × 單價 × PENALTY 罰款。中途取消也一樣罰。
--- 營地的混凝土地坪（也在這裡）：建築區（講堂、研究帳篷、貨櫃辦公室、長椅的外框）和收料區兩塊鋪混凝土，
+-- 營地的混凝土地坪（也在這裡）：建築區（講堂、研究帳篷、貨櫃辦公室、長椅的外框）、交車區、收料區鋪混凝土，
 --   地坪上不能放東西、建築和地面挖不掉，往下 UNDER m 內也不能挖（碎石、自己放的置物櫃這類還是拿得走）；
 --   有 rockmech 權限（老師）的人不受限。新蓋的營地一起鋪，舊的營地補鋪。
 
@@ -20,8 +20,9 @@ local F = core.formspec_escape
 -- 營地的位置
 ---------------------------------------------------------------------------
 
--- 地坪範圍（x 相對營地中心 x0，z 是絕對座標）：建築區（建築外框再外推 2 m）、收料區
-local PADS = {{x1 = 11, x2 = 32, z1 = -33, z2 = -1}, {x1 = -18, x2 = -10, z1 = -50, z2 = -34}}
+-- 地坪範圍（x 相對營地中心 x0，z 是絕對座標）：建築區（建築外框再外推 2 m）、收料區、交車區
+local PADS = {{x1 = 11, x2 = 32, z1 = -33, z2 = -1}, {x1 = -18, x2 = -10, z1 = -50, z2 = -34},
+	{x1 = 10, x2 = 36, z1 = -54, z2 = -34}}     -- 交車區（delivery.lua 的 YARD）：有東西擋著就不交車
 local OLD_PAD = {x1 = -21, x2 = 33, z1 = -56, z2 = -1}    -- 第一版（整個南半部，太大）：鋪過的世界縮回來
 local UNDER = 10                         -- 地坪下幾公尺內不能挖
 -- 收料車：停在地磅上，車頭朝北；車身原點（駕駛艙中心）的位置
@@ -87,7 +88,7 @@ local function pavable(n)
 	return (g.soil or g.crumbly or g.cracky or g.rockmech_topsoil) and not n:find("leaves") and not n:find("tree")
 		and not rockmech.rubble_level[n] or rockmech.rubble_base and rockmech.rubble_base[n] == rockmech.RUBBLE_SOIL
 end
--- 鋪地坪；第一版鋪過的（pad:x0 = 1、沒有 pad2）先把新範圍外面的混凝土換回表土
+-- 鋪地坪；舊版鋪過的（pad:x0 = 1、沒有 pad3）先把新範圍外面的混凝土換回表土
 local TOPSOIL = "rockmech:topsoil"
 local function pave(x0)
 	local base = sy()
@@ -120,10 +121,10 @@ local function pave(x0)
 		end
 	end
 	storage:set_string("pad:" .. x0, "1")
-	storage:set_string("pad2:" .. x0, "1")
+	storage:set_string("pad3:" .. x0, "1")
 	core.log("action", ("[rockmech] 營地 x = %d 鋪好混凝土地坪、收料區"):format(x0))
 end
-local function done(x0) return storage:get_string("pad2:" .. x0) == "1" end
+local function done(x0) return storage:get_string("pad3:" .. x0) == "1" end
 local function pave_when_loaded(x0)
 	core.emerge_area({x = x0 + OLD_PAD.x1, y = sy() - 8, z = OLD_PAD.z1}, {x = x0 + OLD_PAD.x2, y = sy() + 10, z = OLD_PAD.z2}, function(_, _, rem)
 		if rem > 0 or done(x0) then return end

@@ -588,8 +588,19 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				if hired then inv:add_item("main", stack)
 				else rockmech.notify(name, S("[Supplier] @1", why)); ok = false end
 			elseif vkind then
-				ok, msg = rockmech.deliver_vehicle(name, vkind)
-				if not ok then rockmech.notify(name, S("[Supplier] @1", msg)) end
+				local alert
+				ok, msg, alert = rockmech.deliver_vehicle(name, vkind)
+				if not ok then
+					rockmech.notify(name, S("[Supplier] @1", msg))
+					-- 交車區沒淨空：跳出警示視窗（蓋掉商店）
+					if alert then
+						core.show_formspec(name, "rockmech:yard_alert", "formspec_version[6]size[9,3.2]"
+							.. ("label[0.5,0.7;%s]"):format(core.colorize("#ff8060", core.formspec_escape(S("Cannot deliver the vehicle"))))
+							.. ("textarea[0.5,1.1;8,1.2;;;%s]"):format(core.formspec_escape(msg))
+							.. ("button_exit[3,2.3;3,0.7;ok;%s]"):format(core.formspec_escape(S("OK"))))
+						return true
+					end
+				end
 			elseif not inv:room_for_item("main", stack) then
 				rockmech.notify(name, S("[Supplier] Your inventory is full"))
 				ok = false

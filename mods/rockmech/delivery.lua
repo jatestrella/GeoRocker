@@ -2,7 +2,7 @@
 -- 大東西不進背包（人身上只放小東西）：
 --   車輛：買了就停在自己營地東南邊的交車區（營地中心往東 YARD.x1..x2、z = YARD.z1..z2），要自己開去工地。
 --     兩排：北排車頭朝北、南排車頭朝南，車頭都貼著交車區的邊，前面是空地；左右隔 1 m。
---     交車區沒有空位（車身蓋到的地面要平、上方淨空、沒有人或車）就不賣，先把交車區的車開走。
+--     交車區要整個淨空（混凝土地坪上沒有車、人、碎石）才賣，有東西擋著就跳警示（rockmech.yard_obstacle）。
 --   設施（破碎站、大型破碎站、選礦場、輸送帶、置物箱）：買了拿到「施工單」（一張紙），拿著對地面按右鍵，照原本的放置規則在那裡施工。
 --     施工前先檢查施工範圍（機身、受料倉、塔）裡有沒有人或車：有就不施工（人會掉進挖開的倉裡）。
 --     放置預覽（preview.lua）跟著施工單走，範圍內有人或車也標紅色。
@@ -137,6 +137,32 @@ local function find_slot(x0, kind)
 	return nil, why
 end
 
+-- 交車區裡有沒有東西擋著：回傳是什麼（車名、人、地上的東西），淨空回傳 nil
+function rockmech.yard_obstacle(x0)
+	core.load_area({x = x0 + YARD.x1, y = -40, z = YARD.z2}, {x = x0 + YARD.x2, y = 60, z = YARD.z1})
+	local mx, mz = x0 + math.floor((YARD.x1 + YARD.x2) / 2), math.floor((YARD.z1 + YARD.z2) / 2)
+	local base
+	for y = 60, -40, -1 do
+		local n = core.get_node({x = mx, y = y, z = mz}).name
+		if n ~= "ignore" and not V.passable(n) then base = y; break end
+	end
+	if not base then return nil end
+	local cells = {}
+	for x = x0 + YARD.x1, x0 + YARD.x2 do
+		for z = YARD.z2, YARD.z1 do
+			cells[#cells + 1] = {x, z}
+			for y = base + 1, base + 3 do
+				local n = core.get_node({x = x, y = y, z = z}).name
+				if n ~= "ignore" and not V.passable(n) then
+					local d = core.registered_nodes[n]
+					return rockmech.rubble_level[n] and S("rubble") or (d and d.description ~= "" and d.description:match("^[^\n]*")) or n
+				end
+			end
+		end
+	end
+	return rockmech.cells_blocked(cells, base + 1, base + 5)
+end
+
 local function camp_x(name)
 	local t = rockmech.team_of and rockmech.team_of(name)
 	if t and rockmech.team_site_x then return rockmech.team_site_x(t) end
@@ -148,6 +174,9 @@ function rockmech.deliver_vehicle(name, kind)
 	local def = V.TYPES[kind]
 	if not def then return false, S("No such vehicle") end
 	local x0 = camp_x(name)
+	-- 交車區要整個淨空（車、人、碎石…都不能有）才交車
+	local what = rockmech.yard_obstacle(x0)
+	if what then return false, S("The delivery yard is not clear (@1). Clear it before buying a vehicle", what), true end
 	local pos, why, yaw = find_slot(x0, kind)
 	if not pos then return false, S("@1: drive the vehicles out of the delivery yard first", why) end
 	local obj = core.add_entity(pos, "rockmech:" .. kind)
