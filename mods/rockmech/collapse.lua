@@ -197,6 +197,9 @@ local function rubble_k(name) return rockmech.rubble_level[name] end
 -- 碎石流得進去的格子：不擋路的方塊（空氣、草…），還有裝飾用的木製品（group rubble_breaks：木板、木牆板、樓梯、門…，
 -- 擋不住碎石，碎石流進來就把它壓壞，見 woodwork.lua）
 local function passable(name)
+    -- 沒載入的區塊（ignore）當成擋住：不然區塊邊界上的碎石會以為底下懸空、掉下去（載入後發現是實心又落回原位），
+    -- 每次那個區塊被卸載（約 30 秒）就重來一次，沒有玩家也一直排穩定、破壞檢查
+    if name == "ignore" then return false end
     local d = core.registered_nodes[name]
     if not d then return false end
     if d.groups and d.groups.rubble_breaks then return true end
