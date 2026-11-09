@@ -936,7 +936,7 @@ local function build_market(x0)
 	set(RX, 2, 0, "doors:hidden", 3)
 	set(RX + 1, 1, -2, "rockmech:camp_cone")
 	set(-RX - 1, 1, 1, "rockmech:office_ac", 3)       -- facedir 3：風扇朝西
-	if rockmech.news_board_put then rockmech.news_board_put(at(RX + 1, 2, -1), at(RX, 2, -1)) end   -- 1 樓門旁的告示板（market.lua）
+	if rockmech.news_board_put then rockmech.news_board_put(at(-RX, 2, RZ + 1), at(-RX, 2, RZ)) end   -- 正面、機械設備課長窗口旁的角柱上的告示板（market.lua）
 	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
 	for kind, bx in pairs(BOOTH_X) do
 		for _, p in ipairs(BOOTH_PROPS[kind]) do set(bx + p[1], p[3], p[2], "rockmech:camp_" .. p[4]) end

@@ -428,7 +428,7 @@ core.after(3, function()
 end)
 
 ---------------------------------------------------------------------------
--- 告示板（貨櫃辦公室 1 樓門旁的外牆）：右鍵看今天的價格、漲跌和新聞。
+-- 告示板（貨櫃辦公室正面，機械設備課長窗口旁的角柱上）：右鍵看今天的價格、漲跌和新聞。
 -- 廣播收音機：帶在身上，右上角跟著顯示價格和新聞（沒帶就只有資金）
 ---------------------------------------------------------------------------
 
@@ -483,29 +483,29 @@ function rockmech.news_board_put(pos, wall)
 	core.set_node(pos, {name = BOARD, param2 = core.dir_to_wallmounted(vector.subtract(wall, pos))})
 end
 
--- 已經蓋好的貨櫃辦公室補告示板（1 樓東牆門旁）：找牆的底樑定高度
-local OFFICE_RX = 6
+-- 已經蓋好的貨櫃辦公室補告示板（正面角柱）：找牆的底樑定高度
+local OFFICE_RX, OFFICE_RZ = 6, 3
 core.after(4, function()
 	local dx = rockmech.career_office_dx
 	if not dx then return end
 	for _, x0 in ipairs(rockmech.camp and rockmech.camp.sites() or {}) do
-		-- board2：第一版從上往下找底樑，找到 2 樓那根（2 樓地板也是底樑），板子掛到 2 樓去了：拔掉重掛
-		if storage:get_string("board2:" .. x0) == "" then
+		-- board3：前兩版掛在門旁的側牆（第一版還掛到 2 樓）：拔掉，改掛到正面的角柱
+		if storage:get_string("board3:" .. x0) == "" then
 			local _, at = rockmech.career_placer(x0 + dx, -10, 0)
 			local w0 = at(OFFICE_RX, 0, -1)
 			core.emerge_area(vector.offset(w0, -2, -30, -2), vector.offset(w0, 2, 40, 2), function(_, _, rem)
-				if rem > 0 or storage:get_string("board2:" .. x0) ~= "" then return end
+				if rem > 0 or storage:get_string("board3:" .. x0) ~= "" then return end
 				for y = -30, 40 do      -- 從下往上：1 樓的底樑
 					if core.get_node({x = w0.x, y = y, z = w0.z}).name == "rockmech:office_wall_base" then
 						local _, at2 = rockmech.career_placer(x0 + dx, -10, y - 1)
-						for h = 3, 8 do
+						for h = 2, 8 do
 							local q = at2(OFFICE_RX + 1, h, -1)
 							if core.get_node(q).name == BOARD then core.remove_node(q) end
 						end
-						local p = at2(OFFICE_RX + 1, 2, -1)
-						if core.get_node(p).name == "air" then rockmech.news_board_put(p, at2(OFFICE_RX, 2, -1)) end
+						local p = at2(-OFFICE_RX, 2, OFFICE_RZ + 1)
+						if core.get_node(p).name == "air" then rockmech.news_board_put(p, at2(-OFFICE_RX, 2, OFFICE_RZ)) end
 						storage:set_string("board1:" .. x0, "1")
-						storage:set_string("board2:" .. x0, "1")
+						storage:set_string("board3:" .. x0, "1")
 						core.log("action", ("[rockmech] 營地 x = %d 的貨櫃辦公室補上告示板"):format(x0))
 						return
 					end
