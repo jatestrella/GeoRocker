@@ -1291,3 +1291,13 @@ if cfg.career then
 		end
 	end)
 end
+
+-- 新手裝備：第一次進遊戲就發十字鎬、鏟子、手推車（每張地圖都發；背包放不下的掉在腳邊）
+local STARTER = {"rockmech:pick", "rockmech:shovel", "rockmech:cart_item"}
+core.register_on_newplayer(function(player)
+	local inv = player:get_inventory()
+	for _, it in ipairs(STARTER) do
+		local left = inv:add_item("main", ItemStack(it))
+		if not left:is_empty() then core.add_item(player:get_pos(), left) end
+	end
+end)

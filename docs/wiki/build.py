@@ -15,7 +15,7 @@ MECHANICS = [
 <h3>第一步</h3>
 <ol>
 <li>出生點旁是<b>營地</b>：帳篷裡有三位供應商（<a href="#i-vendor_vehicle">機械設備課長</a>、<a href="#i-vendor_blast">爆破主任</a>、<a href="#i-vendor_tools">工具室管理員</a>），旁邊有一座<a href="#i-crusher">破碎站</a>、<a href="#i-research">研究帳篷</a>和<a href="#i-professor">大學教授</a>。</li>
-<li>拿免費的<a href="#i-pick">挖礦鎬</a>去敲煤層（黑色的岩石），敲下來的煤碎石捧在手上，搬到破碎站的受料倉倒進去就入帳。</li>
+<li>一進遊戲就有<a href="#i-pick">挖礦鎬</a>、鏟子和手推車。拿挖礦鎬去敲煤層（黑色的岩石），敲下來的煤碎石捧在手上，搬到破碎站的受料倉倒進去就入帳。</li>
 <li>有錢之後買<a href="#i-shovel">鏟子</a>、<a href="#i-cart">手推車</a>，再來是<a href="#i-truck">卡車</a>和<a href="#i-excavator">挖土機</a>。</li>
 <li>開挖面越來越大時，學會看<a href="#m-stability">穩定性</a>，必要時打<a href="#i-rock_bolt">岩栓</a>、立<a href="#i-timber_post">木柱</a>。</li>
 </ol>
