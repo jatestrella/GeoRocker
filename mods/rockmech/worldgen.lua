@@ -232,6 +232,9 @@ function M.generate(world_conf)
 		local main_top, main_i = R.column(r, mode, nseam, add, sum, range, function() return #beds end)
 		local dip = R.dip(frac("dip"))
 		local dipdir = r:next(0, 359)
+		-- 範本可以指定傾向（rockmech_gen_dipdir，±15° 隨機），例如和平礦場的片岩大致往東南傾
+		local fdd = tonumber(world_conf:get("rockmech_gen_dipdir") or "")
+		if fdd and k == 1 then dipdir = (math.floor(fdd) + r:next(-15, 15)) % 360 end
 		if k == 1 then main_dip, main_dipdir = dip, dipdir end
 		-- 主礦層的頂在 P 點露出地表（y = 0）：第 1 區在出生點往上傾方向 dist m，其他區在斷層外 25–50 m
 		local cosd, tand = math.cos(math.rad(dip)), math.tan(math.rad(dip))
@@ -246,7 +249,10 @@ function M.generate(world_conf)
 		end
 		local function top_at(x, z) return main_i > 1 and rockmech.stress.strata_column(St, x, z)[main_i - 1] or 0 end
 		local px, pz
-		if k == 1 and R.centered then px, pz = 0, 0
+		if k == 1 and R.centered then
+			-- 礦體中心：rockmech_gen_center = x,z（例如採場中間），沒寫就是出生點
+			local cx, cz = (world_conf:get("rockmech_gen_center") or ""):match("^%s*(%-?[%d.]+)%s*,%s*(%-?[%d.]+)")
+			px, pz = tonumber(cx) or 0, tonumber(cz) or 0
 		elseif k == 1 then px, pz = -dist * sdd, -dist * cdd
 		else
 			local f = faults[k - 1]
