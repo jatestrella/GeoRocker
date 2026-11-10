@@ -890,6 +890,7 @@ function config.load(get)
 	-- 經營模式（career.lua）
 	cfg.career = get("rockmech_career") == "true" or get("rockmech_career") == true
 	cfg.solo = get("rockmech_solo") == "true" or get("rockmech_solo") == true    -- 單機版（standalone/）：沒有老師功能
+	cfg.mentor = not (get("rockmech_mentor") == "false" or get("rockmech_mentor") == false)   -- 老礦工（mentor.lua）
 	-- 教學地圖（rockmech_teacher = true）：分組礦帶、老師示範區（第 0 帶）、在別組礦帶裝炸藥無效、營地炸不壞、
 	-- 名單（students.csv）、頭上名牌和暱稱、老師分頁和指令、每人發回營地旗子、每日定時重開。
 	-- 其他地圖（單機、自訂、隨機）全部沒有。沒寫時：有分組礦帶（rockmech_coal_seam_lanes）又不是單機版才算（舊的上課世界）

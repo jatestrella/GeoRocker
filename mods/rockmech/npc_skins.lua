@@ -205,6 +205,21 @@ do
 	SKINS.buyer = p.done()
 end
 
+-- 老礦工（mentor.lua）：灰白頭髮、舊的深藍工作服、毛巾圍脖子、黑雨鞋，舊黃安全帽加礦燈
+do
+	local p = painter()
+	p.head("#c8c4bc", 2)
+	p.r(10, 13, 4, 1, "#a8a49c")                                     -- 鬍渣
+	p.hat("#c8a848", 2)
+	p.top("#34405a")
+	p.r(16, 20, 24, 2, "#e8e4d8"); p.r(28, 20, 12, 2, "#e8e4d8")     -- 脖子上的毛巾
+	p.r(20, 24, 3, 3, "#2a3448")                                     -- 胸前口袋
+	p.r(16, 28, 24, 1, "#4a4038"); p.r(28, 28, 12, 1, "#4a4038")     -- 腰帶
+	p.pants("#3a4258", "#1a1a1a")
+	p.r(0, 25, 16, 7, "#1a1a1a")                                     -- 高筒雨鞋
+	SKINS.mentor = p.done()
+end
+
 function rockmech.npc_skin(role) return SKINS[role] or "character.png" end
 
 ---------------------------------------------------------------------------
@@ -263,6 +278,12 @@ local DRESS = {
 	mechanic = (function()
 		local t = HARDHAT("#f0c020")
 		t[#t + 1] = {bone = "Arm_Right", pos = {x = 0, y = 5.5, z = 3}, rot = {x = -90, y = 225, z = 90}, item = "rockmech:npc_wrench"}
+		return t
+	end)(),
+	mentor = (function()
+		local t = HARDHAT("#c8a848")
+		t[#t + 1] = {bone = "Head", pos = {x = 0, y = HEAD_TOP + 0.2, z = -2.75}, size = {x = 0.14, y = 0.12, z = 0.06}, tex = "#f8f0b0"}  -- 礦燈（臉朝 −z）
+		t[#t + 1] = {bone = "Arm_Right", pos = {x = 0, y = 5.5, z = 3}, rot = {x = -90, y = 225, z = 90}, item = "rockmech:pick"}
 		return t
 	end)(),
 	tools = {
