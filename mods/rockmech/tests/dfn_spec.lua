@@ -143,4 +143,20 @@ describe("DFN 節理面", function()
 		-- 範圍外的粗格不產生這一組
 		for _, d in ipairs(S.dfn:generated(10, 0, 0)) do assert.are.equal(nil, d.set == 1 and d or nil) end
 	end)
+
+	it("層控節理：頁岩裡比砂岩密，而且不跨過層面", function()
+		local lith_at = function(x, y) return y >= 0 and "sandstone" or "shale" end
+		local S = sets_of({{dip = 85, dipdir = 30, spacing = 3, kappa = 40, rmin = 1, rmax = 8, a = 3.5,
+			lith_p32 = {sandstone = 0.5, shale = 2}}}, nil, lith_at)
+		local n = {sandstone = 0, shale = 0}
+		for x = 0, 47 do for y = -12, 11 do for z = 0, 47 do for ax = 1, 3 do
+			if joints.face_joint(S, x, y, z, ax) then
+				local y2 = ax == 2 and y + 1 or y
+				assert.are.equal(lith_at(x, y), lith_at(x, y2))
+				n[lith_at(x, y)] = n[lith_at(x, y)] + 1
+			end
+		end end end end
+		local ratio = n.shale / n.sandstone
+		assert.truthy(ratio > 2.5 and ratio < 6, "shale/sandstone = " .. ratio)
+	end)
 end)

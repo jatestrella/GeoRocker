@@ -1026,7 +1026,8 @@ function config.load(get)
 			end
 		end
 	end
-	-- DFN 每組的範圍：rockmech_joint_region_i = zone=2; lith=sandstone,shale; box=x1,y1,z1,x2,y2,z2
+	-- DFN 每組的範圍：rockmech_joint_region_i = zone=2; lith=sandstone,shale; box=x1,y1,z1,x2,y2,z2; p32=sandstone:0.7,shale:1.5
+	--   p32：層控節理，各岩性的強度倍率（間距 = spacing / 倍率），圓盤碰到層面就停
 	--   （分號分開，可以只寫其中幾項；zone 也可以寫在 rockmech_joint_dfn_i 的第 5 個欄位）
 	for i = 1, #cfg.joint_sets do
 		local key = "rockmech_joint_region_" .. i
@@ -1034,7 +1035,7 @@ function config.load(get)
 		if v and v ~= "" then
 			local js = cfg.joint_sets[i]
 			for part in tostring(v):gmatch("[^;]+") do
-				local k, val = part:match("^%s*(%a+)%s*=%s*(.-)%s*$")
+				local k, val = part:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
 				if k == "zone" and tonumber(val) then js.zone = math.floor(tonumber(val))
 				elseif k == "lith" then
 					local L = {}
@@ -1043,6 +1044,13 @@ function config.load(get)
 						else warnings[#warnings + 1] = key .. ": 沒有岩性 " .. name .. "（忽略）" end
 					end
 					if next(L) then js.lith = L end
+				elseif k == "p32" then
+					local M = {}
+					for name, m in val:gmatch("([%a_]+)%s*:%s*([%d.]+)") do
+						if cfg.lithologies[name] then M[name] = math.max(0, math.min(10, tonumber(m)))
+						else warnings[#warnings + 1] = key .. ": 沒有岩性 " .. name .. "（忽略）" end
+					end
+					if next(M) then js.lith_p32 = M end
 				elseif k == "box" then
 					local n = {}
 					for t in val:gmatch("%-?[%d.]+") do n[#n + 1] = tonumber(t) end
@@ -1054,7 +1062,7 @@ function config.load(get)
 					warnings[#warnings + 1] = key .. ": 看不懂「" .. part .. "」（忽略）"
 				end
 			end
-			if (js.zone or js.lith or js.box) and not js.kappa then cfg.dfn_needed = true end
+			if (js.zone or js.lith or js.box or js.lith_p32) and not js.kappa then cfg.dfn_needed = true end
 		end
 	end
 	if cfg.dfn_needed and not cfg.dfn then

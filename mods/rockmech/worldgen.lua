@@ -69,6 +69,10 @@ M.RECIPES = {
 		joint1 = function(r, dip, dipdir, round, range, pick)
 			return ("%d,%d,%g,0.7,1.5,3"):format(dip, dipdir, round(range(r, 2, 5), 0.5))
 		end,
+		-- 層控節理：陡傾的兩組在砂岩裡疏、頁岩裡密（P32 倍率）
+		p32 = function(r, round, range)
+			return ("sandstone:%g,shale:%g"):format(round(range(r, 0.5, 0.8), 0.1), round(range(r, 1.3, 2), 0.1))
+		end,
 		-- 層面：位態集中、面很大（κ,rmin,rmax,a）
 		dfn1 = function(r, round, range)
 			return ("%d,1.5,%d,3"):format(round(range(r, 40, 80)), round(range(r, 20, 35)))
@@ -104,6 +108,10 @@ M.RECIPES = {
 		end,
 		joint1 = function(r, dip, dipdir, round, range, pick)
 			return ("%d,%d,%g,0.9,1,%d"):format(dip, dipdir, round(range(r, 1, 2), 0.5), pick(r, {2, 3, 4}))
+		end,
+		-- 層控節理：大理岩裡疏、片岩裡密
+		p32 = function(r, round, range)
+			return ("marble:%g,schist:%g"):format(round(range(r, 0.5, 0.8), 0.1), round(range(r, 1.2, 1.8), 0.1))
 		end,
 		-- 葉理：間距小、面中等
 		dfn1 = function(r, round, range)
@@ -221,6 +229,7 @@ function M.generate(world_conf)
 		for j, dd in ipairs({d2, d3}) do
 			set("joint_set_" .. (b + 1 + j), ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), dd, sp(), jr(), ja()))
 			set("joint_dfn_" .. (b + 1 + j), ("%d,1,%d,%g"):format(round(range(r, 15, 35)), round(range(r, 6, 15)), round(range(r, 3.3, 4), 0.1)) .. zs)
+			set("joint_region_" .. (b + 1 + j), "p32=" .. R.p32(r, round, range))
 		end
 	end
 

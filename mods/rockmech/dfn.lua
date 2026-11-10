@@ -14,6 +14,9 @@
 --                 圓盤碰到別的岩層就停（層控節理）
 --   box           只在這個範圍裡 {x1, y1, z1, x2, y2, z2}（含邊界）
 --   同一個地方可以有好幾組各自的參數：例如同一種岩性，在兩個範圍各一組不同位態的節理
+--   lith_p32      層控節理：各岩性的強度倍率 {sandstone = 0.7, shale = 1.5}（沒列的岩性 = 1）。
+--                 每片圓盤屬於圓心所在的岩層，這一層的倍率決定留不留（P32 = 倍率 / spacing），
+--                 而且碰到層面就停。同一組位態，薄而軟的岩層節理比較密
 --
 -- 產生：世界切成 C×C×C 的粗格（預設 16，對齊 mapblock）。每格、每組的圓盤數是 Poisson(λ)，
 --   λ = P32 · C³ / (π·E[r²])；圓心均勻分布、極點 Fisher 抽樣、半徑冪律抽樣，亂數由 (種子, 組, 格) 決定。
@@ -113,8 +116,15 @@ function dfn.new(sets, seed, opts)
 		js.P32 = 1 / math.max(0.05, js.spacing or 3)
 		js.lambda = js.P32 * C * C * C / (pi * E_r2(js.rmin, js.rmax, js.a))
 		if js.rmax > rmax then rmax = js.rmax end
+		js.reach = math.ceil((js.rmax + 1) / C)
+		-- 層控：先照最大的倍率產生，再依圓心岩層的倍率篩掉
+		js.p32max = 1
+		if js.lith_p32 and opts.lith_at then
+			for _, m in pairs(js.lith_p32) do if m > js.p32max then js.p32max = m end end
+		end
 		-- 這一組有沒有範圍限制（沒有對應查詢函式的條件不算）
-		js.ranged = (js.box ~= nil) or (js.zone ~= nil and opts.where ~= nil) or (js.lith ~= nil and opts.lith_at ~= nil)
+		js.ranged = (js.box ~= nil) or (js.zone ~= nil and opts.where ~= nil)
+			or ((js.lith ~= nil or js.lith_p32 ~= nil) and opts.lith_at ~= nil)
 	end
 	D.rmax = rmax
 	D.reach = math.ceil((rmax + 1) / C)
@@ -131,7 +141,7 @@ function dfn.new(sets, seed, opts)
 			return v
 		end
 	end
-	D.gen_cache = cache2(D.cache * 8)
+	D.gen_cache = cache2(D.cache * 32)      -- 一個粗格、一組一筆
 	D.touch_cache = cache2(D.cache)
 	D.face_cache = cache2(D.cache)
 	return setmetatable(D, {__index = dfn})
@@ -139,13 +149,23 @@ end
 
 local function key3(x, y, z) return x .. "," .. y .. "," .. z end
 
--- 粗格 (cx, cy, cz) 裡產生的圓盤（圓心在這一格）
+-- 粗格 (cx, cy, cz) 裡產生的圓盤（圓心在這一格），所有組
 function dfn:generated(cx, cy, cz)
-	return self.gen_cache(key3(cx, cy, cz), function()
+	local out = {}
+	for i = 1, #self.sets do
+		for _, d in ipairs(self:generated_set(cx, cy, cz, i)) do out[#out + 1] = d end
+	end
+	return out
+end
+
+-- 粗格 (cx, cy, cz) 裡第 i 組的圓盤
+function dfn:generated_set(cx, cy, cz, i)
+	return self.gen_cache(key3(cx, cy, cz) .. "," .. i, function()
 		local C, out = self.C, {}
 		local x0, y0, z0 = cx * C - 0.5, cy * C - 0.5, cz * C - 0.5
-		local where = self.where
-		for i, js in ipairs(self.sets) do
+		local where, lith_at = self.where, self.lith_at
+		local js = self.sets[i]
+		do
 			local skip = false
 			local B = js.box
 			if B then
@@ -165,15 +185,22 @@ function dfn:generated(cx, cy, cz)
 			end
 			if not skip then
 				local u = rng(self.mix, self.hash(self.seed, js.id, cx, cy, cz, 0xD15C))
-				local n = poisson(u, js.lambda)
-				for _ = 1, n do
+				local bound = js.lith_p32 and lith_at
+				local n = poisson(u, js.lambda * js.p32max)
+				for k = 1, n do
 					local px, py, pz = x0 + u() * C, y0 + u() * C, z0 + u() * C
 					local nx, ny, nz = sample_fisher(u, js.n, js.kappa)
 					local r = sample_r(u, js.rmin, js.rmax, js.a)
-					self.nid = self.nid + 1
-					out[#out + 1] = {x = px, y = py, z = pz, nx = nx, ny = ny, nz = nz,
-						d = nx * px + ny * py + nz * pz, r = r, set = i, ranged = js.ranged,
-						id = self.hash(cx, cy, cz, i, #out) % 100000}
+					local keep, li = true, nil
+					if bound then
+						li = lith_at(floor(px + 0.5), floor(py + 0.5), floor(pz + 0.5))
+						keep = u() * js.p32max < (js.lith_p32[li] or 1)
+					end
+					if keep then
+						out[#out + 1] = {x = px, y = py, z = pz, nx = nx, ny = ny, nz = nz,
+							d = nx * px + ny * py + nz * pz, r = r, set = i, ranged = js.ranged, lith = li,
+							id = self.hash(cx, cy, cz, i, k) % 100000}
+					end
 				end
 			end
 		end
@@ -184,11 +211,13 @@ end
 -- 會碰到粗格 (cx, cy, cz) 的圓盤（盒子外擴 1 格：面的另一側、方塊的半格）
 function dfn:touching(cx, cy, cz)
 	return self.touch_cache(key3(cx, cy, cz), function()
-		local C, R, out = self.C, self.reach, {}
+		local C, out = self.C, {}
 		local bx0, by0, bz0 = cx * C - 1, cy * C - 1, cz * C - 1
 		local bx1, by1, bz1 = bx0 + C + 1, by0 + C + 1, bz0 + C + 1
+		for i, js in ipairs(self.sets) do
+		local R = js.reach
 		for gx = cx - R, cx + R do for gy = cy - R, cy + R do for gz = cz - R, cz + R do
-			for _, d in ipairs(self:generated(gx, gy, gz)) do
+			for _, d in ipairs(self:generated_set(gx, gy, gz, i)) do
 				-- 圓心到盒子的距離 ≤ r
 				local dx = d.x < bx0 and bx0 - d.x or (d.x > bx1 and d.x - bx1 or 0)
 				local dy = d.y < by0 and by0 - d.y or (d.y > by1 and d.y - by1 or 0)
@@ -202,6 +231,7 @@ function dfn:touching(cx, cy, cz)
 				end
 			end
 		end end end
+		end
 		return out
 	end)
 end
@@ -225,24 +255,27 @@ function dfn:crosses(d, x, y, z, axis)
 		local e = {0, 0, 0}
 		e[axis] = 1
 		local js = self.sets[d.set]
-		if not self:inside(js, x, y, z) or not self:inside(js, x + e[1], y + e[2], z + e[3]) then return false end
+		if not self:inside(js, x, y, z, nil, d) or not self:inside(js, x + e[1], y + e[2], z + e[3], nil, d) then return false end
 	end
 	return true
 end
 
--- 格 (x, y, z) 在不在 js 的範圍裡。info(x, y, z) → 區號、岩性（可選，給快取用）
-function dfn:inside(js, x, y, z, info)
+-- 格 (x, y, z) 在不在 js 的範圍裡（d：層控圓盤還要在同一層）。info(x, y, z) → 區號、岩性（可選，給快取用）
+function dfn:inside(js, x, y, z, info, d)
 	local B = js.box
 	if B and (x < B[1] or x > B[4] or y < B[2] or y > B[5] or z < B[3] or z > B[6]) then return false end
-	if (js.zone and self.where) or (js.lith and self.lith_at) then
+	local dl = d and d.lith
+	local need_l = self.lith_at and (js.lith or dl)
+	if (js.zone and self.where) or need_l then
 		local zn, li
 		if info then zn, li = info(x, y, z)
 		else
 			zn = js.zone and self.where and self.where(x, y, z)
-			li = js.lith and self.lith_at and self.lith_at(x, y, z)
+			li = need_l and self.lith_at(x, y, z)
 		end
 		if js.zone and self.where and zn ~= js.zone then return false end
 		if js.lith and self.lith_at and not js.lith[li] then return false end
+		if dl and li ~= dl then return false end
 	end
 	return true
 end
@@ -296,7 +329,7 @@ function dfn:face_map(cx, cy, cz)
 										local js = sets[d.set]
 										local q = {p[1], p[2], p[3]}
 										q[axis] = q[axis] + 1
-										ok = self:inside(js, p[1], p[2], p[3], info) and self:inside(js, q[1], q[2], q[3], info)
+										ok = self:inside(js, p[1], p[2], p[3], info, d) and self:inside(js, q[1], q[2], q[3], info, d)
 									end
 									if ok then
 										local li = (((p[1] - base[1]) * C + (p[2] - base[2])) * C + (p[3] - base[3])) * 3 + axis
@@ -345,7 +378,7 @@ function dfn:face_traces(x, y, z, axis, sg, info)
 	for _, d in ipairs(self:touching(floor(x / C), floor(y / C), floor(z / C))) do
 		local n = {d.nx, d.ny, d.nz}
 		local f0 = n[1] * fc[1] + n[2] * fc[2] + n[3] * fc[3] - d.d
-		if abs(f0) < 0.5 * (abs(n[u]) + abs(n[v])) and (not d.ranged or self:inside(self.sets[d.set], x, y, z, info)) then
+		if abs(f0) < 0.5 * (abs(n[u]) + abs(n[v])) and (not d.ranged or self:inside(self.sets[d.set], x, y, z, info, d)) then
 			local ex, ey, ez = fc[1] - d.x, fc[2] - d.y, fc[3] - d.z
 			local rr = d.r + 0.71
 			if ex * ex + ey * ey + ez * ez <= rr * rr then
