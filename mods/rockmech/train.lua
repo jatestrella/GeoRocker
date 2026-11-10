@@ -349,7 +349,7 @@ local function depart(acc)
 	local st = states[acc]
 	if not st then return end
 	sync(acc)
-	local ore = cfg.ores.coal
+	local ore = cfg.main_ore
 	local price = ore and rockmech.ore_price(ore) or 0
 	local rec = ore and (rockmech.eff_ore_recovery and rockmech.eff_ore_recovery(acc, ore) or ore.recovery) or 0
 	local rows, net, total_t = {}, 0, 0
@@ -358,7 +358,7 @@ local function depart(acc)
 		local lv, g = O.load_grade({load = ld.load or {}, loadq = ld.loadq or {}})
 		if lv > 0 then
 			local t = tons_of(lv)
-			local m = math.floor(t * g * rec * price - t * (1 - g) * cfg.crusher_fee + 0.5)
+			local m = math.floor(t * g * rec * price - t * (1 - g) * rockmech.gangue_fee(ore) + 0.5)
 			net, total_t = net + m, total_t + t
 			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)), t1(t), ("$%.0f × %.0f%%"):format(price, rec * 100),
 				money_text(m), m >= 0 and 0x80ff80 or 0xff8080}

@@ -47,7 +47,7 @@ local function t1(t) return ("%.1f t"):format(t) end
 local SIZES = {{tons = 40, days = 2}, {tons = 60, days = 3}, {tons = 100, days = 5}}
 local SPECS = {0.60, 0.70, 0.80}
 local function offers(acc)
-	local ore = cfg.ores.coal
+	local ore = cfg.main_ore
 	if not ore then return {} end
 	local d = today()
 	local seed = d * 7919
@@ -55,7 +55,8 @@ local function offers(acc)
 	local r = PcgRandom(seed)
 	local list = {}
 	for i, sz in ipairs(SIZES) do
-		local spec = SPECS[r:next(1, #SPECS)]
+		local specs = ore.specs or SPECS      -- 品位規格：礦種自己的（水泥廠要的比較純）
+		local spec = specs[r:next(1, #specs)]
 		local premium = 1.15 + r:next(0, 20) / 100
 		list[i] = {tons = sz.tons, days = sz.days, spec = spec,
 			price = math.floor(rockmech.ore_price(ore) * spec * premium + 0.5)}
@@ -504,7 +505,7 @@ core.register_entity(NPC, {
 	end,
 	on_punch = function() return true end,
 })
-rockmech.career_npcs[WHO] = {entity = NPC, title = S("Power Plant Buyer"), sells = S("Coal contracts"),
+rockmech.career_npcs[WHO] = {entity = NPC, title = S(cfg.main_ore.buyer or "Power Plant Buyer"), sells = S(cfg.main_ore.contracts or "Coal contracts"),
 	color = "#a0ffb0", tint = "#2f7a46", sit = false, roams = true}
 
 -- 營地附近有人才放採購員，沒人了收掉（不存檔）
@@ -550,7 +551,7 @@ if cfg.teacher then
 			local tons, spec, days, price = (param or ""):match("^%s*(%d+)%s+(%d+)%s+(%d+)%s*(%d*)%s*$")
 			if not tons then return false, S("Usage: /rockmech_order <tons> <grade %> <days> [price/t]") end
 			spec = tonumber(spec) / 100
-			local ore = cfg.ores.coal
+			local ore = cfg.main_ore
 			price = tonumber(price) or math.floor(rockmech.ore_price(ore) * spec * 1.25 + 0.5)
 			local n, skip = 0, 0
 			for i = 0, cfg.career_teams or 0 do

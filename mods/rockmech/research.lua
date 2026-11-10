@@ -40,7 +40,7 @@ local ITEMS = {
 	{key = "ore_recovery", who = "geologist", label = TR("Grade control"), max = 5, base = 25000, minutes = 10,
 		desc = TR("Recovery of ore sold at the crushing station +1%"),
 		value = function(acc)
-			for _, ore in pairs(cfg.ores) do return ("%.0f%%"):format(rockmech.eff_ore_recovery(acc, ore) * 100) end
+			for _, ore in ipairs(cfg.active_ores) do return ("%.0f%%"):format(rockmech.eff_ore_recovery(acc, ore) * 100) end
 			return "—"
 		end},
 	{key = "blast_design", who = "geologist", label = TR("Blast design"), max = 4, base = 25000, minutes = 10,

@@ -32,9 +32,26 @@ describe("config.load", function()
 		assert.are.equal(0, cfg.surface_y)
 		assert.are.equal(0.5, cfg.k0)
 		assert.is_true(cfg.replace_stone)
-		assert.are.equal(4, #cfg.lithology_order)
+		assert.are.equal(6, #cfg.lithology_order)
 		assert.are.equal(3, #cfg.joint_sets)
 		assert.are.equal(0, #warn)
+		assert.are.equal("coal", cfg.main_ore.lith)      -- 沒設定 rockmech_ores 就是煤
+	end)
+
+	it("rockmech_ores 選這張地圖的礦", function()
+		local cfg, warn = config.load(getter({rockmech_ores = "marble"}))
+		assert.are.equal("marble", cfg.main_ore.lith)
+		assert.are.equal(1, #cfg.active_ores)
+		assert.are.equal(0, #warn)
+		local cfg2, warn2 = config.load(getter({rockmech_ores = "gold"}))
+		assert.are.equal("coal", cfg2.main_ore.lith)
+		assert.are.equal(1, #warn2)
+	end)
+
+	it("大理岩的截止品位比煤高", function()
+		local cfg = config.load(getter({}))
+		local function cut(ore) return (ore.fee or cfg.crusher_fee) / (ore.price * ore.recovery + (ore.fee or cfg.crusher_fee)) end
+		assert.is_true(cut(cfg.ores.marble) > cut(cfg.ores.coal) + 0.3)
 	end)
 
 	it("設定覆寫 y0、K0、replace_stone", function()

@@ -281,7 +281,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 					if strata then
 						local key, _, fr = stress.strata_at(strata, x, y, z, cols[x .. "," .. z])
 						cv, pv = c_var[key], c_plane[key]
-						if key == "coal" then sfrac = fr end
+						if cfg.lithologies[key].ore then sfrac = fr end      -- 礦層（煤、大理岩）：品位照在層裡的位置
 					end
 					if plane then
 						data[vi] = (coal and c_plane.coal or pv)[suffix(cell_traces(joints, sets, x, y, z, MAXL))]
@@ -310,7 +310,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 				-- 鄰近 chunk 寫進邊緣的其他天然方塊（礦石、凍土、冰…）→ 該位置的岩性
 				local p = area:position(i)
 				local key = stress.lith_key_at(cfg, p.x, p.y, p.z)
-				if key == "coal" then
+				if cfg.lithologies[key].ore then
 					if strata then
 						local _, _, fr = stress.strata_at(strata, p.x, p.y, p.z)
 						p2data[i] = stress.strata_grade(p.x, p.z, fr)
@@ -348,7 +348,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 
 	if changed then
 		vm:set_data(data)
-		if seam or pit then vm:set_param2_data(p2data) end
+		if seam or pit or strata then vm:set_param2_data(p2data) end      -- 柱狀圖的礦層也有品位（以前漏寫，全用預設品位）
 		-- stone → 岩性 光照不變；剝除土壤會改變光照與水的流動
 		if stripped > 0 then
 			vm:calc_lighting()

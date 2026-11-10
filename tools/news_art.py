@@ -14,7 +14,7 @@ FONT = {  # 3×5 點陣字
     'L': ['100', '100', '100', '100', '111'], 'I': ['111', '010', '010', '010', '111'],
     'V': ['101', '101', '101', '101', '010'], 'C': ['111', '100', '100', '100', '111'],
     'O': ['111', '101', '101', '101', '111'], '2': ['111', '001', '111', '100', '111'],
-    '$': ['111', '110', '111', '011', '111'], ' ': ['000'] * 5,
+    '$': ['111', '110', '111', '011', '111'], 'A': ['111', '101', '111', '101', '101'], ' ': ['000'] * 5,
 }
 
 def text(d, x, y, s, c):
@@ -168,9 +168,42 @@ def infrastructure(d):
     for y in (10, 15, 20, 25): d.line([(50, y), (74, y)], (120, 120, 130))
     d.rectangle([50, 21, 74, 27], (180, 180, 185))
 
+def cement_works(d, x, y, smoke_on=True):
+    # 水泥廠：兩支筒倉、斜放的旋窯、預熱塔
+    d.rectangle([x, y - 16, x + 5, y], (205, 205, 200)); d.rectangle([x + 7, y - 16, x + 12, y], (205, 205, 200))
+    d.rectangle([x + 15, y - 22, x + 19, y], (170, 170, 175))
+    d.line([(x + 19, y - 6), (x + 36, y - 2)], (150, 140, 130), 3)
+    if smoke_on: smoke(d, x + 17, y - 26, 3, (200, 200, 200))
+
+def housing_cool(d):
+    sky(d, (150, 160, 175), (205, 210, 215)); ground(d, 27, (120, 120, 115))
+    for x, h in ((4, 14), (14, 20), (26, 11), (36, 17)):
+        d.rectangle([x, 27 - h, x + 8, 27], (175, 170, 160))
+        for wy in range(27 - h + 2, 26, 3):
+            for wx in range(x + 1, x + 8, 3): d.point((wx, wy), (70, 80, 100))
+    d.rectangle([24, 2, 44, 8], (240, 240, 235)); text(d, 26, 3, 'SALE', (200, 30, 40))
+    arrow(d, 60, 10, False, (240, 60, 60))
+
+def cement_export(d):
+    sky(d, (100, 170, 235), (180, 215, 245))
+    d.rectangle([0, 22, W - 1, SH - 1], (40, 90, 150))
+    for x in range(0, W, 6): d.line([(x, 25), (x + 3, 25)], (90, 140, 200))
+    d.polygon([(6, 18), (54, 18), (50, 25), (10, 25)], (60, 60, 70))          # 船身
+    for x in (12, 22, 32): d.rectangle([x, 12, x + 7, 18], (205, 205, 200))   # 水泥艙
+    d.rectangle([44, 9, 50, 18], (230, 230, 230))
+    arrow(d, 62, 14, True, (60, 200, 90))
+
+def kiln_overhaul(d):
+    sky(d, (140, 180, 220), (200, 220, 240)); ground(d, 27, (150, 150, 140), (120, 120, 110), 12)
+    cement_works(d, 8, 27, smoke_on=False)
+    for x in range(50, 76, 6): d.polygon([(x, 27), (x + 3, 19), (x + 5, 19), (x + 2, 27)], (240, 140, 30))   # 三角錐
+    d.rectangle([48, 14, 77, 17], (240, 200, 40))
+    for x in range(48, 78, 6): d.rectangle([x, 14, x + 2, 17], (30, 30, 30))
+
 SCENES = {'miyi_war': miyi_war, 'wue_war': wue_war, 'opec_cut': opec_cut, 'cold_wave': cold_wave,
           'warm_winter': warm_winter, 'typhoon': typhoon, 'coal_cut': coal_cut, 'carbon_fee': carbon_fee,
-          'recession': recession, 'infrastructure': infrastructure}
+          'recession': recession, 'infrastructure': infrastructure,
+          'housing_cool': housing_cool, 'cement_export': cement_export, 'kiln_overhaul': kiln_overhaul}
 
 def frame(scene):
     im = Image.new('RGBA', (W, H), (0, 0, 0, 255))

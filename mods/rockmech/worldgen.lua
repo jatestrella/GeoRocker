@@ -11,6 +11,9 @@
 --   gen_fold     褶皺振幅 0–25 m（波長 150–300 m，軸向大致沿走向）
 --   gen_terrain  hills（丘陵）或 cuesta（單面山：順向坡＋陡崖，傾角大就是豬背嶺）
 --   gen_relief   地形起伏 0–40 m（出生點附近 60 m 內是平地，給營地）
+--   gen_ore      coal（煤礦，預設）或 marble（大理岩：花蓮大南澳片岩，大理岩夾在黑色片岩裡）。
+--                大理岩：single = 片岩裡一層厚大理岩（15–40 m），inter = 片岩、大理岩互層；傾角 20–70°（比煤陡）；
+--                第 1 組節理是葉理（間距密、面平滑、有綠泥石雲母，Jr 1、Ja 2–4），世界設定 rockmech_ores = marble
 -- 其他：節理第 1 組是層面（地層的平均位態），第 2、3 組陡傾、走向大致互相垂直，Jr、Ja 取 Q 法表格值；
 -- 各岩性的 GSI；現地應力 K_Hmax、K_hmin、σHmax 方位。
 -- 地質不直接顯示（要自己鑽岩心、量節理）；老師用 /rockmech_geology 查（單機版看不到，直接看世界資料夾的 rockmech.conf）。
@@ -43,9 +46,11 @@ function M.generate(world_conf)
 		return pick(r, t)
 	end
 
+	local ore = world_conf:get("rockmech_gen_ore") == "marble" and "marble" or "coal"
+	local marble = ore == "marble"
 	local mode = choice("strata", {"single", "inter"})
 	local terrain = choice("terrain", {"hills", "cuesta"})
-	local dip = math.max(3, round(40 * frac("dip")))
+	local dip = marble and round(20 + 50 * frac("dip")) or math.max(3, round(40 * frac("dip")))
 	local dipdir = r:next(0, 359)
 	local dist = round(20 + 35 * frac("outcrop"))
 	local var = round(0.6 * frac("thickvar"), 0.01)
@@ -60,10 +65,30 @@ function M.generate(world_conf)
 		if last and last[1] == lith then last[2] = last[2] + round(t, 0.5)      -- 同一種岩性相鄰：併成一層
 		else beds[#beds + 1] = {lith, round(t, 0.5)} end
 	end
-	local host = pick(r, {"shale", "sandstone"})
+	local host = marble and "schist" or pick(r, {"shale", "sandstone"})
 	local main_top, main_i    -- 主煤層頂離柱狀圖頂面的真厚度、主煤層是第幾層
 	local function sum() local d = 0 for _, b in ipairs(beds) do d = d + b[2] end return d end
-	if mode == "single" then
+	if marble and mode == "single" then
+		add("schist", 40)
+		main_top = sum()
+		add("marble", range(r, 15, 40))
+		main_i = #beds
+		add("schist", 250)
+	elseif marble then
+		-- 片岩、大理岩互層：主礦層比較厚，其他幾層薄的大理岩夾在片岩裡
+		local main = r:next(1, nseam)
+		add("schist", range(r, 6, 15))
+		for k = 1, nseam do
+			if k == main then
+				main_top = sum()
+				add("marble", range(r, 12, 30)); main_i = #beds
+			else
+				add("marble", range(r, 2, 8))
+			end
+			add("schist", range(r, 4, 15))
+		end
+		while sum() < main_top + 250 do add("schist", 20) end
+	elseif mode == "single" then
 		add(host, 40)
 		main_top = sum()
 		add("coal", range(r, 4, 12))
@@ -127,7 +152,7 @@ function M.generate(world_conf)
 	set("only_lithologies", "true")
 	set("lith_mode", "zones")
 	set("zone_width", 100000)
-	set("zone_order", mode == "single" and host or "shale")
+	set("zone_order", (mode == "single" or marble) and host or "shale")
 	set("strata", table.concat(parts, ","))
 	set("strata_attitude", ("%d,%d,%g"):format(dip, dipdir, round(y0, 0.1)))
 	if foldA > 0 then set("strata_fold", ("%d,%d,%d"):format(foldA, foldL, foldAz)) end
@@ -136,8 +161,17 @@ function M.generate(world_conf)
 	set("gsi_sandstone", round(range(r, 45, 70)))
 	set("gsi_shale", round(range(r, 35, 60)))
 	set("gsi_coal", round(range(r, 30, 50)))
-	-- 第 1 組：層面（地層的平均位態，煤質軟、填充物多）；第 2、3 組：陡傾的節理
-	set("joint_set_1", ("%d,%d,%g,0.7,1.5,3"):format(dip, dipdir, sp()))
+	if marble then
+		set("gsi_marble", round(range(r, 50, 75)))
+		set("gsi_schist", round(range(r, 30, 55)))
+		set("ores", "marble")
+	end
+	-- 第 1 組：層面（地層的平均位態，煤質軟、填充物多）；大理岩地圖是片岩的葉理（間距密、面平滑）；第 2、3 組：陡傾的節理
+	if marble then
+		set("joint_set_1", ("%d,%d,%g,0.9,1,%d"):format(dip, dipdir, round(range(r, 1, 2), 0.5), pick(r, {2, 3, 4})))
+	else
+		set("joint_set_1", ("%d,%d,%g,0.7,1.5,3"):format(dip, dipdir, sp()))
+	end
 	set("joint_set_2", ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), d2, sp(), jr(), ja()))
 	set("joint_set_3", ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), d3, sp(), jr(), ja()))
 	set("joint_persistence", "patch")
@@ -158,8 +192,8 @@ function M.generate(world_conf)
 	local mg = {mg_name = "flat", mg_flags = "nocaves, nodungeons, light, nodecorations, nobiomes, noores",
 		mgflat_spflags = "nolakes, nohills, nocaverns", mgflat_ground_level = "0", water_level = "-31000"}
 	for k, v in pairs(mg) do core.set_mapgen_setting(k, v, true) end
-	core.log("action", ("[rockmech] 地圖產生器：種子 %s → %s %d 層煤、傾角 %d°/%03d°、露頭 %d m 外、營地底下 %d m、褶皺 %d m、厚度變化 %d%%、%s %d m"):format(
-		seed_str, mode, nseam, dip, dipdir, dist, depth, foldA, math.floor(var * 100 + 0.5), terrain, relief))
+	core.log("action", ("[rockmech] 地圖產生器：種子 %s → %s %s %d 層、傾角 %d°/%03d°、露頭 %d m 外、營地底下 %d m、褶皺 %d m、厚度變化 %d%%、%s %d m"):format(
+		seed_str, ore, mode, nseam, dip, dipdir, dist, depth, foldA, math.floor(var * 100 + 0.5), terrain, relief))
 	return true
 end
 
@@ -176,15 +210,18 @@ function M.register_command()
 			local out = {}
 			if g("strata") ~= "-" then
 				-- 柱狀圖：列到最後一層煤再多兩層，煤層用 [ ] 標出來
-				local col, last_coal = {}, 0
+				local col, last_coal, seen, gsi = {}, 0, {}, {}
 				local function name(k) local L = rockmech.cfg.lithologies[k]; return L and S(L.description) or k end
 				for lith, t in g("strata"):gmatch("([%a_]+):([%d.]+)") do
-					col[#col + 1] = lith == "coal" and ("[" .. t .. " m " .. name(lith) .. "]") or (t .. " m " .. name(lith))
-					if lith == "coal" then last_coal = #col end
+					local L = rockmech.cfg.lithologies[lith]
+					local is_ore = L and L.ore
+					col[#col + 1] = is_ore and ("[" .. t .. " m " .. name(lith) .. "]") or (t .. " m " .. name(lith))
+					if is_ore then last_coal = #col end
+					if not seen[lith] then seen[lith] = true; gsi[#gsi + 1] = name(lith) .. " " .. g("gsi_" .. lith) end
 				end
 				for k = #col, last_coal + 3, -1 do col[k] = nil end
 				out[#out + 1] = S("Strata (top down): @1", table.concat(col, ", ") .. " …")
-				out[#out + 1] = ("GSI  %s %s  %s %s  %s %s"):format(name("sandstone"), g("gsi_sandstone"), name("shale"), g("gsi_shale"), name("coal"), g("gsi_coal"))
+				out[#out + 1] = "GSI  " .. table.concat(gsi, "  ")
 				out[#out + 1] = S("Attitude dip/dip direction, top at (0,0): @1", g("strata_attitude"))
 				out[#out + 1] = S("Fold amplitude,wavelength,axis: @1   thickness variation,scale: @2   terrain: @3", g("strata_fold"), g("strata_var"), g("terrain"))
 			end

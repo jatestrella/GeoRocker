@@ -155,7 +155,7 @@ local function cut_cell(self, c)
 	if rockmech.lith_of_node[n] then
 		if room < NLEV then return "full" end
 		self.cut_now = (self.cut_now or 0) + 1
-		if n:find("coal", 1, true) then self.cut_coal = (self.cut_coal or 0) + 1 end
+		if rockmech.lith_of_node[n].ore then self.cut_coal = (self.cut_coal or 0) + 1 end      -- 切到礦層（煤、大理岩）
 		local rn, rp = rockmech.rubble_node(node)
 		V.load_put(self, rockmech.rubble_base[rn], NLEV, rp)
 		core.remove_node(c)
@@ -341,7 +341,8 @@ local function debris(self, pos, s, coal_part)
 			texture = ("[fill:4x4:%s^[fill:2x2:0,0:#00000040"):format(color),
 		})
 	end
-	spawn("#1e1e22", math.floor(18 * coal_part + 0.5))
+	local ore = rockmech.cfg.main_ore
+	spawn(ore.key == "coal" and "#1e1e22" or ore.pure, math.floor(18 * coal_part + 0.5))
 	spawn("#7a7068", math.floor(18 * (1 - coal_part) + 0.5))
 end
 

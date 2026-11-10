@@ -19,7 +19,7 @@ local KEY = "belt_switches"
 local list = core.deserialize(storage:get_string(KEY)) or {}    -- 位置字串 → {mode = "run"|"stop"|"price", price = $/t, owner}
 local function save() storage:set_string(KEY, core.serialize(list)) end
 
-local function main_ore() for _, ore in pairs(cfg.ores) do return ore end end
+local function main_ore() return cfg.main_ore end      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）
 local function price_now()
 	local ore = main_ore()
 	return ore and rockmech.ore_price and rockmech.ore_price(ore) or 0

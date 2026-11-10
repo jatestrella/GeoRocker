@@ -30,11 +30,11 @@ local BOOM = "rockmech:plant_boom"
 local BOOM_REST = 3         -- 沒車時放料臂朝外伸出多長 (m)
 local STALL_T = 10          -- 連續停機多久才算停機 (s)
 local TOWER_OFF = 4         -- 塔中心離機身中心（左右）
-local SIDES = {{key = "p", s = 1, label = S("Clean coal")}, {key = "r", s = -1, label = S("Rejects")}}
+local SIDES = {{key = "p", s = 1, label = S(cfg.main_ore.product or "Clean coal")}, {key = "r", s = -1, label = S("Rejects")}}
 
--- 選礦場的主要礦種（只有一種礦：煤）
+-- 選礦場的主要礦種（這張地圖的主要礦：煤或大理岩）
 local function main_ore()
-	for _, ore in pairs(cfg.ores) do return ore end
+	return cfg.main_ore      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）
 end
 
 -- 機身 pos、受料倉朝 d：side s 的塔中心、放料口位置與朝外的方向
@@ -200,9 +200,9 @@ local function formspec(pos)
 			or S("Pre-sorting plant   Running"))),
 		("button[6,0.2;2.6,0.8;toggle;%s]"):format(core.formspec_escape(stopped and S("Start") or S("Stop"))),
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(S("Capacity: @1 t/s   Loading: @2 t/s", ("%g"):format(cfg.plant_rate), ("%g"):format(cfg.plant_load_rate)))),
-		("label[0.5,1.8;%s]"):format(core.formspec_escape(S("Separation: @1% of the coal goes to clean coal, @2% of the waste is misplaced into clean coal",
-			("%.0f"):format(rockmech.eff_plant_recovery(meta:get_string("owner")) * 100),
-			("%.0f"):format(rockmech.eff_plant_misplaced(meta:get_string("owner")) * 100)))),
+		("label[0.5,1.8;%s]"):format(core.formspec_escape(S("Separation: @1 @2% into @3, @4 @5% misplaced into @6", S(main_ore().label),
+			("%.0f"):format(rockmech.eff_plant_recovery(meta:get_string("owner")) * 100), SIDES[1].label, rockmech.gangue_label(main_ore()),
+			("%.0f"):format(rockmech.eff_plant_misplaced(meta:get_string("owner")) * 100), SIDES[1].label))),
 		("label[0.5,2.5;%s]"):format(core.formspec_escape(parts[1])),
 		("label[0.5,3.1;%s]"):format(core.formspec_escape(parts[2])),
 		("label[0.5,3.7;%s]"):format(core.formspec_escape(S("When a truck or haul truck stands still within @1 m of a loading boom, the boom swings over and loads it", ("%g"):format(cfg.plant_reach)))),

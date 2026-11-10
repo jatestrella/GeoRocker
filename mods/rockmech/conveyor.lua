@@ -21,7 +21,7 @@ local BELT_H, BELT_ST, NAME = {}, {}, {}    -- node 名稱 → 表面高度 h（
 local SAVE_EVERY = 10       -- 輸送帶上的料多久存檔一次 (s)
 
 local function main_ore()
-	for _, ore in pairs(cfg.ores) do return ore end
+	return cfg.main_ore      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）
 end
 -- 每格最多升降幾個 1/8 m
 local function rmax() return math.max(0, math.floor(8 * math.tan(math.rad(cfg.conveyor_max_angle)) + 1e-6)) end

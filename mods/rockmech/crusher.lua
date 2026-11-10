@@ -66,8 +66,12 @@ local function price_change(ore)
 	return factor(ore) / prev - 1
 end
 local function main_ore()
-	for _, ore in pairs(cfg.ores) do return ore end
+	return cfg.main_ore      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）
 end
+rockmech.main_ore = main_ore
+-- 每噸廢石的處理費：礦種自己的（大理岩：水泥廠的雜質罰款），沒寫就用 rockmech_crusher_fee
+function rockmech.gangue_fee(ore) ore = ore or cfg.main_ore; return ore and ore.fee or cfg.crusher_fee end
+function rockmech.gangue_label(ore) ore = ore or cfg.main_ore; return S(ore and ore.gangue or "Gangue") end
 local function price_text(ore)
 	local c = price_change(ore)
 	return S("@1 price $@2/t (@3 @4%)", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)), c >= 0 and "▲" or "▼", ("%.0f"):format(math.abs(c) * 100))
@@ -209,12 +213,12 @@ local function open_market()
 	if days <= 0 then return end
 	storage:set_int(PRICE_DAY, today)
 	local lo, hi = math.log(cfg.price_min), math.log(cfg.price_max)
-	for _, ore in pairs(cfg.ores) do storage:set_float(PRICE_PREV .. ore.key, factor(ore)) end
+	for _, ore in ipairs(cfg.active_ores) do storage:set_float(PRICE_PREV .. ore.key, factor(ore)) end
 	-- 每天：市場（market.lua）先走一步（事件、柴油、炸藥、鋼材，事件開始時煤價也會先跳），煤價再往事件的目標走
 	local first = today - math.min(days, 30)
 	for d = first + 1, today do
 		local z_oil = rockmech.market_day_step and rockmech.market_day_step(d)
-		for _, ore in pairs(cfg.ores) do
+		for _, ore in ipairs(cfg.active_ores) do
 			local m = rockmech.market_target and rockmech.market_target(ore.key) or 0
 			local r = z_oil and rockmech.market_coal_oil or 0
 			local z = r * (z_oil or 0) + math.sqrt(1 - r * r) * gauss()
@@ -223,7 +227,7 @@ local function open_market()
 			storage:set_float(PRICE .. ore.key, math.exp(x))
 		end
 	end
-	for _, ore in pairs(cfg.ores) do
+	for _, ore in ipairs(cfg.active_ores) do
 		local prev = ore.price * storage:get_float(PRICE_PREV .. ore.key)
 		rockmech.notify_all(S("[Market] Today's @1 price $@2/t (yesterday $@3, @4 @5%)", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)),
 			("%.0f"):format(prev), price_change(ore) >= 0 and "▲" or "▼", ("%.0f"):format(math.abs(price_change(ore)) * 100)))
@@ -443,7 +447,7 @@ local function report(meta, owner, dump, day)
 				("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), rockmech.eff_ore_recovery(owner, ore) * 100) .. (r < 1 and (" × %.0f%%"):format(r * 100) or ""),
 				money_text(bg), GREEN}
 		end
-		rows[#rows + 1] = {S("Gangue"), ("%.1f t"):format(bt - bq), ("$%g"):format(cfg.crusher_fee), money_text(-bf), RED}
+		rows[#rows + 1] = {rockmech.gangue_label(ore), ("%.1f t"):format(bt - bq), ("$%g"):format(rockmech.gangue_fee(ore)), money_text(-bf), RED}
 		-- 人事費（wages.lua：雇員薪水在組員在線時已經陸續扣了，這裡列出來、算進淨收入）
 		local wage = 0
 		local wamt, wsec = (rockmech.wage_take or function() end)(rockmech.account_of(owner), day)
@@ -523,7 +527,7 @@ local function crush(pos, dtime)
 		if dump then fee = fee + tons * cfg.dump_fee
 		else
 			if ore then gross = gross + tons * grade * rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * rockmech.ore_price(ore) * rockmech.yard_ratio() end
-			fee = fee + tons * (1 - grade) * cfg.crusher_fee
+			fee = fee + tons * (1 - grade) * rockmech.gangue_fee(ore)
 		end
 	end)
 	local income = gross - fee
@@ -563,7 +567,7 @@ local function formspec(pos, viewer)
 	local qt = tons_of(queue)
 	local queue_text = S("Queue @1 t, about @2 s to process", ("%.1f"):format(qt), tostring(math.ceil(qt / rate)))
 	local prices = {}
-	for _, ore in pairs(cfg.ores) do
+	for _, ore in ipairs(cfg.active_ores) do
 		prices[#prices + 1] = S("@1 at 100% grade: $@2 per tonne today (base $@3), recovery @4%", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)),
 			("%g"):format(ore.price), ("%.0f"):format(rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * 100))
 	end
@@ -572,7 +576,7 @@ local function formspec(pos, viewer)
 		("label[0.5,0.6;%s]"):format(core.formspec_escape(dump and S("Waste dump (rubble dumped here is discarded, no income)") or title_of(pos))),
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(dump
 			and S("Capacity: @1 t/s   Dumping fee: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.dump_fee))
-			or S("Capacity: @1 t/s   Gangue: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.crusher_fee)))),
+			or S("Capacity: @1 t/s   @2: $@3 per tonne", ("%g"):format(rate), rockmech.gangue_label(), ("%g"):format(rockmech.gangue_fee())))),
 		("label[0.5,1.8;%s]"):format(core.formspec_escape(dump and S("Ore dumped here is also discarded as waste") or table.concat(prices, "; "))),
 		("textarea[0.5,6.5;10,1;;;%s]"):format(core.formspec_escape(queue_text)),
 		("button[0.5,5.5;8,0.8;mode;%s]"):format(core.formspec_escape(dump and S("Switch to crusher (sell ore)")

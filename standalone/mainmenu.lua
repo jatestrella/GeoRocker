@@ -47,18 +47,23 @@ local MAPGEN = {
 
 local state = {page = "title", map = nil, msg = nil, confirm = false}
 
--- 自訂煤礦的地質選項（mods/rockmech/worldgen.lua 的 rockmech_gen_*）。滑桿 0–100，旁邊顯示換算的實際值
-local GEN_STRATA = {{"single", "單一煤層"}, {"inter", "砂頁岩煤互層"}}
+-- 自訂地圖的地質選項（mods/rockmech/worldgen.lua 的 rockmech_gen_*）。滑桿 0–100，旁邊顯示換算的實際值
+-- 礦種（隨機地圖也可以選）：煤礦，或大理岩（花蓮大南澳片岩：大理岩夾在黑色片岩裡，傾角比較陡）
+local GEN_ORE = {{"coal", "煤礦"}, {"marble", "大理岩"}}
+local gen = {ore = 1, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30, seed = ""}
+local function marble() return GEN_ORE[gen.ore][1] == "marble" end
+local GEN_STRATA = {{"single", "單一煤層", "單一大理岩層"}, {"inter", "砂頁岩煤互層", "片岩大理岩互層"}}
 local GEN_TERRAIN = {{"hills", "丘陵"}, {"cuesta", "單面山"}}
 local GEN_SLIDERS = {
 	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end},
-	{"seams", "煤層數（互層）", function(v) return ("%d 層"):format(1 + math.floor(4 * v / 100 + 0.5)) end},
-	{"outcrop", "主煤層露頭距離", function(v) return ("營地外 %d m"):format(math.floor(20 + 35 * v / 100 + 0.5)) end},
-	{"dip", "地層傾角", function(v) return ("%d°"):format(math.max(3, math.floor(40 * v / 100 + 0.5))) end},
+	{"seams", "礦層數（互層）", function(v) return ("%d 層"):format(1 + math.floor(4 * v / 100 + 0.5)) end},
+	{"outcrop", "主礦層露頭距離", function(v) return ("營地外 %d m"):format(math.floor(20 + 35 * v / 100 + 0.5)) end},
+	{"dip", "地層傾角", function(v)
+		if marble() then return ("%d°"):format(math.floor(20 + 50 * v / 100 + 0.5)) end
+		return ("%d°"):format(math.max(3, math.floor(40 * v / 100 + 0.5))) end},
 	{"thickvar", "厚度變化", function(v) return ("±%d%%"):format(math.floor(60 * v / 100 + 0.5)) end},
 	{"fold", "褶皺", function(v) return ("振幅 %d m"):format(math.floor(25 * v / 100 + 0.5)) end},
 }
-local gen = {strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30, seed = ""}
 local function gen_randomize()
 	math.randomseed(os.time())
 	gen.strata, gen.terrain = math.random(1, 2), math.random(1, 2)
@@ -165,8 +170,14 @@ local function create_save(m, title, kind)
 	for _, f in ipairs(list_dir(m.dir, false)) do
 		if f ~= "map.conf" and not copy_file(m.dir .. DS .. f, w.path .. DS .. f) then return nil, "複製 " .. f .. " 失敗" end
 	end
+	if m.random then
+		local c = Settings(w.path .. DS .. "rockmech.conf")
+		c:set("rockmech_gen_ore", GEN_ORE[gen.ore][1])
+		if not c:write() then return nil, "寫入地質選項失敗" end
+	end
 	if m.custom then
 		local c = Settings(w.path .. DS .. "rockmech.conf")
+		c:set("rockmech_gen_ore", GEN_ORE[gen.ore][1])
 		c:set("rockmech_gen_strata", GEN_STRATA[gen.strata][1])
 		c:set("rockmech_gen_terrain", GEN_TERRAIN[gen.terrain][1])
 		for _, sl in ipairs(GEN_SLIDERS) do c:set("rockmech_gen_" .. sl[1], tostring(gen[sl[1]])) end
@@ -372,16 +383,20 @@ local function formspec()
 			fs[#fs + 1] = ("label[0.5,2.1;%s]"):format(F(state.page == "new_random" and "隨機地圖" or state.page == "new_custom" and "自訂地圖" or m.title))
 			fs[#fs + 1] = ("textarea[0.5,2.4;13,1.2;;;%s]"):format(F(m.description))
 			y = 3.8
+			local function dd(x, name, label, opts, idx, col)
+				local t = {}
+				for _, o in ipairs(opts) do t[#t + 1] = F(o[col or 2]) end
+				fs[#fs + 1] = ("label[%g,%g;%s]"):format(x, y, F(label))
+				fs[#fs + 1] = ("dropdown[%g,%g;3.0,0.7;%s;%s;%d;true]"):format(x + 1.2, y - 0.35, name, table.concat(t, ","), idx)
+			end
+			if m.random or m.custom then
+				dd(0.5, "g_ore", "礦種", GEN_ORE, gen.ore)
+			end
+			if m.random then y = y + 0.9 end
 			if m.custom then
 				-- 地質選項
-				local function dd(x, name, label, opts, idx)
-					local t = {}
-					for _, o in ipairs(opts) do t[#t + 1] = F(o[2]) end
-					fs[#fs + 1] = ("label[%g,%g;%s]"):format(x, y, F(label))
-					fs[#fs + 1] = ("dropdown[%g,%g;4.2,0.7;%s;%s;%d;true]"):format(x + 2, y - 0.35, name, table.concat(t, ","), idx)
-				end
-				dd(0.5, "g_strata", "地層", GEN_STRATA, gen.strata)
-				dd(7.1, "g_terrain", "地形", GEN_TERRAIN, gen.terrain)
+				dd(5.0, "g_strata", "地層", GEN_STRATA, gen.strata, marble() and 3 or 2)
+				dd(9.5, "g_terrain", "地形", GEN_TERRAIN, gen.terrain)
 				y = y + 0.9
 				fs[#fs + 1] = "scrollbaroptions[min=0;max=100;smallstep=1;largestep=10]"
 				for _, sl in ipairs(GEN_SLIDERS) do
@@ -435,6 +450,7 @@ core.button_handler = function(fields)
 	if fields.new_title then state.new_title = fields.new_title end
 	-- 自訂煤礦的選項（每次送出都記下來，種子欄位也是）
 	if fields.g_seed then gen.seed = fields.g_seed end
+	if fields.g_ore then gen.ore = tonumber(fields.g_ore) or gen.ore end
 	if fields.g_strata then gen.strata = tonumber(fields.g_strata) or gen.strata end
 	if fields.g_terrain then gen.terrain = tonumber(fields.g_terrain) or gen.terrain end
 	for _, sl in ipairs(GEN_SLIDERS) do
@@ -467,6 +483,7 @@ core.button_handler = function(fields)
 			or state.page == "new_template" and templates()[state.tpl or 0]
 		if m then
 			local kind = state.page == "new_random" and "隨機地圖" or state.page == "new_custom" and "自訂地圖" or m.title
+			if (m.random or m.custom) and marble() then kind = "大理岩" .. kind end
 			local sv, err = create_save(m, state.new_title, kind)
 			if sv then
 				state.page, state.sel, state.msg = "main", nil, nil

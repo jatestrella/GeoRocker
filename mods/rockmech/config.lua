@@ -60,10 +60,25 @@ config.lithologies.coal = {
 	rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 2.0,
 }
 
+-- 大理岩地圖（大南澳片岩）：大理岩（礦石，品位 = 碳酸鈣純度）夾在黑色片岩裡。片岩的葉理是弱面（第 1 組節理）
+config.lithologies.marble = {
+	name = "marble", description = TR("Marble"), ore = "marble",
+	gamma = 27.0, ucs = 90.0, tensile = 7.0, mi = 9,
+	color = "#dcdad2", cracky = 3,
+	texture = "default_stone.png^[colorize:#f4f2ec:215",
+	rn = 0.40, rt = 0.85, mu_roll = 0.40, break_height = 4.0,
+}
+config.lithologies.schist = {
+	name = "schist", description = TR("Schist"),
+	gamma = 27.0, ucs = 45.0, tensile = 3.0, mi = 12,
+	color = "#4b544d", cracky = 3,
+	rn = 0.30, rt = 0.80, mu_roll = 0.50, break_height = 2.5,
+}
+
 -- 方塊尺度的小節理（方塊 = 岩體，裡面的小節理只用 GSI 代表）的面況：Q 系統的 Jr、Ja。
 -- 只用來把 GSI 換成岩芯看得到的 RQD（Hoek、Carter & Diederichs 2013：GSI = 52·(Jr/Ja)/(1 + Jr/Ja) + RQD/2），不影響力學。
 -- 沒列的岩性用 Jr 2、Ja 1
-for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}}) do
+for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}, marble = {2, 1}, schist = {1, 3}}) do
 	local l = config.lithologies[key]
 	if l then l.jr, l.ja = v[1], v[2] end
 end
@@ -73,10 +88,18 @@ end
 --   pure    純礦石的顏色；waste_color：廢石的顏色（未破碎的方塊用兩者之間的顏色）
 --   label   顯示用；default：沒指定品位的方塊算多少（param2）
 --   price   品位 100% 時每噸的售價；recovery：選礦回收率（破碎站，見 config.crush_income）
+--   fee     每噸廢石的處理費（沒寫就用 rockmech_crusher_fee）；gangue：結算單上廢石叫什麼
+--   product 選礦場精選出來的叫什麼；buyer、contracts：營地採購員的稱呼和賣什麼；specs：訂單的品位規格
+--   一張地圖賣哪幾種礦：世界設定 rockmech_ores（預設 coal）
 -- 碎石的外觀由 8 張遮罩決定：廢石貼圖上疊礦石貼圖，品位越高礦石的像素越多。加一種礦只要在這裡加一列
 config.ores = {
 	coal = {lith = "coal", waste = "shale", pure = "#141418", waste_color = "#6a6058",
-		label = TR("Coal"), default = 191, price = 120, recovery = 0.9},
+		label = TR("Coal"), default = 191, price = 120, recovery = 0.9, gangue = TR("Gangue"),
+		product = TR("Clean coal"), buyer = TR("Power Plant Buyer"), contracts = TR("Coal contracts"), specs = {0.60, 0.70, 0.80}},
+	-- 水泥原料：單價低、片岩（矽、鎂）混進來水泥廠要罰款，所以截止品位高，邊緣靠近片岩的部分要小心稀釋
+	marble = {lith = "marble", waste = "schist", pure = "#f6f4ee", waste_color = "#4b544d",
+		label = TR("Marble"), default = 230, price = 40, recovery = 0.95, fee = 50, gangue = TR("Waste rock"),
+		product = TR("Sorted marble"), buyer = TR("Cement Plant Buyer"), contracts = TR("Marble contracts"), specs = {0.75, 0.80, 0.85}},
 }
 
 -- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個；
@@ -162,7 +185,7 @@ function config.crush_income(tons, grade, ore, fee, ratio)
 end
 
 -- 註冊順序（固定，讓 content id / 測試結果可重現）
-config.lithology_order = {"sandstone", "shale", "granite", "coal"}
+config.lithology_order = {"sandstone", "shale", "granite", "coal", "marble", "schist"}
 
 -- 依深度分層：h = y0 - y，h < bottom 即屬於該層（由上往下排列）。
 -- h < 0（高於 y0 的山丘）歸入第一層。
@@ -878,6 +901,14 @@ function config.load(get)
 	cfg.crusher_rate = math.max(0.1, tonumber(get("rockmech_crusher_rate")) or 2)
 	cfg.crusher_big_rate = math.max(0.1, tonumber(get("rockmech_crusher_big_rate")) or 10)   -- 大型破碎站 (t/s)
 	cfg.crusher_fee = math.max(0, tonumber(get("rockmech_crusher_fee")) or 30)      -- 矸石處理費（每噸矸石；煤不收）
+	-- 這張地圖賣哪幾種礦（逗號分開，第一種是主要的礦：行情、合約、選礦場）；碎石都照樣註冊
+	cfg.active_ores = {}
+	for k in (get("rockmech_ores") or "coal"):gmatch("[%w_]+") do
+		if cfg.ores[k] then cfg.active_ores[#cfg.active_ores + 1] = cfg.ores[k]
+		else warnings[#warnings + 1] = "rockmech_ores: 沒有礦種 " .. k .. "（忽略）" end
+	end
+	if #cfg.active_ores == 0 then cfg.active_ores[1] = cfg.ores.coal end
+	cfg.main_ore = cfg.active_ores[1]
 	cfg.coal_yard_ratio = math.max(0, math.min(1, tonumber(get("rockmech_coal_yard_ratio")) or 0.7))   -- 收煤站付市價的幾成（有火車的地圖）
 	cfg.dump_fee = math.max(0, tonumber(get("rockmech_dump_fee")) or 0)            -- 破碎站切換成廢石場：每噸棄置費
 	cfg.rubble_density = math.max(0.1, tonumber(get("rockmech_rubble_density")) or 2.5)   -- 計價用的碎石密度 (t/m³)
