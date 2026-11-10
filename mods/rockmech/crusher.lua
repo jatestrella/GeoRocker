@@ -128,8 +128,19 @@ function rockmech.team_of(name)
 	local t = storage:get_string(TEAM_OF .. name)
 	return t ~= "" and t or nil
 end
+-- 單機地圖（rockmech_solo，不是教學地圖）沒有分組：整張地圖一個帳戶，歸營地的主人（第一個進來的人）；
+-- 開放連線時大家共用這個帳戶（合作）。舊存檔沒記主人：有 singleplayer 的錢就是 singleplayer
+local SOLO_OWNER = "solo_owner"
+function rockmech.solo_account(name)
+	local o = storage:get_string(SOLO_OWNER)
+	if o ~= "" then return o end
+	o = storage:contains(MONEY .. "singleplayer") and "singleplayer" or name
+	storage:set_string(SOLO_OWNER, o)
+	return o
+end
 function rockmech.account_of(name)
 	if name:find(":", 1, true) then return name end
+	if cfg.solo and not cfg.teacher then return rockmech.solo_account(name) end
 	local t = rockmech.team_of(name)
 	return t and ("team:" .. t) or name
 end

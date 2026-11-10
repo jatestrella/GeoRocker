@@ -226,8 +226,8 @@ local function start_world(sv, fields)
 	core.settings:set("enable_damage", "true")
 	gamedata.selected_world = sv.index
 	gamedata.address = ""
-	if sv.mode == "class" then
-		-- 開伺服器：名稱就是管理員（老師）
+	if sv.mode == "class" or state.open_net then
+		-- 開伺服器：名稱就是管理員（課堂：老師；單機地圖開放連線：朋友連進來一起玩，共用同一個帳戶）
 		local name = (fields and fields.host_name or core.settings:get("name") or ""):match("^%s*(.-)%s*$")
 		if not name:match("^[%w_%-]+$") or #name > 20 then state.msg = "名稱只能用英文字母、數字、- 和 _（最多 20 字）"; return end
 		local port = tonumber(fields and fields.host_port or core.settings:get("port") or "30000")
@@ -385,18 +385,23 @@ local function formspec()
 		for _, sv in ipairs(list) do items[#items + 1] = F(("%s　（%s）"):format(sv.title, sv.kind)) end
 		if #items == 0 then items[1] = F("（還沒有存檔）") end
 		local sel = state.sel and list[state.sel] and state.sel or 0
-		fs[#fs + 1] = ("textlist[6.2,2.5;7.3,%g;saves;%s;%d;false]"):format(list[sel] and list[sel].mode == "class" and 2.6 or 4.2, table.concat(items, ","), sel)
+		local host = list[sel] and (list[sel].mode == "class" or state.open_net)
+		fs[#fs + 1] = ("textlist[6.2,2.5;7.3,%g;saves;%s;%d;false]"):format(host and 2.1 or 3.7, table.concat(items, ","), sel)
 		local sv = list[sel]
 		if sv then
 			local y = 7.0
-			if sv.mode == "class" then
-				fs[#fs + 1] = ("field[6.2,5.6;3.6,0.8;host_name;%s;%s]"):format(F("你的名稱（老師）"), F(core.settings:get("name") or ""))
+			if sv.mode ~= "class" then
+				-- 開放連線：用伺服器模式開，朋友用「加入連線」連進來（合作：共用營地和錢）
+				fs[#fs + 1] = ("checkbox[6.2,%g;open_net;%s;%s]"):format(host and 4.85 or 6.45, F("開放連線（朋友一起玩，共用營地和錢）"), tostring(state.open_net == true))
+			end
+			if host then
+				fs[#fs + 1] = ("field[6.2,5.6;3.6,0.8;host_name;%s;%s]"):format(F(sv.mode == "class" and "你的名稱（老師）" or "你的名稱"), F(core.settings:get("name") or ""))
 				fs[#fs + 1] = ("pwdfield[9.9,5.6;3.6,0.8;host_pass;%s]"):format(F("密碼（可以空白）"))
 				fs[#fs + 1] = ("field[6.2,6.8;3.6,0.8;host_port;%s;%s]"):format(F("埠"), F(core.settings:get("port") or "30000"))
 				fs[#fs + 1] = ("button[9.9,6.8;3.6,0.8;open_dir;%s]"):format(F("打開存檔資料夾"))
 				y = 7.8
 			end
-			fs[#fs + 1] = ("button[6.2,%g;3.6,0.9;continue;%s]"):format(y, F(sv.mode == "class" and "開伺服器上課" or "繼續遊戲"))
+			fs[#fs + 1] = ("button[6.2,%g;3.6,0.9;continue;%s]"):format(y, F(sv.mode == "class" and "開伺服器上課" or state.open_net and "開放連線開始" or "繼續遊戲"))
 			fs[#fs + 1] = ("button[9.9,%g;3.6,0.9;delete;%s]"):format(y, F(state.confirm and "確定刪除" or "刪除"))
 			if state.confirm then
 				fs[#fs + 1] = ("label[6.2,%g;%s]"):format(y + 1.2, F("「" .. sv.title .. "」會永久刪掉，再按一次確定"))
@@ -528,12 +533,13 @@ core.button_handler = function(fields)
 			if e.type == "DCL" then fields.create = true end
 		end
 	end
+	if fields.open_net then state.open_net = fields.open_net == "true" end
 	if fields.saves then
 		local e = core.explode_textlist_event(fields.saves)
 		if e.type == "CHG" or e.type == "DCL" then
 			state.sel, state.confirm, state.msg = e.index, false, nil
 			local sv = saves()[e.index]
-			if e.type == "DCL" and sv and sv.mode ~= "class" then start_world(sv, fields) end
+			if e.type == "DCL" and sv and sv.mode ~= "class" and not state.open_net then start_world(sv, fields) end
 		end
 	end
 	if fields.go_random then state.page, state.new_title, state.msg = "new_random", "", nil

@@ -214,7 +214,7 @@ core.register_on_joinplayer(function(player)
 				send_home(name, t)
 			end)
 		end
-	elseif not core.is_singleplayer() and not rockmech.has_account(name) then
+	elseif not core.is_singleplayer() and not cfg.solo and not rockmech.has_account(name) then
 		core.after(1, function()
 			core.chat_send_player(name, S("[Teams] You are not in a team yet, so you cannot buy equipment. Please ask the teacher to assign you to a team"))
 		end)
