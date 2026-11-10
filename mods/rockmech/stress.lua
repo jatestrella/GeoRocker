@@ -238,7 +238,22 @@ end
 -- 地下一點的岩性 = 它離柱狀圖頂面多深（垂直層面量）落在哪一層
 ---------------------------------------------------------------------------
 
--- 柱狀圖頂面在 (x, z) 的高程
+-- 多個地質區（S.faults，地圖產生器選了兩種以上的礦）：幾條平行的直立斷層把地圖切成幾區，每區一套柱狀圖（S.domains[k]，
+-- 第 1 區就是 S 自己）。斷層 k 在沿法線方向 d 公尺、斷層帶寬 w：帶裡是斷層角礫岩（S.faults.lith）。
+-- 回傳 (x, z) 這一欄的柱狀圖；在斷層帶裡回傳 nil
+local function domain_of(S, x, z)
+	local F = S.faults
+	if not F then return S end
+	local s = x * F.nx + z * F.nz
+	for k, f in ipairs(F) do
+		if s < f.d - f.w / 2 then return S.domains[k] end
+		if s <= f.d + f.w / 2 then return nil end
+	end
+	return S.domains[#F + 1]
+end
+stress.strata_domain = domain_of
+
+-- 柱狀圖頂面在 (x, z) 的高程（S 是單一一區的柱狀圖）
 function stress.strata_ref_y(S, x, z)
 	local y = S.y0 - S.tan_dip * (x * S.sin_dd + z * S.cos_dd)
 	local f = S.fold
@@ -247,7 +262,9 @@ function stress.strata_ref_y(S, x, z)
 end
 -- (x, z) 這一欄每層的底（離頂面的真厚度累計，m）
 function stress.strata_column(S, x, z)
+	S = domain_of(S, x, z)
 	local out, d = {}, 0
+	if not S then return out end          -- 斷層帶
 	local v = S.var
 	for i, b in ipairs(S.beds) do
 		local m = 1
@@ -259,6 +276,9 @@ function stress.strata_column(S, x, z)
 end
 -- 岩性、第幾層、在這層裡的位置（0 頂 … 1 底）。col：strata_column 的結果（同一欄重複用）
 function stress.strata_at(S, x, y, z, col)
+	local D = domain_of(S, x, z)
+	if not D then return S.faults.lith, 0, 0.5 end
+	S = D
 	col = col or stress.strata_column(S, x, z)
 	local d = (stress.strata_ref_y(S, x, z) - y) * S.cos_dip
 	if d < 0 then return S.beds[1].lith, 1, 0 end           -- 柱狀圖頂面以上：最上面那層往上延伸
@@ -285,7 +305,7 @@ function stress.free_terrain(cfg, x, z)
 	local H = T.h
 	local h
 	if T.mode == "cuesta" and cfg.strata then
-		local S = cfg.strata
+		local S = domain_of(cfg.strata, x, z) or cfg.strata      -- 每個地質區照自己的傾角（跨過斷層地形就變了）
 		local u = x * S.sin_dd + z * S.cos_dd              -- 沿傾向
 		local w = x * S.cos_dd - z * S.sin_dd              -- 沿走向
 		local tan = math.max(math.tan(math.rad(4)), S.tan_dip)

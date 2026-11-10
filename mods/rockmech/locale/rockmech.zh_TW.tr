@@ -116,6 +116,7 @@ Granite=花崗岩
 Coal=煤
 Marble=大理岩
 Schist=片岩
+Fault breccia=斷層角礫岩
 Gangue=矸石
 Clean coal=精煤
 Power Plant Buyer=電廠採購員
@@ -1784,6 +1785,7 @@ Work light@nPlace it on the ground, a wall or a ceiling: brightness 14 (brighter
 
 ### worldgen.lua
 Show this world's geology (teacher)=顯示這個世界的地質（老師用）
+Fault @1 m out (normal @2°), fault zone @3 m of @4=斷層在 @1 m 外（法線方位 @2°），斷層帶 @3 m 寬，是@4
 Strata (top down): @1=柱狀圖（由上往下）：@1
 Attitude dip/dip direction, top at (0,0): @1=位態 傾角,傾向,(0,0) 頂面高程：@1
 Fold amplitude,wavelength,axis: @1   thickness variation,scale: @2   terrain: @3=褶皺 振幅,波長,軸向：@1　厚度變化,尺度：@2　地形：@3

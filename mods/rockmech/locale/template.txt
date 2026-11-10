@@ -116,6 +116,7 @@ Granite=
 Coal=
 Marble=
 Schist=
+Fault breccia=
 Gangue=
 Clean coal=
 Power Plant Buyer=
@@ -1784,6 +1785,7 @@ Work light@nPlace it on the ground, a wall or a ceiling: brightness 14 (brighter
 
 ### worldgen.lua
 Show this world's geology (teacher)=
+Fault @1 m out (normal @2°), fault zone @3 m of @4=
 Strata (top down): @1=
 Attitude dip/dip direction, top at (0,0): @1=
 Fold amplitude,wavelength,axis: @1   thickness variation,scale: @2   terrain: @3=

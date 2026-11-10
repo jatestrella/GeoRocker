@@ -74,11 +74,18 @@ config.lithologies.schist = {
 	color = "#4b544d", cracky = 3,
 	rn = 0.30, rt = 0.80, mu_roll = 0.50, break_height = 2.5,
 }
+-- 斷層角礫岩：兩個地質區之間的斷層帶（地圖產生器選兩種以上的礦時才有）。岩塊被磨碎、夾斷層泥，岩體很差
+config.lithologies.breccia = {
+	name = "breccia", description = TR("Fault breccia"),
+	gamma = 23.0, ucs = 10.0, tensile = 0.5, mi = 10,
+	color = "#6e6252", cracky = 3,
+	rn = 0.25, rt = 0.70, mu_roll = 0.55, break_height = 1.5,
+}
 
 -- 方塊尺度的小節理（方塊 = 岩體，裡面的小節理只用 GSI 代表）的面況：Q 系統的 Jr、Ja。
 -- 只用來把 GSI 換成岩芯看得到的 RQD（Hoek、Carter & Diederichs 2013：GSI = 52·(Jr/Ja)/(1 + Jr/Ja) + RQD/2），不影響力學。
 -- 沒列的岩性用 Jr 2、Ja 1
-for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}, marble = {2, 1}, schist = {1, 3}}) do
+for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}, marble = {2, 1}, schist = {1, 3}, breccia = {1, 6}}) do
 	local l = config.lithologies[key]
 	if l then l.jr, l.ja = v[1], v[2] end
 end
@@ -185,7 +192,7 @@ function config.crush_income(tons, grade, ore, fee, ratio)
 end
 
 -- 註冊順序（固定，讓 content id / 測試結果可重現）
-config.lithology_order = {"sandstone", "shale", "granite", "coal", "marble", "schist"}
+config.lithology_order = {"sandstone", "shale", "granite", "coal", "marble", "schist", "breccia"}
 
 -- 依深度分層：h = y0 - y，h < bottom 即屬於該層（由上往下排列）。
 -- h < 0（高於 y0 的山丘）歸入第一層。
@@ -620,25 +627,51 @@ function config.load(get)
 	--   rockmech_strata_attitude = 傾角,傾向,y0：柱狀圖頂面在 (0, 0) 的高程 y0，整套往傾向傾斜
 	--   rockmech_strata_fold = 振幅,波長,軸向方位（m、m、度；褶皺：層面上下起伏，起伏方向垂直軸向）
 	--   rockmech_strata_var = 變化比例,尺度（每層厚度 × (1 ± 比例)，沿層面緩慢變化；薄的會尖滅）
-	local st = get("rockmech_strata")
-	if st and st ~= "" then
+	--   多個地質區：第 k 區（k ≥ 2）的設定名稱後面加 _k（rockmech_strata_2、rockmech_strata_attitude_2…），
+	--   rockmech_faults = 法線方位,距離:寬度,距離:寬度,…（直立斷層，由近到遠；斷層 k 是第 k 區和第 k+1 區的界線）
+	local function parse_strata(sfx)
+		local st = get("rockmech_strata" .. sfx)
+		if not (st and st ~= "") then return nil end
 		local beds = {}
 		for lith, t in tostring(st):gmatch("([%a_]+)%s*:%s*([%d.]+)") do
 			if cfg.lithologies[lith] then beds[#beds + 1] = {lith = lith, t = tonumber(t)}
-			else warnings[#warnings + 1] = "rockmech_strata: 沒有岩性 " .. lith .. "（忽略）" end
+			else warnings[#warnings + 1] = "rockmech_strata" .. sfx .. ": 沒有岩性 " .. lith .. "（忽略）" end
 		end
-		local att = numbers("rockmech_strata_attitude", 3)
-		if #beds > 0 and att then
-			local dip, dd = math.rad(att[1]), math.rad(att[2])
-			cfg.strata = {beds = beds, y0 = att[3], dip_deg = att[1], dipdir_deg = att[2],
-				tan_dip = math.tan(dip), cos_dip = math.cos(dip), sin_dd = math.sin(dd), cos_dd = math.cos(dd)}
-			local f = numbers("rockmech_strata_fold", 3)
-			if f and f[1] > 0 and f[2] > 0 then
-				local az = math.rad(f[3])       -- 軸向；起伏沿垂直軸向的方向
-				cfg.strata.fold = {A = f[1], L = f[2], cx = math.cos(az), cz = -math.sin(az)}
-			end
-			local v = numbers("rockmech_strata_var", 2)
-			if v and v[1] > 0 then cfg.strata.var = {f = math.min(0.95, v[1]), scale = math.max(10, v[2])} end
+		local att = numbers("rockmech_strata_attitude" .. sfx, 3)
+		if #beds == 0 or not att then return nil end
+		local dip, dd = math.rad(att[1]), math.rad(att[2])
+		local S = {beds = beds, y0 = att[3], dip_deg = att[1], dipdir_deg = att[2],
+			tan_dip = math.tan(dip), cos_dip = math.cos(dip), sin_dd = math.sin(dd), cos_dd = math.cos(dd)}
+		local f = numbers("rockmech_strata_fold" .. sfx, 3)
+		if f and f[1] > 0 and f[2] > 0 then
+			local az = math.rad(f[3])       -- 軸向；起伏沿垂直軸向的方向
+			S.fold = {A = f[1], L = f[2], cx = math.cos(az), cz = -math.sin(az)}
+		end
+		local v = numbers("rockmech_strata_var" .. sfx, 2)
+		if v and v[1] > 0 then S.var = {f = math.min(0.95, v[1]), scale = math.max(10, v[2])} end
+		return S
+	end
+	cfg.strata = parse_strata("")
+	local fl = get("rockmech_faults")
+	if cfg.strata and fl and fl ~= "" then
+		local az = tonumber(tostring(fl):match("^%s*(%-?[%d.]+)"))
+		local F = {}
+		for d, w in tostring(fl):gmatch("(%-?[%d.]+)%s*:%s*([%d.]+)") do F[#F + 1] = {d = tonumber(d), w = tonumber(w)} end
+		local domains = {cfg.strata}
+		for k = 2, #F + 1 do
+			local S = parse_strata("_" .. k)
+			if not S then break end
+			domains[k] = S
+		end
+		while #F > #domains - 1 do F[#F] = nil end
+		if az and #F > 0 then
+			table.sort(F, function(a, b) return a.d < b.d end)
+			F.nx, F.nz = math.sin(math.rad(az)), math.cos(math.rad(az))
+			F.az = az
+			F.lith = cfg.lithologies.breccia and "breccia" or domains[1].beds[1].lith
+			cfg.strata.faults, cfg.strata.domains = F, domains
+		else
+			warnings[#warnings + 1] = "rockmech_faults: 格式不對或沒有第 2 區的柱狀圖（忽略）"
 		end
 	end
 	-- 自由地形（非礦帶世界）：rockmech_terrain = 樣式,高度,尺度；樣式 hills（丘陵）或 cuesta（單面山，要有柱狀圖）

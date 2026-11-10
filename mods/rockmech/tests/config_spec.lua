@@ -32,7 +32,7 @@ describe("config.load", function()
 		assert.are.equal(0, cfg.surface_y)
 		assert.are.equal(0.5, cfg.k0)
 		assert.is_true(cfg.replace_stone)
-		assert.are.equal(6, #cfg.lithology_order)
+		assert.are.equal(7, #cfg.lithology_order)
 		assert.are.equal(3, #cfg.joint_sets)
 		assert.are.equal(0, #warn)
 		assert.are.equal("coal", cfg.main_ore.lith)      -- 沒設定 rockmech_ores 就是煤
@@ -172,5 +172,34 @@ describe("config.is_soil", function()
 	it("rockmech_strip_soil 預設關閉、可由設定開啟", function()
 		assert.is_false(config.load(function() return nil end).strip_soil)
 		assert.is_true(config.load(function(k) return k == "rockmech_strip_soil" and "true" or nil end).strip_soil)
+	end)
+end)
+
+describe("多個地質區（斷層隔開）", function()
+	local stress = load_module("stress")
+	local set = {
+		rockmech_strata = "shale:40,coal:8,shale:250", rockmech_strata_attitude = "10,0,0",
+		rockmech_strata_2 = "schist:30,marble:20,schist:250", rockmech_strata_attitude_2 = "45,90,0",
+		rockmech_faults = "90,100:10",        -- 法線朝東（+x）、100 m 外、帶寬 10 m
+		rockmech_ores = "coal,marble",
+	}
+	it("兩區各照自己的柱狀圖，中間是斷層角礫岩", function()
+		local cfg, w = config.load(getter(set))
+		assert.are.equal(0, #w)
+		assert.are.equal(2, #cfg.active_ores)
+		assert.are.equal(2, #cfg.strata.domains)
+		assert.are.equal("shale", (stress.strata_at(cfg.strata, 0, -1, 0)))       -- 第 1 區頂部
+		assert.are.equal("breccia", (stress.strata_at(cfg.strata, 100, -1, 0)))   -- 斷層帶
+		assert.are.equal("schist", (stress.strata_at(cfg.strata, 200, 300, 0)))   -- 第 2 區、柱狀圖頂面以上
+		assert.are.equal("coal", (stress.strata_at(cfg.strata, 0, -44, 0)))
+		assert.are.same({}, stress.strata_column(cfg.strata, 100, 0))
+	end)
+	it("缺第 2 區的柱狀圖就不切斷層", function()
+		local s2 = {}
+		for k, v in pairs(set) do s2[k] = v end
+		s2.rockmech_strata_2 = nil
+		local cfg, w = config.load(getter(s2))
+		assert.is_nil(cfg.strata.faults)
+		assert.are.equal(1, #w)
 	end)
 end)
