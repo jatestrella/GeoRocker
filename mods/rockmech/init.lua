@@ -138,6 +138,11 @@ function rockmech.get_joint_sets()
 			local in_seam = rockmech.stress.in_seam
 			prepared_sets.skip = function(x, y, z) return in_seam(s, x, y, z) end
 		end
+		-- 豎井外圍那圈硬大理岩不帶節理（oreshaft.lua）
+		if cfg.shafts then
+			local prev, ring = prepared_sets.skip, cfg.in_shaft_ring
+			prepared_sets.skip = function(x, y, z) return ring(x, z) or (prev ~= nil and prev(x, y, z)) end
+		end
 	end
 	return prepared_sets
 end

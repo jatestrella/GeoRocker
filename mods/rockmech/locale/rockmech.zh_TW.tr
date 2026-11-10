@@ -888,6 +888,9 @@ Give every team the same order (teams with an order already are skipped)=每組�
 Usage: /rockmech_order <tons> <grade %> <days> [price/t]=用法：/rockmech_order <噸> <品位%> <天> [每噸價格]
 Order sent to @1 teams (@2 skipped)=已發給 @1 組，跳過 @2 組
 
+### oreshaft.lua
+[Ore pass @1] @2 t, @3=[豎井 @1] @2 t，@3
+
 ### plant.lua
 Product=產品
 Rejects=矸石

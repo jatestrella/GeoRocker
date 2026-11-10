@@ -888,6 +888,9 @@ Give every team the same order (teams with an order already are skipped)=
 Usage: /rockmech_order <tons> <grade %> <days> [price/t]=
 Order sent to @1 teams (@2 skipped)=
 
+### oreshaft.lua
+[Ore pass @1] @2 t, @3=
+
 ### plant.lua
 Product=
 Rejects=

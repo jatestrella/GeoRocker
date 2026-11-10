@@ -1171,6 +1171,16 @@ function config.load(get, opts)
 		if #cfg.shafts == 0 then cfg.shafts = nil; warnings[#warnings + 1] = "rockmech_shafts: 格式是 x,z;x,z（忽略）" end
 	end
 	cfg.camp_crusher = cfg.shafts == nil
+	-- 豎井的井（邊長 2·half+1）和外圍一圈沒有節理的硬大理岩（厚 ring）
+	cfg.shaft_half, cfg.shaft_ring = 4, 6
+	function cfg.in_shaft_ring(x, z)
+		if not cfg.shafts then return false end
+		local R = cfg.shaft_half + cfg.shaft_ring
+		for _, s in ipairs(cfg.shafts) do
+			if math.abs(x - s.x) <= R and math.abs(z - s.z) <= R then return true end
+		end
+		return false
+	end
 
 	-- 營地（出生點）的地面高度：一般就是 surface_y；真實地形的地圖是 surface_y + 出生點的網格高度（作業平台）
 	cfg.camp_y = math.floor(cfg.surface_y or 0)
