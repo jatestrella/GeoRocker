@@ -408,18 +408,25 @@ local function formspec()
 		elseif state.page == "new_custom" then m = custom_map()
 		else m = templates()[state.tpl or 0] end
 		local y
-		if state.page == "new_template" and not m then
-			-- 範本清單
-			fs[#fs + 1] = "label[0.5,2.1;" .. F("自範本建立地圖：選一個範本") .. "]"
-			y = 2.4
-			for i, t in ipairs(templates()) do
-				fs[#fs + 1] = ("button[0.5,%g;5,0.9;tpl_%d;%s]"):format(y, i, F(t.title))
-				local lines = wrap_cjk(t.description, 15.7 * 2.4)
-				local h = math.max(1.1, #lines * 0.42 + 0.2)
-				fs[#fs + 1] = ("textarea[5.8,%g;15.7,%g;;;%s]"):format(y - 0.05, h, F(table.concat(lines, "\n")))
-				y = y + math.max(1.25, h + 0.2)
+		if state.page == "new_template" then
+			-- 範本清單（左）＋選中的範本說明（右），跟「既有存檔」一樣用清單選；按兩下直接建立
+			local tl = templates()
+			local sel = tl[state.tpl or 0] and state.tpl or 1
+			state.tpl = sel
+			fs[#fs + 1] = "label[0.5,2.1;" .. F("選一個範本") .. "]"
+			local items = {}
+			for _, t in ipairs(tl) do items[#items + 1] = F(t.title) end
+			fs[#fs + 1] = ("textlist[0.5,2.5;7.5,6.6;tpls;%s;%d;false]"):format(table.concat(items, ","), sel)
+			local t = tl[sel]
+			if t then
+				fs[#fs + 1] = ("label[8.6,2.1;%s]"):format(F(t.title))
+				fs[#fs + 1] = ("box[8.6,2.5;12.9,4.3;#00000060]")
+				fs[#fs + 1] = ("textarea[8.8,2.6;12.6,4.1;;;%s]"):format(F(table.concat(wrap_cjk(t.description, 12.4 * 2.4), "\n")))
+				fs[#fs + 1] = ("field[8.6,7.4;6.6,0.8;new_title;%s;%s]"):format(F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
+				fs[#fs + 1] = "field_close_on_enter[new_title;false]"
+				fs[#fs + 1] = ("button[15.4,7.4;3.0,0.8;create;%s]"):format(F("建立並開始"))
 			end
-			fs[#fs + 1] = ("button[0.5,%g;5,0.9;back_main;%s]"):format(math.max(y + 0.2, 6.4), F("返回"))
+			fs[#fs + 1] = ("button[18.5,7.4;3.0,0.8;back_main;%s]"):format(F("返回"))
 		elseif m then
 			fs[#fs + 1] = ("label[0.5,2.1;%s]"):format(F(state.page == "new_random" and "隨機地圖" or state.page == "new_custom" and "自訂地圖" or m.title))
 			local dl = wrap_cjk(m.description, 21 * 2.4)
@@ -462,7 +469,7 @@ local function formspec()
 			y = y + 1.4
 			if m.mode == "class" then y = host_fields(fs, y) end
 			fs[#fs + 1] = ("button[0.5,%g;10.3,0.9;create;%s]"):format(y, F(m.mode == "class" and "建立並開伺服器" or "建立並開始"))
-			fs[#fs + 1] = ("button[11.2,%g;10.3,0.9;%s;%s]"):format(y, state.page == "new_template" and "back_tpl" or "back_main", F("返回"))
+			fs[#fs + 1] = ("button[11.2,%g;10.3,0.9;%s;%s]"):format(y, "back_main", F("返回"))
 		end
 	elseif state.page == "join" then
 		fs[#fs + 1] = "label[0.5,2.1;" .. F("加入連線：輸入老師給的位址和你的帳號密碼") .. "]"
@@ -514,9 +521,12 @@ core.button_handler = function(fields)
 		end
 	end
 	if fields.g_random then gen_randomize() end
-	for k in pairs(fields) do
-		local i = tonumber(k:match("^tpl_(%d+)$"))
-		if i and templates()[i] then state.tpl, state.msg = i, nil end
+	if fields.tpls then
+		local e = core.explode_textlist_event(fields.tpls)
+		if (e.type == "CHG" or e.type == "DCL") and templates()[e.index] then
+			state.tpl, state.msg = e.index, nil
+			if e.type == "DCL" then fields.create = true end
+		end
 	end
 	if fields.saves then
 		local e = core.explode_textlist_event(fields.saves)
