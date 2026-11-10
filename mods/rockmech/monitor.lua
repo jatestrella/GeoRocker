@@ -4,7 +4,7 @@
 --   收斂：隧道兩壁各貼一個，看兩邊往內移多少。右鍵打開看歷史曲線。
 -- 位移的大小：應力解的勁度只是數值尺度（fem.lua 的 E = 1 GPa），換成岩體變形模數 E_rm（Hoek & Diederichs 2006）：
 --   E_rm = E_i · (0.02 + (1 − D/2) / (1 + e^((60 + 15D − GSI)/11)))，E_i = MR · UCS
---   MR（模數比）照 Hoek 的表：頁岩 150、砂岩 275、花崗岩 425、煤 200；D 是爆破擾動（rockmass.lua）。
+--   MR（模數比）照 Hoek 的表：頁岩 150、砂岩 275、花崗岩 425、煤 200、大理岩 850、片岩 675、角礫岩 290；D 是爆破擾動（rockmass.lua）。
 
 local cfg = rockmech.cfg
 local S = rockmech.S
@@ -12,7 +12,7 @@ local PRISM = "rockmech:survey_prism"
 local FORM = "rockmech:survey_prism"
 local HIST_N = 60
 local E_FEM = 1e6           -- kPa，fem.lua 的數值勁度
-local MR = {shale = 150, sandstone = 275, granite = 425, coal = 200}
+local MR = {shale = 150, sandstone = 275, granite = 425, coal = 200, marble = 850, schist = 675, breccia = 290}   -- Hoek 表的中間值
 
 -- 岩體變形模數 (MPa)
 function rockmech.erm(lith_key, gsi, D)
