@@ -323,6 +323,7 @@ function M.register_command()
 				if g("joint_set_" .. i) == "-" then break end
 				local line = ("J%d  %s"):format(i, g("joint_set_" .. i))
 				if g("joint_dfn_" .. i) ~= "-" then line = line .. "  DFN " .. g("joint_dfn_" .. i) end
+				if g("joint_region_" .. i) ~= "-" then line = line .. "  [" .. g("joint_region_" .. i) .. "]" end
 				out[#out + 1] = line
 			end
 			out[#out + 1] = "(dip,dipdir,spacing,persistence,Jr,Ja  DFN κ,rmin,rmax,a,zone)"

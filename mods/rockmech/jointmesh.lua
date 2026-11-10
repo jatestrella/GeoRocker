@@ -98,7 +98,8 @@ local function build_mesh(bx, by, bz)
 		if (sets[i].persistence or 1) > 0 then live[#live + 1] = sets[i] end
 	end
 	local D = sets.dfn          -- 離散裂隙網路：跡線是圓盤和岩面的交線（dfn.face_traces）
-	if D then live = {} end
+	local info
+	if D then live = {}; info = D:info_cache() end
 	-- 一條跡線（面內座標 a → b）加寬成四邊形
 	local function quad(c, ax, sg, u, v, a, b)
 		local function world(q)
@@ -130,7 +131,7 @@ local function build_mesh(bx, by, bz)
 						local ax, sg = d[4], d[5]
 						local u, v = OTHER[ax][1], OTHER[ax][2]
 						if D then
-							for _, t in ipairs(D:face_traces(x, y, z, ax, sg, D.where and D.where(x, y, z))) do
+							for _, t in ipairs(D:face_traces(x, y, z, ax, sg, info)) do
 								quad(c, ax, sg, u, v, {t[1], t[2]}, {t[3], t[4]})
 							end
 						end

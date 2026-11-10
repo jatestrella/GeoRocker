@@ -106,6 +106,13 @@ function rockmech.get_joint_sets()
 				for k, D in ipairs(S.domains) do idx[D] = k end
 				opts.where = function(x, y, z) local D = dom(S, x, z); return D and idx[D] end
 			end
+			for _, js in ipairs(cfg.joint_sets) do
+				if js.lith then
+					local key_at, c = rockmech.stress.lith_key_at, cfg
+					opts.lith_at = function(x, y, z) return key_at(c, x, y, z) end
+					break
+				end
+			end
 		end
 		prepared_sets = rockmech.joints.prepare(cfg.joint_sets, rockmech.seed, cfg.joint_lattice,
 			cfg.joint_persistence, opts)

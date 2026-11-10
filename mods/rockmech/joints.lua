@@ -147,7 +147,8 @@ end
 -- sets: config 的節理組陣列；seed: 32-bit 整數；lattice: D（預設 8）。
 -- persistence_mode: "patch"（片狀延續性，片的大小 ≈ 間距）或 "face"（舊：每個格面各自判定）。
 -- opts.dfn（dfn.lua 模組）：改用離散裂隙網路（圓盤），回傳的陣列多一個 .dfn 物件；
---   opts.where(x, y, z) → 地質區編號（組的 zone）、opts.cell 粗格大小。有效位態 = 輸入位態（不對齊格點）。
+--   opts.where(x, y, z) → 地質區編號（組的 zone）、opts.lith_at(x, y, z) → 岩性（組的 lith）、
+--   opts.cell 粗格大小。有效位態 = 輸入位態（不對齊格點）。
 -- 回傳前處理後的陣列（原表不修改），每組多出：
 --   n（輸入位態的單位法向）、mx,my,mz、m_axis、L、o、
 --   n_eff、dip_eff、dipdir_eff、spacing_eff、dvec（有效位態的順傾向向量）
@@ -195,7 +196,8 @@ function joints.prepare(sets, seed, lattice, persistence_mode, opts)
 		out[i] = p
 	end
 	if opts and opts.dfn then
-		out.dfn = opts.dfn.new(out, seed, {mix = mix, hash = joints.hash, where = opts.where, cell = opts.cell})
+		out.dfn = opts.dfn.new(out, seed, {mix = mix, hash = joints.hash, where = opts.where,
+			lith_at = opts.lith_at, cell = opts.cell})
 	end
 	return out
 end

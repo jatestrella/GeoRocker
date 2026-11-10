@@ -1026,6 +1026,41 @@ function config.load(get)
 			end
 		end
 	end
+	-- DFN 每組的範圍：rockmech_joint_region_i = zone=2; lith=sandstone,shale; box=x1,y1,z1,x2,y2,z2
+	--   （分號分開，可以只寫其中幾項；zone 也可以寫在 rockmech_joint_dfn_i 的第 5 個欄位）
+	for i = 1, #cfg.joint_sets do
+		local key = "rockmech_joint_region_" .. i
+		local v = get(key)
+		if v and v ~= "" then
+			local js = cfg.joint_sets[i]
+			for part in tostring(v):gmatch("[^;]+") do
+				local k, val = part:match("^%s*(%a+)%s*=%s*(.-)%s*$")
+				if k == "zone" and tonumber(val) then js.zone = math.floor(tonumber(val))
+				elseif k == "lith" then
+					local L = {}
+					for name in val:gmatch("[%a_]+") do
+						if cfg.lithologies[name] then L[name] = true
+						else warnings[#warnings + 1] = key .. ": 沒有岩性 " .. name .. "（忽略）" end
+					end
+					if next(L) then js.lith = L end
+				elseif k == "box" then
+					local n = {}
+					for t in val:gmatch("%-?[%d.]+") do n[#n + 1] = tonumber(t) end
+					if #n == 6 then
+						js.box = {math.min(n[1], n[4]), math.min(n[2], n[5]), math.min(n[3], n[6]),
+							math.max(n[1], n[4]), math.max(n[2], n[5]), math.max(n[3], n[6])}
+					else warnings[#warnings + 1] = key .. ": box 需要 6 個數字（忽略）" end
+				else
+					warnings[#warnings + 1] = key .. ": 看不懂「" .. part .. "」（忽略）"
+				end
+			end
+			if (js.zone or js.lith or js.box) and not js.kappa then cfg.dfn_needed = true end
+		end
+	end
+	if cfg.dfn_needed and not cfg.dfn then
+		cfg.dfn = true       -- 有範圍限制只能用 DFN（平行平面沒有範圍）
+	end
+	cfg.dfn_needed = nil
 	if cfg.dfn then
 		for _, js in ipairs(cfg.joint_sets) do
 			js.kappa = js.kappa or 30

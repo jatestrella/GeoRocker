@@ -2,14 +2,14 @@ dofile((debug.getinfo(1, "S").source:match("^@(.*[/\\])") or "./") .. "helper.lu
 local joints = load_module("joints")
 local dfn = load_module("dfn")
 
-local function sets_of(list, where)
+local function sets_of(list, where, lith_at)
 	for i, t in ipairs(list) do
 		t.id = t.id or i
 		t.name = t.name or ("J" .. i)
 		t.persistence = t.persistence or 1
 		t.phi = t.phi or 30
 	end
-	return joints.prepare(list, 4242, 8, "patch", {dfn = dfn, where = where})
+	return joints.prepare(list, 4242, 8, "patch", {dfn = dfn, where = where, lith_at = lith_at})
 end
 
 describe("DFN 抽樣", function()
@@ -107,5 +107,40 @@ describe("DFN 節理面", function()
 			n = n + #S.dfn:face_traces(x, y, 0, 3, -1)
 		end end
 		assert.truthy(n > 20)
+	end)
+
+	it("岩性範圍：砂岩、頁岩各一組，圓盤碰到層面就停", function()
+		local lith_at = function(x, y) return y >= 0 and "sandstone" or "shale" end
+		local S = sets_of({{dip = 80, dipdir = 0, spacing = 2, kappa = 30, rmin = 1, rmax = 10, a = 3, lith = {sandstone = true}},
+			{dip = 80, dipdir = 90, spacing = 2, kappa = 30, rmin = 1, rmax = 10, a = 3, lith = {shale = true}}}, nil, lith_at)
+		local cnt = {0, 0}
+		for x = 0, 20 do for y = -10, 9 do for z = 0, 20 do for ax = 1, 3 do
+			local i = joints.face_joint(S, x, y, z, ax)
+			if i then
+				cnt[i] = cnt[i] + 1
+				local y2 = ax == 2 and y + 1 or y
+				assert.are.equal(i == 1 and "sandstone" or "shale", lith_at(x, y))
+				assert.are.equal(lith_at(x, y), lith_at(x, y2))     -- 不跨過層面
+			end
+		end end end end
+		assert.truthy(cnt[1] > 50 and cnt[2] > 50)
+	end)
+
+	it("方塊範圍：同一種岩體，兩個範圍各一組不同位態", function()
+		local S = sets_of({{dip = 20, dipdir = 0, spacing = 2, kappa = 50, rmin = 1, rmax = 8, a = 3, box = {-40, -20, -20, -1, 20, 20}},
+			{dip = 70, dipdir = 180, spacing = 2, kappa = 50, rmin = 1, rmax = 8, a = 3, box = {0, -20, -20, 40, 20, 20}}})
+		local cnt = {0, 0}
+		for x = -30, 29 do for y = -5, 5 do for z = -5, 5 do for ax = 1, 3 do
+			local i = joints.face_joint(S, x, y, z, ax)
+			if i then
+				cnt[i] = cnt[i] + 1
+				local x2 = ax == 1 and x + 1 or x
+				assert.are.equal(i, x < 0 and 1 or 2)
+				assert.are.equal(x < 0, x2 < 0)
+			end
+		end end end end
+		assert.truthy(cnt[1] > 50 and cnt[2] > 50)
+		-- 範圍外的粗格不產生這一組
+		for _, d in ipairs(S.dfn:generated(10, 0, 0)) do assert.are.equal(nil, d.set == 1 and d or nil) end
 	end)
 end)

@@ -8,7 +8,12 @@
 --   rmin, rmax    圓盤半徑的上下限 (m)
 --   a             半徑的冪律指數：數量 ∝ r^−a（a 越大小裂隙越多）
 --   spacing       平均間距 (m)：裂隙強度 P32 = 1 / spacing（每立方公尺的裂隙面積，m²/m³）
---   zone          (可選) 只在第幾個地質區（opts.where(x, y, z) 回傳的編號）；nil = 全圖
+-- 範圍（可選，可以組合；都沒有 = 全圖）：
+--   zone          只在第幾個地質區（opts.where(x, y, z) 回傳的編號）
+--   lith          只在這些岩性裡（{sandstone = true, ...}；opts.lith_at(x, y, z) → 岩性名稱）。
+--                 圓盤碰到別的岩層就停（層控節理）
+--   box           只在這個範圍裡 {x1, y1, z1, x2, y2, z2}（含邊界）
+--   同一個地方可以有好幾組各自的參數：例如同一種岩性，在兩個範圍各一組不同位態的節理
 --
 -- 產生：世界切成 C×C×C 的粗格（預設 16，對齊 mapblock）。每格、每組的圓盤數是 Poisson(λ)，
 --   λ = P32 · C³ / (π·E[r²])；圓心均勻分布、極點 Fisher 抽樣、半徑冪律抽樣，亂數由 (種子, 組, 格) 決定。
@@ -93,11 +98,12 @@ dfn.sample_fisher = sample_fisher
 -- DFN 物件
 ---------------------------------------------------------------------------
 -- sets：joints.prepare 之後的組（需要 id、n、spacing、kappa、rmin、rmax、a、zone）
--- opts：{cell = 16, mix = joints.mix, hash = joints.hash, where = function(x, y, z) → 區號或 nil, cache = 96}
+-- opts：{cell = 16, mix = joints.mix, hash = joints.hash, where = function(x, y, z) → 區號或 nil,
+--        lith_at = function(x, y, z) → 岩性名稱, cache = 96}
 function dfn.new(sets, seed, opts)
 	opts = opts or {}
 	local C = opts.cell or 16
-	local D = {sets = sets, seed = seed, C = C, where = opts.where, mix = opts.mix, hash = opts.hash,
+	local D = {sets = sets, seed = seed, C = C, where = opts.where, lith_at = opts.lith_at, mix = opts.mix, hash = opts.hash,
 		cache = opts.cache or 96, nid = 0}
 	local rmax = 0
 	for i, js in ipairs(sets) do
@@ -107,6 +113,8 @@ function dfn.new(sets, seed, opts)
 		js.P32 = 1 / math.max(0.05, js.spacing or 3)
 		js.lambda = js.P32 * C * C * C / (pi * E_r2(js.rmin, js.rmax, js.a))
 		if js.rmax > rmax then rmax = js.rmax end
+		-- 這一組有沒有範圍限制（沒有對應查詢函式的條件不算）
+		js.ranged = (js.box ~= nil) or (js.zone ~= nil and opts.where ~= nil) or (js.lith ~= nil and opts.lith_at ~= nil)
 	end
 	D.rmax = rmax
 	D.reach = math.ceil((rmax + 1) / C)
@@ -139,7 +147,13 @@ function dfn:generated(cx, cy, cz)
 		local where = self.where
 		for i, js in ipairs(self.sets) do
 			local skip = false
-			if js.zone and where then
+			local B = js.box
+			if B then
+				local e = js.rmax + 1
+				skip = x0 + C + e < B[1] or x0 - e > B[4] or y0 + C + e < B[2] or y0 - e > B[5]
+					or z0 + C + e < B[3] or z0 - e > B[6]
+			end
+			if not skip and js.zone and where then
 				-- 外擴 rmax 的盒子 8 個角都在同一個別的區 → 這一組在這裡不會有任何節理面
 				local e, first, same = js.rmax + 1, nil, true
 				for _, px in ipairs({x0 - e, x0 + C + e}) do for _, pz in ipairs({z0 - e, z0 + C + e}) do
@@ -158,7 +172,7 @@ function dfn:generated(cx, cy, cz)
 					local r = sample_r(u, js.rmin, js.rmax, js.a)
 					self.nid = self.nid + 1
 					out[#out + 1] = {x = px, y = py, z = pz, nx = nx, ny = ny, nz = nz,
-						d = nx * px + ny * py + nz * pz, r = r, set = i, zone = js.zone,
+						d = nx * px + ny * py + nz * pz, r = r, set = i, ranged = js.ranged,
 						id = self.hash(cx, cy, cz, i, #out) % 100000}
 				end
 			end
@@ -207,27 +221,52 @@ function dfn:crosses(d, x, y, z, axis)
 	q[axis] = t
 	local dx, dy, dz = q[1] - d.x, q[2] - d.y, q[3] - d.z
 	if dx * dx + dy * dy + dz * dz > d.r * d.r then return false end
-	if d.zone and self.where then
+	if d.ranged then
 		local e = {0, 0, 0}
 		e[axis] = 1
-		if self.where(x, y, z) ~= d.zone or self.where(x + e[1], y + e[2], z + e[3]) ~= d.zone then return false end
+		local js = self.sets[d.set]
+		if not self:inside(js, x, y, z) or not self:inside(js, x + e[1], y + e[2], z + e[3]) then return false end
 	end
 	return true
+end
+
+-- 格 (x, y, z) 在不在 js 的範圍裡。info(x, y, z) → 區號、岩性（可選，給快取用）
+function dfn:inside(js, x, y, z, info)
+	local B = js.box
+	if B and (x < B[1] or x > B[4] or y < B[2] or y > B[5] or z < B[3] or z > B[6]) then return false end
+	if (js.zone and self.where) or (js.lith and self.lith_at) then
+		local zn, li
+		if info then zn, li = info(x, y, z)
+		else
+			zn = js.zone and self.where and self.where(x, y, z)
+			li = js.lith and self.lith_at and self.lith_at(x, y, z)
+		end
+		if js.zone and self.where and zn ~= js.zone then return false end
+		if js.lith and self.lith_at and not js.lith[li] then return false end
+	end
+	return true
+end
+
+-- 每格的區號、岩性快取（一次點陣化或畫一個區塊用）
+function dfn:info_cache()
+	local zc, lc = {}, {}
+	local where, lith_at = self.where, self.lith_at
+	return function(x, y, z)
+		local k = x .. "," .. y .. "," .. z
+		local zn, li = zc[k], lc[k]
+		if zn == nil then zn = where and where(x, y, z) or false; zc[k] = zn end
+		if li == nil then li = lith_at and lith_at(x, y, z) or false; lc[k] = li end
+		return zn, li
+	end
 end
 
 -- 粗格的面表：face[局部索引] = 圓盤（同一個面有幾組時取組號最小的）
 function dfn:face_map(cx, cy, cz)
 	return self.face_cache(key3(cx, cy, cz), function()
-		local C, where = self.C, self.where
+		local C, sets = self.C, self.sets
 		local base = {cx * C, cy * C, cz * C}
 		local faces = {}
-		local zc = {}            -- 格的區號快取
-		local function zone_at(a, b, c)
-			local k = (a - base[1] + 1) * 4624 + (b - base[2] + 1) * 68 + (c - base[3] + 1)
-			local z = zc[k]
-			if z == nil then z = where(a, b, c) or false; zc[k] = z end
-			return z
-		end
+		local info = self:info_cache()
 		for _, d in ipairs(self:touching(cx, cy, cz)) do
 			local n = {d.nx, d.ny, d.nz}
 			local c = {d.x, d.y, d.z}
@@ -253,10 +292,11 @@ function dfn:face_map(cx, cy, cz)
 									local p = {0, 0, 0}
 									p[axis], p[u], p[v] = pa, pu, pv
 									local ok = true
-									if d.zone and where then
+									if d.ranged then
+										local js = sets[d.set]
 										local q = {p[1], p[2], p[3]}
 										q[axis] = q[axis] + 1
-										ok = zone_at(p[1], p[2], p[3]) == d.zone and zone_at(q[1], q[2], q[3]) == d.zone
+										ok = self:inside(js, p[1], p[2], p[3], info) and self:inside(js, q[1], q[2], q[3], info)
 									end
 									if ok then
 										local li = (((p[1] - base[1]) * C + (p[2] - base[2])) * C + (p[3] - base[3])) * 3 + axis
@@ -294,7 +334,8 @@ end
 
 -- 格 (x, y, z) 的 6 個面之一（axis 軸、sg = ±1 那一面，邊長 1 的正方形）上的跡線：
 -- 回傳 {{u1, v1, u2, v2, disc}, ...}（面內座標，相對格中心，u、v 是 OTHER[axis] 那兩軸）
-function dfn:face_traces(x, y, z, axis, sg, zone)
+-- info：dfn:info_cache() 的結果（畫一整個區塊時共用，可省略）
+function dfn:face_traces(x, y, z, axis, sg, info)
 	local C, out = self.C, {}
 	local c = {x, y, z}
 	local u, v = OTHER[axis][1], OTHER[axis][2]
@@ -304,7 +345,7 @@ function dfn:face_traces(x, y, z, axis, sg, zone)
 	for _, d in ipairs(self:touching(floor(x / C), floor(y / C), floor(z / C))) do
 		local n = {d.nx, d.ny, d.nz}
 		local f0 = n[1] * fc[1] + n[2] * fc[2] + n[3] * fc[3] - d.d
-		if abs(f0) < 0.5 * (abs(n[u]) + abs(n[v])) and (not d.zone or not self.where or d.zone == zone) then
+		if abs(f0) < 0.5 * (abs(n[u]) + abs(n[v])) and (not d.ranged or self:inside(self.sets[d.set], x, y, z, info)) then
 			local ex, ey, ez = fc[1] - d.x, fc[2] - d.y, fc[3] - d.z
 			local rr = d.r + 0.71
 			if ex * ex + ey * ey + ez * ez <= rr * rr then
