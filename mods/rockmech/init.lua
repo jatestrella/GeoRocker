@@ -21,6 +21,7 @@ dofile(modpath .. "/notify.lua")       -- 遊戲訊息顯示在左下角（rockm
 -- 純模組
 rockmech.config = dofile(modpath .. "/config.lua")
 rockmech.joints = dofile(modpath .. "/joints.lua")
+rockmech.dfn = dofile(modpath .. "/dfn.lua")
 rockmech.stress = dofile(modpath .. "/stress.lua")
 rockmech.jointtex = dofile(modpath .. "/jointtex.lua")
 rockmech.failure = assert(loadfile(modpath .. "/failure.lua"))(rockmech.stress)
@@ -95,8 +96,19 @@ function rockmech.get_joint_sets()
 			core.log("warning", "[rockmech] 讀不到世界種子，節理延續性改用種子 0")
 		end
 		rockmech.seed = rockmech.joints.seed_from_string(seed_str or "0")
+		local opts
+		if cfg.dfn then
+			-- 離散裂隙網路：多個地質區時，每組只長在自己的區（斷層帶裡沒有）
+			opts = {dfn = rockmech.dfn}
+			local S = cfg.strata
+			if S and S.faults then
+				local idx, dom = {}, rockmech.stress.strata_domain
+				for k, D in ipairs(S.domains) do idx[D] = k end
+				opts.where = function(x, y, z) local D = dom(S, x, z); return D and idx[D] end
+			end
+		end
 		prepared_sets = rockmech.joints.prepare(cfg.joint_sets, rockmech.seed, cfg.joint_lattice,
-			cfg.joint_persistence)
+			cfg.joint_persistence, opts)
 		-- 煤層不帶節理（煤是軟弱的層狀岩，節理組只發育在頂底板的頁岩裡）：煤層裡、和煤層接觸的面都不算節理
 		local s = cfg.coal_seam
 		if cfg.strata then

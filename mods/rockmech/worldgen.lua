@@ -69,6 +69,10 @@ M.RECIPES = {
 		joint1 = function(r, dip, dipdir, round, range, pick)
 			return ("%d,%d,%g,0.7,1.5,3"):format(dip, dipdir, round(range(r, 2, 5), 0.5))
 		end,
+		-- 層面：位態集中、面很大（κ,rmin,rmax,a）
+		dfn1 = function(r, round, range)
+			return ("%d,1.5,%d,3"):format(round(range(r, 40, 80)), round(range(r, 20, 35)))
+		end,
 	},
 	marble = {
 		dip = function(f) return round(20 + 50 * f) end,
@@ -100,6 +104,10 @@ M.RECIPES = {
 		end,
 		joint1 = function(r, dip, dipdir, round, range, pick)
 			return ("%d,%d,%g,0.9,1,%d"):format(dip, dipdir, round(range(r, 1, 2), 0.5), pick(r, {2, 3, 4}))
+		end,
+		-- 葉理：間距小、面中等
+		dfn1 = function(r, round, range)
+			return ("%d,1,%d,3"):format(round(range(r, 30, 60)), round(range(r, 12, 25)))
 		end,
 	},
 }
@@ -151,6 +159,9 @@ function M.generate(world_conf)
 
 	local set = function(k, v) world_conf:set("rockmech_" .. k, tostring(v)) end
 	local logs = {}
+	local function sp() return round(range(r, 2, 5), 0.5) end
+	local function jr() return pick(r, {1, 1.5, 2, 3}) end
+	local function ja() return pick(r, {1, 2, 3, 4}) end
 	local main_dip, main_dipdir
 	for k, ore in ipairs(ores) do
 		local R = M.RECIPES[ore]
@@ -195,19 +206,24 @@ function M.generate(world_conf)
 		if var > 0 then set("strata_var" .. sfx, ("%g,%d"):format(var, varScale)) end
 		if k == 1 then
 			set("zone_order", (mode == "single" or R.host_only) and beds[1][1] or "shale")
-			set("joint_set_1", R.joint1(r, dip, dipdir, round, range, pick))      -- 第 1 組：第 1 區的層面（大理岩是片岩的葉理）
 			local depth = math.floor(-(y0 + fold_at(0, 0) - top_at(0, 0) / cosd) + 0.5)
 			logs[#logs + 1] = ("%s %s %d 層、傾角 %d°/%03d°、露頭 %d m 外、營地底下 %d m"):format(ore, mode, nseam, dip, dipdir, dist, depth)
 		else
 			logs[#logs + 1] = ("斷層 %d m 外（帶寬 %d m）→ %s 傾角 %d°/%03d°"):format(faults[k - 1].d, faults[k - 1].w, ore, dip, dipdir)
 		end
+		-- 節理：離散裂隙網路（dfn.lua），每區 3 組：層面（大理岩是片岩的葉理）＋兩組陡傾節理，
+		-- 第 k 區是第 3k−2 … 3k 組；兩區以上時每組只長在自己的區
+		local b, zs = 3 * (k - 1), #ores > 1 and ("," .. k) or ""
+		set("joint_set_" .. (b + 1), R.joint1(r, dip, dipdir, round, range, pick))
+		set("joint_dfn_" .. (b + 1), R.dfn1(r, round, range) .. zs)
+		local d2 = r:next(0, 359)
+		local d3 = (d2 + 90 + r:next(-15, 15)) % 360
+		for j, dd in ipairs({d2, d3}) do
+			set("joint_set_" .. (b + 1 + j), ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), dd, sp(), jr(), ja()))
+			set("joint_dfn_" .. (b + 1 + j), ("%d,1,%d,%g"):format(round(range(r, 15, 35)), round(range(r, 6, 15)), round(range(r, 3.3, 4), 0.1)) .. zs)
+		end
 	end
 
-	local d2 = r:next(0, 359)
-	local d3 = (d2 + 90 + r:next(-15, 15)) % 360
-	local function sp() return round(range(r, 2, 5), 0.5) end
-	local function jr() return pick(r, {1, 1.5, 2, 3}) end
-	local function ja() return pick(r, {1, 2, 3, 4}) end
 	local kH = round(range(r, 1.0, 2.0), 0.1)
 	local kh = math.min(kH, round(range(r, 0.6, 1.0), 0.1))
 	local az = r:next(0, 179)
@@ -232,8 +248,6 @@ function M.generate(world_conf)
 		set("gsi_schist", round(range(r, 30, 55)))
 	end
 	set("ores", table.concat(ores, ","))
-	set("joint_set_2", ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), d2, sp(), jr(), ja()))
-	set("joint_set_3", ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), d3, sp(), jr(), ja()))
 	set("joint_persistence", "patch")
 	set("jointtex_style", "mesh")
 	set("surface_y", 0)
@@ -305,7 +319,13 @@ function M.register_command()
 			local cs = g("coal_seam")
 			local dip, dd, t, y0 = cs:match("^([%d.]+),([%d.]+),([%d.]+),(%-?[%d.]+)")
 			if dip then out[#out + 1] = S("Coal seam: dip @1°, dip direction @2°, thickness @3 m, @4 m below spawn", dip, dd, t, tostring(-tonumber(y0))) end
-			for i = 1, 3 do out[#out + 1] = ("J%d  %s"):format(i, g("joint_set_" .. i)) .. "  (dip,dipdir,spacing,persistence,Jr,Ja)" end
+			for i = 1, rockmech.config.MAX_SET_OVERRIDES do
+				if g("joint_set_" .. i) == "-" then break end
+				local line = ("J%d  %s"):format(i, g("joint_set_" .. i))
+				if g("joint_dfn_" .. i) ~= "-" then line = line .. "  DFN " .. g("joint_dfn_" .. i) end
+				out[#out + 1] = line
+			end
+			out[#out + 1] = "(dip,dipdir,spacing,persistence,Jr,Ja  DFN κ,rmin,rmax,a,zone)"
 			out[#out + 1] = ("K_Hmax %s  K_hmin %s  σHmax %s°"):format(g("k_hmax"), g("k_hmin"), g("sigma_hmax_azimuth"))
 			if g("generated") ~= "-" then out[#out + 1] = S("Generated from seed @1", g("generated")) end
 			return true, table.concat(out, "\n")

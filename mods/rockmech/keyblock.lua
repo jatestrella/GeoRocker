@@ -371,10 +371,10 @@ function keyblock.find_masses(g, p, starts)
 	-- 組合：單一平面與兩兩一對；重力下可能的運動方向（平面：沿傾向往下；楔形：交線往下）
 	local combos = {}
 	for a = 1, #sets do
-		if (sets[a].persistence or 1) > 0 and sets[a].mx then
+		if (sets[a].persistence or 1) > 0 and sets[a].mx and not sets[a].dfn then
 			local n = sets[a].n_eff
 			for b = a + 1, #sets do
-				if (sets[b].persistence or 1) > 0 and sets[b].mx then
+				if (sets[b].persistence or 1) > 0 and sets[b].mx and not sets[b].dfn then
 					local l = norm(cross(n, sets[b].n_eff))
 					if l then
 						if l.y > 0 then l = {x = -l.x, y = -l.y, z = -l.z} end

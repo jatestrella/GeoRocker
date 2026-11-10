@@ -97,6 +97,28 @@ local function build_mesh(bx, by, bz)
 	for i = 1, #sets do
 		if (sets[i].persistence or 1) > 0 then live[#live + 1] = sets[i] end
 	end
+	local D = sets.dfn          -- 離散裂隙網路：跡線是圓盤和岩面的交線（dfn.face_traces）
+	if D then live = {} end
+	-- 一條跡線（面內座標 a → b）加寬成四邊形
+	local function quad(c, ax, sg, u, v, a, b)
+		local function world(q)
+			local p = {c[1], c[2], c[3]}
+			p[ax] = p[ax] + 0.5 * sg + OFF * sg
+			p[u] = p[u] + q[1]
+			p[v] = p[v] + q[2]
+			return p
+		end
+		local du, dv = b[1] - a[1], b[2] - a[2]
+		local l = math.sqrt(du * du + dv * dv)
+		if l > 1e-4 then
+			local nu, nv_ = -dv / l * HW, du / l * HW
+			local i1 = vert(world({a[1] + nu, a[2] + nv_}))
+			local i2 = vert(world({b[1] + nu, b[2] + nv_}))
+			local i3 = vert(world({b[1] - nu, b[2] - nv_}))
+			local i4 = vert(world({a[1] - nu, a[2] - nv_}))
+			faces[#faces + 1] = ("f %d/1 %d/1 %d/1 %d/1"):format(i1, i2, i3, i4)
+		end
+	end
 	for z = minp.z, maxp.z do for y = minp.y, maxp.y do
 		local vi = area:index(minp.x, y, z)
 		for x = minp.x, maxp.x do
@@ -107,6 +129,11 @@ local function build_mesh(bx, by, bz)
 					if not solid_cid[nb] then
 						local ax, sg = d[4], d[5]
 						local u, v = OTHER[ax][1], OTHER[ax][2]
+						if D then
+							for _, t in ipairs(D:face_traces(x, y, z, ax, sg, D.where and D.where(x, y, z))) do
+								quad(c, ax, sg, u, v, {t[1], t[2]}, {t[3], t[4]})
+							end
+						end
 						for _, js in ipairs(live) do
 							local m = {js.mx, js.my, js.mz}
 							if m[u] ~= 0 or m[v] ~= 0 then

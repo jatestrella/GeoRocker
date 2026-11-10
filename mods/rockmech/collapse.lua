@@ -770,6 +770,16 @@ local wcfg = cfg.weakness
 -- 穿過格 (x,y,z) 的節理組（與貼圖跡線相同的平面與延續性判定，不受貼圖 2 條上限限制）
 local function joints_at(x, y, z, sets)
     sets = sets or rockmech.get_joint_sets()
+    if sets.dfn then
+        -- DFN：這一格 6 個面上切過的組
+        local J, seen, out = rockmech.joints, {}, {}
+        for _, f in ipairs(J.FACES) do
+            local fx, fy, fz, ax = J.face_key(x, y, z, f)
+            local i = J.face_joint(sets, fx, fy, fz, ax)
+            if i and not seen[i] then seen[i] = true; out[#out + 1] = sets[i] end
+        end
+        return out
+    end
     local tr = rockmech.jointtex.cell_traces(rockmech.joints, sets, x, y, z, #sets)
     local out = {}
     for k = 1, #tr do out[k] = sets[tr[k].set] end

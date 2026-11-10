@@ -475,7 +475,7 @@ function config.parse_gsi(s)
 end
 
 -- 節理組可由設定覆寫的槽位數（rockmech_joint_set_1 .. _N）
-config.MAX_SET_OVERRIDES = 6   -- 第 4 組以後是新增的組（須連號）；方塊變體跡線只畫前幾組，mesh 模式全部都畫
+config.MAX_SET_OVERRIDES = 12  -- 第 4 組以後是新增的組（須連號）；方塊變體跡線只畫前幾組，mesh 模式全部都畫
 
 ---------------------------------------------------------------------------
 -- 解析與驗證
@@ -997,11 +997,41 @@ function config.load(get)
 		elseif o then
 			local js = cfg.joint_sets[i]
 			if not js then
-				js = {id = i, name = "J" .. i, color = "#ffffff"}
+				local base = config.joint_sets[(i - 1) % #config.joint_sets + 1]
+				js = {id = i, name = "J" .. i, color = base and base.color or "#ffffff"}
 				cfg.joint_sets[i] = js
 			end
 			for k, v in pairs(o) do js[k] = v end
 		end
+	end
+	-- 離散裂隙網路（dfn.lua）：rockmech_joint_dfn_i = κ,rmin,rmax,a[,區號]
+	--   Fisher 集中度 κ、圓盤半徑上下限 (m)、半徑冪律指數 a、只在第幾個地質區（多個地質區的地圖）。
+	--   任何一組有設定 → 整個世界的節理改用 DFN（P32 = 1/spacing），節理跡線一律用 mesh 樣式
+	for i = 1, #cfg.joint_sets do
+		local key = "rockmech_joint_dfn_" .. i
+		local v = get(key)
+		if v and v ~= "" then
+			local n = {}
+			for tok in tostring(v):gmatch("[^,]+") do n[#n + 1] = tonumber((tok:gsub("%s", ""))) end
+			if #n >= 4 and n[1] and n[2] and n[3] and n[4] then
+				local js = cfg.joint_sets[i]
+				js.kappa = math.max(0, math.min(1e5, n[1]))
+				js.rmin = math.max(0.5, math.min(50, n[2]))
+				js.rmax = math.max(js.rmin, math.min(100, n[3]))
+				js.a = math.max(1.5, math.min(5, n[4]))
+				js.zone = n[5] and math.floor(n[5]) or nil
+				cfg.dfn = true
+			else
+				warnings[#warnings + 1] = key .. ": 需要 κ,rmin,rmax,a[,區號]（忽略）"
+			end
+		end
+	end
+	if cfg.dfn then
+		for _, js in ipairs(cfg.joint_sets) do
+			js.kappa = js.kappa or 30
+			js.rmin, js.rmax, js.a = js.rmin or 1, js.rmax or 10, js.a or 3.5
+		end
+		cfg.jointtex.style = "mesh"
 	end
 	-- 一組 persistence = 0 等同停用，保留在表中（羅盤仍會顯示其平面）
 

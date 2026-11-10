@@ -99,6 +99,7 @@ local function face_hash01(js, k, x, y, z, axis)
 	return h / TWO32
 end
 joints.face_hash01 = face_hash01
+joints.mix = mix
 
 -- 世界種子字串（可能超過 2^53）→ 32-bit 整數。逐字元雜湊以免精度損失。
 function joints.seed_from_string(s)
@@ -145,10 +146,12 @@ end
 --
 -- sets: config 的節理組陣列；seed: 32-bit 整數；lattice: D（預設 8）。
 -- persistence_mode: "patch"（片狀延續性，片的大小 ≈ 間距）或 "face"（舊：每個格面各自判定）。
+-- opts.dfn（dfn.lua 模組）：改用離散裂隙網路（圓盤），回傳的陣列多一個 .dfn 物件；
+--   opts.where(x, y, z) → 地質區編號（組的 zone）、opts.cell 粗格大小。有效位態 = 輸入位態（不對齊格點）。
 -- 回傳前處理後的陣列（原表不修改），每組多出：
 --   n（輸入位態的單位法向）、mx,my,mz、m_axis、L、o、
 --   n_eff、dip_eff、dipdir_eff、spacing_eff、dvec（有效位態的順傾向向量）
-function joints.prepare(sets, seed, lattice, persistence_mode)
+function joints.prepare(sets, seed, lattice, persistence_mode, opts)
 	local D = lattice or 8
 	local out = {}
 	for i, js in ipairs(sets) do
@@ -183,7 +186,16 @@ function joints.prepare(sets, seed, lattice, persistence_mode)
 		if persistence_mode == "patch" then
 			p.patch = math.max(2, floor(p.spacing_eff + 0.5))
 		end
+		if opts and opts.dfn then
+			p.dfn = true
+			p.n_eff, p.dip_eff, p.dipdir_eff, p.spacing_eff = p.n, js.dip, js.dipdir, js.spacing
+			p.dvec = joints.dip_vector(js.dip, js.dipdir)
+			p.patch = nil
+		end
 		out[i] = p
+	end
+	if opts and opts.dfn then
+		out.dfn = opts.dfn.new(out, seed, {mix = mix, hash = joints.hash, where = opts.where, cell = opts.cell})
 	end
 	return out
 end
@@ -247,6 +259,13 @@ end
 joints.face_skipped = skipped
 
 function joints.face_joint(sets, x, y, z, axis)
+	local D = sets.dfn
+	if D then
+		-- 先查圓盤（快），切到了才判斷這兩格帶不帶節理（煤層、斷層角礫岩；要查岩性，比較慢）
+		local d = D:face(x, y, z, axis)
+		if not d or skipped(sets, x, y, z, axis) then return nil end
+		return d.set, d
+	end
 	if skipped(sets, x, y, z, axis) then return nil end
 	for i = 1, #sets do
 		local js = sets[i]
@@ -269,6 +288,13 @@ end
 function joints.face_info(sets, x, y, z, axis)
 	local out = {}
 	local skip = skipped(sets, x, y, z, axis)
+	if sets.dfn then
+		-- DFN：k = 圓盤編號、r = 0（圓盤有限大，沒有延續性雜湊）
+		for _, d in ipairs(sets.dfn:face_all(x, y, z, axis)) do
+			out[#out + 1] = {set = d.set, k = d.id, r = 0, joint = not skip, disc = d}
+		end
+		return out
+	end
 	for i = 1, #sets do
 		local js = sets[i]
 		local k, r = joints.face_crossing(js, x, y, z, axis)
