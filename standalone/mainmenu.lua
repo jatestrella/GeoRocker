@@ -221,7 +221,7 @@ local function create_save(m, title, kind)
 end
 
 -- 開放連線的兩種玩法（寫進世界設定 rockmech_multiplayer）
-local NET_MODES = {{"coop", "合作：共用營地和錢"}, {"compete", "競爭：各自的錢"}}
+local NET_MODES = {{"coop", "合作"}, {"compete", "競爭"}}
 local function start_world(sv, fields)
 	if not sv then state.msg = "請先選一個存檔"; return end
 	core.settings:set("creative_mode", "false")
