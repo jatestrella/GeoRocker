@@ -193,6 +193,7 @@ dofile(modpath .. "/train.lua")            -- 火車出貨（教學地圖原型�
 dofile(modpath .. "/airq.lua")         -- 空氣品質：柴油廢氣、炮煙、通風、氣體偵測器
 dofile(modpath .. "/knowledge.lua")
 dofile(modpath .. "/coredrill.lua")
+dofile(modpath .. "/oreshaft.lua")       -- 豎井：井口倒礦，井底的破碎站收料
 dofile(modpath .. "/mentor.lua")         -- 老礦工：單機經營模式一開始在附近晃、聊天式的小任務
 dofile(modpath .. "/mohr.lua")         -- Mohr 圓的畫圖
 dofile(modpath .. "/tablet.lua")       -- 數值分析平板：手上的螢幕畫指著那一格的 Mohr 圓

@@ -1083,6 +1083,7 @@ local function build_camp_now(owner, x0)
 	if rockmech.career_build_opbench then rockmech.career_build_opbench(x0, owner) end  -- 操作員休息長椅（operator.lua）
 	local team = owner:match("^team:(%d)$")
 	if team then build_sign(x0, team) end
+	if cfg.camp_crusher == false then return end      -- 有豎井的地圖：破碎站在井底（oreshaft.lua）
 	local y = ground_y(x0 + CRUSHER_X, CAMP_Z) or 0
 	if not rockmech.crusher_build({x = x0 + CRUSHER_X, y = y + 1, z = CAMP_Z}, -1, 0, owner) then
 		core.log("warning", ("[rockmech] 營地 x = %d 的破碎站蓋不起來：地形不平"):format(x0))

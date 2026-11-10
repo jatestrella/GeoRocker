@@ -1161,6 +1161,17 @@ function config.load(get, opts)
 		end
 	end
 
+	-- 豎井（oreshaft.lua）：rockmech_shafts = x,z;x,z（井口中心）。有豎井的地圖營地不蓋收煤站（破碎站在井底）
+	local sh = get("rockmech_shafts")
+	if sh and sh ~= "" then
+		cfg.shafts = {}
+		for x, z in tostring(sh):gmatch("(%-?[%d.]+)%s*,%s*(%-?[%d.]+)") do
+			cfg.shafts[#cfg.shafts + 1] = {x = math.floor(tonumber(x)), z = math.floor(tonumber(z))}
+		end
+		if #cfg.shafts == 0 then cfg.shafts = nil; warnings[#warnings + 1] = "rockmech_shafts: 格式是 x,z;x,z（忽略）" end
+	end
+	cfg.camp_crusher = cfg.shafts == nil
+
 	-- 營地（出生點）的地面高度：一般就是 surface_y；真實地形的地圖是 surface_y + 出生點的網格高度（作業平台）
 	cfg.camp_y = math.floor(cfg.surface_y or 0)
 	if cfg.terrain and cfg.terrain.height then cfg.camp_y = cfg.camp_y + math.floor(cfg.terrain.height(0, 0) + 0.5) end
