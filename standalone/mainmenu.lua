@@ -23,15 +23,19 @@ gamedata = gamedata or {}
 do
 	local FONT = core.get_builtin_path() .. ".." .. DS .. "games" .. DS .. GAME .. DS .. "fonts" .. DS .. "Cubic_11.ttf"
 	-- georocker_font：設定版本（改字級時加 1，舊的設定也會跟著換）
-	if core.settings:get("font_path") ~= FONT or core.settings:get("georocker_font") ~= "2" then
+	if core.settings:get("font_path") ~= FONT or core.settings:get("georocker_font") ~= "3" then
 		for _, k in ipairs({"font_path", "font_path_bold", "font_path_italic", "font_path_bold_italic",
 				"mono_font_path", "mono_font_path_bold", "mono_font_path_italic", "mono_font_path_bold_italic"}) do
 			core.settings:set(k, FONT)
 		end
-		core.settings:set("font_size", "16")       -- 跟原本的字一樣大：22 會撐破 Luanti 內建選單的按鈕
-		core.settings:set("mono_font_size", "16")
+		-- 點陣字只有整數倍才清楚（11 px 的字放到 16 px 會糊）：22 = 剛好 2 倍；
+		-- font_size_divisible_by 讓其他地方（標題放大、名牌）也落在 11 的倍數。Luanti 內建的 Esc 選單按鈕會有點擠
+		core.settings:set("font_size", "22")
+		core.settings:set("mono_font_size", "22")
+		core.settings:set("font_size_divisible_by", "11")
+		core.settings:set("mono_font_size_divisible_by", "11")
 		core.settings:set("font_shadow", "0")
-		core.settings:set("georocker_font", "2")
+		core.settings:set("georocker_font", "3")
 	end
 end
 -- 語言：沒設的話用繁中（系統是英文的電腦，遊戲裡的字才不會變英文）。語言要重開遊戲才生效
