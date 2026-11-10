@@ -1171,13 +1171,13 @@ function config.load(get, opts)
 		if #cfg.shafts == 0 then cfg.shafts = nil; warnings[#warnings + 1] = "rockmech_shafts: 格式是 x,z;x,z（忽略）" end
 	end
 	cfg.camp_crusher = cfg.shafts == nil
-	-- 豎井的井（邊長 2·half+1）和外圍一圈沒有節理的硬大理岩（厚 ring）
-	cfg.shaft_half, cfg.shaft_ring = 4, 6
+	-- 豎井：圓井半徑 r（直徑 12 m，照和平礦場）和外圍一圈沒有節理的硬大理岩（厚 ring）
+	cfg.shaft_r, cfg.shaft_ring = 6, 6
 	function cfg.in_shaft_ring(x, z)
 		if not cfg.shafts then return false end
-		local R = cfg.shaft_half + cfg.shaft_ring
+		local R2 = (cfg.shaft_r + cfg.shaft_ring + 0.5) ^ 2
 		for _, s in ipairs(cfg.shafts) do
-			if math.abs(x - s.x) <= R and math.abs(z - s.z) <= R then return true end
+			if (x - s.x) ^ 2 + (z - s.z) ^ 2 <= R2 then return true end
 		end
 		return false
 	end

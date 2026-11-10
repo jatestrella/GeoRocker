@@ -1,5 +1,5 @@
 -- rockmech/oreshaft.lua
--- 豎井（溜井）：採場地面上的方井（邊長 2·half+1），深 DEPTH m。井壁是一圈完整、沒有節理切過的硬大理岩（厚 ring m），
+-- 豎井（溜井）：採場地面上的圓井（半徑 r），深 DEPTH m。井壁是一圈完整、沒有節理切過的硬大理岩（厚 ring m），
 -- 像一口天然的豎井；採場往下挖時這圈岩石跟著一起挖，井口就降低。
 -- 井裡一開始填滿碎石到「井口下 KEEP m」（填料不算錢，撐住井壁）。收料：井裡高過「井口下 KEEP m」的碎石
 -- 每 STEP 秒收走、付錢（照品位和市價，廢石收處理費，跟收煤站一樣）；倒多少收多少，碎石面一直維持在井口下 KEEP m。
@@ -14,8 +14,10 @@ local WALL = "rockmech:shaft_marble"
 local DEPTH = 150               -- 井深 (m)
 local KEEP = 5                  -- 碎石面維持在井口下幾公尺
 local STEP = 2                  -- 每幾秒收一次
-local HALF = cfg.shaft_half or 4
+local RAD = cfg.shaft_r or 6
 local RING = cfg.shaft_ring or 6
+local function inside(dx, dz) return dx * dx + dz * dz <= (RAD + 0.5) ^ 2 end
+local function in_wall(dx, dz) return dx * dx + dz * dz <= (RAD + RING + 0.5) ^ 2 end
 
 -- 井壁：硬大理岩（沒有節理），挖起來是大理岩碎石
 do
@@ -47,12 +49,14 @@ local function build(i, s, owner)
 	local C = rockmech.collapse
 	C.quiet = C.quiet + 1
 	local ok, err = pcall(function()
-		local R = HALF + RING
+		local R = RAD + RING
 		for y = bottom - 1, top + 6 do
 			for x = s.x - R, s.x + R do for z = s.z - R, s.z + R do
 				local p = {x = x, y = y, z = z}
-				local inside = math.abs(x - s.x) <= HALF and math.abs(z - s.z) <= HALF
-				if inside and y >= bottom then
+				local hole = inside(x - s.x, z - s.z)
+				if not in_wall(x - s.x, z - s.z) then
+					-- 圓環外面不動
+				elseif hole and y >= bottom then
 					C.mark_excavated(p)
 					if y <= fill_top then core.swap_node(p, {name = base, param2 = 200})      -- 填料
 					else core.swap_node(p, {name = "air"}) end
@@ -75,7 +79,7 @@ local function ensure(owner)
 		if storage:get_string("shaft:" .. i) == "" then
 			pending = true
 			local top = ground_top(s.x, s.z)
-			local R = HALF + RING
+			local R = RAD + RING
 			core.emerge_area({x = s.x - R, y = top - DEPTH - 2, z = s.z - R}, {x = s.x + R, y = top + 8, z = s.z + R}, function(_, _, rem)
 				if rem > 0 then return end
 				pending = false
@@ -101,7 +105,7 @@ end)
 
 -- 井口：井壁硬大理岩還在的最高一層（從記下的井口往下找）
 local function collar(d)
-	local x = d.x + HALF + 1
+	local x = d.x + RAD + 1
 	for y = d.top, d.top - DEPTH, -1 do
 		local n = core.get_node({x = x, y = y, z = d.z}).name
 		if n == "ignore" then return nil end
@@ -138,9 +142,9 @@ core.register_globalstep(function(dtime)
 				C.quiet = C.quiet + 1
 				local ok, err = pcall(function()
 					for y = c + 8, keep + 1, -1 do
-						for x = d.x - HALF, d.x + HALF do for z = d.z - HALF, d.z + HALF do
+						for x = d.x - RAD, d.x + RAD do for z = d.z - RAD, d.z + RAD do
 							local p = {x = x, y = y, z = z}
-							local k = rockmech.rubble_level[core.get_node(p).name]
+							local k = inside(x - d.x, z - d.z) and rockmech.rubble_level[core.get_node(p).name]
 							if k then
 								local lv, base, p2 = V.take_rubble(p, k)
 								if lv > 0 then pay(i, d, lv, base, p2) end
