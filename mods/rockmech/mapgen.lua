@@ -15,7 +15,13 @@ local cfg = config.load(function(key)
 	local v = world_settings[key]
 	if v ~= nil and v ~= "" then return v end
 	return core.settings:get(key)
-end)
+end, {read_file = function(name)
+	local f = io.open(core.get_worldpath() .. "/" .. name, "rb")
+	if not f then return nil end
+	local s = f:read("*a")
+	f:close()
+	return s
+end})
 if not cfg.replace_stone then
 	return
 end

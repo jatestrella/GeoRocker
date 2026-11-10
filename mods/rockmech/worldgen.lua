@@ -119,6 +119,37 @@ M.RECIPES = {
 		end,
 	},
 }
+-- 水泥礦（仿和平礦場）：賣的還是大理岩（ore = marble），但礦體很厚（120–200 m），裡面夾幾層薄片岩（稀釋），
+-- 傾角 25–55°。gen_strata = single：純的厚大理岩；inter：夾片岩
+do
+	local C = {}
+	for k, v in pairs(M.RECIPES.marble) do C[k] = v end
+	C.ore = "marble"
+	C.dip = function(f) return round(25 + 30 * f) end
+	C.column = function(r, mode, nseam, add, sum, range, count)
+		add("schist", range(r, 20, 40))
+		local main_top = sum()
+		local T = range(r, 120, 200)
+		local main_i
+		if mode == "single" then
+			add("marble", T); main_i = count()
+		else
+			-- 主礦體中間夾 nseam 層薄片岩（1–4 m）：主礦層算第一段大理岩
+			local left, first = T, true
+			for k = 1, nseam do
+				local seg = left / (nseam + 2 - k) * range(r, 0.7, 1.3)
+				add("marble", seg); left = left - seg
+				if first then main_i = count(); first = false end
+				add("schist", range(r, 1, 4))
+			end
+			add("marble", math.max(10, left))
+		end
+		add("schist", 250)
+		return main_top, main_i
+	end
+	M.RECIPES.cement = C
+end
+local function ore_key(k) return M.RECIPES[k] and M.RECIPES[k].ore or k end
 
 function M.generate(world_conf)
 	if world_conf:has("rockmech_joint_lattice") or world_conf:has("rockmech_zone_order") or world_conf:has("rockmech_generated") then
@@ -166,6 +197,23 @@ function M.generate(world_conf)
 	end
 
 	local set = function(k, v) world_conf:set("rockmech_" .. k, tostring(v)) end
+	-- 真實地形（rockmech_terrain = dem,檔名）：不擲地形；礦層露頭的高度照那裡的地面
+	-- 地面高度 = surface_y + 網格高度；surface_y = −出生點高度，出生點就在 y ≈ 0（營地、找地面的程式都假設地面在 0 附近）
+	local dem, sy = nil, 0
+	do
+		local file = (world_conf:get("rockmech_terrain") or ""):match("^%s*dem%s*,%s*([%w_.%-]+)")
+		if file and rockmech.read_world_file then
+			local txt = rockmech.read_world_file(file)
+			dem = txt and rockmech.config.parse_dem(txt)
+			if dem then sy = -math.floor(rockmech.config.dem_height(dem, 0, 0) + 0.5) end
+		end
+	end
+	local pad = tonumber((world_conf:get("rockmech_terrain") or ""):match("^%s*dem%s*,%s*[%w_.%-]+%s*,%s*([%d.]+)") or "") or 0
+	local function ground(x, z)
+		if not dem then return 0 end
+		if math.sqrt(x * x + z * z) <= pad then return sy + rockmech.config.dem_height(dem, 0, 0) end      -- 出生點的作業平台
+		return sy + rockmech.config.dem_height(dem, x, z)
+	end
 	local logs = {}
 	local function sp() return round(range(r, 2, 5), 0.5) end
 	local function jr() return pick(r, {1, 1.5, 2, 3}) end
@@ -205,6 +253,7 @@ function M.generate(world_conf)
 		end
 		-- 頂面高程 ref_y(P) = y0 − tan·(P·傾向) + fold(P)；主礦層頂 = ref_y(P) − top(P)/cos = 0
 		local y0 = top_at(px, pz) / cosd + tand * (px * sdd + pz * cdd) - fold_at(px, pz)
+		y0 = y0 + ground(px, pz)
 		local parts = {}
 		for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) end
 		local sfx = k == 1 and "" or ("_" .. k)
@@ -214,7 +263,7 @@ function M.generate(world_conf)
 		if var > 0 then set("strata_var" .. sfx, ("%g,%d"):format(var, varScale)) end
 		if k == 1 then
 			set("zone_order", (mode == "single" or R.host_only) and beds[1][1] or "shale")
-			local depth = math.floor(-(y0 + fold_at(0, 0) - top_at(0, 0) / cosd) + 0.5)
+			local depth = math.floor(ground(0, 0) - (y0 + fold_at(0, 0) - top_at(0, 0) / cosd) + 0.5)
 			logs[#logs + 1] = ("%s %s %d 層、傾角 %d°/%03d°、露頭 %d m 外、營地底下 %d m"):format(ore, mode, nseam, dip, dipdir, dist, depth)
 		else
 			logs[#logs + 1] = ("斷層 %d m 外（帶寬 %d m）→ %s 傾角 %d°/%03d°"):format(faults[k - 1].d, faults[k - 1].w, ore, dip, dipdir)
@@ -248,18 +297,23 @@ function M.generate(world_conf)
 		set("faults", table.concat(fp, ","))
 		set("gsi_breccia", round(range(r, 10, 25)))
 	end
-	if relief > 0 then set("terrain", ("%s,%d,%d"):format(terrain, relief, terrain == "cuesta" and 120 or 60)) end
+	if relief > 0 and not dem then set("terrain", ("%s,%d,%d"):format(terrain, relief, terrain == "cuesta" and 120 or 60)) end
 	set("gsi_sandstone", round(range(r, 45, 70)))
 	set("gsi_shale", round(range(r, 35, 60)))
 	set("gsi_coal", round(range(r, 30, 50)))
-	if seen.marble then
+	if seen.marble or seen.cement then
 		set("gsi_marble", round(range(r, 50, 75)))
 		set("gsi_schist", round(range(r, 30, 55)))
 	end
-	set("ores", table.concat(ores, ","))
+	local okeys, oseen = {}, {}
+	for _, k in ipairs(ores) do
+		local o = ore_key(k)
+		if not oseen[o] then okeys[#okeys + 1] = o; oseen[o] = true end
+	end
+	set("ores", table.concat(okeys, ","))
 	set("joint_persistence", "patch")
 	set("jointtex_style", "mesh")
-	set("surface_y", 0)
+	set("surface_y", sy)
 	set("joint_lattice", 8)
 	set("k_hmax", kH)
 	set("k_hmin", kh)
@@ -273,7 +327,7 @@ function M.generate(world_conf)
 	world_conf:write()
 	-- 引擎的地形：平地（起伏由 rockmech_terrain 自己造），沒有湖、海、洞穴
 	local mg = {mg_name = "flat", mg_flags = "nocaves, nodungeons, light, nodecorations, nobiomes, noores",
-		mgflat_spflags = "nolakes, nohills, nocaverns", mgflat_ground_level = "0", water_level = "-31000"}
+		mgflat_spflags = "nolakes, nohills, nocaverns", mgflat_ground_level = tostring(sy), water_level = "-31000"}
 	for k, v in pairs(mg) do core.set_mapgen_setting(k, v, true) end
 	core.log("action", ("[rockmech] 地圖產生器：種子 %s → %s；褶皺 %d m、厚度變化 %d%%、%s %d m"):format(
 		seed_str, table.concat(logs, "；"), foldA, math.floor(var * 100 + 0.5), terrain, relief))

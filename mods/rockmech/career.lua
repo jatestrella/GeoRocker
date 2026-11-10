@@ -1070,7 +1070,7 @@ local function build_camp_now(owner, x0)
 	-- 先把營地範圍的平地整成一層平整的表土，建築、家具蓋在土上面（woodwork.lua）
 	if rockmech.level_camp_soil then
 		local a, b = rockmech.career_area(x0 or 0)
-		rockmech.level_camp_soil(a, b, math.floor(cfg.surface_y or 0))
+		rockmech.level_camp_soil(a, b, cfg.camp_y or math.floor(cfg.surface_y or 0))
 	end
 	storage:set_string("sign3:" .. x0, "1")
 	x0 = x0 or 0
@@ -1276,7 +1276,7 @@ if cfg.career then
 					if storage:get_string("yard2:" .. x0) == "" then
 						storage:set_string("yard2:" .. x0, "1")
 						if rockmech.level_camp_soil then
-							rockmech.level_camp_soil({x = x0 + 9, z = -55}, {x = x0 + 37, z = -35}, math.floor(cfg.surface_y or 0))
+							rockmech.level_camp_soil({x = x0 + 9, z = -55}, {x = x0 + 37, z = -35}, cfg.camp_y or math.floor(cfg.surface_y or 0))
 							core.log("action", ("[rockmech] 營地 x = %d 的新交車區整地"):format(x0))
 						end
 					end
@@ -1311,6 +1311,17 @@ end
 
 -- 新手裝備：第一次進遊戲就發十字鎬、鏟子、手推車（每張地圖都發；背包放不下的掉在腳邊）
 local STARTER = {"rockmech:pick", "rockmech:shovel", "rockmech:cart_item"}
+-- 真實地形的地圖：引擎的出生點是平坦地圖產生器的地面（surface_y，遠在山底下），一律放到營地
+if cfg.terrain and cfg.terrain.mode == "dem" then
+	local function to_camp(player) player:set_pos(rockmech.career_spawn(cfg.career_camp_dx or 0)) end
+	core.register_on_newplayer(to_camp)
+	core.register_on_respawnplayer(function(player)
+		if rockmech.team_of and rockmech.team_of(player:get_player_name()) then return false end
+		to_camp(player)
+		return true
+	end)
+end
+
 core.register_on_newplayer(function(player)
 	local inv = player:get_inventory()
 	for _, it in ipairs(STARTER) do

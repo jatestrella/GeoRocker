@@ -570,11 +570,40 @@ function config.validate_joint_set(js)
 	return warn
 end
 
+-- 高程網格（tools/dem_extract.py 產生）：檔案內容 → {nx, nz, cell, x0, z0, h}；格式不對回傳 nil
+function config.parse_dem(s)
+	local nx, nz, cell, x0, z0, p = s:match("^RMDEM (%d+) (%d+) ([%d.%-]+) ([%d.%-]+) ([%d.%-]+)\n()")
+	if not nx then return nil end
+	nx, nz = tonumber(nx), tonumber(nz)
+	if #s < p - 1 + nx * nz * 2 then return nil end
+	local h, byte = {}, string.byte
+	for i = 1, nx * nz do
+		local lo, hi = byte(s, p, p + 1)
+		h[i] = (hi * 256 + lo) / 10
+		p = p + 2
+	end
+	return {nx = nx, nz = nz, cell = tonumber(cell), x0 = tonumber(x0), z0 = tonumber(z0), h = h}
+end
+-- 網格上 (x, z) 的高度（雙線性內插；範圍外用邊上的值）
+function config.dem_height(D, x, z)
+	local fx = math.max(0, math.min(D.nx - 1, (x - D.x0) / D.cell))
+	local fz = math.max(0, math.min(D.nz - 1, (z - D.z0) / D.cell))
+	local i, j = math.min(D.nx - 2, math.floor(fx)), math.min(D.nz - 2, math.floor(fz))
+	local tx, tz = fx - i, fz - j
+	local h, nx = D.h, D.nx
+	local k = j * nx + i + 1
+	local a = h[k] + (h[k + 1] - h[k]) * tx
+	local b = h[k + nx] + (h[k + nx + 1] - h[k + nx]) * tx
+	return a + (b - a) * tz
+end
+
 -- 由設定讀取函式產生最終設定表。
 -- get(key) 回傳字串或 nil（引擎內為 core.settings:get）。
+-- opts.read_file(name)：讀世界資料夾裡的檔案（高程網格用），回傳內容或 nil
 -- 回傳 cfg, warnings
-function config.load(get)
+function config.load(get, opts)
 	get = get or function() return nil end
+	opts = opts or {}
 	local warnings = {}
 	local cfg = {
 		lithologies = copy(config.lithologies),
@@ -675,10 +704,35 @@ function config.load(get)
 		end
 	end
 	-- 自由地形（非礦帶世界）：rockmech_terrain = 樣式,高度,尺度；樣式 hills（丘陵）或 cuesta（單面山，要有柱狀圖）
+	--   或 dem,檔名[,平台半徑]：真實地形的高程網格（世界資料夾裡的檔案，tools/dem_extract.py 產生）。
+	--   高度是相對 surface_y 的（地圖產生器把 surface_y 設成出生點高度的負值，出生點就在 y ≈ 0）；
+	--   平台半徑：出生點附近整平成一塊作業平台（給營地），外面 40 m 漸變回原地形
 	local tr = get("rockmech_terrain")
 	if tr and tr ~= "" and not cfg.lane_terrain then
-		local mode, h, sc = tostring(tr):match("^%s*(%a+)%s*,%s*([%d.]+)%s*,%s*([%d.]+)")
-		if mode and tonumber(h) > 0 then cfg.terrain = {mode = mode, h = tonumber(h), scale = math.max(10, tonumber(sc))} end
+		local file, pad = tostring(tr):match("^%s*dem%s*,%s*([%w_.%-]+)%s*,?%s*([%d.]*)")
+		if file then
+			local s = opts.read_file and opts.read_file(file)
+			local D = s and config.parse_dem(s)
+			if D then
+				local R = tonumber(pad) or 0
+				local h0 = config.dem_height(D, 0, 0)
+				local height = function(x, z)
+					local h = config.dem_height(D, x, z)
+					if R > 0 then
+						local t = math.max(0, math.min(1, (math.sqrt(x * x + z * z) - R) / 40))
+						t = t * t * (3 - 2 * t)
+						h = h0 + (h - h0) * t
+					end
+					return h
+				end
+				cfg.terrain = {mode = "dem", dem = D, height = height}
+			else
+				warnings[#warnings + 1] = "rockmech_terrain: 讀不到高程網格 " .. file .. "（平地）"
+			end
+		else
+			local mode, h, sc = tostring(tr):match("^%s*(%a+)%s*,%s*([%d.]+)%s*,%s*([%d.]+)")
+			if mode and tonumber(h) > 0 then cfg.terrain = {mode = mode, h = tonumber(h), scale = math.max(10, tonumber(sc))} end
+		end
 	end
 	local pit = numbers("rockmech_open_pit", 6)
 	if pit then
@@ -1091,6 +1145,9 @@ function config.load(get)
 		end
 	end
 
+	-- 營地（出生點）的地面高度：一般就是 surface_y；真實地形的地圖是 surface_y + 出生點的網格高度（作業平台）
+	cfg.camp_y = math.floor(cfg.surface_y or 0)
+	if cfg.terrain and cfg.terrain.height then cfg.camp_y = cfg.camp_y + math.floor(cfg.terrain.height(0, 0) + 0.5) end
 	return cfg, warnings
 end
 

@@ -40,6 +40,15 @@ rockmech.rockmass = dofile(modpath .. "/rockmass.lua")
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
 local world_conf_path = core.get_worldpath() .. "/rockmech.conf"
 local world_conf = Settings(world_conf_path)
+-- 世界資料夾裡的檔案（高程網格這類設定引用的資料）
+local function read_world_file(name)
+	local f = io.open(core.get_worldpath() .. "/" .. name, "rb")
+	if not f then return nil end
+	local s = f:read("*a")
+	f:close()
+	return s
+end
+rockmech.read_world_file = read_world_file
 -- 地圖產生器：新世界（還沒有 rockmech.conf）第一次啟動時擲一套地質寫進去（worldgen.lua）
 local worldgen = dofile(modpath .. "/worldgen.lua")
 if worldgen.generate(world_conf) then world_conf = Settings(world_conf_path) end
@@ -48,7 +57,7 @@ local function get_setting(key)
 	if v ~= nil and v ~= "" then return v end
 	return core.settings:get(key)
 end
-local cfg, warnings = rockmech.config.load(get_setting)
+local cfg, warnings = rockmech.config.load(get_setting, {read_file = read_world_file})
 rockmech.cfg = cfg
 for _, w in ipairs(warnings) do
 	core.log("warning", "[rockmech] " .. w)

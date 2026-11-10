@@ -240,3 +240,29 @@ describe("config 離散裂隙網路", function()
 		assert.are.equal(3, #w)
 	end)
 end)
+
+describe("高程網格（rockmech_terrain = dem）", function()
+	-- 3×2 的網格，cell 5，西南角 (-5, 0)：高度 0,10,20 / 30,40,50（×10 存）
+	local function grid()
+		local h = {0, 10, 20, 30, 40, 50}
+		local t = {"RMDEM 3 2 5 -5 0\n"}
+		for _, v in ipairs(h) do t[#t + 1] = string.char((v * 10) % 256, math.floor(v * 10 / 256)) end
+		return table.concat(t)
+	end
+	it("讀檔、雙線性內插、範圍外用邊上的值", function()
+		local D = config.parse_dem(grid())
+		assert.are.equal(3, D.nx)
+		assert.near(0, config.dem_height(D, -5, 0), 1e-9)
+		assert.near(40, config.dem_height(D, 0, 5), 1e-9)
+		assert.near(20, config.dem_height(D, -2.5, 2.5), 1e-9)
+		assert.near(50, config.dem_height(D, 100, 100), 1e-9)
+		assert.are.equal(nil, config.parse_dem("RMDEM 3 2 5 -5 0\n" .. "xx"))
+	end)
+	it("設定讀得到檔案才有地形，讀不到給警告", function()
+		local cfg = config.load(getter({rockmech_terrain = "dem,a.bin"}), {read_file = function(n) return n == "a.bin" and grid() or nil end})
+		assert.near(20, cfg.terrain.height(-2.5, 2.5), 1e-9)
+		local cfg2, warn = config.load(getter({rockmech_terrain = "dem,b.bin"}), {read_file = function() return nil end})
+		assert.are.equal(nil, cfg2.terrain)
+		assert.truthy(#warn > 0)
+	end)
+end)

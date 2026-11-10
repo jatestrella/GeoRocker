@@ -47,7 +47,7 @@ local function site_of(acc)
 	if t and rockmech.team_site_x and storage:get_string("team_site:" .. t) == "1" then return rockmech.team_site_x(t) end
 	if storage:get_string("career_site") == "2" then return cfg.career_camp_dx end
 end
-local function sy() return math.floor(cfg.surface_y or 0) end
+local function sy() return cfg.camp_y or math.floor(cfg.surface_y or 0) end      -- 營地的地面高度
 local function in_rect(x0, r, x, z) return x >= x0 + r.x1 and x <= x0 + r.x2 and z >= r.z1 and z <= r.z2 end
 local EXTRA = {}             -- 其他受保護的長條（鐵路，train.lua 用 rockmech.camp.protect 加）
 local function in_pad(x0, pos)

@@ -114,7 +114,8 @@ local function maps()
 		local s = Settings(dir .. DS .. "map.conf")
 		out[#out + 1] = {id = id, dir = dir, title = s:get("title") or id, description = s:get("description") or "",
 			mode = s:get("mode") or "solo", order = tonumber(s:get("order") or "") or 99, random = s:get("random") == "true",
-			custom = s:get("custom") == "true", hidden = s:get("hidden") == "true"}
+			custom = s:get("custom") == "true", hidden = s:get("hidden") == "true",
+			reseed = s:get("reseed") == "true", mapgen_limit = tonumber(s:get("mapgen_limit") or "")}
 	end
 	table.sort(out, function(a, b) return a.order < b.order end)
 	return out
@@ -174,10 +175,14 @@ local function create_save(m, title, kind)
 	if title == "" then title = unique_title(kind) end
 	if title_used(title) then return nil, "已經有叫「" .. title .. "」的存檔，換個名字" end
 	-- 隨機地圖、自訂地圖：每次新的（或指定的）種子，地圖產生器（worldgen.lua）依種子擲地質
+	-- 範本 map.conf：reseed = true 每次新的種子（地質由地圖產生器擲）；mapgen_limit 地圖範圍（真實地形比較大）
 	local mg = MAPGEN
-	if m.random or m.custom then
+	if m.random or m.custom or m.reseed or m.mapgen_limit then
 		mg = {}
 		for k, v in pairs(MAPGEN) do mg[k] = v end
+		if m.mapgen_limit then mg.mapgen_limit = tostring(m.mapgen_limit) end
+	end
+	if m.random or m.custom or m.reseed then
 		math.randomseed(os.time())
 		local sd = m.custom and gen.seed:match("^%s*(.-)%s*$") or ""
 		mg.fixed_map_seed = sd ~= "" and sd or tostring(math.random(1, 2000000000))

@@ -302,6 +302,7 @@ end
 local CUESTA_SCARP = math.tan(math.rad(55))
 function stress.free_terrain(cfg, x, z)
 	local T = cfg.terrain
+	if T.height then local h = T.height(x, z); return h, h end      -- 真實地形（高程網格）
 	local H = T.h
 	local h
 	if T.mode == "cuesta" and cfg.strata then
