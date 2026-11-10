@@ -359,8 +359,8 @@ local function formspec()
 		return table.concat(fs)
 	end
 	local cm = state.page == "new_custom"
-	local PH = cm and 15 or 10.5
-	local PW = state.page:sub(1, 4) == "new_" and 18 or 14     -- 開新遊戲的頁面比較寬（選項多）
+	local PH = cm and 15.8 or 10.5
+	local PW = state.page:sub(1, 4) == "new_" and 22 or 14     -- 開新遊戲的頁面比較寬（選項多）
 	local fs = {("formspec_version[6]size[%g,%g]bgcolor[#00000000;true]"):format(PW, PH), ("box[0,0;%g,%g;#000000b0]"):format(PW, PH)}
 	header(fs, PW)
 	if state.page == "main" then
@@ -405,21 +405,22 @@ local function formspec()
 			y = 2.4
 			for i, t in ipairs(templates()) do
 				fs[#fs + 1] = ("button[0.5,%g;5,0.9;tpl_%d;%s]"):format(y, i, F(t.title))
-				local lines = wrap_cjk(t.description, 27)
+				local lines = wrap_cjk(t.description, 15.7 * 2.4)
 				local h = math.max(1.1, #lines * 0.42 + 0.2)
-				fs[#fs + 1] = ("textarea[5.8,%g;11.7,%g;;;%s]"):format(y - 0.05, h, F(table.concat(lines, "\n")))
+				fs[#fs + 1] = ("textarea[5.8,%g;15.7,%g;;;%s]"):format(y - 0.05, h, F(table.concat(lines, "\n")))
 				y = y + math.max(1.25, h + 0.2)
 			end
 			fs[#fs + 1] = ("button[0.5,%g;5,0.9;back_main;%s]"):format(math.max(y + 0.2, 6.4), F("返回"))
 		elseif m then
 			fs[#fs + 1] = ("label[0.5,2.1;%s]"):format(F(state.page == "new_random" and "隨機地圖" or state.page == "new_custom" and "自訂地圖" or m.title))
-			fs[#fs + 1] = ("textarea[0.5,2.4;17,1.2;;;%s]"):format(F(table.concat(wrap_cjk(m.description, 40), "\n")))
-			y = 3.8
+			local dl = wrap_cjk(m.description, 21 * 2.4)
+			fs[#fs + 1] = ("textarea[0.5,2.4;21,%g;;;%s]"):format(#dl * 0.42 + 0.3, F(table.concat(dl, "\n")))
+			y = 2.4 + #dl * 0.42 + 0.9
 			local function dd(x, name, label, opts, idx, col)
 				local t = {}
 				for _, o in ipairs(opts) do t[#t + 1] = F(o[col or 2]) end
 				fs[#fs + 1] = ("label[%g,%g;%s]"):format(x, y, F(label))
-				fs[#fs + 1] = ("dropdown[%g,%g;4.4,0.7;%s;%s;%d;true]"):format(x + 1.2, y - 0.35, name, table.concat(t, ","), idx)
+				fs[#fs + 1] = ("dropdown[%g,%g;5.0,0.7;%s;%s;%d;true]"):format(x + 1.2, y - 0.35, name, table.concat(t, ","), idx)
 			end
 			if m.random or m.custom then
 				fs[#fs + 1] = ("label[0.5,%g;%s]"):format(y, F("礦種"))
@@ -433,26 +434,26 @@ local function formspec()
 			if m.custom then
 				-- 地質選項
 				dd(0.5, "g_strata", "地層", GEN_STRATA, gen.strata, strata_col())
-				dd(7.0, "g_terrain", "地形", GEN_TERRAIN, gen.terrain)
+				dd(8.0, "g_terrain", "地形", GEN_TERRAIN, gen.terrain)
 				y = y + 0.9
 				fs[#fs + 1] = "scrollbaroptions[min=0;max=100;smallstep=1;largestep=10]"
 				for _, sl in ipairs(GEN_SLIDERS) do
 					fs[#fs + 1] = ("label[0.5,%g;%s]"):format(y, F(sl[2]))
-					fs[#fs + 1] = ("scrollbar[4.4,%g;8.4,0.45;horizontal;g_%s;%d]"):format(y - 0.22, sl[1], gen[sl[1]])
-					fs[#fs + 1] = ("label[13.2,%g;%s]"):format(y, F(("%d　%s"):format(gen[sl[1]], sl[3](gen[sl[1]]))))
-					y = y + 0.7
+					fs[#fs + 1] = ("scrollbar[5.0,%g;10.5,0.45;horizontal;g_%s;%d]"):format(y - 0.22, sl[1], gen[sl[1]])
+					fs[#fs + 1] = ("label[15.9,%g;%s]"):format(y, F(("%d　%s"):format(gen[sl[1]], sl[3](gen[sl[1]]))))
+					y = y + 0.75
 				end
-				fs[#fs + 1] = ("field[0.5,%g;8.3,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子（空白＝隨機；同一個種子同一套地質）"), F(gen.seed))
+				fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子（空白＝隨機；同一個種子同一套地質）"), F(gen.seed))
 				fs[#fs + 1] = "field_close_on_enter[g_seed;false]"
-				fs[#fs + 1] = ("button[9.2,%g;8.3,0.8;g_random;%s]"):format(y + 0.4, F("全部隨機"))
+				fs[#fs + 1] = ("button[11.2,%g;10.3,0.8;g_random;%s]"):format(y + 0.4, F("全部隨機"))
 				y = y + 1.6
 			end
-			fs[#fs + 1] = ("field[0.5,%g;8.3,0.8;new_title;%s;%s]"):format(y + 0.4, F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
+			fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;new_title;%s;%s]"):format(y + 0.4, F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
 			fs[#fs + 1] = "field_close_on_enter[new_title;false]"
 			y = y + 1.4
 			if m.mode == "class" then y = host_fields(fs, y) end
-			fs[#fs + 1] = ("button[0.5,%g;8.3,0.9;create;%s]"):format(y, F(m.mode == "class" and "建立並開伺服器" or "建立並開始"))
-			fs[#fs + 1] = ("button[9.2,%g;8.3,0.9;%s;%s]"):format(y, state.page == "new_template" and "back_tpl" or "back_main", F("返回"))
+			fs[#fs + 1] = ("button[0.5,%g;10.3,0.9;create;%s]"):format(y, F(m.mode == "class" and "建立並開伺服器" or "建立並開始"))
+			fs[#fs + 1] = ("button[11.2,%g;10.3,0.9;%s;%s]"):format(y, state.page == "new_template" and "back_tpl" or "back_main", F("返回"))
 		end
 	elseif state.page == "join" then
 		fs[#fs + 1] = "label[0.5,2.1;" .. F("加入連線：輸入老師給的位址和你的帳號密碼") .. "]"
