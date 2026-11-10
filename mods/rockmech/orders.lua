@@ -41,31 +41,36 @@ local function tell(acc, msg)
 	for _, m in ipairs(rockmech.account_members(acc)) do rockmech.notify(m, S("[Order] @1", msg)) end
 end
 local function pct(g) return ("%.0f%%"):format(g * 100) end
+-- 採購員的頭銜：只有一種礦是那種礦的收購商（電廠、水泥廠），多種礦是「礦產採購」
+local function BUYER_TITLE() return rockmech.multi_ore() and S("Ore Buyer") or S(cfg.main_ore.buyer or "Power Plant Buyer") end
 local function t1(t) return ("%.1f t"):format(t) end
 
 -- 今天的 3 張訂單（同一天同一組都一樣；鎖的單價照今天的煤價）
 local SIZES = {{tons = 40, days = 2}, {tons = 60, days = 3}, {tons = 100, days = 5}}
 local SPECS = {0.60, 0.70, 0.80}
+-- 多種礦的地圖：每種開著的礦各 3 張（各自的收購商、規格、價格），一次只能接一張
 local function offers(acc)
-	local ore = cfg.main_ore
-	if not ore then return {} end
 	local d = today()
 	local seed = d * 7919
 	for i = 1, #acc do seed = (seed * 31 + acc:byte(i)) % 2147483647 end
 	local r = PcgRandom(seed)
 	local list = {}
-	for i, sz in ipairs(SIZES) do
-		local specs = ore.specs or SPECS      -- 品位規格：礦種自己的（水泥廠要的比較純）
-		local spec = specs[r:next(1, #specs)]
-		local premium = 1.15 + r:next(0, 20) / 100
-		list[i] = {tons = sz.tons, days = sz.days, spec = spec,
-			price = math.floor(rockmech.ore_price(ore) * spec * premium + 0.5)}
+	for _, ore in ipairs(cfg.active_ores) do
+		for _, sz in ipairs(SIZES) do
+			local specs = ore.specs or SPECS      -- 品位規格：礦種自己的（水泥廠要的比較純）
+			local spec = specs[r:next(1, #specs)]
+			local premium = 1.15 + r:next(0, 20) / 100
+			list[#list + 1] = {tons = sz.tons, days = sz.days, spec = spec, ore = ore.key,
+				price = math.floor(rockmech.ore_price(ore) * spec * premium + 0.5)}
+		end
 	end
 	return list
 end
+-- 訂單的礦（舊存檔沒記就是主要礦）
+local function order_ore(o) return rockmech.active_ore(o and o.ore or "") end
 
 local function accept(acc, o)
-	set_order(acc, {tons = o.tons, spec = o.spec, price = o.price, due = today() + o.days, done = 0, paid = 0,
+	set_order(acc, {tons = o.tons, spec = o.spec, price = o.price, due = today() + o.days, done = 0, paid = 0, ore = o.ore or cfg.main_ore.key,
 		loads = 0, rejected = 0, next_t = 0})
 	tell(acc, S("Accepted: @1 t, grade ≥ @2, @3 days, $@4/t. The pickup truck is on its way to the receiving area",
 		o.tons, pct(o.spec), o.days, o.price))
@@ -195,12 +200,13 @@ local function spawn_truck(acc, o)
 	tell(acc, S("The pickup truck is at the receiving area"))
 end
 
--- 料的總量、品位（礦石的 param2 加權）
-local function load_grade(e)
+-- 料的總量、品位（礦石的 param2 加權）。給 ore 就只算這種礦（別種礦算廢石），沒給是任何礦
+local function load_grade(e, ore)
 	local total, q = 0, 0
 	for base, lv in pairs(e.load) do
 		total = total + lv
-		if rockmech.ore_of_rubble[base] then q = q + (e.loadq[base] or 0) end
+		local o = rockmech.ore_of_rubble[base]
+		if o and (not ore or o == ore) then q = q + (e.loadq[base] or 0) end
 	end
 	return total, total > 0 and q / total / 255 or 0
 end
@@ -209,7 +215,7 @@ end
 local function weigh(acc, e)
 	local o = get_order(acc)
 	if not o then return end
-	local lv, g = load_grade(e)
+	local lv, g = load_grade(e, order_ore(o))
 	if lv <= 0 then return end
 	local t = tons_of(lv)
 	local members = rockmech.account_members(acc)
@@ -350,10 +356,13 @@ local function lbl(x, y, s) return ("label[%g,%g;%s]"):format(x, y, F(s)) end
 local function buyer_form(name)
 	local acc = rockmech.account_of(name)
 	local o = get_order(acc)
-	local out = {"formspec_version[6]size[11,7.4]", lbl(0.5, 0.6, S("Power Plant Buyer"))}
+	local list = not o and offers(acc) or {}
+	local multi = rockmech.multi_ore()
+	local out = {("formspec_version[6]size[11,%g]"):format(math.max(7.4, 3.4 + #list)), lbl(0.5, 0.6, BUYER_TITLE())}
 	if o then
 		local left = o.due - today()
-		out[#out + 1] = lbl(0.5, 1.4, S("Current order: @1 t, grade ≥ @2, $@3/t", o.tons, pct(o.spec), o.price))
+		out[#out + 1] = lbl(0.5, 1.4, multi and S("Current order: @1 @2 t, grade ≥ @3, $@4/t", S(order_ore(o).label), o.tons, pct(o.spec), o.price)
+			or S("Current order: @1 t, grade ≥ @2, $@3/t", o.tons, pct(o.spec), o.price))
 		out[#out + 1] = lbl(0.5, 1.9, S("Delivered @1 / @2 t, @3 loads, @4 rejected", ("%.1f"):format(o.done), o.tons, o.loads, o.rejected))
 		out[#out + 1] = lbl(0.5, 2.4, S("@1 days left, received @2", left, money_text(o.paid)))
 		out[#out + 1] = lbl(0.5, 3.1, S("Short at the deadline: @1% of the price as penalty", PENALTY * 100))
@@ -361,9 +370,10 @@ local function buyer_form(name)
 	else
 		out[#out + 1] = lbl(0.5, 1.4, S("Deliver to the pickup truck at the receiving area. Price is locked when you accept"))
 		out[#out + 1] = lbl(0.5, 1.9, S("Below spec: the whole load is rejected. Short at the deadline: @1% penalty", PENALTY * 100))
-		for i, of in ipairs(offers(acc)) do
+		for i, of in ipairs(list) do
 			local y = 2.4 + i * 1.0
-			out[#out + 1] = lbl(0.5, y, S("@1 t   grade ≥ @2   @3 days   $@4/t", of.tons, pct(of.spec), of.days, of.price))
+			out[#out + 1] = lbl(0.5, y, multi and S("@1   @2 t   grade ≥ @3   @4 days   $@5/t", S(order_ore(of).label), of.tons, pct(of.spec), of.days, of.price)
+				or S("@1 t   grade ≥ @2   @3 days   $@4/t", of.tons, pct(of.spec), of.days, of.price))
 			out[#out + 1] = ("button[7.5,%g;3,0.8;take%d;%s]"):format(y - 0.4, i, F(S("Accept")))
 		end
 	end
@@ -412,7 +422,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		core.close_formspec(name, FORM)
 		return true
 	end
-	for i = 1, #SIZES do
+	for i = 1, #SIZES * #cfg.active_ores do
 		if fields["take" .. i] then
 			if not get_order(acc) then
 				local of = offers(acc)[i]
@@ -505,7 +515,7 @@ core.register_entity(NPC, {
 	end,
 	on_punch = function() return true end,
 })
-rockmech.career_npcs[WHO] = {entity = NPC, title = S(cfg.main_ore.buyer or "Power Plant Buyer"), sells = S(cfg.main_ore.contracts or "Coal contracts"),
+rockmech.career_npcs[WHO] = {entity = NPC, title = BUYER_TITLE(), sells = rockmech.multi_ore() and S("Ore contracts") or S(cfg.main_ore.contracts or "Coal contracts"),
 	color = "#a0ffb0", tint = "#2f7a46", sit = false, roams = true}
 
 -- 營地附近有人才放採購員，沒人了收掉（不存檔）

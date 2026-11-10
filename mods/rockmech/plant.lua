@@ -30,12 +30,16 @@ local BOOM = "rockmech:plant_boom"
 local BOOM_REST = 3         -- 沒車時放料臂朝外伸出多長 (m)
 local STALL_T = 10          -- 連續停機多久才算停機 (s)
 local TOWER_OFF = 4         -- 塔中心離機身中心（左右）
-local SIDES = {{key = "p", s = 1, label = S(cfg.main_ore.product or "Clean coal")}, {key = "r", s = -1, label = S("Rejects")}}
+-- 塔的名稱（方塊說明用）：多種礦的地圖每座選的礦不一樣，產品塔就叫「產品」
+local SIDES = {{key = "p", s = 1, label = rockmech.multi_ore() and S("Product") or S(cfg.main_ore.product or "Clean coal")},
+	{key = "r", s = -1, label = S("Rejects")}}
 
--- 選礦場的主要礦種（這張地圖的主要礦：煤或大理岩）
+-- 選礦場選的礦（meta 的 ore，沒選過是這張地圖的主要礦，見 crusher.lua）；別種礦跟廢石一起進廢料塔
 local function main_ore()
-	return cfg.main_ore      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）
+	return cfg.main_ore      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）：塔的顏色
 end
+local function ore_of(meta) return rockmech.facility_ore(meta) end
+local function side_label(sd, ore) return sd.key == "p" and S(ore.product or "Clean coal") or sd.label end
 
 -- 機身 pos、受料倉朝 d：side s 的塔中心、放料口位置與朝外的方向
 local function layout(pos, dx, dz, s)
@@ -90,11 +94,13 @@ end
 -- 存量用 m³（跟車斗一樣），括號附噸數
 local function info(meta)
 	local parts = {}
+	local ore = ore_of(meta)
 	for _, sd in ipairs(SIDES) do
+		local label = side_label(sd, ore)
 		local lv, coal = meta:get_float(sd.key .. "_lv"), meta:get_float(sd.key .. "_coal")
 		local a, b, t = ("%.0f"):format(lv / NLEV), ("%.0f"):format(cfg.plant_bin), ("%.0f"):format(H.tons_of(lv))
-		parts[#parts + 1] = lv >= 1 and S("@1 bin @2 / @3 m³ (@4 t, grade @5%)", sd.label, a, b, t, ("%.0f"):format(100 * coal / lv))
-			or S("@1 bin @2 / @3 m³ (@4 t)", sd.label, a, b, t)   -- 不到 1 級的零頭放不出來，品位也沒意義
+		parts[#parts + 1] = lv >= 1 and S("@1 bin @2 / @3 m³ (@4 t, grade @5%)", label, a, b, t, ("%.0f"):format(100 * coal / lv))
+			or S("@1 bin @2 / @3 m³ (@4 t)", label, a, b, t)   -- 不到 1 級的零頭放不出來，品位也沒意義
 	end
 	return parts
 end
@@ -128,8 +134,9 @@ local function step(pos, dtime)
 	local stopped = meta:get_int("stopped") == 1     -- 右鍵選單按「停止」：不吃料也不放料
 	if room >= 1 and not stopped then
 		local add = {p_lv = 0, p_coal = 0, r_lv = 0, r_coal = 0}
+		local target = ore_of(meta)
 		eaten = H.eat(pos, dtime, cfg.plant_rate, math.floor(room), function(t, base, p2)
-			local g = rockmech.ore_of_rubble[base] and p2 / 255 or 0
+			local g = rockmech.grade_for(base, p2, target)
 			local coal = t * g
 			local prod = R * coal + m * (t - coal)
 			add.p_lv, add.p_coal = add.p_lv + prod, add.p_coal + R * coal
@@ -141,7 +148,7 @@ local function step(pos, dtime)
 	-- 要連續停：倉裡零星的殘料一點一點流下來時會停停走走，車子不該每次只裝一點就跑
 	if dtime > 0 then meta:set_float("stall_t", eaten == 0 and meta:get_float("stall_t") + dtime or 0) end
 	-- 2. 放料：車斗停在放料口下面就裝
-	local ore = main_ore()
+	local ore = ore_of(meta)
 	local per_step = math.max(1, math.floor(cfg.plant_load_rate * dtime / H.tons_of(1)))
 	local dx, dz = meta:get_int("dx"), meta:get_int("dz")
 	for _, sd in ipairs(SIDES) do
@@ -192,6 +199,7 @@ end
 
 local function formspec(pos)
 	local meta = core.get_meta(pos)
+	local ore = ore_of(meta)
 	local parts = info(meta)
 	local stopped = meta:get_int("stopped") == 1
 	return table.concat({
@@ -200,9 +208,11 @@ local function formspec(pos)
 			or S("Pre-sorting plant   Running"))),
 		("button[6,0.2;2.6,0.8;toggle;%s]"):format(core.formspec_escape(stopped and S("Start") or S("Stop"))),
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(S("Capacity: @1 t/s   Loading: @2 t/s", ("%g"):format(cfg.plant_rate), ("%g"):format(cfg.plant_load_rate)))),
-		("label[0.5,1.8;%s]"):format(core.formspec_escape(S("Separation: @1 @2% into @3, @4 @5% misplaced into @6", S(main_ore().label),
-			("%.0f"):format(rockmech.eff_plant_recovery(meta:get_string("owner")) * 100), SIDES[1].label, rockmech.gangue_label(main_ore()),
-			("%.0f"):format(rockmech.eff_plant_misplaced(meta:get_string("owner")) * 100), SIDES[1].label))),
+		("label[0.5,1.8;%s]"):format(core.formspec_escape(S("Separation: @1 @2% into @3, @4 @5% misplaced into @6", S(ore.label),
+			("%.0f"):format(rockmech.eff_plant_recovery(meta:get_string("owner")) * 100), side_label(SIDES[1], ore), rockmech.gangue_label(ore),
+			("%.0f"):format(rockmech.eff_plant_misplaced(meta:get_string("owner")) * 100), side_label(SIDES[1], ore)))),
+		rockmech.multi_ore() and ("label[3.2,0.6;%s]"):format(core.formspec_escape(S("Sorts:"))) or "",
+		rockmech.ore_dropdown(4.2, 0.2, 1.7, "ore", ore),
 		("label[0.5,2.5;%s]"):format(core.formspec_escape(parts[1])),
 		("label[0.5,3.1;%s]"):format(core.formspec_escape(parts[2])),
 		("label[0.5,3.7;%s]"):format(core.formspec_escape(S("When a truck or haul truck stands still within @1 m of a loading boom, the boom swings over and loads it", ("%g"):format(cfg.plant_reach)))),
@@ -216,6 +226,15 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local name = player:get_player_name()
 	local pos = form_pos[name]
 	if fields.quit then form_pos[name] = nil end
+	local pick = fields.ore and rockmech.ore_from_field(fields.ore)
+	if pick and pos and core.get_node(pos).name == PLANT and rockmech.owner_ok(core.get_meta(pos):get_string("owner"), name) then
+		local meta = core.get_meta(pos)
+		if pick ~= ore_of(meta) then
+			meta:set_string("ore", pick.key)
+			step(pos, 0)
+			core.show_formspec(name, PLANT, formspec(pos))
+		end
+	end
 	if not (fields.toggle and pos and core.get_node(pos).name == PLANT) then return true end
 	local meta = core.get_meta(pos)
 	meta:set_int("stopped", meta:get_int("stopped") == 1 and 0 or 1)

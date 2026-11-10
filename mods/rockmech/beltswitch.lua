@@ -16,17 +16,19 @@ local ITEM_OFF = "rockmech:belt_switch_off"     -- 停止中（紅燈）
 local FORM = "rockmech:belt_switch"
 local KEY = "belt_switches"
 
-local list = core.deserialize(storage:get_string(KEY)) or {}    -- 位置字串 → {mode = "run"|"stop"|"price", price = $/t, owner}
+local list = core.deserialize(storage:get_string(KEY)) or {}    -- 位置字串 → {mode = "run"|"stop"|"price", price = $/t, owner, ore = 礦的鍵}
 local function save() storage:set_string(KEY, core.serialize(list)) end
 
 local function main_ore() return cfg.main_ore end      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）
-local function price_now()
-	local ore = main_ore()
+-- 看哪一種礦的價格：多種礦的地圖在選單裡選（s.ore），沒選過是主要礦
+local function ore_of(s) return rockmech.active_ore and rockmech.active_ore(s and s.ore or "") or main_ore() end
+local function price_now(s)
+	local ore = ore_of(s)
 	return ore and rockmech.ore_price and rockmech.ore_price(ore) or 0
 end
 local function running(s)
 	if s.mode == "stop" then return false end
-	if s.mode == "price" then return price_now() >= (s.price or 0) end
+	if s.mode == "price" then return price_now(s) >= (s.price or 0) end
 	return true
 end
 
@@ -78,14 +80,15 @@ end
 local editing = {}       -- 玩家名稱 → 位置字串
 local function form(ps)
 	local s = list[ps] or {mode = "run"}
-	local ore = main_ore()
+	local ore = ore_of(s)
 	local function btn(x, key, label, on)
 		return ("style[%s;bgcolor=%s]button[%g,1.9;3,0.8;%s;%s]"):format(key, on and "#3f8f4f" or "#3a3e44", x, key, E(label))
 	end
 	return table.concat({
 		"formspec_version[6]size[10.4,4.6]",
 		("label[0.5,0.6;%s]"):format(E(S("Conveyor control box"))),
-		("label[0.5,1.2;%s]"):format(E(ore and S("Today's @1 price $@2/t", S(ore.label), ("%.0f"):format(price_now())) or "")),
+		("label[0.5,1.2;%s]"):format(E(ore and S("Today's @1 price $@2/t", S(ore.label), ("%.0f"):format(price_now(s))) or "")),
+		rockmech.ore_dropdown and rockmech.ore_dropdown(6.9, 0.8, 3, "ore", ore) or "",
 		btn(0.5, "run", S("Run"), s.mode == "run"),
 		btn(3.7, "stop", S("Stop"), s.mode == "stop"),
 		btn(6.9, "price", S("By ore price"), s.mode == "price"),
@@ -105,6 +108,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	if not (rockmech.owner_ok and not rockmech.owner_ok(s.owner or "", name)) then
 		local v = tonumber(fields.p)
 		if v then s.price = math.max(0, v) end
+		local pick = fields.ore and rockmech.ore_from_field(fields.ore)
+		if pick and pick ~= ore_of(s) then s.ore = pick.key; s.price = pick.price end     -- 換礦：門檻先換成那種礦的基準價
 		if fields.run then s.mode = "run" elseif fields.stop then s.mode = "stop"
 		elseif fields.price or fields.setp then s.mode = "price" end
 		save(); refresh(); set_info(ps)

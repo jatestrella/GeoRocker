@@ -27,7 +27,13 @@ end
 function rockmech.yard_ratio()
 	return rockmech.train_enabled and rockmech.train_enabled() and cfg.coal_yard_ratio or 1
 end
-local function title_of(pos) return core.get_node(pos).name == CRUSHER_BIG and S("Large crusher") or S("Crusher") end
+-- 這座收哪一種礦（meta 的 ore；沒選過就是這張地圖的主要礦），多種礦的地圖標題後面加礦名
+local function ore_of(meta) return rockmech.active_ore(meta:get_string("ore")) end
+rockmech.facility_ore = ore_of
+local function title_of(pos)
+	local t = core.get_node(pos).name == CRUSHER_BIG and S("Large crusher") or S("Crusher")
+	return rockmech.multi_ore() and (t .. "  " .. S(ore_of(core.get_meta(pos)).label)) or t
+end
 local SIZE, FEEDER = 9, 3    -- 受料倉開口（大型破碎站、選礦場）、底部格柵的邊長 (m)
 local SMALL_SIZE = 7         -- 一般破碎站的受料倉開口（小一號）；每座的開口記在機身的 meta size
 -- 倉深 (m)：每往下一層四邊各內縮 1 m（壁坡 45°），最底層就是格柵的大小
@@ -72,6 +78,32 @@ rockmech.main_ore = main_ore
 -- 每噸廢石的處理費：礦種自己的（大理岩：水泥廠的雜質罰款），沒寫就用 rockmech_crusher_fee
 function rockmech.gangue_fee(ore) ore = ore or cfg.main_ore; return ore and ore.fee or cfg.crusher_fee end
 function rockmech.gangue_label(ore) ore = ore or cfg.main_ore; return S(ore and ore.gangue or "Gangue") end
+-- 多種礦的地圖：破碎站、選礦廠、皮帶控制箱、訂單各自選一種礦（meta / 設定裡的 ore 鍵），別種礦算廢石。
+-- 礦種不寫死：選項就是這張地圖開著的礦（cfg.active_ores）；只有一種礦時不顯示選單，就是那一種
+function rockmech.multi_ore() return #cfg.active_ores > 1 end
+function rockmech.active_ore(key)
+	for _, o in ipairs(cfg.active_ores) do if o.key == key then return o end end
+	return cfg.main_ore
+end
+-- 碎石（base、param2）對某種礦的品位：是這種礦的碎石才算，別種礦和廢石都是 0
+function rockmech.grade_for(base, p2, ore)
+	return ore and rockmech.ore_of_rubble[base] == ore and p2 / 255 or 0
+end
+-- 選礦種的下拉選單（formspec）；只有一種礦時是空字串
+function rockmech.ore_dropdown(x, y, w, field, ore)
+	if not rockmech.multi_ore() then return "" end
+	local items, sel = {}, 1
+	for i, o in ipairs(cfg.active_ores) do
+		items[i] = core.formspec_escape(S(o.label))
+		if o == ore then sel = i end
+	end
+	return ("dropdown[%g,%g;%g,0.8;%s;%s;%d;true]"):format(x, y, w, field, table.concat(items, ","), sel)
+end
+-- 下拉選單回傳的值（index_event = true：序號）→ 礦
+function rockmech.ore_from_field(v)
+	local i = tonumber(v)
+	return i and cfg.active_ores[i] or nil
+end
 local function price_text(ore)
 	local c = price_change(ore)
 	return S("@1 price $@2/t (@3 @4%)", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)), c >= 0 and "▲" or "▼", ("%.0f"):format(math.abs(c) * 100))
@@ -168,14 +200,14 @@ local function show_money(player)
 		if money_hud[name] then player:hud_change(money_hud[name], "text", "") end
 		return
 	end
-	local ore = main_ore()
 	local m = storage:get_float(MONEY .. acc)
 	local team = rockmech.team_of(name)
 	local amount = (m < 0 and "−" or "") .. ("$%.0f"):format(math.abs(m))
 	local text = (team and S("Team @1   Funds @2", team, amount) or S("Funds @1", amount))
 	-- 價格漲跌：身上帶著廣播收音機才顯示（market.lua）；沒有就去貨櫃辦公室的告示板看
 	if rockmech.has_radio and rockmech.has_radio(player) then
-		text = text .. (ore and ("\n" .. price_text(ore)) or "")
+		for _, o in ipairs(cfg.active_ores) do text = text .. "\n" .. price_text(o) end
+		text = text
 			.. (rockmech.market_hud and ("\n" .. rockmech.market_hud()) or "")
 	end
 	if money_hud[name] then
@@ -186,7 +218,11 @@ local function show_money(player)
 	end
 end
 rockmech.show_money = show_money
-rockmech.coal_price_text = function() local ore = main_ore(); return ore and price_text(ore) or "" end
+rockmech.coal_price_text = function()
+	local t = {}
+	for _, o in ipairs(cfg.active_ores) do t[#t + 1] = price_text(o) end
+	return table.concat(t, "\n")
+end
 
 -- name：玩家名稱或帳戶（"team:A"）
 function rockmech.has_account(name) return storage:contains(MONEY .. rockmech.account_of(name)) end
@@ -439,7 +475,7 @@ local function report(meta, owner, dump, day)
 			end
 		end
 	else
-		local ore = main_ore()
+		local ore = ore_of(meta)
 		local rows = {}
 		if ore then
 			local r = rockmech.yard_ratio()
@@ -518,15 +554,16 @@ local function crush(pos, dtime)
 	local meta = core.get_meta(pos)
 	local dump = meta:get_string("mode") == "dump"
 	-- 這一步的帳：煤的噸數、煤的貨款（煤噸 × 價格 × 回收率 × 收購比例）、廢石處理費（廢石噸 × 每噸；廢石場是全部噸數 × 棄置費）
+	-- 只收這座選的礦：別種礦和廢石一樣算廢石、照這種礦的廢石處理費扣
+	local ore = ore_of(meta)
 	local ore_t, gross, fee = 0, 0, 0
 	local eaten = eat(pos, dtime, rate_of(pos), nil, function(t, base, p2)
-		local ore = rockmech.ore_of_rubble[base]
 		local tons = tons_of(t)
-		local grade = ore and p2 / 255 or 0
+		local grade = rockmech.grade_for(base, p2, ore)
 		ore_t = ore_t + tons * grade
 		if dump then fee = fee + tons * cfg.dump_fee
 		else
-			if ore then gross = gross + tons * grade * rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * rockmech.ore_price(ore) * rockmech.yard_ratio() end
+			gross = gross + tons * grade * rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * rockmech.ore_price(ore) * rockmech.yard_ratio()
 			fee = fee + tons * (1 - grade) * rockmech.gangue_fee(ore)
 		end
 	end)
@@ -566,19 +603,19 @@ local function formspec(pos, viewer)
 	-- 排隊：倉裡還有多少、照處理能力還要多久
 	local qt = tons_of(queue)
 	local queue_text = S("Queue @1 t, about @2 s to process", ("%.1f"):format(qt), tostring(math.ceil(qt / rate)))
-	local prices = {}
-	for _, ore in ipairs(cfg.active_ores) do
-		prices[#prices + 1] = S("@1 at 100% grade: $@2 per tonne today (base $@3), recovery @4%", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)),
-			("%g"):format(ore.price), ("%.0f"):format(rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * 100))
-	end
+	local ore = ore_of(meta)
+	local prices = {S("@1 at 100% grade: $@2 per tonne today (base $@3), recovery @4%", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)),
+		("%g"):format(ore.price), ("%.0f"):format(rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * 100))}
 	return table.concat({
 		"formspec_version[6]size[11,8.4]",
 		("label[0.5,0.6;%s]"):format(core.formspec_escape(dump and S("Waste dump (rubble dumped here is discarded, no income)") or title_of(pos))),
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(dump
 			and S("Capacity: @1 t/s   Dumping fee: $@2 per tonne", ("%g"):format(rate), ("%g"):format(cfg.dump_fee))
-			or S("Capacity: @1 t/s   @2: $@3 per tonne", ("%g"):format(rate), rockmech.gangue_label(), ("%g"):format(rockmech.gangue_fee())))),
+			or S("Capacity: @1 t/s   @2: $@3 per tonne", ("%g"):format(rate), rockmech.gangue_label(ore), ("%g"):format(rockmech.gangue_fee(ore))))),
 		("label[0.5,1.8;%s]"):format(core.formspec_escape(dump and S("Ore dumped here is also discarded as waste") or table.concat(prices, "; "))),
 		("textarea[0.5,6.5;10,1;;;%s]"):format(core.formspec_escape(queue_text)),
+		dump and "" or (rockmech.multi_ore() and ("label[0.5,4.9;%s]"):format(core.formspec_escape(S("Buys:"))) or "")
+			.. rockmech.ore_dropdown(2.5, 4.5, 3.5, "ore", ore),
 		("button[0.5,5.5;8,0.8;mode;%s]"):format(core.formspec_escape(dump and S("Switch to crusher (sell ore)")
 			or S("Switch to waste dump (discard, $@1 per tonne)", ("%g"):format(cfg.dump_fee)))),
 		("label[0.5,2.4;%s]"):format(core.formspec_escape(S("Hopper: @1 / @2 m³ (@3 t)", ("%.1f"):format(queue / V.NLEV),
@@ -612,6 +649,15 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		meta:set_string("mode", meta:get_string("mode") == "dump" and "" or "dump")
 		meta:set_string("infotext", meta:get_string("mode") == "dump" and S("Waste dump (right-click to view)") or S("@1 (right-click to view)", title_of(pos)))
 		core.show_formspec(name, CRUSHER, formspec(pos, name))
+	end
+	local pick = fields.ore and rockmech.ore_from_field(fields.ore)
+	if pick and rockmech.owner_ok(core.get_meta(pos):get_string("owner"), name) then
+		local meta = core.get_meta(pos)
+		if pick ~= ore_of(meta) then
+			meta:set_string("ore", pick.key)
+			if meta:get_string("mode") ~= "dump" then meta:set_string("infotext", S("@1 (right-click to view)", title_of(pos))) end
+			core.show_formspec(name, CRUSHER, formspec(pos, name))
+		end
 	end
 	if fields.quit or fields.ok then editing[name] = nil end
 	return true

@@ -333,12 +333,19 @@ local function near_player(p)
 end
 -- 顆粒的顏色：以礦為主是礦的顏色，否則是廢石的顏色
 local function bits_tex(L)
-	local k, kg = 0, 0
+	local k, kg, ore, best = 0, 0, nil, 0
+	local by = {}                -- 礦 → 礦石量：多種礦時用量最多的那種礦的顏色
 	for _, q in ipairs(L) do
 		k = k + q.k
-		if rockmech.ore_of_rubble[q.b] then kg = kg + q.k * q.g / 255 end
+		local o = rockmech.ore_of_rubble[q.b]
+		if o then
+			local v = q.k * q.g / 255
+			kg = kg + v
+			by[o] = (by[o] or 0) + v
+			if by[o] > best then ore, best = o, by[o] end
+		end
 	end
-	local ore = main_ore()
+	ore = ore or main_ore()
 	local c = ore and (kg >= 0.5 * k and ore.pure or ore.waste_color) or "#6a6058"
 	return "default_gravel.png^[colorize:" .. c .. ":160"
 end

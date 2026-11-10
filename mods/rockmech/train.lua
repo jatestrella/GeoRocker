@@ -349,18 +349,23 @@ local function depart(acc)
 	local st = states[acc]
 	if not st then return end
 	sync(acc)
-	local ore = cfg.main_ore
-	local price = ore and rockmech.ore_price(ore) or 0
-	local rec = ore and (rockmech.eff_ore_recovery and rockmech.eff_ore_recovery(acc, ore) or ore.recovery) or 0
 	local rows, net, total_t = {}, 0, 0
 	for i = 1, N do
 		local ld = st.loads[i] or {}
-		local lv, g = O.load_grade({load = ld.load or {}, loadq = ld.loadq or {}})
+		local wagon = {load = ld.load or {}, loadq = ld.loadq or {}}
+		-- 每節照車上最多的那種礦計價，別種礦算廢石（多種礦的地圖要分開裝）
+		local ore, lv, g = cfg.main_ore, 0, -1
+		for _, o in ipairs(cfg.active_ores) do
+			local l, og = O.load_grade(wagon, o)
+			if og > g then ore, lv, g = o, l, og end
+		end
+		local price = rockmech.ore_price(ore)
+		local rec = rockmech.eff_ore_recovery and rockmech.eff_ore_recovery(acc, ore) or ore.recovery
 		if lv > 0 then
 			local t = tons_of(lv)
 			local m = math.floor(t * g * rec * price - t * (1 - g) * rockmech.gangue_fee(ore) + 0.5)
 			net, total_t = net + m, total_t + t
-			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)), t1(t), ("$%.0f × %.0f%%"):format(price, rec * 100),
+			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)) .. (rockmech.multi_ore() and ("  " .. S(ore.label)) or ""), t1(t), ("$%.0f × %.0f%%"):format(price, rec * 100),
 				money_text(m), m >= 0 and 0x80ff80 or 0xff8080}
 		end
 	end

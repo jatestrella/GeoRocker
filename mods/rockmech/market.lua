@@ -278,11 +278,10 @@ end
 
 local function report(name)
 	local acc = rockmech.account_of(name)
-	local ore = cfg.main_ore
 	local today = rockmech.market_day()
 	local lines = {}
 	local function add(s, c) lines[#lines + 1] = c and core.colorize(c, s) or s end
-	if ore then
+	for _, ore in ipairs(cfg.active_ores) do      -- 每種開著的礦各一段：今天的價格、截止品位、5 天後
 		local p = rockmech.ore_price(ore)
 		local rec = rockmech.eff_ore_recovery and rockmech.eff_ore_recovery(acc, ore) or ore.recovery
 		local fee, r = rockmech.gangue_fee(ore), rockmech.yard_ratio()
