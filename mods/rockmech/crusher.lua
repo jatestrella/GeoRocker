@@ -841,12 +841,12 @@ local function site_ok(pos, dx, dz, size)
 	return true
 end
 
--- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false
-function rockmech.crusher_build(pos, dx, dz, name, node)
+-- 在 pos 蓋破碎站（機身），受料倉朝 (dx, dz)。地不平回傳 false。force：不檢查地形（豎井底下埋在岩石裡的，oreshaft.lua）
+function rockmech.crusher_build(pos, dx, dz, name, node, force)
 	-- 範圍內不滿一格的土石先清掉（woodwork.lua）：不然機身架在薄片上
 	if rockmech.clear_site and rockmech.facility_cells then rockmech.clear_site(rockmech.facility_cells(node or CRUSHER, pos, dx, dz), pos) end
 	local size = size_for(node or CRUSHER)
-	if not site_ok(pos, dx, dz, size) then return false end
+	if not force and not site_ok(pos, dx, dz, size) then return false end
 	-- 進料溜槽、板式給料機朝受料倉（模型的 +Z 是進料那一側）
 	core.set_node(pos, {name = node or CRUSHER, param2 = core.dir_to_facedir({x = dx, y = 0, z = dz})})
 	dig_hopper(pos, dx, dz, size)

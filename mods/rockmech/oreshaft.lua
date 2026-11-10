@@ -1,6 +1,6 @@
 -- rockmech/oreshaft.lua
--- 豎井（溜井）：採場地面上一個方井，往下 DEPTH m 是地下硐室裡的大型破碎站（受料倉就在井的正下方）。
--- 礦石從井口倒下去，掉進受料倉，破碎站照平常收料、付錢（crusher.lua）。仿和平礦場：礦石經豎井到山裡的碎石機房。
+-- 豎井（溜井）：採場地面上一個方井，深 DEPTH m，井底是受料倉的格柵。大型破碎站的機身埋在井底旁邊的岩石裡（看不到、
+-- 沒有地下空間），只負責收料、付錢（crusher.lua）：礦石從井口倒下去就算賣掉。
 -- 世界設定 rockmech_shafts = x,z;x,z;...（井口中心，遊戲座標）。營地第一次蓋好之後，每口井蓋一次（mod storage shaft:<i>）。
 -- 有豎井的地圖營地不蓋收煤站（config.lua：cfg.camp_crusher = false）。
 
@@ -40,18 +40,10 @@ local function build(i, s, owner)
 				end
 			end end
 		end
-		-- 硐室：機身上方淨空 4 m
-		for y = by, by + 3 do
-			for x = B.x - 2, B.x + 1 do for z = B.z - 2, B.z + 2 do
-				local p = {x = x, y = y, z = z}
-				C.mark_excavated(p)
-				core.swap_node(p, {name = "air"})
-			end end
-		end
 	end)
 	C.quiet = C.quiet - 1
 	if not ok then error(err) end
-	if rockmech.crusher_build(B, 1, 0, owner, BIG) then
+	if rockmech.crusher_build(B, 1, 0, owner, BIG, true) then
 		storage:set_string("shaft:" .. i, core.pos_to_string(B))
 		core.log("action", ("[rockmech] 豎井 %d：井口 (%d, %d, %d)，破碎站 %s"):format(i, s.x, top, s.z, core.pos_to_string(B)))
 	else
