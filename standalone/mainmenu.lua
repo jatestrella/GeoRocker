@@ -258,18 +258,18 @@ local function start_world(sv, fields)
 end
 local function host_fields(fs, y)
 	fs[#fs + 1] = ("field[0.5,%g;4.2,0.8;host_name;%s;%s]"):format(y + 0.4, F("你的名稱（老師帳號）"), F(core.settings:get("name") or ""))
-	fs[#fs + 1] = ("pwdfield[4.9,%g;4.2,0.8;host_pass;%s]"):format(y + 0.4, F("密碼（可以空白）"))
+	fs[#fs + 1] = ("pwdfield[4.9,%g;4.2,0.8;host_pass;%s]"):format(y + 0.4, F("密碼"))
 	fs[#fs + 1] = ("field[9.3,%g;4.2,0.8;host_port;%s;%s]"):format(y + 0.4, F("埠（學生連線用）"), F(core.settings:get("port") or "30000"))
 	return y + 1.6
 end
 -- 開放連線（單機地圖用伺服器模式開，朋友用「加入連線」進來）：勾選框；勾了再出現名稱、密碼、埠、合作／競爭。回傳下一列的 y
 local function net_fields(fs, x, y, w)
-	fs[#fs + 1] = ("checkbox[%g,%g;open_net;%s;%s]"):format(x, y + 0.2, F("開放連線（讓朋友加入一起玩）"), tostring(state.open_net == true))
+	fs[#fs + 1] = ("checkbox[%g,%g;open_net;%s;%s]"):format(x, y + 0.2, F("開放連線"), tostring(state.open_net == true))
 	if not state.open_net then return y + 0.7 end
 	local c = (w - 0.6) / 4
 	y = y + 1.0
 	fs[#fs + 1] = ("field[%g,%g;%g,0.8;host_name;%s;%s]"):format(x, y, c, F("你的名稱"), F(core.settings:get("name") or ""))
-	fs[#fs + 1] = ("pwdfield[%g,%g;%g,0.8;host_pass;%s]"):format(x + c + 0.2, y, c, F("密碼（可空白）"))
+	fs[#fs + 1] = ("pwdfield[%g,%g;%g,0.8;host_pass;%s]"):format(x + c + 0.2, y, c, F("密碼"))
 	fs[#fs + 1] = ("field[%g,%g;%g,0.8;host_port;%s;%s]"):format(x + 2 * (c + 0.2), y, c, F("埠"), F(core.settings:get("port") or "30000"))
 	local items = {}
 	for _, m in ipairs(NET_MODES) do items[#items + 1] = F(m[2]) end
@@ -413,10 +413,10 @@ local function formspec()
 			local y = 7.0
 			if sv.mode ~= "class" then
 				-- 開放連線：名稱、密碼、埠、合作／競爭排兩列
-				fs[#fs + 1] = ("checkbox[6.2,%g;open_net;%s;%s]"):format(host and 4.85 or 6.45, F("開放連線（讓朋友加入一起玩）"), tostring(state.open_net == true))
+				fs[#fs + 1] = ("checkbox[6.2,%g;open_net;%s;%s]"):format(host and 4.85 or 6.45, F("開放連線"), tostring(state.open_net == true))
 				if host then
 					fs[#fs + 1] = ("field[6.2,5.6;3.6,0.8;host_name;%s;%s]"):format(F("你的名稱"), F(core.settings:get("name") or ""))
-					fs[#fs + 1] = ("pwdfield[9.9,5.6;3.6,0.8;host_pass;%s]"):format(F("密碼（可空白）"))
+					fs[#fs + 1] = ("pwdfield[9.9,5.6;3.6,0.8;host_pass;%s]"):format(F("密碼"))
 					fs[#fs + 1] = ("field[6.2,6.8;3.6,0.8;host_port;%s;%s]"):format(F("埠"), F(core.settings:get("port") or "30000"))
 					local items = {}
 					for _, m in ipairs(NET_MODES) do items[#items + 1] = F(m[2]) end
@@ -425,7 +425,7 @@ local function formspec()
 				end
 			elseif host then
 				fs[#fs + 1] = ("field[6.2,5.6;3.6,0.8;host_name;%s;%s]"):format(F(sv.mode == "class" and "你的名稱（老師）" or "你的名稱"), F(core.settings:get("name") or ""))
-				fs[#fs + 1] = ("pwdfield[9.9,5.6;3.6,0.8;host_pass;%s]"):format(F("密碼（可以空白）"))
+				fs[#fs + 1] = ("pwdfield[9.9,5.6;3.6,0.8;host_pass;%s]"):format(F("密碼"))
 				fs[#fs + 1] = ("field[6.2,6.8;3.6,0.8;host_port;%s;%s]"):format(F("埠"), F(core.settings:get("port") or "30000"))
 				fs[#fs + 1] = ("button[9.9,6.8;3.6,0.8;open_dir;%s]"):format(F("打開存檔資料夾"))
 				y = 7.8
@@ -458,7 +458,7 @@ local function formspec()
 				fs[#fs + 1] = ("textarea[8.8,2.6;12.6,2.7;;;%s]"):format(F(table.concat(wrap_cjk(t.description, 12.4 * 2.4), "\n")))
 				local ny = net_fields(fs, 8.6, 5.5, 12.9)
 				ny = math.max(ny + 0.3, 7.6)
-				fs[#fs + 1] = ("field[8.6,%g;6.6,0.8;new_title;%s;%s]"):format(ny, F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
+				fs[#fs + 1] = ("field[8.6,%g;6.6,0.8;new_title;%s;%s]"):format(ny, F("存檔名稱"), F(state.new_title or ""))
 				fs[#fs + 1] = "field_close_on_enter[new_title;false]"
 				fs[#fs + 1] = ("button[15.4,%g;3.0,0.8;create;%s]"):format(ny, F("建立並開始"))
 				fs[#fs + 1] = ("button[18.5,%g;3.0,0.8;back_main;%s]"):format(ny, F("返回"))
@@ -497,12 +497,12 @@ local function formspec()
 					fs[#fs + 1] = ("label[15.9,%g;%s]"):format(y, F(("%d　%s"):format(gen[sl[1]], sl[3](gen[sl[1]]))))
 					y = y + 0.75
 				end
-				fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子（空白＝隨機；同一個種子同一套地質）"), F(gen.seed))
+				fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子"), F(gen.seed))
 				fs[#fs + 1] = "field_close_on_enter[g_seed;false]"
 				fs[#fs + 1] = ("button[11.2,%g;10.3,0.8;g_random;%s]"):format(y + 0.4, F("全部隨機"))
 				y = y + 1.6
 			end
-			fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;new_title;%s;%s]"):format(y + 0.4, F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
+			fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;new_title;%s;%s]"):format(y + 0.4, F("存檔名稱"), F(state.new_title or ""))
 			fs[#fs + 1] = "field_close_on_enter[new_title;false]"
 			y = y + 1.4
 			if m.mode == "class" then y = host_fields(fs, y)
