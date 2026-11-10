@@ -220,6 +220,8 @@ local function create_save(m, title, kind)
 	return nil, "建立世界失敗"
 end
 
+-- 開放連線的兩種玩法（寫進世界設定 rockmech_multiplayer）
+local NET_MODES = {{"coop", "合作：共用營地和錢"}, {"compete", "競爭：各自的錢"}}
 local function start_world(sv, fields)
 	if not sv then state.msg = "請先選一個存檔"; return end
 	core.settings:set("creative_mode", "false")
@@ -240,6 +242,11 @@ local function start_world(sv, fields)
 		gamedata.password = fields and fields.host_pass or ""
 		gamedata.port = tostring(port)
 		gamedata.singleplayer = false
+		if sv.mode ~= "class" and sv.path then
+			local c = Settings(sv.path .. DS .. "rockmech.conf")
+			c:set("rockmech_multiplayer", NET_MODES[state.net_mode or 1][1])
+			c:write()
+		end
 	else
 		core.settings:set("enable_server", "false")
 		gamedata.playername = "singleplayer"
@@ -254,6 +261,20 @@ local function host_fields(fs, y)
 	fs[#fs + 1] = ("pwdfield[4.9,%g;4.2,0.8;host_pass;%s]"):format(y + 0.4, F("密碼（可以空白）"))
 	fs[#fs + 1] = ("field[9.3,%g;4.2,0.8;host_port;%s;%s]"):format(y + 0.4, F("埠（學生連線用）"), F(core.settings:get("port") or "30000"))
 	return y + 1.6
+end
+-- 開放連線（單機地圖用伺服器模式開，朋友用「加入連線」進來）：勾選框；勾了再出現名稱、密碼、埠、合作／競爭。回傳下一列的 y
+local function net_fields(fs, x, y, w)
+	fs[#fs + 1] = ("checkbox[%g,%g;open_net;%s;%s]"):format(x, y + 0.2, F("開放連線（讓朋友加入一起玩）"), tostring(state.open_net == true))
+	if not state.open_net then return y + 0.7 end
+	local c = (w - 0.6) / 4
+	y = y + 1.0
+	fs[#fs + 1] = ("field[%g,%g;%g,0.8;host_name;%s;%s]"):format(x, y, c, F("你的名稱"), F(core.settings:get("name") or ""))
+	fs[#fs + 1] = ("pwdfield[%g,%g;%g,0.8;host_pass;%s]"):format(x + c + 0.2, y, c, F("密碼（可空白）"))
+	fs[#fs + 1] = ("field[%g,%g;%g,0.8;host_port;%s;%s]"):format(x + 2 * (c + 0.2), y, c, F("埠"), F(core.settings:get("port") or "30000"))
+	local items = {}
+	for _, m in ipairs(NET_MODES) do items[#items + 1] = F(m[2]) end
+	fs[#fs + 1] = ("dropdown[%g,%g;%g,0.8;net_mode;%s;%d;true]"):format(x + 3 * (c + 0.2), y, c, table.concat(items, ","), state.net_mode or 1)
+	return y + 1.1
 end
 local function random_map() for _, m in ipairs(maps()) do if m.random then return m end end end
 local function custom_map() for _, m in ipairs(maps()) do if m.custom then return m end end end
@@ -368,7 +389,7 @@ local function formspec()
 		return table.concat(fs)
 	end
 	local cm = state.page == "new_custom"
-	local PH = cm and 15.8 or 10.5
+	local PH = cm and 17.2 or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
 	local PW = state.page:sub(1, 4) == "new_" and 22 or 14     -- 開新遊戲的頁面比較寬（選項多）
 	local fs = {("formspec_version[6]size[%g,%g]bgcolor[#00000000;true]"):format(PW, PH), ("box[0,0;%g,%g;#000000b0]"):format(PW, PH)}
 	header(fs, PW)
@@ -391,10 +412,18 @@ local function formspec()
 		if sv then
 			local y = 7.0
 			if sv.mode ~= "class" then
-				-- 開放連線：用伺服器模式開，朋友用「加入連線」連進來（合作：共用營地和錢）
-				fs[#fs + 1] = ("checkbox[6.2,%g;open_net;%s;%s]"):format(host and 4.85 or 6.45, F("開放連線（朋友一起玩，共用營地和錢）"), tostring(state.open_net == true))
-			end
-			if host then
+				-- 開放連線：名稱、密碼、埠、合作／競爭排兩列
+				fs[#fs + 1] = ("checkbox[6.2,%g;open_net;%s;%s]"):format(host and 4.85 or 6.45, F("開放連線（讓朋友加入一起玩）"), tostring(state.open_net == true))
+				if host then
+					fs[#fs + 1] = ("field[6.2,5.6;3.6,0.8;host_name;%s;%s]"):format(F("你的名稱"), F(core.settings:get("name") or ""))
+					fs[#fs + 1] = ("pwdfield[9.9,5.6;3.6,0.8;host_pass;%s]"):format(F("密碼（可空白）"))
+					fs[#fs + 1] = ("field[6.2,6.8;3.6,0.8;host_port;%s;%s]"):format(F("埠"), F(core.settings:get("port") or "30000"))
+					local items = {}
+					for _, m in ipairs(NET_MODES) do items[#items + 1] = F(m[2]) end
+					fs[#fs + 1] = ("dropdown[9.9,6.8;3.6,0.8;net_mode;%s;%d;true]"):format(table.concat(items, ","), state.net_mode or 1)
+					y = 7.8
+				end
+			elseif host then
 				fs[#fs + 1] = ("field[6.2,5.6;3.6,0.8;host_name;%s;%s]"):format(F(sv.mode == "class" and "你的名稱（老師）" or "你的名稱"), F(core.settings:get("name") or ""))
 				fs[#fs + 1] = ("pwdfield[9.9,5.6;3.6,0.8;host_pass;%s]"):format(F("密碼（可以空白）"))
 				fs[#fs + 1] = ("field[6.2,6.8;3.6,0.8;host_port;%s;%s]"):format(F("埠"), F(core.settings:get("port") or "30000"))
@@ -425,13 +454,17 @@ local function formspec()
 			local t = tl[sel]
 			if t then
 				fs[#fs + 1] = ("label[8.6,2.1;%s]"):format(F(t.title))
-				fs[#fs + 1] = ("box[8.6,2.5;12.9,4.3;#00000060]")
-				fs[#fs + 1] = ("textarea[8.8,2.6;12.6,4.1;;;%s]"):format(F(table.concat(wrap_cjk(t.description, 12.4 * 2.4), "\n")))
-				fs[#fs + 1] = ("field[8.6,7.4;6.6,0.8;new_title;%s;%s]"):format(F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
+				fs[#fs + 1] = ("box[8.6,2.5;12.9,2.9;#00000060]")
+				fs[#fs + 1] = ("textarea[8.8,2.6;12.6,2.7;;;%s]"):format(F(table.concat(wrap_cjk(t.description, 12.4 * 2.4), "\n")))
+				local ny = net_fields(fs, 8.6, 5.5, 12.9)
+				ny = math.max(ny + 0.3, 7.6)
+				fs[#fs + 1] = ("field[8.6,%g;6.6,0.8;new_title;%s;%s]"):format(ny, F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
 				fs[#fs + 1] = "field_close_on_enter[new_title;false]"
-				fs[#fs + 1] = ("button[15.4,7.4;3.0,0.8;create;%s]"):format(F("建立並開始"))
+				fs[#fs + 1] = ("button[15.4,%g;3.0,0.8;create;%s]"):format(ny, F("建立並開始"))
+				fs[#fs + 1] = ("button[18.5,%g;3.0,0.8;back_main;%s]"):format(ny, F("返回"))
+			else
+				fs[#fs + 1] = ("button[18.5,7.4;3.0,0.8;back_main;%s]"):format(F("返回"))
 			end
-			fs[#fs + 1] = ("button[18.5,7.4;3.0,0.8;back_main;%s]"):format(F("返回"))
 		elseif m then
 			fs[#fs + 1] = ("label[0.5,2.1;%s]"):format(F(state.page == "new_random" and "隨機地圖" or state.page == "new_custom" and "自訂地圖" or m.title))
 			local dl = wrap_cjk(m.description, 21 * 2.4)
@@ -472,7 +505,8 @@ local function formspec()
 			fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;new_title;%s;%s]"):format(y + 0.4, F("存檔名稱（空白就自動取名）"), F(state.new_title or ""))
 			fs[#fs + 1] = "field_close_on_enter[new_title;false]"
 			y = y + 1.4
-			if m.mode == "class" then y = host_fields(fs, y) end
+			if m.mode == "class" then y = host_fields(fs, y)
+			else y = net_fields(fs, 0.5, y - 0.2, 21) + 0.2 end
 			fs[#fs + 1] = ("button[0.5,%g;10.3,0.9;create;%s]"):format(y, F(m.mode == "class" and "建立並開伺服器" or "建立並開始"))
 			fs[#fs + 1] = ("button[11.2,%g;10.3,0.9;%s;%s]"):format(y, "back_main", F("返回"))
 		end
@@ -534,6 +568,7 @@ core.button_handler = function(fields)
 		end
 	end
 	if fields.open_net then state.open_net = fields.open_net == "true" end
+	if fields.net_mode then state.net_mode = tonumber(fields.net_mode) or state.net_mode end
 	if fields.saves then
 		local e = core.explode_textlist_event(fields.saves)
 		if e.type == "CHG" or e.type == "DCL" then

@@ -1309,6 +1309,17 @@ if cfg.career then
 	end)
 end
 
+-- 單機地圖開放連線、競爭模式：新來的人自己一個帳戶，拿起始資金（收煤站要自己蓋，錢給蓋的人）
+if cfg.solo and not cfg.teacher then
+	core.register_on_joinplayer(function(player)
+		local name = player:get_player_name()
+		if storage:get_string(SITE_KEY) ~= "" and not rockmech.has_account(name) then
+			rockmech.add_money(name, cfg.career_start)
+			core.log("action", ("[rockmech] %s 自己的帳戶：起始資金 $%d"):format(name, cfg.career_start))
+		end
+	end)
+end
+
 -- 新手裝備：第一次進遊戲就發十字鎬、鏟子、手推車（每張地圖都發；背包放不下的掉在腳邊）
 local STARTER = {"rockmech:pick", "rockmech:shovel", "rockmech:cart_item"}
 -- 真實地形的地圖：引擎的出生點是平坦地圖產生器的地面（surface_y，遠在山底下），一律放到營地

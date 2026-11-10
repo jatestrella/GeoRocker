@@ -952,6 +952,8 @@ function config.load(get, opts)
 	if tv == nil then tv = (not cfg.solo) and cfg.coal_seam ~= nil and cfg.coal_seam.lane_w ~= nil end
 	cfg.teacher = tv
 	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 23000)
+	-- 單機地圖開放連線時：coop 合作（共用營地主人的帳戶）、compete 競爭（每人自己的帳戶，收煤站的錢給蓋的人）
+	cfg.multiplayer = get("rockmech_multiplayer") == "compete" and "compete" or "coop"
 	-- 分組（team.lua）：組數（A, B, …）、各組營地沿 z 相隔幾公尺、名單檔（世界資料夾裡）、名單外的名稱能不能登入
 	cfg.career_teams = math.max(1, math.min(26, math.floor(tonumber(get("rockmech_career_teams")) or 8)))
 	cfg.career_site_spacing = math.max(60, tonumber(get("rockmech_career_site_spacing")) or 150)
