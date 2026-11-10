@@ -119,17 +119,18 @@ M.RECIPES = {
 		end,
 	},
 }
--- 水泥礦（仿和平礦場）：賣的還是大理岩（ore = marble），但礦體很厚（120–200 m），裡面夾幾層薄片岩（稀釋），
--- 傾角 25–55°。gen_strata = single：純的厚大理岩；inter：夾片岩
+-- 水泥礦（仿和平礦場）：賣的還是大理岩（ore = marble），但礦體很厚（250–400 m），裡面夾幾層薄片岩（稀釋），
+-- 傾角 20–45°。出生點（採場）在礦體厚度的正中間，片岩只在外圍。gen_strata = single：純的厚大理岩；inter：夾片岩
 do
 	local C = {}
 	for k, v in pairs(M.RECIPES.marble) do C[k] = v end
 	C.ore = "marble"
-	C.dip = function(f) return round(25 + 30 * f) end
+	C.dip = function(f) return round(20 + 25 * f) end
+	C.centered = true
 	C.column = function(r, mode, nseam, add, sum, range, count)
 		add("schist", range(r, 20, 40))
 		local main_top = sum()
-		local T = range(r, 120, 200)
+		local T = range(r, 250, 400)
 		local main_i
 		if mode == "single" then
 			add("marble", T); main_i = count()
@@ -245,7 +246,8 @@ function M.generate(world_conf)
 		end
 		local function top_at(x, z) return main_i > 1 and rockmech.stress.strata_column(St, x, z)[main_i - 1] or 0 end
 		local px, pz
-		if k == 1 then px, pz = -dist * sdd, -dist * cdd
+		if k == 1 and R.centered then px, pz = 0, 0
+		elseif k == 1 then px, pz = -dist * sdd, -dist * cdd
 		else
 			local f = faults[k - 1]
 			local o = f.d + f.w / 2 + r:next(25, 50)
@@ -254,6 +256,12 @@ function M.generate(world_conf)
 		-- 頂面高程 ref_y(P) = y0 − tan·(P·傾向) + fold(P)；主礦層頂 = ref_y(P) − top(P)/cos = 0
 		local y0 = top_at(px, pz) / cosd + tand * (px * sdd + pz * cdd) - fold_at(px, pz)
 		y0 = y0 + ground(px, pz)
+		-- 出生點在礦體中間：礦體頂面抬高半個礦體（垂直方向）。互層的話整段大理岩（含夾的片岩）一起算
+		if k == 1 and R.centered then
+			local T = 0
+			for i = main_i, #beds - 1 do T = T + beds[i][2] end
+			y0 = y0 + T / 2 / cosd
+		end
 		local parts = {}
 		for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) end
 		local sfx = k == 1 and "" or ("_" .. k)

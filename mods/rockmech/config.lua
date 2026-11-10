@@ -576,13 +576,20 @@ function config.parse_dem(s)
 	if not nx then return nil end
 	nx, nz = tonumber(nx), tonumber(nz)
 	if #s < p - 1 + nx * nz * 2 then return nil end
-	local h, byte = {}, string.byte
+	local h, q, byte = {}, {}, string.byte
 	for i = 1, nx * nz do
 		local lo, hi = byte(s, p, p + 1)
+		if hi >= 128 then q[i] = true; hi = hi - 128 end      -- 最高位元：採場範圍
 		h[i] = (hi * 256 + lo) / 10
 		p = p + 2
 	end
-	return {nx = nx, nz = nz, cell = tonumber(cell), x0 = tonumber(x0), z0 = tonumber(z0), h = h}
+	return {nx = nx, nz = nz, cell = tonumber(cell), x0 = tonumber(x0), z0 = tonumber(z0), h = h, q = q}
+end
+-- (x, z) 在不在採場範圍（最近的格點）
+function config.dem_quarry(D, x, z)
+	local i = math.max(0, math.min(D.nx - 1, math.floor((x - D.x0) / D.cell + 0.5)))
+	local j = math.max(0, math.min(D.nz - 1, math.floor((z - D.z0) / D.cell + 0.5)))
+	return D.q[j * D.nx + i + 1] == true
 end
 -- 網格上 (x, z) 的高度（雙線性內插；範圍外用邊上的值）
 function config.dem_height(D, x, z)
@@ -706,18 +713,25 @@ function config.load(get, opts)
 	-- 自由地形（非礦帶世界）：rockmech_terrain = 樣式,高度,尺度；樣式 hills（丘陵）或 cuesta（單面山，要有柱狀圖）
 	--   或 dem,檔名[,平台半徑]：真實地形的高程網格（世界資料夾裡的檔案，tools/dem_extract.py 產生）。
 	--   高度是相對 surface_y 的（地圖產生器把 surface_y 設成出生點高度的負值，出生點就在 y ≈ 0）；
-	--   平台半徑：出生點附近整平成一塊作業平台（給營地），外面 40 m 漸變回原地形
+	--   平台半徑：出生點附近整平成一塊作業平台（給營地），外面 40 m 漸變回原地形；
+	--   階高：網格標了採場範圍的地方切成一階一階（每階幾公尺高）
 	local tr = get("rockmech_terrain")
 	if tr and tr ~= "" and not cfg.lane_terrain then
-		local file, pad = tostring(tr):match("^%s*dem%s*,%s*([%w_.%-]+)%s*,?%s*([%d.]*)")
+		local file, pad, bench = tostring(tr):match("^%s*dem%s*,%s*([%w_.%-]+)%s*,?%s*([%d.]*)%s*,?%s*([%d.]*)")
 		if file then
 			local s = opts.read_file and opts.read_file(file)
 			local D = s and config.parse_dem(s)
 			if D then
 				local R = tonumber(pad) or 0
-				local h0 = config.dem_height(D, 0, 0)
-				local height = function(x, z)
+				local B = tonumber(bench) or 0
+				local function raw(x, z)
 					local h = config.dem_height(D, x, z)
+					if B > 0 and config.dem_quarry(D, x, z) then h = math.floor(h / B) * B end
+					return h
+				end
+				local h0 = raw(0, 0)
+				local height = function(x, z)
+					local h = raw(x, z)
 					if R > 0 then
 						local t = math.max(0, math.min(1, (math.sqrt(x * x + z * z) - R) / 40))
 						t = t * t * (3 - 2 * t)
