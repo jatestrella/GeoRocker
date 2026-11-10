@@ -654,26 +654,20 @@ See that black streak on the hill? Knock a piece off and show me.=山頭那條�
 The black one. If it won't break, you're hitting the wrong rock.=黑黑那條啦。敲不動，就是敲錯石頭了。
 Coal, sure enough. How much ash is in it? Only the scale at the coal yard knows.=是煤沒錯。裡面灰分多少？要給收煤站秤過才知道。
 That noisy machine by the camp. Coal it pays for; rock it charges you for.=營地旁邊那台很吵的，煤它給錢，石頭它跟你收錢。
-Money in your pocket. That's how everyone starts.=錢入袋了。大家都是這樣開始的。
 Carrying it by hand? You'll be hauling until you retire.=用手搬喔？搬到你退休啦。
 Even in my day we had wheels.=我們那個年代也有輪子可以用啊。
-Now you're working smart.=這樣才對，做工也要用頭腦。
-Look at the cracks in that rock face. You'd stand under that?=你看那面岩壁裂成那樣，你敢站在下面？
-Rock doesn't warn you twice. We used to prop it up with timber.=石頭不會講第二次。以前我們都用木頭撐。
-Good. Respect the rock and it lets you go home.=好。你尊重石頭，石頭就讓你平安回家。
 In my day, one drill hole told us how thick the coal ran down below.=以前我們打一支孔，就知道底下的煤有多厚。
 Digging blind costs more than drilling.=亂挖比打孔還貴。
-Read that core carefully. The rock tells you everything.=岩芯要看仔細，石頭什麼都會跟你講。
 Hey, kid. New here? I worked these hills for forty years.=少年欸，新來的喔？這片山我挖四十年了。
-Oh, you've already figured that out.=喔，這你已經會了。
-Never mind. You'll learn it someday.=算了，以後你就知道了。
-Alright, you'll do fine. I'm old, I'm going to go rest.=好啦，你沒問題了。我老了，去休息囉。
 My lungs aren't what they used to be.=肺不像以前那麼好囉。
 Coal dust and sweet potato porridge. That was our life.=煤灰配番薯籤，以前就是這樣過的。
 The mountain feeds you, and the mountain takes you back.=山給你吃，也會把你收回去。
 Listen to the rock. When it creaks, run.=聽石頭的聲音，它在叫的時候就快跑。
+Look at the cracks in that rock face. You'd stand under that?=你看那面岩壁裂成那樣，你敢站在下面？
+Rock doesn't warn you twice. We used to prop it up with timber.=石頭不會講第二次。以前我們都用木頭撐。
+Read that core carefully. The rock tells you everything.=岩芯要看仔細，石頭什麼都會跟你講。
+Good. Respect the rock and it lets you go home.=好。你尊重石頭，石頭就讓你平安回家。
 Old Miner=老礦工
-Old miner starts over=老礦工從頭再來
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=監測稜鏡@n還沒有讀數（附近開挖、算過應力後才有）
@@ -1827,6 +1821,12 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Money in your pocket. That's how everyone starts.=錢入袋了。大家都是這樣開始的。
+Now you're working smart.=這樣才對，做工也要用頭腦。
+Oh, you've already figured that out.=喔，這你已經會了。
+Never mind. You'll learn it someday.=算了，以後你就知道了。
+Alright, you'll do fine. I'm old, I'm going to go rest.=好啦，你沒問題了。我老了，去休息囉。
+Old miner starts over=老礦工從頭再來
 Capacity: @1 t/s   Gangue: $@2 per tonne=處理能力：@1 t/s　矸石：每噸 $@2
 Separation: @1% of the coal goes to clean coal, @2% of the waste is misplaced into clean coal=分選：煤 @1% 進精煤，矸石 @2% 混進精煤
 The delivery yard is not clear (@1). Clear it before buying a vehicle=交車區有東西擋著：@1。先把交車區淨空才能買車
