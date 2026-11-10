@@ -108,8 +108,9 @@ end
 local function send_home(name, t) send_to(name, site_x(t)) end
 
 -- 單機版（rockmech_solo）：引擎在單機時會給玩家幾乎所有權限（含 server，等於老師），這裡只留基本的
+-- 開發者開關：minetest.conf 寫 rockmech_dev = true 的電腦照樣有全部權限（/god 測試用；安裝包不寫）
 local SOLO_PRIVS = {interact = true, shout = true}
-if cfg.solo then
+if cfg.solo and not core.settings:get_bool("rockmech_dev", false) then
 	core.register_on_mods_loaded(function()
 		if not core.is_singleplayer() then return end
 		for priv, def in pairs(core.registered_privileges) do
