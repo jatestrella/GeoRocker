@@ -36,7 +36,7 @@ for _, k in ipairs({"cart", "suv", "truck", "excavator", "lowboy", "heavyhaul", 
 		"vent_fan", "vent_duct", "bolt", "drill"}) do SHOP_INDEX[k] = "steel" end
 
 -- 事件：影響是對數（+0.15 ≈ 漲 16%、+0.3 ≈ 35%、+0.5 ≈ 65%），days 持續幾個交易日
--- fx 的礦價用礦種的 key（coal、marble）；ore：只在賣這種礦的地圖發生（寒流跟大理岩無關、水泥窯歲修跟煤無關）
+-- fx 的礦價用礦種的 key（coal、marble）；別種礦的事件照樣會發生，只是對這張地圖的礦價沒影響
 local U1, U2, U3 = 0.15, 0.3, 0.5
 local EVENTS = {
 	{id = "miyi_war", label = S("Miyi War"), days = 12, fx = {coal = U1, diesel = U3, explosive = U2, steel = U1},
@@ -45,13 +45,13 @@ local EVENTS = {
 		news = S("War between Wu and E; energy and metals both scarce")},
 	{id = "opec_cut", label = S("Oupeike output cut"), days = 7, fx = {coal = U1, diesel = U2, explosive = U1},
 		news = S("Oil producers agree to cut output")},
-	{id = "cold_wave", label = S("Cold wave"), days = 4, fx = {coal = U2, diesel = U1}, ore = "coal",
+	{id = "cold_wave", label = S("Cold wave"), days = 4, fx = {coal = U2, diesel = U1},
 		news = S("A strong cold wave; power plants burn more coal")},
-	{id = "warm_winter", label = S("Warm winter"), days = 4, fx = {coal = -U2, diesel = -U1}, ore = "coal",
+	{id = "warm_winter", label = S("Warm winter"), days = 4, fx = {coal = -U2, diesel = -U1},
 		news = S("A warm winter; heating demand falls")},
 	{id = "typhoon", label = S("Typhoon closes ports"), days = 2, fx = {coal = U1, diesel = U1, steel = U1},
 		news = S("A typhoon closes the ports; shipments are delayed")},
-	{id = "coal_cut", label = S("Coal-fired power reduction"), days = 12, fx = {coal = -U2}, ore = "coal",
+	{id = "coal_cut", label = S("Coal-fired power reduction"), days = 12, fx = {coal = -U2},
 		news = S("The government orders power plants to burn less coal")},
 	{id = "carbon_fee", label = S("Carbon fee"), days = 12, fx = {coal = -U1, marble = -U1, diesel = U1},
 		news = S("A carbon fee takes effect")},
@@ -59,11 +59,11 @@ local EVENTS = {
 		news = S("The economy slows; demand falls everywhere")},
 	{id = "infrastructure", label = S("Infrastructure boom"), days = 7, fx = {marble = U2, explosive = U1, steel = U2},
 		news = S("A big public works budget passes; steel and explosives in demand")},
-	{id = "housing_cool", label = S("Housing market cools"), days = 12, fx = {marble = -U2, steel = -U1}, ore = "marble",
+	{id = "housing_cool", label = S("Housing market cools"), days = 12, fx = {marble = -U2, steel = -U1},
 		news = S("Home sales slump; builders order less cement")},
-	{id = "cement_export", label = S("Cement exports surge"), days = 7, fx = {marble = U2}, ore = "marble",
+	{id = "cement_export", label = S("Cement exports surge"), days = 7, fx = {marble = U2},
 		news = S("A building boom overseas; cement plants run at full capacity")},
-	{id = "kiln_overhaul", label = S("Cement kiln overhaul"), days = 5, fx = {marble = -U1}, ore = "marble",
+	{id = "kiln_overhaul", label = S("Cement kiln overhaul"), days = 5, fx = {marble = -U1},
 		news = S("A big cement kiln shuts for overhaul and buys less limestone")},
 }
 local EVENT_BY_ID = {}
@@ -188,10 +188,8 @@ function rockmech.market_day_step(today)
 	set_active(keep)
 	if #keep < MAX_ACTIVE and math.random() < EVENT_P then
 		local pool = {}
-		local here = {}
-		for _, ore in ipairs(cfg.active_ores) do here[ore.key] = true end
 		for _, e in ipairs(EVENTS) do
-			local busy = e.ore and not here[e.ore]      -- 別種礦的事件不會發生
+			local busy = false
 			for _, a in ipairs(keep) do if a.id == e.id then busy = true end end
 			if not busy then pool[#pool + 1] = e end
 		end
