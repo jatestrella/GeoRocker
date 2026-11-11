@@ -1,7 +1,7 @@
 -- rockmech/shaftroad.lua
 -- 豎井道路：營地到每口豎井鋪一條壓碎大理岩（壓實）的路（寬 WIDTH m），玩家一看就知道礦要載去哪裡倒。
 -- 路線：5 m 格網上 A*，成本 = 距離 ×（1 + 坡度超過 8% 的懲罰）；已經有路的格便宜（幾條路共用主幹）；繞開其他豎井。
--- 縱斷面：沿路線的地面高程，前後各掃一次限制坡度 ≤ GRADE，兩次取平均（一半挖、一半填），採場的階也切得出坡道。
+-- 縱斷面：貼著沒切階的地形（短距離平滑）；採場裡取階的中間，一半挖、一半填，切過一階一階就是坡道。
 -- 路面：最上面一格是對應級數的壓實碎石，底下填到碰到實心為止；上面的岩石、表土、樹清掉（天然地形，不算開挖）。
 -- 只蓋一次（mod storage shaft_roads），豎井都蓋好之後由 oreshaft.lua 呼叫。
 
@@ -14,7 +14,14 @@ local PAD = 58              -- 營地平台（半徑 60 m）裡面不鋪
 local NLEV = rockmech.RUBBLE_LEVELS
 local P2 = 200             -- 大理岩碎石的品位（跟豎井填料一樣）
 
-local function surface(x, z)        -- 天然地面（岩石頂上面那一層）的高程，小數
+-- 路面的參考地面：真實地形用沒切成階的高程（採場的階之間沒有坡道，照階算會找不到路、或墊出高牆）
+local function surface(x, z)
+	local T = cfg.terrain
+	if T and T.smooth_height then
+		-- 採場裡：階的中間（實際的階面比沒切階的地形低 0–B m），路面一半挖、一半填
+		local half = T.quarry and T.quarry(x, z) and (T.bench or 0) / 2 or 0
+		return cfg.surface_y + T.smooth_height(x, z) + 1 - half
+	end
 	return cfg.surface_y + rockmech.stress.terrain_rise(cfg, x, z) + 1
 end
 
@@ -54,7 +61,7 @@ for dx = -2, 2 do for dz = -2, 2 do
 end end
 
 -- A*：from → 離 goal 中心 reach m 內；blocked(x, z)；used[key] = 已經有路。回傳 {{x, z}, ...}
-local function route(from, goal, reach, blocked, used, box)
+local function route(from, goal, reach, blocked, used, box, max_grade)
 	local nx = math.floor((box.x2 - box.x1) / CELL) + 1
 	local nz = math.floor((box.z2 - box.z1) / CELL) + 1
 	local function wx(i) return box.x1 + i * CELL end
@@ -91,10 +98,10 @@ local function route(from, goal, reach, blocked, used, box)
 					local q = b * nx + a
 					if not done[q] and not blocked(wx(a), wz(b)) then
 						local grade = math.abs(h_at(a, b) - h0) / m[3]
-						local c = m[3] * (1 + 12 * math.max(0, grade - 0.08) + 40 * math.max(0, grade - 0.3))
-						if used[q] then c = c * 0.4 end
-						local ng = g[k] + c
-						if not g[q] or ng < g[q] then
+						local c = grade <= max_grade and m[3] * (1 + 12 * math.max(0, grade - 0.08))
+						if c and used[q] then c = c * 0.4 end
+						local ng = c and g[k] + c
+						if ng and (not g[q] or ng < g[q]) then
 							g[q], prev[q] = ng, k
 							heap_push(open, ng + hcost(a, b), q)
 						end
@@ -140,22 +147,21 @@ local function smooth_line(pts)
 	return res
 end
 
--- 縱斷面：坡度 ≤ GRADE（每 1 m），前後各掃一次取平均；end_y：終點固定的高程
+-- 縱斷面：貼著地面，前後各 SMOOTH m 平均（不硬壓坡度：硬壓的話過山谷會墊出高牆）；end_y：終點固定的高程，最後 30 m 漸變過去
+local SMOOTH = 8
 local function profile(line, end_y)
 	local n = #line
 	local gy = {}
 	for i, p in ipairs(line) do gy[i] = surface(p.x, p.z) end
-	if end_y then gy[n] = end_y end
-	local f, b = {}, {}
-	f[1] = gy[1]
-	for i = 2, n do f[i] = math.max(f[i - 1] - GRADE, math.min(f[i - 1] + GRADE, gy[i])) end
-	b[n] = gy[n]
-	for i = n - 1, 1, -1 do b[i] = math.max(b[i + 1] - GRADE, math.min(b[i + 1] + GRADE, gy[i])) end
 	local y = {}
-	for i = 1, n do y[i] = (f[i] + b[i]) / 2 end
-	if end_y then      -- 終點附近接到井口：最後 20 m 往 end_y 漸變
-		for i = math.max(1, n - 20), n do
-			local t = (i - (n - 20)) / 20
+	for i = 1, n do
+		local sum, cnt = 0, 0
+		for k = math.max(1, i - SMOOTH), math.min(n, i + SMOOTH) do sum = sum + gy[k]; cnt = cnt + 1 end
+		y[i] = sum / cnt
+	end
+	if end_y then
+		for i = math.max(1, n - 30), n do
+			local t = (i - (n - 30)) / 30
 			if t > 0 then y[i] = y[i] + (end_y - y[i]) * t end
 		end
 	end
@@ -205,7 +211,7 @@ local function pave(c)
 	local top = {name = rockmech.compact_of[rockmech.rubble_with_level(base, k, P2)] or full.name, param2 = P2}
 	core.swap_node({x = c.x, y = yb, z = c.z}, top)
 	-- 往下填到實心
-	for y = yb - 1, yb - 40, -1 do
+	for y = yb - 1, yb - 15, -1 do
 		local p = {x = c.x, y = y, z = c.z}
 		local n = core.get_node(p).name
 		local def = core.registered_nodes[n]
@@ -259,7 +265,15 @@ function rockmech.shaft_roads(owner)
 			end
 			return false
 		end
-		local path = route({x = 0, z = 0}, d, R + 9, blocked, used, box)
+		-- 坡度上限先試 GRADE，找不到再放寬
+		local path
+		for _, mg in ipairs({GRADE, 0.18, 0.3, 10}) do
+			path = route({x = 0, z = 0}, d, R + 9, blocked, used, box, mg)
+			if path then
+				if mg > GRADE then core.log("warning", ("[rockmech] 豎井道路：(%d, %d) 坡度放寬到 %g"):format(d.x, d.z, mg)) end
+				break
+			end
+		end
 		if path then
 			-- 最後接到井壁外緣（離中心 R + 0.5 m）
 			local last = path[#path]
@@ -282,8 +296,14 @@ function rockmech.shaft_roads(owner)
 		t.cells[#t.cells + 1] = c
 		t.lo, t.hi = math.min(t.lo, c.y), math.max(t.hi, c.y)
 	end
-	local ncell = 0
-	for _ in pairs(cells) do ncell = ncell + 1 end
+	local ncell, high, maxd = 0, 0, 0
+	for _, c in pairs(cells) do
+		ncell = ncell + 1
+		local d = c.y - (cfg.surface_y + rockmech.stress.terrain_rise(cfg, c.x, c.z) + 1)      -- 正：填，負：挖
+		if d > 5 then high = high + 1 end
+		if math.abs(d) > math.abs(maxd) then maxd = d end
+	end
+	core.log("action", ("[rockmech] 豎井道路：填超過 5 m 的格 %d、最大挖填 %.1f m"):format(high, maxd))
 	core.log("action", ("[rockmech] 豎井道路：%d 條、%d 格，路線 %.0f ms"):format(n_ok, ncell, (core.get_us_time() - t0) / 1000))
 	local idx = 0
 	local function next_tile()

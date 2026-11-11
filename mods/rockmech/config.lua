@@ -730,6 +730,16 @@ function config.load(get, opts)
 					return h
 				end
 				local h0 = raw(0, 0)
+				local function blend(x, z, h)
+					if R > 0 then
+						local t = math.max(0, math.min(1, (math.sqrt(x * x + z * z) - R) / 40))
+						t = t * t * (3 - 2 * t)
+						h = h0 + (h - h0) * t
+					end
+					return h
+				end
+				-- 沒切成階的地形（豎井道路找路線、定縱斷面用：坡道切過一階一階）
+				local smooth_height = function(x, z) return blend(x, z, config.dem_height(D, x, z)) end
 				local height = function(x, z)
 					local h = raw(x, z)
 					if R > 0 then
@@ -739,7 +749,7 @@ function config.load(get, opts)
 					end
 					return h
 				end
-				cfg.terrain = {mode = "dem", dem = D, height = height,
+				cfg.terrain = {mode = "dem", dem = D, height = height, smooth_height = smooth_height, bench = B,
 					quarry = D.has_q and function(x, z) return config.dem_quarry(D, x, z) end or nil}
 			else
 				warnings[#warnings + 1] = "rockmech_terrain: 讀不到高程網格 " .. file .. "（平地）"
