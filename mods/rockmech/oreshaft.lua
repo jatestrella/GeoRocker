@@ -89,8 +89,10 @@ local function ensure(owner)
 			return
 		end
 	end
+	if rockmech.shaft_roads then rockmech.shaft_roads(owner) end      -- 豎井都蓋好了：鋪營地到豎井的路（shaftroad.lua）
 end
 
+rockmech.shaft_ensure = ensure      -- 測試用
 core.register_on_joinplayer(function(player)
 	core.after(3, function()
 		if storage:get_string("career_site") == "" then return end

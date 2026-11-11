@@ -579,11 +579,11 @@ function config.parse_dem(s)
 	local h, q, byte = {}, {}, string.byte
 	for i = 1, nx * nz do
 		local lo, hi = byte(s, p, p + 1)
-		if hi >= 128 then q[i] = true; hi = hi - 128 end      -- 最高位元：採場範圍
+		if hi >= 128 then q[i] = true; q.any = true; hi = hi - 128 end      -- 最高位元：採場範圍
 		h[i] = (hi * 256 + lo) / 10
 		p = p + 2
 	end
-	return {nx = nx, nz = nz, cell = tonumber(cell), x0 = tonumber(x0), z0 = tonumber(z0), h = h, q = q}
+	return {nx = nx, nz = nz, cell = tonumber(cell), x0 = tonumber(x0), z0 = tonumber(z0), h = h, q = q, has_q = q.any}
 end
 -- (x, z) 在不在採場範圍（最近的格點）
 function config.dem_quarry(D, x, z)
@@ -739,7 +739,8 @@ function config.load(get, opts)
 					end
 					return h
 				end
-				cfg.terrain = {mode = "dem", dem = D, height = height}
+				cfg.terrain = {mode = "dem", dem = D, height = height,
+					quarry = D.has_q and function(x, z) return config.dem_quarry(D, x, z) end or nil}
 			else
 				warnings[#warnings + 1] = "rockmech_terrain: 讀不到高程網格 " .. file .. "（平地）"
 			end

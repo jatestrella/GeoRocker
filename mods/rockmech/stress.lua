@@ -440,6 +440,12 @@ function stress.tree_at(x, z)
 end
 -- 天然表土厚度（1/8 m）。rise：這一欄岩石頂比地表高幾格；rise_at(x, z)：別欄的 rise（坡腳用）；ore_top：頂上是礦石
 function stress.natural_soil(cfg, x, z, rise, rise_at, ore_top)
+	-- 真實地形（DEM）：採場範圍裡是裸岩；採場外整片是山坡（頂上是大理岩也鋪土、種樹）
+	local T = cfg.terrain
+	if T and T.quarry then
+		if T.quarry(x, z) then return 0 end
+		ore_top, rise = false, math.max(rise, SOILC.min_rise)
+	end
 	if ore_top or rise < 0 then return 0 end
 	local NL = 8
 	local function noise_t(lo, hi) return math.floor(NL * (lo + (hi - lo) * fbm(x / 14, z / 14, 41)) + 0.5) end

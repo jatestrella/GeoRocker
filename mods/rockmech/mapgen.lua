@@ -175,7 +175,8 @@ local function lay_topsoil(area, minp, maxp)
 					if dy <= full then done = dy end
 				end
 				-- 樹（stress.tree_at）：表土整格都鋪上了，樹幹 4–5 m、樹冠半徑 2 m，整棵在 chunk 裡
-				local seed = top - sy >= SC.min_rise and stress.outcrop_factor(cfg, x, z) >= 1 and stress.tree_at(x, z)
+				local hillside = top - sy >= SC.min_rise or (cfg.terrain and cfg.terrain.quarry and true)
+				local seed = hillside and stress.outcrop_factor(cfg, x, z) >= 1 and stress.tree_at(x, z)
 				if seed and done * NL == t then plant[#plant + 1] = {x, z, top + done, seed} end
 			end
 		end

@@ -1,0 +1,312 @@
+-- rockmech/shaftroad.lua
+-- 豎井道路：營地到每口豎井鋪一條壓碎大理岩（壓實）的路（寬 WIDTH m），玩家一看就知道礦要載去哪裡倒。
+-- 路線：5 m 格網上 A*，成本 = 距離 ×（1 + 坡度超過 8% 的懲罰）；已經有路的格便宜（幾條路共用主幹）；繞開其他豎井。
+-- 縱斷面：沿路線的地面高程，前後各掃一次限制坡度 ≤ GRADE，兩次取平均（一半挖、一半填），採場的階也切得出坡道。
+-- 路面：最上面一格是對應級數的壓實碎石，底下填到碰到實心為止；上面的岩石、表土、樹清掉（天然地形，不算開挖）。
+-- 只蓋一次（mod storage shaft_roads），豎井都蓋好之後由 oreshaft.lua 呼叫。
+
+local cfg = rockmech.cfg
+local storage = rockmech.collapse.storage
+local WIDTH = 8
+local GRADE = 0.12
+local CELL = 5
+local PAD = 58              -- 營地平台（半徑 60 m）裡面不鋪
+local NLEV = rockmech.RUBBLE_LEVELS
+local P2 = 200             -- 大理岩碎石的品位（跟豎井填料一樣）
+
+local function surface(x, z)        -- 天然地面（岩石頂上面那一層）的高程，小數
+	return cfg.surface_y + rockmech.stress.terrain_rise(cfg, x, z) + 1
+end
+
+-- 二元堆積（A* 的 open list）
+local function heap_push(h, k, v)
+	local i = #h + 1
+	h[i] = {k, v}
+	while i > 1 do
+		local p = math.floor(i / 2)
+		if h[p][1] <= h[i][1] then break end
+		h[p], h[i] = h[i], h[p]; i = p
+	end
+end
+local function heap_pop(h)
+	local top = h[1]
+	local last = table.remove(h)
+	if #h > 0 then
+		h[1] = last
+		local i = 1
+		while true do
+			local l, r, m = 2 * i, 2 * i + 1, i
+			if h[l] and h[l][1] < h[m][1] then m = l end
+			if h[r] and h[r][1] < h[m][1] then m = r end
+			if m == i then break end
+			h[m], h[i] = h[i], h[m]; i = m
+		end
+	end
+	return top[1], top[2]
+end
+
+local MOVES = {}
+for dx = -2, 2 do for dz = -2, 2 do
+	local g = math.abs(dx) + math.abs(dz)
+	if g > 0 and not (math.abs(dx) == 2 and math.abs(dz) == 2) and not (math.abs(dx) == 2 and dz == 0) and not (dx == 0 and math.abs(dz) == 2) then
+		MOVES[#MOVES + 1] = {dx, dz, math.sqrt(dx * dx + dz * dz) * CELL}
+	end
+end end
+
+-- A*：from → 離 goal 中心 reach m 內；blocked(x, z)；used[key] = 已經有路。回傳 {{x, z}, ...}
+local function route(from, goal, reach, blocked, used, box)
+	local nx = math.floor((box.x2 - box.x1) / CELL) + 1
+	local nz = math.floor((box.z2 - box.z1) / CELL) + 1
+	local function wx(i) return box.x1 + i * CELL end
+	local function wz(j) return box.z1 + j * CELL end
+	local H = {}
+	local function h_at(i, j)
+		local k = j * nx + i
+		local v = H[k]
+		if not v then v = surface(wx(i), wz(j)); H[k] = v end
+		return v
+	end
+	local si = math.floor((from.x - box.x1) / CELL + 0.5)
+	local sj = math.floor((from.z - box.z1) / CELL + 0.5)
+	local g, prev, done = {}, {}, {}
+	local open = {}
+	local function hcost(i, j) return math.sqrt((wx(i) - goal.x) ^ 2 + (wz(j) - goal.z) ^ 2) * 0.5 end
+	local s = sj * nx + si
+	g[s] = 0
+	heap_push(open, hcost(si, sj), s)
+	local found
+	local n = 0
+	while #open > 0 do
+		local _, k = heap_pop(open)
+		if not done[k] then
+			done[k] = true
+			n = n + 1
+			if n > 400000 then break end
+			local i, j = k % nx, math.floor(k / nx)
+			if math.sqrt((wx(i) - goal.x) ^ 2 + (wz(j) - goal.z) ^ 2) <= reach then found = k; break end
+			local h0 = h_at(i, j)
+			for _, m in ipairs(MOVES) do
+				local a, b = i + m[1], j + m[2]
+				if a >= 0 and b >= 0 and a < nx and b < nz then
+					local q = b * nx + a
+					if not done[q] and not blocked(wx(a), wz(b)) then
+						local grade = math.abs(h_at(a, b) - h0) / m[3]
+						local c = m[3] * (1 + 12 * math.max(0, grade - 0.08) + 40 * math.max(0, grade - 0.3))
+						if used[q] then c = c * 0.4 end
+						local ng = g[k] + c
+						if not g[q] or ng < g[q] then
+							g[q], prev[q] = ng, k
+							heap_push(open, ng + hcost(a, b), q)
+						end
+					end
+				end
+			end
+		end
+	end
+	if not found then return nil end
+	local path, k = {}, found
+	while k do
+		used[k] = true
+		table.insert(path, 1, {x = wx(k % nx), z = wz(math.floor(k / nx))})
+		k = prev[k]
+	end
+	return path
+end
+
+-- 折線磨圓（Chaikin 兩次）再每 1 m 取一點
+local function smooth_line(pts)
+	for _ = 1, 2 do
+		local out = {pts[1]}
+		for i = 1, #pts - 1 do
+			local a, b = pts[i], pts[i + 1]
+			out[#out + 1] = {x = a.x * 0.75 + b.x * 0.25, z = a.z * 0.75 + b.z * 0.25}
+			out[#out + 1] = {x = a.x * 0.25 + b.x * 0.75, z = a.z * 0.25 + b.z * 0.75}
+		end
+		out[#out + 1] = pts[#pts]
+		pts = out
+	end
+	local res = {{x = pts[1].x, z = pts[1].z}}
+	local carry = 0
+	for i = 1, #pts - 1 do
+		local a, b = pts[i], pts[i + 1]
+		local L = math.sqrt((b.x - a.x) ^ 2 + (b.z - a.z) ^ 2)
+		local s = 1 - carry
+		while s <= L do
+			res[#res + 1] = {x = a.x + (b.x - a.x) * s / L, z = a.z + (b.z - a.z) * s / L}
+			s = s + 1
+		end
+		carry = L - (s - 1)
+	end
+	return res
+end
+
+-- 縱斷面：坡度 ≤ GRADE（每 1 m），前後各掃一次取平均；end_y：終點固定的高程
+local function profile(line, end_y)
+	local n = #line
+	local gy = {}
+	for i, p in ipairs(line) do gy[i] = surface(p.x, p.z) end
+	if end_y then gy[n] = end_y end
+	local f, b = {}, {}
+	f[1] = gy[1]
+	for i = 2, n do f[i] = math.max(f[i - 1] - GRADE, math.min(f[i - 1] + GRADE, gy[i])) end
+	b[n] = gy[n]
+	for i = n - 1, 1, -1 do b[i] = math.max(b[i + 1] - GRADE, math.min(b[i + 1] + GRADE, gy[i])) end
+	local y = {}
+	for i = 1, n do y[i] = (f[i] + b[i]) / 2 end
+	if end_y then      -- 終點附近接到井口：最後 20 m 往 end_y 漸變
+		for i = math.max(1, n - 20), n do
+			local t = (i - (n - 20)) / 20
+			if t > 0 then y[i] = y[i] + (end_y - y[i]) * t end
+		end
+	end
+	return y
+end
+
+-- 路面的每一格：key → {x, z, y = 路面高程, w = 離中線}
+local function stamp(cells, line, ys)
+	for i, p in ipairs(line) do
+		local a, b = line[math.max(1, i - 2)], line[math.min(#line, i + 2)]
+		local tx, tz = b.x - a.x, b.z - a.z
+		local L = math.sqrt(tx * tx + tz * tz)
+		if L > 0 then
+			local nx, nz = -tz / L, tx / L
+			for w = -WIDTH / 2, WIDTH / 2, 0.5 do
+				local x, z = math.floor(p.x + nx * w + 0.5), math.floor(p.z + nz * w + 0.5)
+				if x * x + z * z > PAD * PAD then
+					local k = x .. "," .. z
+					local c = cells[k]
+					if not c or math.abs(w) < c.w then cells[k] = {x = x, z = z, y = ys[i], w = math.abs(w)} end
+				end
+			end
+		end
+	end
+end
+
+-- 這一欄可以動的方塊：天然岩石、碎石、表土、樹、空氣
+local function natural(name)
+	if name == "air" then return true end
+	if name == "rockmech:shaft_marble" then return false end
+	if rockmech.lith_of_node[name] or rockmech.rubble_level[name] then return true end
+	return name == "default:tree" or name == "default:leaves" or name == "default:apple"
+end
+local function is_air(name) return name == "air" end
+
+local function pave(c)
+	local S = c.y
+	local yb = math.ceil(S) - 1
+	local k = math.floor((S - yb) * NLEV + 0.5)
+	if k <= 0 then yb, k = yb - 1, NLEV end
+	-- 先檢查這欄：有建築（非天然）就不動
+	for y = yb - 2, yb + 8 do
+		if not natural(core.get_node({x = c.x, y = y, z = c.z}).name) then return end
+	end
+	local base = rockmech.rubble_for("rockmech:marble")
+	local full = {name = rockmech.compact_of[rockmech.rubble_with_level(base, NLEV, P2)], param2 = P2}
+	local top = {name = rockmech.compact_of[rockmech.rubble_with_level(base, k, P2)] or full.name, param2 = P2}
+	core.swap_node({x = c.x, y = yb, z = c.z}, top)
+	-- 往下填到實心
+	for y = yb - 1, yb - 40, -1 do
+		local p = {x = c.x, y = y, z = c.z}
+		local n = core.get_node(p).name
+		local def = core.registered_nodes[n]
+		if n ~= "air" and def and def.walkable ~= false and not rockmech.rubble_level[n] and n ~= "default:leaves" then
+			if rockmech.lith_of_node[n] then core.swap_node(p, full) end      -- 路面下第一格岩石也鋪平
+			break
+		end
+		core.swap_node(p, full)
+	end
+	-- 往上清空，連續 4 格空氣就停
+	local air = 0
+	for y = yb + 1, yb + 80 do
+		local p = {x = c.x, y = y, z = c.z}
+		local n = core.get_node(p).name
+		if is_air(n) then
+			air = air + 1
+			if air >= 4 then break end
+		else
+			air = 0
+			if not natural(n) then break end
+			core.swap_node(p, {name = "air"})
+		end
+	end
+end
+
+local building = false
+function rockmech.shaft_roads(owner)
+	if building or storage:get_string("shaft_roads") ~= "" or not cfg.shafts then return end
+	local shafts = {}
+	for i in ipairs(cfg.shafts) do
+		local d = core.deserialize(storage:get_string("shaft:" .. i))
+		if not d then return end
+		shafts[#shafts + 1] = d
+	end
+	building = true
+	local t0 = core.get_us_time()
+	local R = (cfg.shaft_r or 6) + (cfg.shaft_ring or 6)
+	local box = {x1 = -200, z1 = -200, x2 = 200, z2 = 200}
+	for _, d in ipairs(shafts) do
+		box.x1, box.x2 = math.min(box.x1, d.x - 250), math.max(box.x2, d.x + 250)
+		box.z1, box.z2 = math.min(box.z1, d.z - 250), math.max(box.z2, d.z + 250)
+	end
+	local used, cells = {}, {}
+	-- 近的先蓋，遠的可以沿用前面的路
+	table.sort(shafts, function(a, b) return a.x * a.x + a.z * a.z < b.x * b.x + b.z * b.z end)
+	local n_ok = 0
+	for _, d in ipairs(shafts) do
+		local function blocked(x, z)
+			for _, o in ipairs(shafts) do
+				if (x - o.x) ^ 2 + (z - o.z) ^ 2 <= (R + 3) ^ 2 then return true end
+			end
+			return false
+		end
+		local path = route({x = 0, z = 0}, d, R + 9, blocked, used, box)
+		if path then
+			-- 最後接到井壁外緣（離中心 R + 0.5 m）
+			local last = path[#path]
+			local dx, dz = last.x - d.x, last.z - d.z
+			local L = math.sqrt(dx * dx + dz * dz)
+			path[#path + 1] = {x = d.x + dx / L * (R + 0.5), z = d.z + dz / L * (R + 0.5)}
+			local line = smooth_line(path)
+			stamp(cells, line, profile(line, d.top + 1))
+			n_ok = n_ok + 1
+		else
+			core.log("warning", ("[rockmech] 豎井道路：(%d, %d) 找不到路線"):format(d.x, d.z))
+		end
+	end
+	-- 按 80 m 一塊分組，一塊一塊載入後鋪
+	local tiles, order = {}, {}
+	for _, c in pairs(cells) do
+		local tk = math.floor(c.x / 80) .. "," .. math.floor(c.z / 80)
+		local t = tiles[tk]
+		if not t then t = {cells = {}, lo = math.huge, hi = -math.huge}; tiles[tk] = t; order[#order + 1] = tk end
+		t.cells[#t.cells + 1] = c
+		t.lo, t.hi = math.min(t.lo, c.y), math.max(t.hi, c.y)
+	end
+	local ncell = 0
+	for _ in pairs(cells) do ncell = ncell + 1 end
+	core.log("action", ("[rockmech] 豎井道路：%d 條、%d 格，路線 %.0f ms"):format(n_ok, ncell, (core.get_us_time() - t0) / 1000))
+	local idx = 0
+	local function next_tile()
+		idx = idx + 1
+		local tk = order[idx]
+		if not tk then
+			storage:set_string("shaft_roads", "1")
+			building = false
+			core.log("action", "[rockmech] 豎井道路鋪好了")
+			return
+		end
+		local t = tiles[tk]
+		local tx, tz = tk:match("^(%-?%d+),(%-?%d+)$")
+		tx, tz = tonumber(tx) * 80, tonumber(tz) * 80
+		core.emerge_area({x = tx - 1, y = math.floor(t.lo) - 45, z = tz - 1}, {x = tx + 81, y = math.ceil(t.hi) + 85, z = tz + 81}, function(_, _, rem)
+			if rem > 0 then return end
+			local C = rockmech.collapse
+			C.quiet = C.quiet + 1
+			local ok, err = pcall(function() for _, c in ipairs(t.cells) do pave(c) end end)
+			C.quiet = C.quiet - 1
+			if not ok then core.log("error", "[rockmech] 豎井道路：" .. tostring(err)) end
+			core.after(0, next_tile)
+		end)
+	end
+	next_tile()
+end
