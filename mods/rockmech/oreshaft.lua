@@ -41,6 +41,12 @@ local function ground_top(x, z)
 end
 local function tons_of(levels) return levels / V.NLEV * cfg.rubble_density end
 
+-- 井口平台往上清多高；可以清的方塊：天然岩石、碎石、表土、樹
+local PAD_UP = 60
+local function natural(name)
+	return rockmech.lith_of_node[name] or rockmech.rubble_level[name]
+		or name == "default:tree" or name == "default:leaves" or name == "default:apple"
+end
 local function build(i, s, owner)
 	local top = ground_top(s.x, s.z)
 	local bottom = top - DEPTH
@@ -50,12 +56,16 @@ local function build(i, s, owner)
 	C.quiet = C.quiet + 1
 	local ok, err = pcall(function()
 		local R = RAD + RING
-		for y = bottom - 1, top + 6 do
+		for y = bottom - 1, top + PAD_UP do
 			for x = s.x - R, s.x + R do for z = s.z - R, s.z + R do
 				local p = {x = x, y = y, z = z}
 				local hole = inside(x - s.x, z - s.z)
 				if not in_wall(x - s.x, z - s.z) then
 					-- 圓環外面不動
+				elseif y > top then
+					-- 井口平台：井口以上整圈清空（山坡上的井口不會被上面的岩石蓋住）
+					if hole then C.mark_excavated(p) end
+					if natural(core.get_node(p).name) then core.swap_node(p, {name = "air"}) end
 				elseif hole and y >= bottom then
 					C.mark_excavated(p)
 					if y <= fill_top then core.swap_node(p, {name = base, param2 = 200})      -- 填料
@@ -80,7 +90,7 @@ local function ensure(owner)
 			pending = true
 			local top = ground_top(s.x, s.z)
 			local R = RAD + RING
-			core.emerge_area({x = s.x - R, y = top - DEPTH - 2, z = s.z - R}, {x = s.x + R, y = top + 8, z = s.z + R}, function(_, _, rem)
+			core.emerge_area({x = s.x - R, y = top - DEPTH - 2, z = s.z - R}, {x = s.x + R, y = top + PAD_UP + 2, z = s.z + R}, function(_, _, rem)
 				if rem > 0 then return end
 				pending = false
 				if storage:get_string("shaft:" .. i) == "" then build(i, s, owner) end
