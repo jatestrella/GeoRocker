@@ -126,13 +126,13 @@ local function pay(i, d, levels, base, p2)
 	sums[i] = s
 end
 
--- 離 pos 最近、水平距離在 井半徑 + reach 內、高度離井口 8 m 內的豎井：回傳 i, d, 井口高程
-local function shaft_near(pos, reach)
+-- 離 pos 最近、水平距離在 井半徑 + reach 內、高度離井口 8 m 內（any_y：不看高度）的豎井：回傳 i, d, 井口高程
+local function shaft_near(pos, reach, any_y)
 	for i in ipairs(cfg.shafts) do
 		local d = core.deserialize(storage:get_string("shaft:" .. i))
 		if d and (pos.x - d.x) ^ 2 + (pos.z - d.z) ^ 2 <= (RAD + reach) ^ 2 then
 			local c = collar(d)
-			if c and math.abs(pos.y - c) < 8 then return i, d, c end
+			if c and (any_y or math.abs(pos.y - c) < 8) then return i, d, c end
 		end
 	end
 end
@@ -166,9 +166,10 @@ function V.dump_to_ground(self, cells, ytop)
 	return dump_to_ground(self, cells, ytop)
 end
 
--- 無人卡車（vehicle_ahs.lua）：傾倒點在井口旁邊 → 當成受料倉，倒車到井邊。r：車身要停在離中心多遠以外
+-- 無人卡車（vehicle_ahs.lua）：傾倒點在井口旁邊 → 當成受料倉，倒車到井邊。r：車身要停在離中心多遠以外。
+-- 不看高度：採場往下挖、井口降低之後，錄的傾倒點高程是舊的，照樣認得（開車、對準都只看水平位置）
 function rockmech.shaft_center(pos)
-	local _, d, c = shaft_near(pos, RING + SNAP)
+	local _, d, c = shaft_near(pos, RING + SNAP, true)
 	if d then return {x = d.x, y = c, z = d.z, r = RAD + 0.5} end
 end
 
