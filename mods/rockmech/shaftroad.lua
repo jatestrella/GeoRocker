@@ -193,6 +193,7 @@ local function natural(name)
 	if name == "air" then return true end
 	if name == "rockmech:shaft_marble" then return false end
 	if rockmech.lith_of_node[name] or rockmech.rubble_level[name] then return true end
+	if core.get_item_group(name, "rockmech_topsoil") > 0 then return true end      -- 表土（草）
 	return name == "default:tree" or name == "default:leaves" or name == "default:apple"
 end
 local function is_air(name) return name == "air" end
@@ -204,7 +205,7 @@ local function pave(c)
 	if k <= 0 then yb, k = yb - 1, NLEV end
 	-- 先檢查這欄：有建築（非天然）就不動
 	for y = yb - 2, yb + 8 do
-		if not natural(core.get_node({x = c.x, y = y, z = c.z}).name) then return end
+		if not natural(core.get_node({x = c.x, y = y, z = c.z}).name) then return false end
 	end
 	local base = rockmech.rubble_for("rockmech:marble")
 	local full = {name = rockmech.compact_of[rockmech.rubble_with_level(base, NLEV, P2)], param2 = P2}
@@ -305,14 +306,14 @@ function rockmech.shaft_roads(owner)
 	end
 	core.log("action", ("[rockmech] 豎井道路：填超過 5 m 的格 %d、最大挖填 %.1f m"):format(high, maxd))
 	core.log("action", ("[rockmech] 豎井道路：%d 條、%d 格，路線 %.0f ms"):format(n_ok, ncell, (core.get_us_time() - t0) / 1000))
-	local idx = 0
+	local idx, skipped = 0, 0
 	local function next_tile()
 		idx = idx + 1
 		local tk = order[idx]
 		if not tk then
 			storage:set_string("shaft_roads", "1")
 			building = false
-			core.log("action", "[rockmech] 豎井道路鋪好了")
+			core.log("action", ("[rockmech] 豎井道路鋪好了（有建築跳過 %d 格）"):format(skipped))
 			return
 		end
 		local t = tiles[tk]
@@ -322,7 +323,7 @@ function rockmech.shaft_roads(owner)
 			if rem > 0 then return end
 			local C = rockmech.collapse
 			C.quiet = C.quiet + 1
-			local ok, err = pcall(function() for _, c in ipairs(t.cells) do pave(c) end end)
+			local ok, err = pcall(function() for _, c in ipairs(t.cells) do if pave(c) == false then skipped = skipped + 1 end end end)
 			C.quiet = C.quiet - 1
 			if not ok then core.log("error", "[rockmech] 豎井道路：" .. tostring(err)) end
 			core.after(0, next_tile)

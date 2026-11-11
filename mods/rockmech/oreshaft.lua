@@ -44,7 +44,7 @@ local function tons_of(levels) return levels / V.NLEV * cfg.rubble_density end
 -- 井口平台往上清多高；可以清的方塊：天然岩石、碎石、表土、樹
 local PAD_UP = 60
 local function natural(name)
-	return rockmech.lith_of_node[name] or rockmech.rubble_level[name]
+	return rockmech.lith_of_node[name] or rockmech.rubble_level[name] or core.get_item_group(name, "rockmech_topsoil") > 0
 		or name == "default:tree" or name == "default:leaves" or name == "default:apple"
 end
 local function build(i, s, owner)
