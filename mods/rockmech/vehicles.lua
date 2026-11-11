@@ -949,6 +949,7 @@ end
 
 -- 引擎聲：有人駕駛（或自動駕駛）才發動，一段循環音，運作時放大，約 1 秒漸變。車越重音高越低
 local ENGINE_IDLE, ENGINE_RUN, ENGINE_FADE = 0.1, 0.55, 0.45
+local ENGINE_LOAD_LO, ENGINE_LOAD_HI = 0.3, 0.95     -- 行駛中：引擎負載 0 → 1 的音量
 -- 車子發出的一次性聲音：旁人照位置聽（越遠越小），駕駛另外一份不跟位置走（追蹤相機時視點離車很遠，聲音才不會變小）
 function V.play(self, name, spec)
 	local p = table.copy(spec)
@@ -1018,10 +1019,15 @@ local function engine_update(self, kind, working)
 		end
 		self.engine = e
 	end
-	if working ~= e.work then
-		e.work = working
-		core.sound_fade(e.handle, ENGINE_FADE, (working and ENGINE_RUN or ENGINE_IDLE) * g)
-		if e.cab then core.sound_fade(e.cab, ENGINE_FADE, (working and ENGINE_RUN or ENGINE_IDLE) * g) end
+	-- 行駛中的輪胎車：音量跟引擎負載（V.engine_load）走，路況差、上坡、滿載時比較大聲
+	local target = working and ENGINE_RUN or ENGINE_IDLE
+	if working and self.eload and (self.speed_now or 0) > 0.3 then
+		target = ENGINE_LOAD_LO + (ENGINE_LOAD_HI - ENGINE_LOAD_LO) * self.eload
+	end
+	if working ~= e.work or math.abs(target - (e.target or 0)) > 0.04 then
+		e.work, e.target = working, target
+		core.sound_fade(e.handle, ENGINE_FADE, target * g)
+		if e.cab then core.sound_fade(e.cab, ENGINE_FADE, target * g) end
 	end
 end
 
@@ -1122,6 +1128,12 @@ function V.power_speed(self, def, kind, rr, grade)
 	if R <= 0 then return math.huge end
 	local full = (V.MASS[kind] or 20) + def.cap / NLEV * rockmech.cfg.failure.gamma_other / 10
 	return def.top_speed * rockmech.cfg.rr.ref * full / (gross_mass(self, kind) * R)
+end
+-- 引擎負載（0–1）：用掉的馬力 ÷ 馬力 = v × 總重 × (RR + tanθ) ÷ (極速 × rr.ref × 滿載總重)。引擎聲照這個變大（engine_update）
+function V.engine_load(self, def, kind, rr, grade, v)
+	local full = (V.MASS[kind] or 20) + def.cap / NLEV * rockmech.cfg.failure.gamma_other / 10
+	local R = math.max(0, rr + math.tan(grade))
+	return math.min(1, math.abs(v) * gross_mass(self, kind) * R / (def.top_speed * rockmech.cfg.rr.ref * full))
 end
 
 -- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
@@ -1891,6 +1903,7 @@ function V.register(kind, def)
 					local vp = V.power_speed(self, def, kind, self.rr, g)
 					if math.abs(ctx.speed) > vp then ctx.speed = ctx.speed >= 0 and vp or -vp end
 					if self.cruise and self.cruise > vp then self.cruise = math.max(vp, 0.5) end
+					self.eload = V.engine_load(self, def, kind, self.rr, g, ctx.speed)
 				elseif g > 0 then
 					ctx.speed = ctx.speed * (1 - 0.7 * g / def.max_grade)
 				end
@@ -1909,6 +1922,7 @@ function V.register(kind, def)
 			else
 				local working = ctx.speed ~= 0 or turn ~= 0 or self.dig ~= nil or self.tip ~= nil or self.boring ~= nil
 					or (def.busy ~= nil and def.busy(self))
+				self.speed_now = math.abs(ctx.speed)
 				engine_update(self, kind, working)
 				V.exhaust(self, def, working, dtime)
 				-- 燃料費（fuel.lua）：引擎發動（有人駕駛或自動駕駛）才耗油，空車停著不算
@@ -1925,8 +1939,7 @@ function V.register(kind, def)
 			-- HUD 時速（每 5 km/h 更新一次）
 			if def.top_speed then
 				local kmh = math.floor(math.abs(ctx.speed) * 3.6 / 5 + 0.5) * 5
-				local rrp = self.rr and math.floor(self.rr * 100 + 0.5)
-				if kmh ~= self.kmh or rrp ~= self.rr_shown then self.kmh, self.rr_shown = kmh, rrp; update_hud(self) end
+				if kmh ~= self.kmh then self.kmh = kmh; update_hud(self) end
 			end
 			if def.step then def.step(self, ctx) end
 			-- 儀表板按鍵列（vehicle_views.lua）：開關狀態變了就重畫

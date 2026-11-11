@@ -1824,4 +1824,3 @@ Build a rock hill in front of you (its face toward you) that you can tunnel stra
 Rock hill built in front of you: height @1 m, width @2 m, depth @3 m, face angle @4°; dig toward @5 to go into the hill. @6=
 Warning: the face has daylighting joints @1, so the face may slide.=
 The face has no daylighting joints.=
-RR @1%=
