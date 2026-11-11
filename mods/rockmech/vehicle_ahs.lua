@@ -140,8 +140,11 @@ end
 -- 倉口是方的，斜著倒車時倉口比較遠
 local function hopper_back(a, def)
 	local d = a.hopper.d
-	local half = rockmech.hopper_half_at and rockmech.hopper_half_at(a.hopper) or rockmech.HOPPER_HALF
-	local rim = half / math.max(math.abs(d.x), math.abs(d.z))
+	local rim = a.hopper.r     -- 豎井：圓的
+	if not rim then
+		local half = rockmech.hopper_half_at and rockmech.hopper_half_at(a.hopper) or rockmech.HOPPER_HALF
+		rim = half / math.max(math.abs(d.x), math.abs(d.z))
+	end
 	return math.max(def.rear + 1, rim + def.half + 0.5)
 end
 -- 第 i 個傾倒位置（0 起算；超出傾倒區回傳 nil）。破碎站只有一個位置：倒車對準倉的中心
@@ -483,7 +486,7 @@ local function hopper_busy(self, a)
 end
 -- 傾倒點在破碎站旁邊：記下格柵中心和進格柵的方向（破碎站的倉擴建過、或錄完才蓋，都要重新找）
 local function find_hopper(a)
-	local c = rockmech.grate_center(a.dump)
+	local c = rockmech.grate_center(a.dump) or (rockmech.shaft_center and rockmech.shaft_center(a.dump))
 	if not c then return nil end
 	local from = a.route[1]
 	for i = #a.route, 1, -1 do
@@ -678,7 +681,7 @@ function AHS.step(self, def, ctx)
 		-- 先到傾倒位置前方的待命點
 		local sp = standoff(a, a.target, STANDOFF)
 		if flat_dist(pos, sp) < 1.0 then
-			if a.hopper and rockmech.hopper_room(a.hopper) < V.load_total(self) then
+			if a.hopper and not a.hopper.r and rockmech.hopper_room(a.hopper) < V.load_total(self) then
 				if a.wait_msg ~= HOPPER_WAIT then a.wait_msg = HOPPER_WAIT; V.refresh(self) end
 			else
 				set_phase(self, "align")
@@ -884,7 +887,7 @@ local function formspec(self, name)
 		"label[0.5,0.6;" .. FE(S("Autonomous haulage (AHS)")) .. "]",
 		("label[0.5,1.2;%s]"):format(FE(S("Loading point: @1", a.bound and S("follows the excavator")
 			or a.chute and S("@1 (plant loading chute)", fmt(a.load)) or fmt(a.load)))),
-		("label[0.5,1.7;%s]"):format(FE(a.hopper and S("Dump point: @1 (crusher hopper)", fmt(a.dump)) or S("Dump point: @1", fmt(a.dump)))),
+		("label[0.5,1.7;%s]"):format(FE(a.hopper and (a.hopper.r and S("Dump point: @1 (ore pass)", fmt(a.dump)) or S("Dump point: @1 (crusher hopper)", fmt(a.dump))) or S("Dump point: @1", fmt(a.dump)))),
 		("label[0.5,2.2;%s]"):format(FE(S("@1: @2 points   Dump area: @3 / @4 spots used", a.route_name or S("Route"),
 			tostring(a.route and #a.route or 0), tostring(math.min(a.spot or 0, DUMP_SPOTS)), tostring(DUMP_SPOTS)))),
 		("label[0.5,2.7;%s]"):format(FE(S("Status: @1", st))),
@@ -945,7 +948,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			a.chute = rockmech.plant_chute_near and rockmech.plant_chute_near(a.load, CHUTE_R) or nil
 			if a.chute then a.bound, a.spot_at = nil, nil end
 			msg = S("Route recorded (@1 points)@2@3", tostring(#a.route),
-				a.hopper and S(": the dump point is at the crusher; the truck backs up to the hopper by itself") or "",
+				a.hopper and (a.hopper.r and S(": the dump point is at the ore pass; the truck backs up to it by itself")
+					or S(": the dump point is at the crusher; the truck backs up to the hopper by itself")) or "",
 				a.chute and S("; the loading point is within reach of the plant loading chute, so the truck parks and waits to be loaded (does not follow the excavator)") or "")
 		end
 	elseif fields.start then

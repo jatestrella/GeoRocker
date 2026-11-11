@@ -126,6 +126,52 @@ local function pay(i, d, levels, base, p2)
 	sums[i] = s
 end
 
+-- 離 pos 最近、水平距離在 井半徑 + reach 內、高度離井口 8 m 內的豎井：回傳 i, d, 井口高程
+local function shaft_near(pos, reach)
+	for i in ipairs(cfg.shafts) do
+		local d = core.deserialize(storage:get_string("shaft:" .. i))
+		if d and (pos.x - d.x) ^ 2 + (pos.z - d.z) ^ 2 <= (RAD + reach) ^ 2 then
+			local c = collar(d)
+			if c and math.abs(pos.y - c) < 8 then return i, d, c end
+		end
+	end
+end
+
+-- 自動對準（跟破碎站受料倉一樣）：卡車、怪手倒料的那幾欄中心離井口 SNAP m 內，整車倒進井裡、馬上算錢
+local SNAP = 4
+local dump_to_ground = V.dump_to_ground
+function V.dump_to_ground(self, cells, ytop)
+	if self.load and cells and cells[1] then
+		local cx, cz = 0, 0
+		for _, c in ipairs(cells) do cx, cz = cx + c.x, cz + c.z end
+		local i, d, c = shaft_near({x = cx / #cells, y = ytop, z = cz / #cells}, SNAP)
+		if i then
+			local took = 0
+			for base, lv in pairs(self.load) do
+				if base ~= "default:tree" and rockmech.rubble_level and lv > 0 then
+					pay(i, d, lv, base, V.load_grade(self, base))
+					V.load_keep(self, base, 0)
+					took = took + lv
+				end
+			end
+			if took > 0 then
+				local p = {x = d.x, y = c - 2, z = d.z}
+				rockmech.collapse.rubble_sound(p, took)
+				core.add_particlespawner({amount = 40, time = 1.5, minpos = vector.offset(p, -2, 0, -2), maxpos = vector.offset(p, 2, 3, 2),
+					minvel = {x = -0.3, y = -3, z = -0.3}, maxvel = {x = 0.3, y = -1, z = 0.3}, minexptime = 0.8, maxexptime = 1.5,
+					minsize = 2, maxsize = 5, texture = "[fill:4x4:#bdb8ae"})
+			end
+		end
+	end
+	return dump_to_ground(self, cells, ytop)
+end
+
+-- 無人卡車（vehicle_ahs.lua）：傾倒點在井口旁邊 → 當成受料倉，倒車到井邊。r：車身要停在離中心多遠以外
+function rockmech.shaft_center(pos)
+	local _, d, c = shaft_near(pos, RING + SNAP)
+	if d then return {x = d.x, y = c, z = d.z, r = RAD + 0.5} end
+end
+
 local tick = 0
 core.register_globalstep(function(dtime)
 	tick = tick + dtime
