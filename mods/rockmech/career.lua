@@ -1325,7 +1325,17 @@ end
 local STARTER = {"rockmech:pick", "rockmech:shovel", "rockmech:cart_item"}
 -- 真實地形的地圖：引擎的出生點是平坦地圖產生器的地面（surface_y，遠在山底下），一律放到營地
 if cfg.terrain and cfg.terrain.mode == "dem" then
-	local function to_camp(player) player:set_pos(rockmech.career_spawn(cfg.career_camp_dx or 0)) end
+	-- 先把營地那塊地圖產生好再放（還沒產生的話找不到地面，會放在半空中掉下來）
+	local function to_camp(player)
+		local name, x0 = player:get_player_name(), cfg.career_camp_dx or 0
+		player:set_pos(rockmech.career_spawn(x0))
+		local y = math.floor(cfg.camp_y or 0)
+		core.emerge_area({x = x0 - 2, y = y - 20, z = -2}, {x = x0 + 2, y = y + 40, z = 2}, function(_, _, rem)
+			if rem > 0 then return end
+			local p = core.get_player_by_name(name)
+			if p then p:set_pos(rockmech.career_spawn(x0)) end
+		end)
+	end
 	core.register_on_newplayer(to_camp)
 	core.register_on_respawnplayer(function(player)
 		if rockmech.team_of and rockmech.team_of(player:get_player_name()) then return false end
@@ -1333,6 +1343,22 @@ if cfg.terrain and cfg.terrain.mode == "dem" then
 		return true
 	end)
 end
+
+-- 剛進遊戲 10 秒不受摔傷：地圖還在產生、營地還在蓋的時候，人可能先掉一段
+local GRACE = 10
+core.register_on_joinplayer(function(player)
+	local g = player:get_armor_groups()
+	g.fall_damage_add_percent = -100
+	player:set_armor_groups(g)
+	local name = player:get_player_name()
+	core.after(GRACE, function()
+		local p = core.get_player_by_name(name)
+		if not p then return end
+		local g2 = p:get_armor_groups()
+		g2.fall_damage_add_percent = nil
+		p:set_armor_groups(g2)
+	end)
+end)
 
 core.register_on_newplayer(function(player)
 	local inv = player:get_inventory()
