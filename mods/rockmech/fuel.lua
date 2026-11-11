@@ -30,7 +30,7 @@ local function rate(self, kind, working)
 	local vel = self.object:get_velocity() or {x = 0, y = 0, z = 0}
 	local vh = math.sqrt(vel.x * vel.x + vel.z * vel.z)
 	local m = V.gross_mass(self, kind)                       -- t → P 單位 kW
-	local lf = m * G * (RR * vh + vel.y) / kw
+	local lf = m * G * ((self.rr or RR) * vh + vel.y) / kw      -- 滾動阻力：路面算過的（vehicles.lua V.rolling_resistance），沒有就用 RR
 	if vh < 0.1 and working then lf = math.max(lf, WORK) end
 	lf = math.max(IDLE, math.min(1, lf))
 	return BSFC * kw * lf

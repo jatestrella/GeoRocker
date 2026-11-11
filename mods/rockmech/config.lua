@@ -1040,6 +1040,9 @@ function config.load(get, opts)
 	cfg.conveyor_max_angle = math.max(0, math.min(45, tonumber(get("rockmech_conveyor_max_angle")) or 16))
 	-- 交通壓實（vehicles.lua）：車子總重（含載重）多少噸以上才壓得實（排除手推車）、壓幾趟壓實、壓實後的摩擦角 (deg)
 	cfg.compact_mass = math.max(0, tonumber(get("rockmech_compact_mass")) or 10)
+	-- 滾動阻力（vehicles.lua V.rolling_resistance）：鬆碎石的值可調；車轍每 cm 加 0.6 %；ref：滿載剛好跑到極速的總阻力
+	cfg.rr = {paved = 0.015, firm = 0.02, loose = math.max(0, (tonumber(get("rockmech_rr_loose")) or 4) / 100),
+		rut_cm = 0.006, ref = 0.04}
 	cfg.compact_passes = math.max(1, math.floor(tonumber(get("rockmech_compact_passes")) or 4))
 	cfg.compact_phi = math.min(89, math.max(1, tonumber(get("rockmech_compact_phi")) or 75))
 	cfg.model_scale = tonumber(get("rockmech_model_scale")) or 1

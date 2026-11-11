@@ -420,6 +420,11 @@ rockmech_conveyor_max_angle (Conveyor max inclination) float 16 0 45
 # becomes compacted rubble (lighter colour, higher friction angle). It is still rubble: diggable, pushable, and it falls
 # when undermined. The mass limit only keeps hand carts out.
 rockmech_compact_mass (Traffic compaction: minimum gross mass) float 10 0 1000
+
+# Rolling resistance of loose rubble and soil (% of gross weight). Paved 1.5 %, compacted rubble / road / rock 2 %, ruts add 0.6 % per cm.
+# Wheeled vehicles are power-limited: a full load reaches top speed only when rolling resistance + grade <= 4 %.
+rockmech_rr_loose (Rolling resistance: loose rubble, %) float 4 0 30
+
 rockmech_compact_passes (Traffic compaction: passes) int 4 1 100
 
 # Friction angle of compacted rubble (degrees). Loose rubble uses the angle of repose (35). A higher angle makes slopes stand steeper and resists wheel ruts:

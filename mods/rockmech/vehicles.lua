@@ -1081,6 +1081,49 @@ local function gross_mass(self, kind)
 end
 V.gross_mass = gross_mass
 
+-- 滾動阻力 RR（總重的幾 %）：兩條輪跡底下的路面，加上車轍深度（每 cm 加 rr.rut_cm，經驗值 0.6 %/cm）。
+-- 噴凝土 rr.paved、壓實碎石・整過的路・岩盤 rr.firm、鬆碎石・土 rr.loose。車轍深度 = 輪跡比兩側（內、外）低多少，最多算 RUT_MAX m
+local RUT_MAX = 0.25
+function V.rolling_resistance(pos, def, dir)
+	local rr = rockmech.cfg.rr
+	local base = pos.y - def.half
+	local lat = def.lat or {-0.5, 0.5}
+	local sum = 0
+	for _, l in ipairs({lat[1], lat[#lat]}) do
+		local function at(o) return pos.x + dir.z * o, pos.z - dir.x * o end
+		local x, z = at(l)
+		local xi, zi = math.floor(x + 0.5), math.floor(z + 0.5)
+		local r = rr.firm
+		for y = math.floor(base + 1.5), math.floor(base + 0.5) - 3, -1 do
+			local n = core.get_node({x = xi, y = y, z = zi}).name
+			if not V.passable(n) then
+				if core.get_item_group(n, "shotcrete") > 0 then r = rr.paved
+				elseif rockmech.rubble_level[n] and not rockmech.compacted[n] then r = rr.loose end
+				break
+			end
+		end
+		local h = ground_top(x, base + 1.5, z, 5)
+		local side = l >= 0 and 1 or -1
+		local ox, oz = at(l + side)
+		local ix, iz = at(l - side)
+		local ho, hi = ground_top(ox, base + 1.5, oz, 5), ground_top(ix, base + 1.5, iz, 5)
+		if h and ho and hi then
+			r = r + rr.rut_cm * 100 * math.min(RUT_MAX, math.max(0, math.min(ho, hi) - h))
+		end
+		sum = sum + r
+	end
+	return sum / 2
+end
+
+-- 輪胎車的馬力上限車速：馬力固定，牽引力 × 車速 = 總重 × g × (RR + 坡度) × 車速。
+-- 馬力照「滿載、總阻力 rr.ref 剛好跑到極速」定，所以 v = 極速 × rr.ref × 滿載總重 ÷ (總重 × (RR + tan 坡度))；下坡阻力 ≤ 0 不限
+function V.power_speed(self, def, kind, rr, grade)
+	local R = rr + math.tan(grade)
+	if R <= 0 then return math.huge end
+	local full = (V.MASS[kind] or 20) + def.cap / NLEV * rockmech.cfg.failure.gamma_other / 10
+	return def.top_speed * rockmech.cfg.rr.ref * full / (gross_mass(self, kind) * R)
+end
+
 -- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
 -- 在碎石坡上（tanθ > 0.35）整個車寬都判定、往下坡擠：坡在安息角附近時，加上車重就往下垮，並往坡上傳。
 -- 夠重的車整個車寬都算壓實的趟數（車轍照樣只在輪跡）。
@@ -1831,12 +1874,23 @@ function V.register(kind, def)
 			local ctx = {obj = obj, pos = pos, yaw = yaw, dir = dir, s = s, fwd = fwd, dtime = dtime, d = d, ctrl = ctrl,
 				speed = speed}
 			-- 爬坡能力：上坡超過最大爬坡角就上不去；坡上越陡越慢（到最大爬坡角剩 30%）
+			-- 輪胎車（有極速的）：滾動阻力＋坡度阻力限制車速（V.power_speed）；其他車照舊：坡上越陡越慢
 			local steep
+			local powered = def.tire and def.top_speed and not def.pushed
 			if def.max_grade and fwd ~= 0 then
 				local g = travel_grade(pos, yaw, def, fwd)
 				if g > def.max_grade then
 					ctx.speed, ctx.fwd = 0, 0
 					steep = S("Too steep (@1° > @2°)", ("%d"):format(math.floor(math.deg(g) + 0.5)), ("%d"):format(math.floor(math.deg(def.max_grade) + 0.5)))
+				elseif powered then
+					self.rr_t = (self.rr_t or 1) + dtime
+					if self.rr_t >= 0.25 or not self.rr then
+						self.rr_t = 0
+						self.rr = V.rolling_resistance(pos, def, dir)
+					end
+					local vp = V.power_speed(self, def, kind, self.rr, g)
+					if math.abs(ctx.speed) > vp then ctx.speed = ctx.speed >= 0 and vp or -vp end
+					if self.cruise and self.cruise > vp then self.cruise = math.max(vp, 0.5) end
 				elseif g > 0 then
 					ctx.speed = ctx.speed * (1 - 0.7 * g / def.max_grade)
 				end
@@ -1871,7 +1925,8 @@ function V.register(kind, def)
 			-- HUD 時速（每 5 km/h 更新一次）
 			if def.top_speed then
 				local kmh = math.floor(math.abs(ctx.speed) * 3.6 / 5 + 0.5) * 5
-				if kmh ~= self.kmh then self.kmh = kmh; update_hud(self) end
+				local rrp = self.rr and math.floor(self.rr * 100 + 0.5)
+				if kmh ~= self.kmh or rrp ~= self.rr_shown then self.kmh, self.rr_shown = kmh, rrp; update_hud(self) end
 			end
 			if def.step then def.step(self, ctx) end
 			-- 儀表板按鍵列（vehicle_views.lua）：開關狀態變了就重畫
