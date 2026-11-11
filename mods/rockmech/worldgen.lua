@@ -119,34 +119,23 @@ M.RECIPES = {
 		end,
 	},
 }
--- 水泥礦（仿和平礦場）：賣的還是大理岩（ore = marble），但礦體很厚（250–400 m 起跳，不夠包住整座礦場就加厚），裡面夾幾層薄片岩（稀釋），
--- 傾角 20–45°。出生點（採場）在礦體厚度的正中間，片岩只在外圍。gen_strata = single：純的厚大理岩；inter：夾片岩
+-- 水泥礦（仿和平礦場）：賣的還是大理岩（ore = marble），整張地圖都是大理岩，中間夾很多薄的透鏡狀片岩（稀釋）：
+-- 每 6–25 m 大理岩一層透鏡，厚 1–4 m、一塊塊 25–60 m 大，其他地方尖滅。透鏡帶 1600 m 厚，置中在礦場；帶外上下也是大理岩。
+-- 傾角 20–45°。不分 single／inter，也不用厚度變化（透鏡本身就是變化）
 do
 	local C = {}
 	for k, v in pairs(M.RECIPES.marble) do C[k] = v end
 	C.ore = "marble"
 	C.dip = function(f) return round(20 + 25 * f) end
 	C.centered = true
+	C.no_var = true
 	C.column = function(r, mode, nseam, add, sum, range, count)
-		add("schist", range(r, 20, 40))
-		local main_top = sum()
-		local T = range(r, 250, 400)
-		local main_i
-		if mode == "single" then
-			add("marble", T); main_i = count()
-		else
-			-- 主礦體中間夾 nseam 層薄片岩（1–4 m）：主礦層算第一段大理岩
-			local left, first = T, true
-			for k = 1, nseam do
-				local seg = left / (nseam + 2 - k) * range(r, 0.7, 1.3)
-				add("marble", seg); left = left - seg
-				if first then main_i = count(); first = false end
-				add("schist", range(r, 1, 4))
-			end
-			add("marble", math.max(10, left))
+		add("marble", range(r, 6, 25))
+		while sum() < 1600 do
+			add("schist", range(r, 1, 4), r:next(25, 60))
+			add("marble", range(r, 6, 25))
 		end
-		add("schist", 250)
-		return main_top, main_i
+		return 0, 1
 	end
 	M.RECIPES.cement = C
 end
@@ -223,10 +212,10 @@ function M.generate(world_conf)
 	for k, ore in ipairs(ores) do
 		local R = M.RECIPES[ore]
 		local beds = {}
-		local function add(lith, t)
+		local function add(lith, t, lens)      -- lens：透鏡尺度 (m)，見 stress.strata_column
 			local last = beds[#beds]
-			if last and last[1] == lith then last[2] = last[2] + round(t, 0.5)      -- 同一種岩性相鄰：併成一層
-			else beds[#beds + 1] = {lith, round(t, 0.5)} end
+			if last and last[1] == lith and not lens and not last[3] then last[2] = last[2] + round(t, 0.5)      -- 同一種岩性相鄰：併成一層
+			else beds[#beds + 1] = {lith, round(t, 0.5), lens} end
 		end
 		local function sum() local d = 0 for _, b in ipairs(beds) do d = d + b[2] end return d end
 		local main_top, main_i = R.column(r, mode, nseam, add, sum, range, function() return #beds end)
@@ -240,8 +229,9 @@ function M.generate(world_conf)
 		local cosd, tand = math.cos(math.rad(dip)), math.tan(math.rad(dip))
 		local sdd, cdd = math.sin(math.rad(dipdir)), math.cos(math.rad(dipdir))
 		local foldL, foldAz = r:next(150, 300), (dipdir + 90 + r:next(-20, 20)) % 360
-		local St = {beds = {}, var = var > 0 and {f = math.min(0.95, var), scale = varScale} or nil}
-		for i, b in ipairs(beds) do St.beds[i] = {lith = b[1], t = b[2]} end
+		local bvar = var > 0 and not R.no_var
+		local St = {beds = {}, var = bvar and {f = math.min(0.95, var), scale = varScale} or nil}
+		for i, b in ipairs(beds) do St.beds[i] = {lith = b[1], t = b[2], lens = b[3]} end
 		local function fold_at(x, z)
 			if foldA <= 0 then return 0 end
 			local az = math.rad(foldAz)
@@ -263,40 +253,25 @@ function M.generate(world_conf)
 		local y0 = top_at(px, pz) / cosd + tand * (px * sdd + pz * cdd) - fold_at(px, pz)
 		y0 = y0 + ground(px, pz)
 		if k == 1 and R.centered then
-			-- 礦體要包住整座礦場：出生點、礦體中心（地面和往下挖 150 m）、每口豎井井口都在大理岩裡，外加 40 m。
-			-- 傾向斜切礦場的話，這幾點的層位差很多 → 加厚最後一段大理岩；y0 取中間
+			-- 透鏡帶置中在礦場：出生點、礦體中心（地面和往下挖 150 m）、每口豎井井口，層位取中間
 			local pts = {{0, 0}, {px, pz}, {px, pz, -150}}
 			for x, z in (world_conf:get("rockmech_shafts") or ""):gmatch("(%-?[%d.]+)%s*,%s*(%-?[%d.]+)") do
 				pts[#pts + 1] = {tonumber(x), tonumber(z)}
 			end
-			local last = #beds - 1      -- 最後一段大理岩（底下是 250 m 片岩）
-			local function span()
-				local lo, hi = -math.huge, math.huge
-				for _, q in ipairs(pts) do
-					local col = rockmech.stress.strata_column(St, q[1], q[2])
-					local base = tand * (q[1] * sdd + q[2] * cdd) - fold_at(q[1], q[2]) + ground(q[1], q[2]) + (q[3] or 0)
-					lo = math.max(lo, base + (main_i > 1 and col[main_i - 1] or 0) / cosd)
-					hi = math.min(hi, base + col[last] / cosd)
-				end
-				return lo, hi
+			local lo, hi = math.huge, -math.huge
+			for _, q in ipairs(pts) do
+				local a = tand * (q[1] * sdd + q[2] * cdd) - fold_at(q[1], q[2]) + ground(q[1], q[2]) + (q[3] or 0)
+				lo, hi = math.min(lo, a), math.max(hi, a)
 			end
-			local need = 2 * 40 / cosd
-			for _ = 1, 6 do
-				local lo, hi = span()
-				if hi - lo >= need then break end
-				beds[last][2] = round(beds[last][2] + (need - (hi - lo)) * cosd * 1.1 + 1, 0.5)
-				St.beds[last].t = beds[last][2]
-			end
-			local lo, hi = span()
-			y0 = (lo + hi) / 2
+			y0 = (lo + hi) / 2 + sum() / 2 / cosd
 		end
 		local parts = {}
-		for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) end
+		for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) .. (b[3] and (":" .. b[3]) or "") end
 		local sfx = k == 1 and "" or ("_" .. k)
 		set("strata" .. sfx, table.concat(parts, ","))
 		set("strata_attitude" .. sfx, ("%d,%d,%g"):format(dip, dipdir, round(y0, 0.1)))
 		if foldA > 0 then set("strata_fold" .. sfx, ("%d,%d,%d"):format(foldA, foldL, foldAz)) end
-		if var > 0 then set("strata_var" .. sfx, ("%g,%d"):format(var, varScale)) end
+		if bvar then set("strata_var" .. sfx, ("%g,%d"):format(var, varScale)) end
 		if k == 1 then
 			set("zone_order", (mode == "single" or R.host_only) and beds[1][1] or "shale")
 			local depth = math.floor(ground(0, 0) - (y0 + fold_at(0, 0) - top_at(0, 0) / cosd) + 0.5)

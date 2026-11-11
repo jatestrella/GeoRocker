@@ -659,7 +659,7 @@ function config.load(get, opts)
 		end
 	end
 	-- 地層柱狀圖（地圖產生器 worldgen.lua 寫的；有它就不看 coal_seam）：
-	--   rockmech_strata = 岩性:厚度,岩性:厚度,…（由上往下，真厚度 m）
+	--   rockmech_strata = 岩性:厚度,岩性:厚度,…（由上往下，真厚度 m）；岩性:厚度:尺度 = 透鏡（尺度 m 的一塊塊，其他地方尖滅）
 	--   rockmech_strata_attitude = 傾角,傾向,y0：柱狀圖頂面在 (0, 0) 的高程 y0，整套往傾向傾斜
 	--   rockmech_strata_fold = 振幅,波長,軸向方位（m、m、度；褶皺：層面上下起伏，起伏方向垂直軸向）
 	--   rockmech_strata_var = 變化比例,尺度（每層厚度 × (1 ± 比例)，沿層面緩慢變化；薄的會尖滅）
@@ -669,8 +669,8 @@ function config.load(get, opts)
 		local st = get("rockmech_strata" .. sfx)
 		if not (st and st ~= "") then return nil end
 		local beds = {}
-		for lith, t in tostring(st):gmatch("([%a_]+)%s*:%s*([%d.]+)") do
-			if cfg.lithologies[lith] then beds[#beds + 1] = {lith = lith, t = tonumber(t)}
+		for lith, t, lens in tostring(st):gmatch("([%a_]+)%s*:%s*([%d.]+)%s*:?%s*([%d.]*)") do
+			if cfg.lithologies[lith] then beds[#beds + 1] = {lith = lith, t = tonumber(t), lens = tonumber(lens)}
 			else warnings[#warnings + 1] = "rockmech_strata" .. sfx .. ": 沒有岩性 " .. lith .. "（忽略）" end
 		end
 		local att = numbers("rockmech_strata_attitude" .. sfx, 3)

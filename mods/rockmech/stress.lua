@@ -260,31 +260,47 @@ function stress.strata_ref_y(S, x, z)
 	if f then y = y + f.A * math.sin(2 * math.pi * (x * f.cx + z * f.cz) / f.L) end
 	return y
 end
--- (x, z) 這一欄每層的底（離頂面的真厚度累計，m）
-function stress.strata_column(S, x, z)
+-- (x, z) 這一欄每層的底（離頂面的真厚度累計，m）。dmax：算到超過 dmax 再兩層就停（strata_at 單點查詢用）
+-- 透鏡（b.lens = 尺度 m）：厚度乘上雜訊鐘形，大部分地方是 0、一塊塊鼓起來（水泥礦大理岩裡的片岩透鏡）
+function stress.strata_column(S, x, z, dmax)
 	S = domain_of(S, x, z)
 	local out, d = {}, 0
 	if not S then return out end          -- 斷層帶
 	local v = S.var
+	local past = 0
 	for i, b in ipairs(S.beds) do
 		local m = 1
 		if v then m = math.max(0, 1 + v.f * (2 * fbm(x / v.scale + i * 3.7, z / v.scale, 50 + i) - 1)) end
+		if b.lens then m = m * smooth((fbm(x / b.lens + i * 7.3, z / b.lens - i * 3.1, 300 + i) - 0.45) / 0.15) end
 		d = d + b.t * m
 		out[i] = d
+		if dmax and d > dmax then past = past + 1; if past > 2 then break end end
 	end
 	return out
 end
 -- 岩性、第幾層、在這層裡的位置（0 頂 … 1 底）。col：strata_column 的結果（同一欄重複用）
+-- 位置：同一種岩性中間只隔著尖滅（厚度 0）的透鏡，當成同一層算（品位不會在看不到的界線跳）
 function stress.strata_at(S, x, y, z, col)
 	local D = domain_of(S, x, z)
 	if not D then return S.faults.lith, 0, 0.5 end
 	S = D
-	col = col or stress.strata_column(S, x, z)
 	local d = (stress.strata_ref_y(S, x, z) - y) * S.cos_dip
 	if d < 0 then return S.beds[1].lith, 1, 0 end           -- 柱狀圖頂面以上：最上面那層往上延伸
+	col = col or stress.strata_column(S, x, z, d)
 	local prev = 0
 	for i, bot in ipairs(col) do
-		if d < bot then return S.beds[i].lith, i, bot > prev and (d - prev) / (bot - prev) or 0.5 end
+		if d < bot then
+			local lith, beds = S.beds[i].lith, S.beds
+			local top, k = prev, i
+			while k > 2 and beds[k - 2].lith == lith and col[k - 1] - col[k - 2] < 0.05 do
+				k = k - 2; top = col[k - 1] or 0
+			end
+			local btm, j = bot, i
+			while col[j + 2] and beds[j + 2].lith == lith and col[j + 1] - col[j] < 0.05 do
+				j = j + 2; btm = col[j]
+			end
+			return lith, i, btm > top and (d - top) / (btm - top) or 0.5
+		end
 		prev = bot
 	end
 	return S.beds[#S.beds].lith, #S.beds, 0.5
