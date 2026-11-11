@@ -156,6 +156,7 @@ dofile(modpath .. "/tools.lua")
 dofile(modpath .. "/ui.lua")
 dofile(modpath .. "/blasting.lua")
 dofile(modpath .. "/drilling.lua")
+dofile(modpath .. "/mixtrough.lua")      -- 硝酸銨、柴油、拌和槽（手拌 ANFO）
 dofile(modpath .. "/groundsupport.lua")
 dofile(modpath .. "/timber.lua")
 dofile(modpath .. "/femstress.lua")

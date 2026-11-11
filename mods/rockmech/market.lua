@@ -29,11 +29,12 @@ local COAL_OIL = 0.4            -- 煤價跟柴油亂數的相關
 
 -- 商店的東西跟哪一種指數走（沒列的固定價）
 local SHOP_INDEX = {}
-for _, k in ipairs({"detonator", "emulsion", "anfo"}) do SHOP_INDEX[k] = "explosive" end
+for _, k in ipairs({"detonator", "emulsion", "anfo", "ammonium_nitrate"}) do SHOP_INDEX[k] = "explosive" end
+SHOP_INDEX.diesel = "diesel"
 for _, k in ipairs({"cart", "suv", "truck", "excavator", "lowboy", "heavyhaul", "dozer", "bulktruck", "charger", "corerig",
 		"aerial", "crane", "drillrig", "jumbo", "haul", "excavator_big", "miner", "breaker_kit",
 		"crusher", "crusher_big", "plant", "belt", "belt_switch", "loadout", "dump_hopper", "dump_hopper_big",
-		"vent_fan", "vent_duct", "bolt", "drill"}) do SHOP_INDEX[k] = "steel" end
+		"vent_fan", "vent_duct", "bolt", "drill", "mix_trough"}) do SHOP_INDEX[k] = "steel" end
 
 -- 事件：影響是對數（+0.15 ≈ 漲 16%、+0.3 ≈ 35%、+0.5 ≈ 65%），days 持續幾個交易日
 -- fx 的礦價用礦種的 key（coal、marble）；別種礦的事件照樣會發生，只是對這張地圖的礦價沒影響

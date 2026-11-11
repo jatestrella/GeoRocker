@@ -156,7 +156,10 @@ local function detonate(pos)
 		-- 柱狀裝藥：孔口留填塞，往下每 1.5 m 一段；夾制／自由面整根孔一起算。
 		-- 底板：孔底那一格以下不破碎（實際台階孔會超鑽到底板以下，炸完底板就在孔底附近）
 		local floor_y = math.floor(pos.y - depth + 0.5)
-		local R = bcfg.anfo_radius * bm
+		-- 配比（拌和槽拌的 ANFO，meta q = 相對能量，裝藥車混的是 1）：半徑跟能量的立方根走
+		local q = meta:get_float("q")
+		if q <= 0 then q = 1 end
+		local R = bcfg.anfo_radius * bm * q ^ (1 / 3)
 		local bottom = vector.add(pos, vector.multiply(dir, depth))
 		local B = burden(bottom, dir, R, depth)
 		local f = bcfg.confine_factor * (B and (1 + bcfg.free_face_k * (1 - B / R)) or 1)
@@ -523,8 +526,8 @@ function rockmech.load_charge(under, above, player)
 	return true
 end
 
--- 倒 ANFO：只能倒進往下的鑽孔（靠重力）；一袋裝滿整根孔。回傳 true 表示用掉一袋
-function rockmech.pour_anfo(pos, player)
+-- 倒 ANFO：只能倒進往下的鑽孔（靠重力）；一袋裝滿整根孔。q：相對能量（拌和槽的配比，mixtrough.lua；沒給 = 1）。回傳 true 表示用掉一袋
+function rockmech.pour_anfo(pos, player, q)
 	if forbidden(player, pos) then return false end
 	local node = core.get_node(pos)
 	local kind = kind_of(node.name)
@@ -545,6 +548,7 @@ function rockmech.pour_anfo(pos, player)
 	-- 空孔 → 只有 ANFO；先放了乳膠炸藥的孔 → 那條就是起爆藥包
 	become(pos, node, kind == HOLE and ANFO_HOLE or ANFO_PRIMED)
 	if kind == HOLE then meta:set_int("n", 0) end
+	meta:set_float("q", q or 1)
 	set_info(pos)
 	if meta:get_int("n") < 1 then tell(player, S("No primer yet: add one emulsion cartridge, otherwise it will misfire")) end
 	return true
@@ -628,7 +632,8 @@ core.register_craftitem(ANFO, {
 	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#e8e4d8^[fill:10x2:3,3:#c8c0a8^[fill:6x3:5,8:#d03020",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
-		if rockmech.pour_anfo(pointed.under, placer)
+		local q = tonumber(itemstack:get_meta():get_string("q"))
+		if rockmech.pour_anfo(pointed.under, placer, q)
 			and not core.is_creative_enabled(placer and placer:get_player_name() or "") then
 			itemstack:take_item()
 		end

@@ -157,6 +157,9 @@ Radio=
 Rock drill=
 Blasting machine=
 Emulsion explosive=
+Ammonium nitrate=
+Diesel=
+Mixing trough=
 Rock bolt=
 Shotcrete=
 Axe=
@@ -589,7 +592,6 @@ Locker (@1)=
 [Locker] There are still items inside: take them out before removing it=
 
 ### market.lua
-Diesel=
 Explosives=
 Steel=
 Miyi War=
@@ -668,6 +670,9 @@ Rock doesn't warn you twice. We used to prop it up with timber.=
 Read that core carefully. The rock tells you everything.=
 Good. Respect the rock and it lets you go home.=
 Old Miner=
+
+### mixtrough.lua
+Ammonium nitrate @1 bags, diesel @2 L=
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=
@@ -1427,8 +1432,8 @@ Autonomous haulage (AHS)=
 Loading point: @1=
 follows the excavator=
 @1 (plant loading chute)=
-Dump point: @1 (crusher hopper)=
 Dump point: @1 (ore pass)=
+Dump point: @1 (crusher hopper)=
 Dump point: @1=
 @1: @2 points   Dump area: @3 / @4 spots used=
 Route=
@@ -1452,8 +1457,8 @@ Got it=
 Recording started: drive to where you want to dump=
 Set the loading point and start recording first=
 Route recorded (@1 points)@2@3=
-: the dump point is at the crusher; the truck backs up to the hopper by itself=
 : the dump point is at the ore pass; the truck backs up to it by itself=
+: the dump point is at the crusher; the truck backs up to the hopper by itself=
 ; the loading point is within reach of the plant loading chute, so the truck parks and waits to be loaded (does not follow the excavator)=
 Record a route first (loading point → dump point)=
 Started: please get out=
@@ -1471,21 +1476,21 @@ Deleted @1 (vehicles already using it keep running)=
 [AHS] @1=
 
 ### vehicle_bulktruck.lua
-ANFO (bags)=
 Emulsion explosive (sticks)=
+ANFO (bags)=
 Right-click to get in; Space loads, E charges the holes=
-Tank: ANFO @1 / @2 bags  Emulsion @3 / @4 sticks=
+Ammonium nitrate @1  Diesel @2 L  Emulsion @3=
 Filling holes @1 / @2=
 Fill holes (within @1 m of the boom)=
 Space=
 Tank=
 Filled @1 holes; @2 holes have no primer (not enough emulsion)=
 Filled @1 holes=
-Out of ANFO (filled @1 holes)=
+Out of ammonium nitrate or diesel (filled @1 holes)=
 No downward holes to fill within @1 m of the boom=
 charge the holes=
 Filling holes=
-The tank is empty: load ANFO and emulsion first=
+The tank is empty: load ammonium nitrate, diesel and emulsion first=
 
 ### vehicle_cart.lua
 Cart=

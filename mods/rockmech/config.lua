@@ -148,7 +148,10 @@ config.shop = {
 	{key = "drill", shop = "blast", item = "rockmech:rock_drill", label = TR("Rock drill"), price = 500},
 	{key = "detonator", shop = "blast", item = "rockmech:detonator", label = TR("Blasting machine"), price = 500},
 	{key = "emulsion", shop = "blast", item = "rockmech:emulsion", label = TR("Emulsion explosive"), price = 500, count = 10},
-	{key = "anfo", shop = "blast", item = "rockmech:anfo", label = "ANFO", price = 1000, count = 10},
+	-- ANFO 不賣成品：買硝酸銨和柴油，裝藥車現場混、或在拌和槽手拌（mixtrough.lua）
+	{key = "ammonium_nitrate", shop = "blast", item = "rockmech:ammonium_nitrate", label = TR("Ammonium nitrate"), price = 400, count = 10},
+	{key = "diesel", shop = "blast", item = "rockmech:diesel", label = TR("Diesel"), price = 1000, count = 20},
+	{key = "mix_trough", shop = "blast", item = "rockmech:mix_trough", label = TR("Mixing trough"), price = 1500},
 	{key = "bolt", shop = "geotech", item = "rockmech:rock_bolt", label = TR("Rock bolt"), price = 300, count = 10},
 	{key = "shotcrete", shop = "geotech", item = "rockmech:shotcrete", label = TR("Shotcrete"), price = 800, count = 10},
 	{key = "axe", shop = "tools", item = "default:axe_steel", label = TR("Axe"), price = 100},
