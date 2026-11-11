@@ -641,10 +641,20 @@ local TRIGGER_COOLDOWN, TRIGGER_MAX = 60, 24
 local triggered = {}
 local STABILITY_KINDS = {overhang = true, keyblock = true}
 local FAILURE_KINDS = {axial = true, slip = true, mass = true}
+-- 天然坡面（附近沒挖過）不觸發：真實地形（DEM）有陡崖、順向坡，算出來 FS ≤ 1 也是本來就站在那裡的，
+-- 玩家飛過去就垮不合理。開挖面旁 NEAR 格內才算
+local NEAR = 2
+local is_ex = collapse.is_excavated_at
+local function near_excavation(p)
+	for dz = -NEAR, NEAR do for dy = -NEAR, NEAR do for dx = -NEAR, NEAR do
+		if is_ex(p.x + dx, p.y + dy, p.z + dz) then return true end
+	end end end
+	return false
+end
 local function trigger_failed(cells)
 	local t, n = now(), 0
 	for _, c in ipairs(cells) do
-		if c.fs <= 1 and (STABILITY_KINDS[c.kind] or FAILURE_KINDS[c.kind]) then
+		if c.fs <= 1 and (STABILITY_KINDS[c.kind] or FAILURE_KINDS[c.kind]) and near_excavation(c.pos) then
 			local k = pkey(c.pos)
 			if not triggered[k] or t - triggered[k] > TRIGGER_COOLDOWN then
 				triggered[k] = t

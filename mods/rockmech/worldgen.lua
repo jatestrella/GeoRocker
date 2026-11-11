@@ -119,7 +119,7 @@ M.RECIPES = {
 		end,
 	},
 }
--- 水泥礦（仿和平礦場）：賣的還是大理岩（ore = marble），但礦體很厚（250–400 m），裡面夾幾層薄片岩（稀釋），
+-- 水泥礦（仿和平礦場）：賣的還是大理岩（ore = marble），但礦體很厚（250–400 m 起跳，不夠包住整座礦場就加厚），裡面夾幾層薄片岩（稀釋），
 -- 傾角 20–45°。出生點（採場）在礦體厚度的正中間，片岩只在外圍。gen_strata = single：純的厚大理岩；inter：夾片岩
 do
 	local C = {}
@@ -262,11 +262,33 @@ function M.generate(world_conf)
 		-- 頂面高程 ref_y(P) = y0 − tan·(P·傾向) + fold(P)；主礦層頂 = ref_y(P) − top(P)/cos = 0
 		local y0 = top_at(px, pz) / cosd + tand * (px * sdd + pz * cdd) - fold_at(px, pz)
 		y0 = y0 + ground(px, pz)
-		-- 出生點在礦體中間：礦體頂面抬高半個礦體（垂直方向）。互層的話整段大理岩（含夾的片岩）一起算
 		if k == 1 and R.centered then
-			local T = 0
-			for i = main_i, #beds - 1 do T = T + beds[i][2] end
-			y0 = y0 + T / 2 / cosd
+			-- 礦體要包住整座礦場：出生點、礦體中心（地面和往下挖 150 m）、每口豎井井口都在大理岩裡，外加 40 m。
+			-- 傾向斜切礦場的話，這幾點的層位差很多 → 加厚最後一段大理岩；y0 取中間
+			local pts = {{0, 0}, {px, pz}, {px, pz, -150}}
+			for x, z in (world_conf:get("rockmech_shafts") or ""):gmatch("(%-?[%d.]+)%s*,%s*(%-?[%d.]+)") do
+				pts[#pts + 1] = {tonumber(x), tonumber(z)}
+			end
+			local last = #beds - 1      -- 最後一段大理岩（底下是 250 m 片岩）
+			local function span()
+				local lo, hi = -math.huge, math.huge
+				for _, q in ipairs(pts) do
+					local col = rockmech.stress.strata_column(St, q[1], q[2])
+					local base = tand * (q[1] * sdd + q[2] * cdd) - fold_at(q[1], q[2]) + ground(q[1], q[2]) + (q[3] or 0)
+					lo = math.max(lo, base + (main_i > 1 and col[main_i - 1] or 0) / cosd)
+					hi = math.min(hi, base + col[last] / cosd)
+				end
+				return lo, hi
+			end
+			local need = 2 * 40 / cosd
+			for _ = 1, 6 do
+				local lo, hi = span()
+				if hi - lo >= need then break end
+				beds[last][2] = round(beds[last][2] + (need - (hi - lo)) * cosd * 1.1 + 1, 0.5)
+				St.beds[last].t = beds[last][2]
+			end
+			local lo, hi = span()
+			y0 = (lo + hi) / 2
 		end
 		local parts = {}
 		for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) end
