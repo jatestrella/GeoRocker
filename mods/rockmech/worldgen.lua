@@ -129,6 +129,11 @@ do
 	C.dip = function(f) return round(20 + 25 * f) end
 	C.centered = true
 	C.no_var = true
+	-- 新鮮堅硬的大理岩：葉理、兩組陡傾節理都是平滑～粗糙起伏、輕微蝕變（Jr 1.5–2、Ja 2 → φj 37–45°），葉理間距 2–4 m
+	C.joint1 = function(r, dip, dipdir, round, range, pick)
+		return ("%d,%d,%g,0.9,%g,2"):format(dip, dipdir, round(range(r, 2, 4), 0.5), pick(r, {1.5, 2}))
+	end
+	C.jrja = function(r, pick) return pick(r, {1.5, 2}), 2 end
 	C.column = function(r, mode, nseam, add, sum, range, count)
 		add("marble", range(r, 6, 25))
 		while sum() < 1600 do
@@ -287,7 +292,9 @@ function M.generate(world_conf)
 		local d2 = r:next(0, 359)
 		local d3 = (d2 + 90 + r:next(-15, 15)) % 360
 		for j, dd in ipairs({d2, d3}) do
-			set("joint_set_" .. (b + 1 + j), ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), dd, sp(), jr(), ja()))
+			local jrv, jav
+			if R.jrja then jrv, jav = R.jrja(r, pick) else jrv, jav = jr(), ja() end
+			set("joint_set_" .. (b + 1 + j), ("%d,%d,%g,0.7,%g,%g"):format(r:next(60, 85), dd, sp(), jrv, jav))
 			set("joint_dfn_" .. (b + 1 + j), ("%d,1,%d,%g"):format(round(range(r, 15, 35)), round(range(r, 6, 15)), round(range(r, 3.3, 4), 0.1)) .. zs)
 			set("joint_region_" .. (b + 1 + j), "p32=" .. R.p32(r, round, range))
 		end
