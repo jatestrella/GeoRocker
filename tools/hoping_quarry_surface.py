@@ -1,11 +1,13 @@
 # 和平礦場採場現況：用國土測繪中心 WMTS 通用電子地圖（EMAP15 含等高線、EMAP16 不含）相減取得等高線與高程點，
 # 底盤 = 高程點內插，邊坡坡度 = 等高線密度（範圍外用舊 DEM 校正），從底盤往外爬升，跟舊 DEM 取低的。
-# 輸入：dens.npy、flat.npy、spots.pkl（由圖磚判讀產生）；用法：python hoping_quarry_surface.py 舊.bin 新.bin
+# 輸入：dens.npy、flat.npy、spots.pkl（由圖磚判讀產生）；用法：E0=出生點E N0=出生點N python hoping_quarry_surface.py 舊.bin 新.bin
 # 採場現況地形：底盤 = 高程點內插；邊坡 = 從底盤往外，坡度照等高線密度（範圍外用舊 DEM 校正）；跟舊 DEM 取低的
 import numpy as np, pickle, heapq, sys
 from scipy import ndimage
 from scipy.interpolate import griddata
 fn = sys.argv[1]
+import os
+E0, N0 = float(os.environ.get('E0', 324189)), float(os.environ.get('N0', 2688743))      # 遊戲 (0, 0) 的 TWD97 座標（出生點）
 b = open(fn, 'rb').read(); nl = b.index(b'\n'); _, nx, nz, cell, x0, z0 = b[:nl].decode().split()
 nx, nz, x0, z0 = int(nx), int(nz), float(x0), float(z0)
 a = np.frombuffer(b[nl + 1:], dtype='<u2').reshape(nz, nx).copy(); h = (a & 0x7fff) / 10.; q = a >= 0x8000
@@ -15,7 +17,7 @@ tan = np.interp(dens, D, T)
 F = ndimage.binary_closing(flat, iterations=3) & q
 F = ndimage.binary_opening(F, iterations=1)
 spots = pickle.load(open('spots.pkl', 'rb'))
-X = np.array([(E - 324189 - x0) / 5 for E, N, v in spots]); Z = np.array([(N - 2688743 - z0) / 5 for E, N, v in spots]); V = np.array([v for _, _, v in spots], float)
+X = np.array([(E - E0 - x0) / 5 for E, N, v in spots]); Z = np.array([(N - N0 - z0) / 5 for E, N, v in spots]); V = np.array([v for _, _, v in spots], float)
 ii = np.clip(np.round(X).astype(int), 0, nx - 1); jj = np.clip(np.round(Z).astype(int), 0, nz - 1)
 inq = q[jj, ii]
 # 底盤上的高程點（離底盤 10 m 內）

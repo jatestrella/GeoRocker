@@ -5,7 +5,8 @@
 import sys, numpy as np
 from scipy import ndimage
 photo, El, Nt, demf, out = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), sys.argv[4], sys.argv[5]
-E0, N0 = 324189, 2688743         # 遊戲 (0, 0)
+import os
+E0, N0 = float(os.environ.get('E0', 324189)), float(os.environ.get('N0', 2688743))      # 遊戲 (0, 0) 的 TWD97 座標（出生點）
 a = np.load(photo).astype(float)
 H, W = a.shape[0] // 5 * 5, a.shape[1] // 5 * 5
 c = a[:H, :W].reshape(H // 5, 5, W // 5, 5, 3).mean((1, 3))
