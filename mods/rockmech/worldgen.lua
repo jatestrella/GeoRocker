@@ -134,6 +134,10 @@ do
 		return ("%d,%d,%g,0.9,%g,2"):format(dip, dipdir, round(range(r, 2, 4), 0.5), pick(r, {1.5, 2}))
 	end
 	C.jrja = function(r, pick) return pick(r, {1.5, 2}), 2 end
+	-- 片岩透鏡裡的節理密度跟大理岩差不多（和平的片岩滿強的）
+	C.p32 = function(r, round, range)
+		return ("marble:%g,schist:%g"):format(round(range(r, 0.6, 0.9), 0.1), round(range(r, 0.8, 1.1), 0.1))
+	end
 	C.column = function(r, mode, nseam, add, sum, range, count)
 		add("marble", range(r, 6, 25))
 		while sum() < 1600 do
@@ -321,7 +325,11 @@ function M.generate(world_conf)
 	set("gsi_coal", round(range(r, 30, 50)))
 	if seen.marble or seen.cement then
 		set("gsi_marble", round(range(r, 50, 75)))
-		set("gsi_schist", round(range(r, 30, 55)))
+		-- 水泥礦（和平）的片岩其實滿強的：跟大理岩差不多
+		if seen.cement then
+			set("gsi_schist", round(range(r, 50, 70)))
+			set("ucs_schist", round(range(r, 60, 80)))
+		else set("gsi_schist", round(range(r, 30, 55))) end
 	end
 	local okeys, oseen = {}, {}
 	for _, k in ipairs(ores) do

@@ -454,7 +454,7 @@ config.rockfall_defaults = {
 
 -- 岩體強度（rockmass.lua）；設定鍵為 rockmech_rockmass_<key>
 -- 另有：rockmech_model_scale（相似比 N）、rockmech_gsi（所有岩性的 GSI 剖面）、
--- rockmech_gsi_<岩性>、rockmech_mi_<岩性>
+-- rockmech_gsi_<岩性>、rockmech_mi_<岩性>、rockmech_ucs_<岩性>（MPa）
 config.rockmass_defaults = {
 	d = 0,                    -- Hoek-Brown 擾動係數 D（0 = 未擾動，1 = 嚴重爆破損傷）
 }
@@ -1087,6 +1087,12 @@ function config.load(get, opts)
 		lith.gsi = prof or gsi_all or lith.gsi or {top = 100}
 		local mi = tonumber(get("rockmech_mi_" .. key))
 		if mi and mi > 0 then lith.mi = mi end
+		-- rockmech_ucs_<岩性>：這張地圖的單軸抗壓強度 (MPa)，抗拉強度照比例
+		local ucs = tonumber(get("rockmech_ucs_" .. key))
+		if ucs and ucs > 0 then
+			lith.tensile = (lith.tensile or ucs / 15) * ucs / (lith.ucs or ucs)
+			lith.ucs = ucs
+		end
 	end
 
 	-- 節理組覆寫
