@@ -419,8 +419,10 @@ local function crack_sound(player, a, center, cells)
 	end
 end
 
--- 節理滑動（slip、shear）不套裂紋，改成偶爾從臨空的那一面噴出一小撮碎石（FS 越接近 1 越常噴、噴越多）
-local JOINT_KIND = {slip = true, shear = true}
+-- 沿節理滑動的（節理滑動、節理受剪、關鍵塊體、楔形整塊滑動）不套裂紋，改成偶爾從臨空的那一面噴出一小撮碎石
+-- （FS 越接近 1 越常噴、噴越多）
+local JOINT_KIND = {slip = true, shear = true, keyblock = true, mass = true}
+rockmech.fswarn_joint_kind = JOINT_KIND
 local SPURT_TICK = 0.5                 -- 每幾秒擲一次
 local SPURT_MAX = 2                    -- 每位玩家每次最多噴幾處
 local function spurt_chance(stage) return 0.006 + 0.008 * stage end    -- 每次擲到的機率：一格平均一分多鐘到十幾秒噴一次

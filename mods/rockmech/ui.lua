@@ -213,8 +213,9 @@ local function fmt_report_lines(r, pname, give)
 	-- 這格有警戒裂紋：是哪種破壞、FS 多少
 	local w = pname and rockmech.fswarn_at and rockmech.fswarn_at(pname, r.pos)
 	if w then
-		lines[#lines + 1] = core.colorize("#ffb040", S("Crack: @1　FS @2", w.label,
-			w.kind == "shear" and w.fs <= 1.011 and "≤ 1" or fs_short(w.fs)))
+		local fsv = w.kind == "shear" and w.fs <= 1.011 and "≤ 1" or fs_short(w.fs)
+		local joint = rockmech.fswarn_joint_kind and rockmech.fswarn_joint_kind[w.kind]
+		lines[#lines + 1] = core.colorize("#ffb040", joint and (w.label .. "　FS " .. fsv) or S("Crack: @1　FS @2", w.label, fsv))
 	end
 	return lines
 end
