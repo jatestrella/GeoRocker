@@ -751,6 +751,22 @@ function config.load(get, opts)
 				end
 				cfg.terrain = {mode = "dem", dem = D, height = height, smooth_height = smooth_height, bench = B,
 					quarry = D.has_q and function(x, z) return config.dem_quarry(D, x, z) end or nil}
+				-- 植生圖（rockmech_vegetation = 檔名，tools/hoping_vegetation.py 從正射影像分類）：每格 0 裸露、1 草地、2 森林
+				local vf = get("rockmech_vegetation")
+				local vs = vf and vf ~= "" and opts.read_file and opts.read_file(vf)
+				local vnx, vnz, vcell, vx0, vz0, vp = (vs or ""):match("^RMVEG (%d+) (%d+) ([%d.%-]+) ([%d.%-]+) ([%d.%-]+)\n()")
+				if vnx then
+					vnx, vnz, vcell, vx0, vz0 = tonumber(vnx), tonumber(vnz), tonumber(vcell), tonumber(vx0), tonumber(vz0)
+					local byte = string.byte
+					cfg.terrain.veg = function(x, z)
+						local i = math.floor((x - vx0) / vcell + 0.5)
+						local j = math.floor((z - vz0) / vcell + 0.5)
+						if i < 0 or j < 0 or i >= vnx or j >= vnz then return nil end
+						return byte(vs, vp + j * vnx + i)
+					end
+				elseif vf and vf ~= "" then
+					warnings[#warnings + 1] = "rockmech_vegetation: 讀不到植生圖 " .. vf
+				end
 			else
 				warnings[#warnings + 1] = "rockmech_terrain: 讀不到高程網格 " .. file .. "（平地）"
 			end

@@ -1,7 +1,7 @@
 -- rockmech/shaftroad.lua
 -- 豎井道路：營地到每口豎井鋪一條壓碎大理岩（壓實）的路（寬 WIDTH m），玩家一看就知道礦要載去哪裡倒。
 -- 路線：5 m 格網上 A*，成本 = 距離 ×（1 + 坡度超過 8% 的懲罰）；已經有路的格便宜（幾條路共用主幹）；繞開其他豎井。
--- 縱斷面：貼著沒切階的地形（短距離平滑）；採場裡取階的中間，一半挖、一半填，切過一階一階就是坡道。
+-- 縱斷面：貼著實際地面（短距離平滑）；採場裡跟階面齊高，換階的地方平滑成坡道。找路線用沒切階的地形。
 -- 路面：最上面一格是對應級數的壓實碎石，底下填到碰到實心為止；上面的岩石、表土、樹清掉（天然地形，不算開挖）。
 -- 只蓋一次（mod storage shaft_roads），豎井都蓋好之後由 oreshaft.lua 呼叫。
 
@@ -148,15 +148,21 @@ local function smooth_line(pts)
 end
 
 -- 縱斷面：貼著地面，前後各 SMOOTH m 平均（不硬壓坡度：硬壓的話過山谷會墊出高牆）；end_y：終點固定的高程，最後 30 m 漸變過去
-local SMOOTH = 8
+-- 路面照實際地面（採場裡就是階面，跟兩旁齊高）；換階的地方靠平滑做出坡道：採場裡前後各 SMOOTH_Q m（5 m 一階 → 約 10%）
+local SMOOTH, SMOOTH_Q = 8, 25
+local function ground_surface(x, z) return cfg.surface_y + rockmech.stress.terrain_rise(cfg, x, z) + 1 end
 local function profile(line, end_y)
 	local n = #line
-	local gy = {}
-	for i, p in ipairs(line) do gy[i] = surface(p.x, p.z) end
+	local gy, win = {}, {}
+	local T = cfg.terrain
+	for i, p in ipairs(line) do
+		gy[i] = ground_surface(p.x, p.z)
+		win[i] = T and T.quarry and T.quarry(p.x, p.z) and SMOOTH_Q or SMOOTH
+	end
 	local y = {}
 	for i = 1, n do
 		local sum, cnt = 0, 0
-		for k = math.max(1, i - SMOOTH), math.min(n, i + SMOOTH) do sum = sum + gy[k]; cnt = cnt + 1 end
+		for k = math.max(1, i - win[i]), math.min(n, i + win[i]) do sum = sum + gy[k]; cnt = cnt + 1 end
 		y[i] = sum / cnt
 	end
 	if end_y then
@@ -297,14 +303,16 @@ function rockmech.shaft_roads(owner)
 		t.cells[#t.cells + 1] = c
 		t.lo, t.hi = math.min(t.lo, c.y), math.max(t.hi, c.y)
 	end
-	local ncell, high, maxd = 0, 0, 0
+	local ncell, high, maxd, flush = 0, 0, 0, 0
 	for _, c in pairs(cells) do
 		ncell = ncell + 1
 		local d = c.y - (cfg.surface_y + rockmech.stress.terrain_rise(cfg, c.x, c.z) + 1)      -- 正：填，負：挖
 		if d > 5 then high = high + 1 end
+		if math.abs(d) <= 0.6 then flush = flush + 1 end
 		if math.abs(d) > math.abs(maxd) then maxd = d end
 	end
-	core.log("action", ("[rockmech] 豎井道路：填超過 5 m 的格 %d、最大挖填 %.1f m"):format(high, maxd))
+	core.log("action", ("[rockmech] 豎井道路：跟地面齊高（±0.6 m）%d%%、填超過 5 m 的格 %d、最大挖填 %.1f m")
+		:format(math.floor(100 * flush / math.max(1, ncell) + 0.5), high, maxd))
 	core.log("action", ("[rockmech] 豎井道路：%d 條、%d 格，路線 %.0f ms"):format(n_ok, ncell, (core.get_us_time() - t0) / 1000))
 	local idx, skipped = 0, 0
 	local function next_tile()

@@ -439,10 +439,22 @@ function stress.tree_at(x, z)
 	return gx * 7 + gz
 end
 -- 天然表土厚度（1/8 m）。rise：這一欄岩石頂比地表高幾格；rise_at(x, z)：別欄的 rise（坡腳用）；ore_top：頂上是礦石
+-- (x, z) 可不可以種樹：有植生圖照它（森林才種），沒有的話看露頭
+function stress.tree_ok(cfg, x, z)
+	local T = cfg.terrain
+	local vc = T and T.veg and T.veg(x, z)
+	if vc then return vc == 2 end
+	return stress.outcrop_factor(cfg, x, z) >= 1
+end
 function stress.natural_soil(cfg, x, z, rise, rise_at, ore_top)
 	-- 真實地形（DEM）：採場範圍裡是裸岩；採場外整片是山坡（頂上是大理岩也鋪土、種樹）
+	-- 有植生圖（正射影像分類）的話照它：裸露不鋪土，草地、森林鋪土（森林才種樹）
 	local T = cfg.terrain
-	if T and T.quarry then
+	local vc = T and T.veg and T.veg(x, z)
+	if vc then
+		if vc == 0 then return 0 end
+		ore_top, rise = false, math.max(rise, SOILC.min_rise)
+	elseif T and T.quarry then
 		if T.quarry(x, z) then return 0 end
 		ore_top, rise = false, math.max(rise, SOILC.min_rise)
 	end
@@ -452,8 +464,8 @@ function stress.natural_soil(cfg, x, z, rise, rise_at, ore_top)
 	if rise >= SOILC.min_rise then
 		local tot, hill = 0, 0
 		if stress.has_terrain(cfg) then tot, hill = stress.terrain_rise(cfg, x, z) end
-		local of = stress.outcrop_factor(cfg, x, z)          -- 露頭：不鋪或漸薄，也不種樹
-		local tree = of >= 1 and stress.tree_at(x, z)
+		local of = vc and 1 or stress.outcrop_factor(cfg, x, z)          -- 露頭：不鋪或漸薄，也不種樹（有植生圖就不用）
+		local tree = stress.tree_ok(cfg, x, z) and stress.tree_at(x, z)
 		if (hill or 0) > 0 and hill >= tot - 0.5 then        -- 礦區山丘（不是交界山脊）：鋪薄一點，看得到煤層
 			return tree and NL or math.floor(noise_t(SOILC.hill_min, SOILC.hill_max) * of + 0.5)
 		end
