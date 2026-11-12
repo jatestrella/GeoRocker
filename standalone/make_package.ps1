@@ -116,7 +116,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 for ($try = 1; $try -le 5; $try++) {
 	try {
 		if (Test-Path $zip) { Remove-Item $zip -Force }
-		[System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $true)
+		# UTF-8 names (the start .bat has a Chinese name): readable on any Windows language and on macOS
+		[System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip, [System.IO.Compression.CompressionLevel]::Optimal, $true, [System.Text.Encoding]::UTF8)
 		break
 	} catch {
 		if ($try -eq 5) { throw }
