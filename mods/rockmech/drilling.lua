@@ -147,6 +147,37 @@ local function burden(center, dir, R, depth)
 end
 rockmech.blast_burden = burden   -- 測試用
 
+-- 配比不對的 ANFO：爆破後冒有顏色的煙（柴油不夠 → 二氧化氮的橘紅煙；柴油太多 → 燒不完的黑煙）。
+-- 威力 q ≥ 0.95 算正常；偏得越多煙越濃。柴油太多時炮煙（CO）× (1 + 損失的威力 / 0.7)，最差兩倍。
+local FUME_IDEAL, FUME_OK = 0.057, 0.95
+local fume_told = {}   -- 同一輪起爆很多孔，每個人只提示一次
+local function anfo_fumes(pos, f, q)
+	if not f or q >= FUME_OK then return 1 end
+	local lean = f < FUME_IDEAL
+	local s = math.min(1, (1 - q) / 0.7)
+	local cols = lean and {"#d8682c", "#c0501e", "#e08040"} or {"#2a2622", "#3a3530", "#1c1a18"}
+	for _, c in ipairs(cols) do
+		core.add_particlespawner({amount = math.floor(12 + 40 * s), time = 2.5,
+			minpos = vector.offset(pos, -0.6, 0, -0.6), maxpos = vector.offset(pos, 0.6, 1, 0.6),
+			minvel = {x = -0.6, y = 0.8, z = -0.6}, maxvel = {x = 0.6, y = 2.2, z = 0.6},
+			minacc = {x = 0, y = -0.1, z = 0}, maxacc = {x = 0, y = 0.1, z = 0},
+			minexptime = 4, maxexptime = 8, minsize = 6 + 6 * s, maxsize = 12 + 14 * s,
+			texture = "[fill:4x4:" .. c .. "^[opacity:" .. math.floor(150 + 80 * s)})
+	end
+	local now = core.get_us_time()
+	local msg = lean
+		and S("Orange fumes: too little diesel (@1% diesel, power @2; best 5.7%)", ("%.1f"):format(100 * f), ("%.2f"):format(q))
+		or S("Black fumes: too much diesel (@1% diesel, power @2; best 5.7%), more CO", ("%.1f"):format(100 * f), ("%.2f"):format(q))
+	for _, pl in ipairs(core.get_connected_players()) do
+		local n = pl:get_player_name()
+		if vector.distance(pl:get_pos(), pos) <= 80 and now - (fume_told[n] or -1e12) > 5e6 then
+			fume_told[n] = now
+			rockmech.notify(n, S("[Blasting]") .. " " .. msg)
+		end
+	end
+	return lean and 1 or 1 + s
+end
+
 local function detonate(pos)
 	local node = core.get_node(pos)
 	local kind = kind_of(node.name)
@@ -171,6 +202,8 @@ local function detonate(pos)
 		-- 配比（拌和槽拌的 ANFO，meta q = 相對能量，裝藥車混的是 1）：半徑跟能量的立方根走
 		local q = meta:get_float("q")
 		if q <= 0 then q = 1 end
+		local fstr = meta:get_string("f")
+		local fm = fstr ~= "" and tonumber(fstr) or nil
 		-- 倒了多少：裝藥柱從孔底往上 L m；不到一段（1.5 m）的話半徑照藥量的立方根縮小
 		local kg = anfo_have(pos)
 		local L = math.min(anfo_col(pos), kg / ANFO_KG_M)
@@ -191,7 +224,8 @@ local function detonate(pos)
 			segs = segs + 1
 		until t > depth + 0.5
 		-- 炮煙（airq.lua）：每段 1.5 m 的 ANFO
-		if rockmech.airq_blast then rockmech.airq_blast(pos, kg) end
+		local co = anfo_fumes(pos, fm, q)   -- 配比不對：有顏色的煙，柴油太多炮煙變多
+		if rockmech.airq_blast then rockmech.airq_blast(pos, kg * co) end
 		R = R * f + depth
 		local center = last
 		local r = math.ceil(R) + 1
