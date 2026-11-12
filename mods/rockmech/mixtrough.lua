@@ -80,6 +80,7 @@ local function anfo_stack(n, f)
 	return stack
 end
 rockmech.anfo_f = anfo_f
+rockmech.anfo_stack = anfo_stack
 
 local function refresh(pos)
 	local meta = core.get_meta(pos)

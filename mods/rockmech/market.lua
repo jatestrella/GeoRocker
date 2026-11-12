@@ -31,7 +31,7 @@ local COAL_OIL = 0.4            -- 煤價跟柴油亂數的相關
 local SHOP_INDEX = {}
 for _, k in ipairs({"detonator", "emulsion", "anfo", "ammonium_nitrate"}) do SHOP_INDEX[k] = "explosive" end
 SHOP_INDEX.diesel = "diesel"
-for _, k in ipairs({"cart", "suv", "truck", "excavator", "lowboy", "heavyhaul", "dozer", "bulktruck", "charger", "corerig",
+for _, k in ipairs({"cart", "suv", "truck", "excavator", "lowboy", "heavyhaul", "dozer", "bulktruck", "anfotruck", "charger", "corerig",
 		"aerial", "crane", "drillrig", "jumbo", "haul", "excavator_big", "miner", "breaker_kit",
 		"crusher", "crusher_big", "plant", "belt", "belt_switch", "loadout", "dump_hopper", "dump_hopper_big",
 		"vent_fan", "vent_duct", "bolt", "drill", "mix_trough"}) do SHOP_INDEX[k] = "steel" end

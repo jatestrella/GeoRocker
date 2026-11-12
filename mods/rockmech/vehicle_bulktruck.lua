@@ -1,5 +1,7 @@
 -- rockmech/vehicle_bulktruck.lua
--- ANFO 裝藥車（露天礦的散裝炸藥車／現場混裝車 MMU）。由 vehicles.lua 載入。
+-- 兩種裝藥車（露天礦）。由 vehicles.lua 載入。
+--   現場混裝車 bulktruck（MMU，貴）：硝酸銨、柴油分開載，灌孔時照孔深計量、標準配比在吊臂裡混成 ANFO（威力 1）。
+--   散裝 ANFO 車 anfotruck：載拌和槽拌好的 ANFO（kg），裝進去的照重量平均記住柴油比例（self.anfo_f），灌孔、卸回背包都帶著這個比例。
 -- 卡車底盤、後面是炸藥儲槽、儲槽後端頂上有迴轉的輸送吊臂（auger boom），軟管從吊臂前端垂直垂進孔裡。
 --   空白鍵：儲槽（從背包裝滿硝酸銨、柴油與乳膠炸藥、卸回背包；車上存放，跟著車存檔、收車時還給玩家）。
 --   E：把吊臂範圍內（BOOM_LEN m）往下的鑽孔依序灌滿：照孔深計量的 ANFO ＋ 一條乳膠炸藥當起爆藥包
@@ -26,7 +28,8 @@ local function recipe(p)
 end
 local HOLE, CHARGED, ANFO_HOLE = "rockmech:drill_hole", "rockmech:charged_hole", "rockmech:anfo_hole"
 
-local def = {desc = S("ANFO bulk truck"), color = "#3a8a50", cap = 0, speed = 5.0,
+local function make(kind, o)
+local def = {desc = o.desc, color = o.color, cap = 0, speed = 5.0,
 	top_speed = 12, accel = 1.5, max_grade = math.rad(17), look_limit = math.rad(75), tire = 1.0,
 	half = 1.5, lat = {-1, 0, 1}, eye_up = 1.55, eye_fwd = 1.35, rear = 5.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
 	tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
@@ -34,8 +37,7 @@ local def = {desc = S("ANFO bulk truck"), color = "#3a8a50", cap = 0, speed = 5.
 	-- 倒車攝影機（車尾上方往後下看）：吊臂範圍內的孔畫成色點
 	cam = {o = {x = 0, y = 1.6, z = -5.8}, target = {x = 0, y = -1.5, z = -10}, holes = BOOM_LEN + 2, flip = false,
 		hfov = math.rad(80), vfov = math.rad(48), w = 56, h = 31},
-	-- 硝酸銨、柴油分開載，灌孔時照孔深計量、在吊臂裡混成 ANFO（現場混裝車 MMU）
-	store = {{AN, 1000, S("Ammonium nitrate")}, {DIESEL, 80, S("Diesel")}, {EMULSION, 40, S("Emulsion explosive (sticks)")}},
+	store = o.store,
 	item_desc = S("Right-click to get in; Space loads, E charges the holes")}
 do   -- 圖示：白色儲槽（綠、粉紅條紋）、槽頂的黃色吊臂、駕駛室、三軸
 	local c, r = def.color, {}
@@ -111,8 +113,9 @@ end
 rockmech.vehicle_bulktruck_holes = hole_list   -- 測試用
 
 function def.hud(self)
-	local s = "\n" .. S("Ammonium nitrate @1 kg  Diesel @2 L  Emulsion @3", ("%d"):format(V.store_count(self, AN)),
+	local s = "\n" .. (o.mmu and S("Ammonium nitrate @1 kg  Diesel @2 L  Emulsion @3", ("%d"):format(V.store_count(self, AN)),
 		("%d"):format(V.store_count(self, DIESEL)), ("%d"):format(V.store_count(self, EMULSION)))
+		or S("ANFO @1 kg  Emulsion @2", ("%d"):format(V.store_count(self, ANFO)), ("%d"):format(V.store_count(self, EMULSION))))
 	if self.pumping then s = s .. "  " .. S("Filling holes @1 / @2", ("%d"):format(self.pumping.done), ("%d"):format(#self.pumping.list)) end
 	return s
 end
@@ -157,11 +160,15 @@ function def.step(self, ctx)
 	pm.t = 0
 	local name = rockmech.hole_kind(core.get_node(p).name)
 	local need_anfo, need_primer = name == HOLE or name == CHARGED, name == HOLE or name == ANFO_HOLE
-	-- 硝酸銨＋柴油照孔深計量、現場混
+	-- 現場混裝車：硝酸銨＋柴油照孔深計量、現場混；散裝車：儲槽裡的 ANFO 照孔深灌（不夠就灌剩下的）
 	local kg, an, fo = recipe(p)
-	local mix = V.store_count(self, AN) >= an and V.store_count(self, DIESEL) >= fo
-	if need_anfo and not mix then
-		return finish(self, S("Out of ammonium nitrate or diesel (filled @1 holes)", ("%d"):format(pm.done)))
+	if o.mmu then
+		if need_anfo and not (V.store_count(self, AN) >= an and V.store_count(self, DIESEL) >= fo) then
+			return finish(self, S("Out of ammonium nitrate or diesel (filled @1 holes)", ("%d"):format(pm.done)))
+		end
+	else
+		kg = math.min(kg, V.store_count(self, ANFO))
+		if need_anfo and kg < 1 then return finish(self, S("Out of ANFO (filled @1 holes)", ("%d"):format(pm.done))) end
 	end
 	if need_primer then
 		if V.store_count(self, EMULSION) >= 1 and rockmech.load_charge(p, p, self.driver and core.get_player_by_name(self.driver)) then
@@ -170,8 +177,9 @@ function def.step(self, ctx)
 			pm.bare = pm.bare + 1
 		end
 	end
-	if need_anfo and rockmech.pour_anfo(p, self.driver and core.get_player_by_name(self.driver), F_IDEAL, kg) then
-		V.store_take(self, AN, an); V.store_take(self, DIESEL, fo)
+	local got = need_anfo and rockmech.pour_anfo(p, self.driver and core.get_player_by_name(self.driver), o.mmu and F_IDEAL or (self.anfo_f or F_IDEAL), kg)
+	if got then
+		if o.mmu then V.store_take(self, AN, an); V.store_take(self, DIESEL, fo) else V.store_take(self, ANFO, got) end
 	end
 	pm.done = pm.done + 1
 	update_hud(self)
@@ -196,8 +204,8 @@ function def.action(self, ctx)
 end
 
 -- 重機操作員（vehicle_op.lua）：按住 E 點孔 → 開到附近、車尾對著它倒車，吊臂搆得到就把範圍內的孔都灌好
-V.op_setup("bulktruck", def, {
-	label = S("ANFO bulk truck"), verb = S("charge the holes"), working = S("Filling holes"), half = def.half,
+V.op_setup(kind, def, {
+	label = o.desc, verb = S("charge the holes"), working = S("Filling holes"), half = def.half,
 	seat = {x = -0.55, y = 0.1, z = 0.6},
 	busy = function(self) return self.pumping ~= nil end,
 	approach = function(self, ctx, p, steer)
@@ -208,10 +216,46 @@ V.op_setup("bulktruck", def, {
 		return steer(self, ctx, p.x, p.z, true, 0.3)
 	end,
 	can_work = function(self)
-		if V.store_count(self, AN) < 1 and V.store_count(self, EMULSION) < 1 then
+		if o.mmu and V.store_count(self, AN) < 1 and V.store_count(self, EMULSION) < 1 then
 			return S("The tank is empty: load ammonium nitrate, diesel and emulsion first")
+		end
+		if not o.mmu and V.store_count(self, ANFO) < 1 and V.store_count(self, EMULSION) < 1 then
+			return S("The tank is empty: load ANFO and emulsion first")
 		end
 	end,
 })
 
-V.register("bulktruck", def)
+if not o.mmu then
+	-- 散裝車：ANFO 的柴油比例（照重量平均），跟著車存檔
+	function def.on_save(self, data) data.anfo_f = self.anfo_f end
+	function def.on_load(self, data) self.anfo_f = data.anfo_f end
+	-- 從背包裝 ANFO：每一疊照它的比例加權平均
+	function def.store_fill(self, item, inv, room)
+		if item ~= ANFO then return nil end
+		local have = V.store_count(self, ANFO)
+		local fuel = (self.anfo_f or F_IDEAL) * have
+		local got = 0
+		for i, st in ipairs(inv:get_list("main")) do
+			if room - got <= 0 then break end
+			if st:get_name() == ANFO then
+				local n = math.min(st:get_count(), room - got)
+				fuel = fuel + rockmech.anfo_f(st) * n
+				got = got + n
+				st:take_item(n)
+				inv:set_stack("main", i, st)
+			end
+		end
+		if have + got > 0 then self.anfo_f = fuel / (have + got) end
+		return got
+	end
+	function def.store_stack(self, item, n)
+		if item == ANFO and rockmech.anfo_stack then return rockmech.anfo_stack(n, self.anfo_f or F_IDEAL) end
+	end
+end
+V.register(kind, def)
+end
+
+make("bulktruck", {desc = S("Mobile mixing truck"), color = "#3a8a50", mmu = true,
+	store = {{AN, 1000, S("Ammonium nitrate")}, {DIESEL, 80, S("Diesel")}, {EMULSION, 40, S("Emulsion explosive (sticks)")}}})
+make("anfotruck", {desc = S("Bulk ANFO truck"), color = "#2f6fa0",
+	store = {{ANFO, 1000, "ANFO"}, {EMULSION, 40, S("Emulsion explosive (sticks)")}}})

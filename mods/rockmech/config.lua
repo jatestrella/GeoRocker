@@ -127,7 +127,8 @@ config.shop = {
 	{key = "lowboy", shop = "vehicle", item = "rockmech:lowboy_item", label = TR("Lowboy trailer"), price = 40000},
 	{key = "heavyhaul", shop = "vehicle", item = "rockmech:heavyhaul_item", label = TR("Heavy haul trailer"), price = 120000},
 	{key = "dozer", shop = "vehicle", item = "rockmech:dozer_item", label = TR("Bulldozer"), price = 35000},
-	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = TR("ANFO bulk truck"), price = 40000},
+	{key = "bulktruck", shop = "blast", item = "rockmech:bulktruck_item", label = TR("Mobile mixing truck"), price = 80000},
+	{key = "anfotruck", shop = "blast", item = "rockmech:anfotruck_item", label = TR("Bulk ANFO truck"), price = 40000},
 	{key = "charger", shop = "blast", item = "rockmech:charger_item", label = TR("Charging unit"), price = 40000},
 	{key = "corerig", shop = "vehicle", item = "rockmech:corerig_item", label = TR("Core drill rig"), price = 45000},
 	{key = "aerial", shop = "vehicle", item = "rockmech:aerial_item", label = TR("Aerial work platform"), price = 60000},
@@ -184,7 +185,7 @@ config.shop = {
 }
 
 -- 引擎額定功率（kW，fuel.lua 算油耗）：沒列的車不耗油（手推車靠人推）
-config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, lowboy = 400, dozer = 250,
+config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, anfotruck = 250, lowboy = 400, dozer = 250,
 	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500,
 	aerial = 150, crane = 250, heavyhaul = 500}
 
@@ -1028,7 +1029,7 @@ function config.load(get, opts)
 	-- 怪手操作員日薪（wages.lua）：每個交易日 $，按雇用時間比例、只在組員在線時計
 	cfg.operator_wage = math.max(0, tonumber(get("rockmech_operator_wage")) or 3000)
 	-- 開不同車的日薪倍數（車種名稱含這幾個字）：怪手 1、露天鑽機 1.2、裝藥車 1.5（要爆炸物執照）
-	cfg.operator_wage_mult = {drillrig = 1.2, bulktruck = 1.5}
+	cfg.operator_wage_mult = {drillrig = 1.2, bulktruck = 1.5, anfotruck = 1.5}
 	cfg.diesel_price = math.max(0, tonumber(get("rockmech_diesel_price")) or 50)   -- 柴油價（$/L，fuel.lua）
 	-- 煤層帶不帶節理（預設不帶：節理組只在頁岩裡）
 	cfg.coal_joints = parse_bool(get("rockmech_coal_joints")) == true

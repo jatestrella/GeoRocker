@@ -33,7 +33,7 @@ function rockmech.op_rest_count(acc) return geti(REST .. acc) end
 function rockmech.op_hired_count(acc) return geti(HIRED .. acc) end
 -- 人數上限：全組要操作員的車（怪手、露天鑽機、裝藥車）
 local function excavators(acc)
-	return V.count_owned(acc, "excavator") + V.count_owned(acc, "drillrig") + V.count_owned(acc, "bulktruck")
+	return V.count_owned(acc, "excavator") + V.count_owned(acc, "drillrig") + V.count_owned(acc, "bulktruck") + V.count_owned(acc, "anfotruck")
 end
 
 -- 舊版的操作員（已經坐在怪手上、還沒算進雇用人數）：補算

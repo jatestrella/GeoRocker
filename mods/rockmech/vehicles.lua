@@ -1059,7 +1059,7 @@ local function settle_box(self, def, pos, dtime)
 end
 
 -- 車輛的自重 (t)，車種沒列的用 20
-V.MASS = {cart = 0.2, truck = 15, haul = 70, bulktruck = 30, dozer = 20, excavator = 20, excavator_big = 100,
+V.MASS = {cart = 0.2, truck = 15, haul = 70, bulktruck = 30, anfotruck = 25, dozer = 20, excavator = 20, excavator_big = 100,
 	jumbo = 30, charger = 20, drillrig = 25, suv = 2.5, miner = 120}   -- 露天採礦機約 100–200 t：只有重型拖車載得動
 
 -- 接地壓力 (kPa) = (自重 + 車上的碎石) / 兩條輪跡的面積（各寬 1 m、長 = 車長），g 取 10。
@@ -1358,6 +1358,11 @@ local hud_clear, update_hud, update_mirrors = V.hud_clear, V.update_hud, V.updat
 -- 車上存放：def.store = {{物品, 容量, 名稱}, …}，self.store[物品] = 數量（跟著車存檔，收車時還給玩家）。
 -- V.open_store 打開存放畫面：「裝滿」從背包拿（創造模式直接裝滿）、「卸下」放回背包；作業時用 V.store_take 消耗
 function V.store_count(self, item) return self.store[item] or 0 end
+-- 儲槽裡的東西還成物品（def.store_stack 可以加上 meta，例如 ANFO 的比例）
+function V.store_stack(self, item, n)
+	local d = TYPES[self.vkind]
+	return d.store_stack and d.store_stack(self, item, n) or ItemStack(item .. " " .. n)
+end
 function V.store_take(self, item, n)
 	local have = self.store[item] or 0
 	n = math.min(n, have)
@@ -1391,11 +1396,13 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		local item, cap = s[1], s[2]
 		local have = V.store_count(self, item)
 		if fields["fill_" .. i] and have < cap then
+			local fill = TYPES[self.vkind].store_fill      -- 自訂裝法（例如 ANFO 要記比例）
 			local got = core.is_creative_enabled(name) and cap - have
+				or fill and fill(self, item, inv, cap - have)
 				or inv:remove_item("main", ItemStack(item .. " " .. (cap - have))):get_count()
 			self.store[item] = have + got
 		elseif fields["out_" .. i] and have > 0 then
-			self.store[item] = inv:add_item("main", ItemStack(item .. " " .. have)):get_count()
+			self.store[item] = inv:add_item("main", V.store_stack(self, item, have)):get_count()
 		end
 	end
 	if fields.quit or fields.ok then store_open[name] = nil
@@ -1747,7 +1754,7 @@ function V.register(kind, def)
 			end
 			for item, n in pairs(self.store) do
 				if n > 0 then
-					local l3 = inv:add_item("main", ItemStack(item .. " " .. n))
+					local l3 = inv:add_item("main", V.store_stack(self, item, n))
 					if not l3:is_empty() then core.add_item(self.object:get_pos(), l3) end
 				end
 			end
