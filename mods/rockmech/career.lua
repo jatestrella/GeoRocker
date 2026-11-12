@@ -1002,10 +1002,25 @@ for _, n in ipairs({{"board", "#f0f0e8", S("Sign board")}, {"digit", "#203a80", 
 		groups = {not_in_creative_inventory = 1},
 	})
 end
+-- 拆掉 z = zf 那裡的看板（只拆看板方塊和兩根柱子）
+local function remove_sign_at(x0, zf)
+	for x = x0 - 4, x0 + 3 do
+		for yy = -30, 70 do        -- 不能用 ground_y：看板本身會被當成地面
+			for z = zf, zf + 1 do
+				local p = {x = x, y = yy, z = z}
+				local n = core.get_node(p).name
+				if n:find("^rockmech:sign_") or ((x == x0 - 4 or x == x0 + 3) and z == zf + 1 and n == "rockmech:tent_pole") then
+					core.remove_node(p)
+				end
+			end
+		end
+	end
+end
 local function build_sign(x0, text)
 	local glyph = DIGITS[text]
 	if not glyph then return end
 	local zf = SIGN_Z                            -- 正面（南），背面在北邊一格
+	remove_sign_at(x0, zf)                       -- 先拆掉原地的舊看板，不然 ground_y 會把它當地面、新看板疊在上面
 	local y = ground_y(x0, zf) or 0
 	local x1, x2, top = x0 - 4, x0 + 3, y + 14   -- 寬 8、高 12（y+3..y+14），下面兩根柱子
 	for _, px in ipairs({x1, x2}) do
@@ -1033,25 +1048,10 @@ local function build_sign(x0, text)
 	end
 end
 
--- 拆掉舊位置的看板（只拆看板方塊和兩根柱子）
-local function remove_old_sign(x0)
-	local zf = OLD_SIGN_Z
-	for x = x0 - 4, x0 + 3 do
-		for yy = -30, 40 do        -- 不能用 ground_y：看板本身會被當成地面
-			for z = zf, zf + 1 do
-				local p = {x = x, y = yy, z = z}
-				local n = core.get_node(p).name
-				if n:find("^rockmech:sign_") or ((x == x0 - 4 or x == x0 + 3) and z == zf + 1 and n == "rockmech:tent_pole") then
-					core.remove_node(p)
-				end
-			end
-		end
-	end
-end
--- 已經蓋好的營地：看板搬到走廊（每座營地做一次）
+-- 已經蓋好的營地：看板搬到走廊、重蓋（每座營地做一次；sign4：修好之前疊成兩塊的看板）
 function rockmech.career_move_sign(x0, team)
-	storage:set_string("sign3:" .. x0, "1")
-	remove_old_sign(x0)
+	storage:set_string("sign4:" .. x0, "1")
+	remove_sign_at(x0, OLD_SIGN_Z)
 	build_sign(x0, team)
 	core.log("action", ("[rockmech] 營地 x = %d 的組號看板搬到 z = %d"):format(x0, SIGN_Z))
 end
@@ -1072,7 +1072,7 @@ local function build_camp_now(owner, x0)
 		local a, b = rockmech.career_area(x0 or 0)
 		rockmech.level_camp_soil(a, b, cfg.camp_y or math.floor(cfg.surface_y or 0))
 	end
-	storage:set_string("sign3:" .. x0, "1")
+	storage:set_string("sign4:" .. x0, "1")
 	x0 = x0 or 0
 	-- 混凝土地坪先鋪（orders.lua），建築、擺設再蓋在上面（先蓋的話擺設底下會留洞）
 	if rockmech.camp_pave then rockmech.camp_pave(x0) end
@@ -1287,7 +1287,8 @@ if cfg.career then
 	end)
 end
 
--- 已經蓋好的營地：組號看板從礦帶裡（舊位置）搬到南邊的走廊；sign3：重蓋成兩面都有數字
+-- 已經蓋好的營地：組號看板從礦帶裡（舊位置）搬到南邊的走廊、重蓋成兩面都有數字；
+-- sign4：之前的 sign3 重蓋時沒拆原地的單面看板，新看板疊在上面變兩塊，再拆掉重蓋一次
 if cfg.career then
 	core.after(2.5, function()
 		local sites = {}
@@ -1299,11 +1300,11 @@ if cfg.career then
 			end
 		end
 		for _, s in ipairs(sites) do
-			if storage:get_string("sign3:" .. s.x0) == "" then
+			if storage:get_string("sign4:" .. s.x0) == "" then
 				local a, b = camp_area(s.x0)
 				core.emerge_area(a, b, function(_, _, rem)
 					if rem > 0 then return end
-					if storage:get_string("sign3:" .. s.x0) == "" then rockmech.career_move_sign(s.x0, s.t) end
+					if storage:get_string("sign4:" .. s.x0) == "" then rockmech.career_move_sign(s.x0, s.t) end
 				end)
 			end
 		end
