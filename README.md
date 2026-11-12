@@ -1,9 +1,9 @@
 <p align="center"><img src="menu/header.png" alt="GeoRocker — Rock Mechanics · Mining · Geotechnics"></p>
 
-GeoRocker 是在 [Luanti](https://www.luanti.org/) 上執行的採礦模擬遊戲，用來教岩石力學、隧道與大地工程。
+GeoRocker 是一款岩石力學、隧道與大地工程的採礦模擬遊戲，以 [Luanti](https://www.luanti.org/) 引擎製作。
 玩家要自己探勘地質、鑽孔爆破、開挖支撐、運輸賣礦。岩體會依應力和節理崩塌，炸藥配比不對威力就打折。
 
-*A rock mechanics and mining simulator for teaching, built on Luanti. Text in game is Traditional Chinese.*
+*A rock mechanics and mining simulator built on the Luanti engine. Text in game is Traditional Chinese.*
 
 **📖 遊戲說明（wiki）：https://jatestrella.github.io/GeoRocker/**
 
@@ -14,14 +14,13 @@ GeoRocker 是在 [Luanti](https://www.luanti.org/) 上執行的採礦模擬遊�
 - **爆破**：鑿岩、裝藥、自己調配 ANFO（硝酸銨與柴油的比例決定威力）
 - **支撐**：岩栓、噴凝土、木支撐、通風與空氣品質
 - **機具與運輸**：怪手、推土機、礦卡、鑽機、裝藥車、輸送帶、收煤站
-- **經營**：分組共用資金、礦價與市場事件、截止品位、貸款
+- **經營**：資金、礦價與市場事件、截止品位、貸款
 
 ## 地圖
 
 | 地圖 | 說明 |
 |---|---|
-| 煤礦課堂（多人） | 老師開伺服器，學生連線分組經營 |
-| 煤礦經營（單機） | 一個人一組，自己練習 |
+| 煤礦經營（單機） | 固定地質，從頭經營一座煤礦 |
 | 隨機煤礦（單機） | 每次地質都不一樣 |
 | 自訂煤礦（單機） | 自己設定地層、煤層、褶皺 |
 | 水泥礦（單機） | 仿花蓮和平礦場山頂採場，1:1 地形 |
