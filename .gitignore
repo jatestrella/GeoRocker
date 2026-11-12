@@ -12,3 +12,6 @@ __pycache__/
 # 外觀調整器的暫時世界、輸出
 tools/ui_tuner/_world/
 tools/ui_tuner/out/
+
+# 內部工作筆記，不公開
+docs/HANDOFF.md

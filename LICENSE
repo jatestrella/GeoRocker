@@ -1,0 +1,27 @@
+GeoRocker (mining_sim)
+Copyright (c) 2026 Jate. All rights reserved.
+
+The source code, textures, models, sounds and documentation in this
+repository are published for viewing only. No permission is granted to
+copy, modify, distribute, or use them, in whole or in part, without prior
+written permission from the copyright holder. For teaching or other uses,
+please open an issue to ask.
+
+Exceptions: the following folders come from other projects and remain
+under their own licenses (see the license.txt / README.txt in each folder):
+
+  mods/creative, mods/default, mods/doors, mods/fire, mods/player_api,
+  mods/sfinv, mods/stairs, mods/tnt   (Minetest Game, LGPL-2.1+ / CC BY-SA 3.0)
+  fonts/Cubic_11.ttf                  (Cubic 11, SIL Open Font License 1.1)
+
+---
+
+GeoRocker（mining_sim）
+著作權 (c) 2026 Jate，保留一切權利。
+
+本 repository 的程式、材質、模型、音效與文件僅公開供閱覽。未經著作權人書面
+同意，不得重製、修改、散布或使用其全部或一部分。若要用於教學或其他用途，
+請開 issue 詢問。
+
+例外：上列資料夾來自其他專案，仍依各自的授權條款（見各資料夾的
+license.txt / README.txt）。
