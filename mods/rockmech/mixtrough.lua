@@ -16,7 +16,7 @@ local FO_KG_L = 0.84        -- 柴油密度 (kg/L)
 local IDEAL = 0.057         -- 能量最大的柴油重量比例（氧平衡為零）
 local MIX_TIME = 3          -- 翻拌幾秒
 local INPUT = {[AN] = true, [DIESEL] = true, [ANFO] = true}      -- 3×3 格子放得進去的東西
-local MAX_OUT = 1000        -- 右邊格子最多幾 kg ANFO
+local MAX_OUT = 1000        -- 槽裡（格子＋右邊格子）最多幾 kg
 
 -- 柴油重量比例 → 相對能量：柴油不夠時往純硝酸銨（約 0.3）掉，太多時每多 1 % 少 3 %
 function rockmech.anfo_power(fo)
@@ -159,7 +159,7 @@ end
 local function mix(pos, name)
 	if busy(pos) then return false end
 	local an, fo, out, am = contents(pos)
-	if an + fo + am <= 0 or an + am + out <= 0 or out + an + fo + am > MAX_OUT then return false end
+	if an + fo + am <= 0 or an + am + out <= 0 or out + an + fo * FO_KG_L + am > MAX_OUT + 0.5 then return false end
 	core.get_meta(pos):set_float("until", core.get_gametime() + MIX_TIME)
 	core.add_particlespawner({amount = 40, time = MIX_TIME, minpos = vector.offset(pos, -0.35, -0.1, -0.35), maxpos = vector.offset(pos, 0.35, 0.05, 0.35),
 		minvel = {x = -0.6, y = 1.2, z = -0.6}, maxvel = {x = 0.6, y = 2.2, z = 0.6}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
@@ -193,9 +193,13 @@ local function rightclick(pos, node, clicker, itemstack)
 	return itemstack
 end
 
+-- 放料：槽裡總重（格子＋右邊的 ANFO）最多 MAX_OUT kg，柴油照密度換算
 local function slot_put(pos, listname, _, stack, player)
 	if listname ~= "in" or not INPUT[stack:get_name()] or busy(pos) or core.is_protected(pos, player:get_player_name()) then return 0 end
-	return stack:get_count()
+	local an, fo, out, am = contents(pos)
+	local room = MAX_OUT - (an + fo * FO_KG_L + out + am)
+	local per = stack:get_name() == DIESEL and FO_KG_L or 1
+	return math.max(0, math.min(stack:get_count(), math.floor(room / per + 1e-6)))
 end
 local function slot_take(pos, listname, _, stack, player)
 	if (listname ~= "out" and busy(pos)) or core.is_protected(pos, player:get_player_name()) then return 0 end
