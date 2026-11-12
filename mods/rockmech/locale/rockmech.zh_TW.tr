@@ -672,7 +672,13 @@ Good. Respect the rock and it lets you go home.=好。你尊重石頭，石頭�
 Old Miner=老礦工
 
 ### mixtrough.lua
-Ammonium nitrate @1 bags, diesel @2 L=硝酸銨 @1 袋、柴油 @2 L
+Ammonium nitrate @1 kg, diesel @2 L=硝酸銨 @1 kg、柴油 @2 L
+1 kg ammonium nitrate=1公斤硝酸銨
+1 L diesel=1L柴油
+Mixed ANFO @1 kg=拌好的 ANFO @1 kg
+Pour=倒入
+Take out ANFO=取出 ANFO
+Dump=倒掉
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=監測稜鏡@n還沒有讀數（附近開挖、算過應力後才有）
@@ -1479,7 +1485,7 @@ Deleted @1 (vehicles already using it keep running)=已刪除@1（已經套用�
 Emulsion explosive (sticks)=乳膠炸藥（條）
 ANFO (bags)=ANFO（袋）
 Right-click to get in; Space loads, E charges the holes=右鍵上車；空白鍵裝料、E 灌孔
-Ammonium nitrate @1  Diesel @2 L  Emulsion @3=硝酸銨 @1　柴油 @2 L　乳膠炸藥 @3
+Ammonium nitrate @1 kg  Diesel @2 L  Emulsion @3=硝酸銨 @1 kg　柴油 @2 L　乳膠炸藥 @3
 Filling holes @1 / @2=灌孔中 @1 / @2
 Fill holes (within @1 m of the boom)=灌孔（吊臂 @1 m 內）
 Space=空白鍵

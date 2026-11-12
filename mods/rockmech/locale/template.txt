@@ -672,7 +672,13 @@ Good. Respect the rock and it lets you go home.=
 Old Miner=
 
 ### mixtrough.lua
-Ammonium nitrate @1 bags, diesel @2 L=
+Ammonium nitrate @1 kg, diesel @2 L=
+1 kg ammonium nitrate=
+1 L diesel=
+Mixed ANFO @1 kg=
+Pour=
+Take out ANFO=
+Dump=
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=
@@ -1479,7 +1485,7 @@ Deleted @1 (vehicles already using it keep running)=
 Emulsion explosive (sticks)=
 ANFO (bags)=
 Right-click to get in; Space loads, E charges the holes=
-Ammonium nitrate @1  Diesel @2 L  Emulsion @3=
+Ammonium nitrate @1 kg  Diesel @2 L  Emulsion @3=
 Filling holes @1 / @2=
 Fill holes (within @1 m of the boom)=
 Space=
