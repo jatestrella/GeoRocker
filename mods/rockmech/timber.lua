@@ -18,6 +18,27 @@ local BEAM_Z = "rockmech:timber_beam_z"       -- 橫放的樑，順 z
 local PLANK = "rockmech:timber_plank"
 local SLAB = "rockmech:timber_slab"
 local IS_POST = {[POST] = true, [POST_TOP] = true}
+-- 鋼支保（H200×200 型鋼）：放法、規則都跟木柱一樣（對地板往上長到頂板、對牆面橫放當樑），只有材料不同。
+-- 超載不會馬上斷：先降伏彎曲（柱身中段往旁邊凸出，STEEL_BENT[0..4] 是偏移量 0–0.38 m，facedir 決定往哪邊彎），
+-- 承載力剩 steel_residual，再超載才倒（不退還）。彎掉的拆下來也不退還
+local STEEL = "rockmech:steel_set"             -- 物品，也是柱身方塊
+local STEEL_TOP = "rockmech:steel_set_top"     -- 柱頂（多一塊頂板）
+local STEEL_BX = "rockmech:steel_beam_x"
+local STEEL_BZ = "rockmech:steel_beam_z"
+local BENT_LV = {0, 0.1, 0.2, 0.3, 0.38}
+local STEEL_BENT = {}
+for i = 0, #BENT_LV - 1 do STEEL_BENT[i] = "rockmech:steel_set_bent_" .. i end
+IS_POST[STEEL], IS_POST[STEEL_TOP] = true, true
+local IS_BENT = {}
+for _, n in pairs(STEEL_BENT) do IS_POST[n] = true; IS_BENT[n] = true end
+-- 方塊 → 材料
+local MAT_OF = {[POST] = "timber", [POST_TOP] = "timber", [STEEL] = "steel", [STEEL_TOP] = "steel",
+	[STEEL_BX] = "steel", [STEEL_BZ] = "steel"}
+for _, n in pairs(STEEL_BENT) do MAT_OF[n] = "steel" end
+local MATS = {
+	timber = {post = POST, top = POST_TOP, bx = "rockmech:timber_beam_x", bz = "rockmech:timber_beam_z"},
+	steel = {post = STEEL, top = STEEL_TOP, bx = STEEL_BX, bz = STEEL_BZ},
+}
 
 local function tell(player, msg)
 	if player and player:is_player() then rockmech.notify(player:get_player_name(), S("[Timber] @1", msg)) end
@@ -39,12 +60,35 @@ local function is_floor(name)
 	return def.is_ground_content ~= false and (g.rockmech_rubble or 0) == 0 and (g.falling_node or 0) == 0
 end
 
-local function capacity(L)
+-- 承載力 P = min(壓碎／降伏, 挫屈)；mat 沒給 = 木柱；bent = 彎掉的鋼支保（乘 steel_residual）
+local function capacity(L, mat, bent)
+	if mat == "steel" then
+		local A, I = scfg.steel_a, scfg.steel_i
+		local yield = scfg.steel_fy * A * 1000
+		local buckle = L > 0 and math.pi ^ 2 * scfg.steel_e * I * 1000 / (L * L) or math.huge
+		local P, mode = yield, "crush"
+		if buckle < yield then P, mode = buckle, "buckle" end
+		if bent then P = P * scfg.steel_residual end
+		return P, mode, yield, buckle
+	end
 	return rockmech.support.post_capacity(L, scfg.post_d, scfg.post_ucs, scfg.post_e)
 end
+-- 柱頂在 (x, y, z)、長 L 的柱子承載力（support.scan 用，照柱頂那格的材料）
+function rockmech.post_capacity_at(x, y, z, L)
+	local name = core.get_node({x = x, y = y, z = z}).name
+	return (capacity(L, MAT_OF[name], IS_BENT[name]))
+end
 local function d(x) return ("%d"):format(x) end
-local function mode_text(mode) return mode == "buckle" and S("buckling") or S("crushing") end
-local function info(L, supporting)
+local function mode_text(mode, mat) return mode == "buckle" and S("buckling") or mat == "steel" and S("yielding") or S("crushing") end
+local function info(L, supporting, mat, bent)
+	if mat == "steel" then
+		local P, mode, y, b = capacity(L, "steel", bent)
+		local txt = S("Steel set H200 (length @1 m)\nCapacity @2 kN (governed by @3: yielding @4 kN, buckling @5 kN)",
+			d(L), d(P), mode_text(mode, "steel"), d(y), d(b))
+		if bent then txt = txt .. "\n" .. S("Yielded and bent: capacity down to @1%, add support", d(scfg.steel_residual * 100)) end
+		if not supporting then txt = txt .. "\n" .. S("Not reaching a rock roof: does not count as support") end
+		return txt
+	end
 	local P, mode, crush, buckle = capacity(L)
 	local l, dia, p, m, c, b = d(L), d(math.floor(scfg.post_d * 100 + 0.5)), d(P), mode_text(mode), d(crush), d(buckle)
 	if supporting then
@@ -84,17 +128,22 @@ end
 local remove_post
 function remove_post(base, len, give)
 	local top = {x = base.x, y = base.y + len - 1, z = base.z}
+	-- 退還：木柱一支、鋼支保一支；彎掉的鋼支保不退
+	local bn = core.get_node(base).name
+	local item = not IS_BENT[bn] and MATS[MAT_OF[bn] or "timber"].post or nil
 	for s = 0, len - 1 do
 		local p = {x = base.x, y = base.y + s, z = base.z}
 		if IS_POST[core.get_node(p).name] then core.remove_node(p) end
 	end
-	if give then
+	if not item then
+		-- 不退還
+	elseif give then
 		if not creative(give) then
-			local left = give:get_inventory():add_item("main", ItemStack(POST))
+			local left = give:get_inventory():add_item("main", ItemStack(item))
 			if not left:is_empty() then core.add_item(base, left) end
 		end
 	else
-		core.add_item(base, ItemStack(POST))
+		core.add_item(base, ItemStack(item))
 	end
 	resolve(top, POST_TOP)
 	-- 掛在柱子上的東西（工作照明燈…，attached_node）跟著掉下來
@@ -154,6 +203,69 @@ local function post_dig(pos, node, digger)
 	return true
 end
 
+-- 放柱子（木柱、鋼支保共用）：對地板往上長到頂板、對牆面橫放當樑
+local function place_post(mat, itemstack, placer, pointed)
+	local M = MATS[mat]
+	if pointed.type ~= "node" then return itemstack end
+	if rockmech.settle_pointed then pointed = rockmech.settle_pointed(pointed) end   -- 薄的土石推到旁邊（woodwork.lua）
+	local under, above = pointed.under, pointed.above
+	-- 對著已經放好的東西右鍵（例如木板）：照一般規則
+	local un = core.get_node(under)
+	local udef = core.registered_nodes[un.name]
+	if udef and udef.on_rightclick and not (placer and placer:get_player_control().sneak) then
+		return udef.on_rightclick(under, un, placer, itemstack, pointed) or itemstack
+	end
+	local ab = core.registered_nodes[core.get_node(above).name]
+	if not ab or not ab.buildable_to then return itemstack end
+	local name = placer and placer:is_player() and placer:get_player_name() or ""
+	if core.is_protected(above, name) then core.record_protection_violation(above, name); return itemstack end
+	-- 接在有墊木的柱頂上：墊木拿掉（柱子變長了，不是頂著頂板的柱頂）
+	if above.y == under.y + 1 and un.name == M.top then core.swap_node(under, {name = M.post}) end
+	if above.y == under.y + 1 then
+		-- 對地板：往上找頂板
+		local n
+		for s = 1, scfg.post_max_len do
+			local p = {x = above.x, y = above.y + s - 1, z = above.z}
+			local def = core.registered_nodes[core.get_node(p).name]
+			if not def or not def.buildable_to then n = s - 1; break end
+		end
+		if n and n >= 1 then
+			local roof = core.get_node({x = above.x, y = above.y + n, z = above.z}).name
+			-- 柱頂墊木只在頂到岩石頂板時加
+			local capped = is_rock(roof)
+			for s = 0, n - 1 do
+				core.set_node({x = above.x, y = above.y + s, z = above.z}, {name = (s == n - 1 and capped) and M.top or M.post})
+			end
+			local meta = core.get_meta(above)
+			meta:set_int("len", n)
+			local supporting = is_rock(roof) and is_floor(un.name)
+			local txt = info(n, supporting, mat)
+			for s = 0, n - 1 do core.get_meta({x = above.x, y = above.y + s, z = above.z}):set_string("infotext", txt) end
+			if supporting then
+				local P, mode = capacity(n, mat)
+				if mat == "steel" then
+					tell(placer, S("A @1 m steel set holds up the roof: capacity @2 kN (governed by @3)", d(n), d(P), mode_text(mode, mat)))
+				else
+					tell(placer, S("A @1 m timber post holds up the roof: capacity @2 kN (governed by @3)", d(n), d(P), mode_text(mode)))
+				end
+			end
+			resolve({x = above.x, y = above.y + n - 1, z = above.z})
+		else
+			-- 上面 post_max_len 內碰不到東西：只放 1 m（建材）
+			core.set_node(above, {name = M.post})
+			core.get_meta(above):set_string("infotext", info(1, false, mat))
+		end
+	elseif above.y == under.y - 1 then
+		core.set_node(above, {name = M.post})
+	else
+		-- 對牆面：橫放當樑，樑的方向垂直於牆面
+		local d = vector.subtract(above, under)
+		core.set_node(above, {name = d.x ~= 0 and M.bx or M.bz})
+	end
+	if not creative(placer) then itemstack:take_item() end
+	return itemstack
+end
+
 core.register_node(POST, {
 	description = S("Timber post\nRight-click the floor to stand it up, a wall to lay it as a beam"),
 	short_description = S("Timber post"),
@@ -165,62 +277,7 @@ core.register_node(POST, {
 	wield_image = "[fill:16x16:#00000000^[fill:4x14:6,1:#6e5032^[fill:1x14:7,1:#5a3f26^[fill:4x2:6,1:#c9a46a",
 	is_ground_content = false, groups = groups(G, {timber_post = 1, timber_stick = 1}), sounds = sounds, drop = "",
 	on_dig = post_dig,
-	on_place = function(itemstack, placer, pointed)
-		if pointed.type ~= "node" then return itemstack end
-		if rockmech.settle_pointed then pointed = rockmech.settle_pointed(pointed) end   -- 薄的土石推到旁邊（woodwork.lua）
-		local under, above = pointed.under, pointed.above
-		-- 對著已經放好的東西右鍵（例如木板）：照一般規則
-		local un = core.get_node(under)
-		local udef = core.registered_nodes[un.name]
-		if udef and udef.on_rightclick and not (placer and placer:get_player_control().sneak) then
-			return udef.on_rightclick(under, un, placer, itemstack, pointed) or itemstack
-		end
-		local ab = core.registered_nodes[core.get_node(above).name]
-		if not ab or not ab.buildable_to then return itemstack end
-		local name = placer and placer:is_player() and placer:get_player_name() or ""
-		if core.is_protected(above, name) then core.record_protection_violation(above, name); return itemstack end
-		-- 接在有墊木的柱頂上：墊木拿掉（柱子變長了，不是頂著頂板的柱頂）
-		if above.y == under.y + 1 and un.name == POST_TOP then core.swap_node(under, {name = POST}) end
-		if above.y == under.y + 1 then
-			-- 對地板：往上找頂板
-			local n
-			for s = 1, scfg.post_max_len do
-				local p = {x = above.x, y = above.y + s - 1, z = above.z}
-				local def = core.registered_nodes[core.get_node(p).name]
-				if not def or not def.buildable_to then n = s - 1; break end
-			end
-			if n and n >= 1 then
-				local roof = core.get_node({x = above.x, y = above.y + n, z = above.z}).name
-				-- 柱頂墊木只在頂到岩石頂板時加
-				local capped = is_rock(roof)
-				for s = 0, n - 1 do
-					core.set_node({x = above.x, y = above.y + s, z = above.z}, {name = (s == n - 1 and capped) and POST_TOP or POST})
-				end
-				local meta = core.get_meta(above)
-				meta:set_int("len", n)
-				local supporting = is_rock(roof) and is_floor(un.name)
-				local txt = info(n, supporting)
-				for s = 0, n - 1 do core.get_meta({x = above.x, y = above.y + s, z = above.z}):set_string("infotext", txt) end
-				if supporting then
-					local P, mode = capacity(n)
-					tell(placer, S("A @1 m timber post holds up the roof: capacity @2 kN (governed by @3)", d(n), d(P), mode_text(mode)))
-				end
-				resolve({x = above.x, y = above.y + n - 1, z = above.z})
-			else
-				-- 上面 post_max_len 內碰不到東西：只放 1 m（建材）
-				core.set_node(above, {name = POST})
-				core.get_meta(above):set_string("infotext", info(1, false))
-			end
-		elseif above.y == under.y - 1 then
-			core.set_node(above, {name = POST})
-		else
-			-- 對牆面：橫放當樑，樑的方向垂直於牆面
-			local d = vector.subtract(above, under)
-			core.set_node(above, {name = d.x ~= 0 and BEAM_X or BEAM_Z})
-		end
-		if not creative(placer) then itemstack:take_item() end
-		return itemstack
-	end,
+	on_place = function(itemstack, placer, pointed) return place_post("timber", itemstack, placer, pointed) end,
 })
 
 core.register_node(POST_TOP, {
@@ -262,6 +319,78 @@ core.register_lbm({
 		core.swap_node(pos, {name = (axis == 3 or axis == 4) and BEAM_X or BEAM_Z})
 	end,
 })
+
+---------------------------------------------------------------------------
+-- 鋼支保：H 型鋼斷面（兩片翼板＋腹板，20 cm 見方）。柱頂、樑的接法比照木柱，但不用 connected nodebox（鋼材直接頂住）
+---------------------------------------------------------------------------
+local STEEL_TEX = "[fill:16x16:#6c747c^[fill:16x1:0,0:#848c94^[fill:16x1:0,15:#545b62^[fill:2x2:4,6:#5f666d^[fill:2x2:11,11:#5f666d"
+local STEEL_END = "[fill:16x16:#545b62"
+local BENT_TEX = STEEL_TEX .. "^[fill:3x2:3,9:#8a5a3a^[fill:2x3:10,3:#8a5a3a"      -- 彎掉的：漆面裂開、生鏽
+local STEEL_ICON = "[fill:16x16:#00000000^[fill:3x14:3,1:#6c747c^[fill:3x14:10,1:#6c747c^[fill:4x2:6,7:#6c747c^[fill:1x14:3,1:#848c94^[fill:1x14:10,1:#848c94"
+-- 直立的 H 斷面，往 +z 偏 oz
+local function hcol(oz)
+	oz = oz or 0
+	return {{-0.1, -0.5, -0.1 + oz, 0.1, 0.5, -0.07 + oz}, {-0.1, -0.5, 0.07 + oz, 0.1, 0.5, 0.1 + oz},
+		{-0.015, -0.5, -0.07 + oz, 0.015, 0.5, 0.07 + oz}}
+end
+local STEEL_CAP = {-0.25, 0.44, -0.25, 0.25, 0.5, 0.25}       -- 柱頂鋼板
+local SG = groups(G, {timber_post = 1, timber_stick = 1})
+SG.dig_immediate = 2
+local SG_HIDDEN = table.copy(SG)
+SG_HIDDEN.not_in_creative_inventory = 1
+local metal = core.get_modpath("default") and default.node_sound_metal_defaults and default.node_sound_metal_defaults() or sounds
+
+core.register_node(STEEL, {
+	description = S("Steel set\nRight-click the floor to stand it up, a wall to lay it as a beam"),
+	short_description = S("Steel set"),
+	drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
+	node_box = {type = "fixed", fixed = hcol()}, selection_box = {type = "fixed", fixed = {-0.1, -0.5, -0.1, 0.1, 0.5, 0.1}},
+	tiles = {STEEL_END, STEEL_END, STEEL_TEX},
+	inventory_image = STEEL_ICON, wield_image = STEEL_ICON,
+	is_ground_content = false, groups = SG, sounds = metal, drop = "",
+	on_dig = post_dig,
+	on_place = function(itemstack, placer, pointed) return place_post("steel", itemstack, placer, pointed) end,
+})
+do
+	local box = hcol()
+	box[#box + 1] = STEEL_CAP
+	core.register_node(STEEL_TOP, {
+		description = S("Steel set (top)"),
+		drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
+		node_box = {type = "fixed", fixed = box}, selection_box = {type = "fixed", fixed = {-0.1, -0.5, -0.1, 0.1, 0.5, 0.1}},
+		tiles = {STEEL_END, STEEL_END, STEEL_TEX},
+		is_ground_content = false, groups = SG_HIDDEN, sounds = metal, drop = "",
+		on_dig = post_dig,
+	})
+end
+-- 彎掉的鋼支保：第 i 種往 facedir 的方向偏 BENT_LV[i] m（整根照正弦分布，中間偏最多）
+for i, n in pairs(STEEL_BENT) do
+	local oz = BENT_LV[i + 1]
+	core.register_node(n, {
+		description = S("Steel set (yielded)"),
+		drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
+		node_box = {type = "fixed", fixed = hcol(oz)},
+		selection_box = {type = "fixed", fixed = {-0.1, -0.5, -0.1 + oz, 0.1, 0.5, 0.1 + oz}},
+		tiles = {STEEL_END, STEEL_END, BENT_TEX},
+		is_ground_content = false, groups = SG_HIDDEN, sounds = metal, drop = "",
+		on_dig = post_dig,
+	})
+end
+-- 橫放的樑（建材，不做結構計算）
+for _, v in ipairs({
+	{STEEL_BX, {{-0.5, 0.07, -0.1, 0.5, 0.1, 0.1}, {-0.5, -0.1, -0.1, 0.5, -0.07, 0.1}, {-0.5, -0.07, -0.015, 0.5, 0.07, 0.015}},
+		{-0.5, -0.1, -0.1, 0.5, 0.1, 0.1}},
+	{STEEL_BZ, {{-0.1, 0.07, -0.5, 0.1, 0.1, 0.5}, {-0.1, -0.1, -0.5, 0.1, -0.07, 0.5}, {-0.015, -0.07, -0.5, 0.015, 0.07, 0.5}},
+		{-0.1, -0.1, -0.5, 0.1, 0.1, 0.5}},
+}) do
+	core.register_node(v[1], {
+		description = S("Steel beam"),
+		drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
+		node_box = {type = "fixed", fixed = v[2]}, selection_box = {type = "fixed", fixed = v[3]},
+		tiles = {STEEL_TEX}, is_ground_content = false,
+		groups = groups(G_HIDDEN, {timber_stick = 1}), sounds = metal, drop = STEEL,
+	})
+end
 
 -- 木板：1/8 格厚的薄板（不是整格方塊，免得看起來像礦柱；岩石力學裡本來就算空格、撐不住岩石）。
 -- 對頂面放是地板，對底面放貼在天花板下；牆壁用木牆板（woodwork.lua）
@@ -364,15 +493,20 @@ local function fall(list)
 		if IS_POST[name] then
 			local b = post_of(p)
 			local k = key(b)
-			if not bases[k] then bases[k] = true; drops[#drops + 1] = {p, POST} end
+			local bn = core.get_node(b).name
+			if not bases[k] then
+				bases[k] = true
+				if not IS_BENT[bn] then drops[#drops + 1] = {p, MATS[MAT_OF[bn] or "timber"].post} end
+			end
 		elseif name == BEAM_X or name == BEAM_Z or name == BEAM then drops[#drops + 1] = {p, POST}
+		elseif name == STEEL_BX or name == STEEL_BZ then drops[#drops + 1] = {p, STEEL}
 		elseif name == PLANK or name == SLAB then drops[#drops + 1] = {p, name} end
 	end
 	falling = true
 	for _, p in ipairs(list) do
 		local name = core.get_node(p).name
 		core.remove_node(p)
-		if name == POST_TOP then resolve(p, POST_TOP) end      -- 頂著頂板的木柱沒了：頂板重新判定
+		if name == POST_TOP or name == STEEL_TOP or IS_BENT[name] then resolve(p, POST_TOP) end      -- 頂著頂板的木柱沒了：頂板重新判定
 	end
 	falling = false
 	for _, d in ipairs(drops) do core.add_item(d[1], ItemStack(d[2])) end
@@ -396,7 +530,11 @@ end
 rockmech.timber_check_around = check_around
 
 -- 木頭被拿掉（挖、炸、拆木柱）
-for _, name in ipairs({POST, POST_TOP, BEAM_X, BEAM_Z, BEAM, PLANK, SLAB}) do
+local ALL_TIMBER = {POST, POST_TOP, BEAM_X, BEAM_Z, BEAM, PLANK, SLAB, STEEL, STEEL_TOP, STEEL_BX, STEEL_BZ}
+for _, n in pairs(STEEL_BENT) do ALL_TIMBER[#ALL_TIMBER + 1] = n end
+local ALL_POSTS = {POST, POST_TOP, STEEL, STEEL_TOP}
+for _, n in pairs(STEEL_BENT) do ALL_POSTS[#ALL_POSTS + 1] = n end
+for _, name in ipairs(ALL_TIMBER) do
 	core.override_item(name, {
 		after_destruct = function(pos)
 			if not falling then core.after(0, check_around, vector.copy(pos)) end
@@ -428,7 +566,7 @@ core.register_lbm({
 core.register_lbm({
 	label = "rockmech: 懸空的木頭掉下來（一次）",
 	name = "rockmech:timber_float_check",
-	nodenames = {POST, POST_TOP, BEAM_X, BEAM_Z, BEAM, PLANK, SLAB},
+	nodenames = ALL_TIMBER,
 	run_at_every_load = false,
 	action = function(pos)
 		core.after(0, function()
@@ -441,7 +579,7 @@ core.register_lbm({
 -- 保險：木柱底下空了（例如地圖直接被改掉）就檢查一次
 core.register_abm({
 	label = "rockmech: 木柱底下空了就檢查有沒有東西撐著",
-	nodenames = {POST}, interval = 5, chance = 1,
+	nodenames = {POST, STEEL}, interval = 5, chance = 1,
 	action = function(pos)
 		local bn = core.get_node({x = pos.x, y = pos.y - 1, z = pos.z}).name
 		if is_timber(bn) or holds(bn) then return end
@@ -460,7 +598,7 @@ core.register_abm({
 
 local function post_tops(a, b)
 	local out = {}
-	for _, p in ipairs(core.find_nodes_in_area(a, b, {POST, POST_TOP})) do
+	for _, p in ipairs(core.find_nodes_in_area(a, b, ALL_POSTS)) do
 		if is_rock(core.get_node({x = p.x, y = p.y + 1, z = p.z}).name) then out[#out + 1] = p end
 	end
 	return out
@@ -468,6 +606,7 @@ end
 
 local function break_post(top)
 	local base, len = post_of(top)
+	local steel = MAT_OF[core.get_node(top).name] == "steel"
 	falling = true
 	for s = 0, len - 1 do
 		local p = {x = base.x, y = base.y + s, z = base.z}
@@ -477,15 +616,45 @@ local function break_post(top)
 	core.add_particlespawner({amount = 40, time = 0.3,
 		minpos = {x = base.x - 0.2, y = base.y - 0.4, z = base.z - 0.2}, maxpos = {x = base.x + 0.2, y = top.y + 0.4, z = base.z + 0.2},
 		minvel = {x = -2, y = -1, z = -2}, maxvel = {x = 2, y = 2, z = 2}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
-		minexptime = 0.6, maxexptime = 1.4, minsize = 1, maxsize = 2.5, texture = "[fill:4x4:#8a6438"})
-	core.sound_play("default_dig_choppy", {pos = top, gain = 1.0, max_hear_distance = 32}, true)
+		minexptime = 0.6, maxexptime = 1.4, minsize = 1, maxsize = 2.5, texture = steel and "[fill:4x4:#6c747c" or "[fill:4x4:#8a6438"})
+	core.sound_play(steel and "default_dug_metal" or "default_dig_choppy", {pos = top, gain = 1.0, max_hear_distance = 32}, true)
 	for _, pl in ipairs(core.get_connected_players()) do
 		if vector.distance(pl:get_pos(), top) <= 32 then
-			rockmech.notify(pl:get_player_name(), S("[Timber post] The timber post at @1 was crushed: it could not hold the roof above", core.pos_to_string(top)))
+			rockmech.notify(pl:get_player_name(), steel
+				and S("[Steel set] The bent steel set at @1 gave way: it could not hold the roof above", core.pos_to_string(top))
+				or S("[Timber post] The timber post at @1 was crushed: it could not hold the roof above", core.pos_to_string(top)))
 		end
 	end
-	core.log("action", ("[rockmech] 木柱壓斷 %s（長 %d m）"):format(core.pos_to_string(top), len))
+	core.log("action", ("[rockmech] %s %s（長 %d m）"):format(steel and "鋼支保倒塌" or "木柱壓斷", core.pos_to_string(top), len))
 	core.after(0, check_around, vector.copy(base))
+end
+
+-- 鋼支保降伏：整根換成彎掉的方塊（中間凸最多，往隨機一邊），meta 保留（swap_node），承載力剩 steel_residual
+local function bend_post(top)
+	local base, len = post_of(top)
+	local dir = math.random(0, 3)
+	for s = 0, len - 1 do
+		local p = {x = base.x, y = base.y + s, z = base.z}
+		if IS_POST[core.get_node(p).name] then
+			local f = math.sin(math.pi * (s + 0.5) / len)
+			local lv = math.max(0, math.min(#BENT_LV - 1, math.floor(f * (#BENT_LV - 1) + 0.5)))
+			core.swap_node(p, {name = STEEL_BENT[lv], param2 = dir})
+		end
+	end
+	local txt = info(len, true, "steel", true)
+	for s = 0, len - 1 do core.get_meta({x = base.x, y = base.y + s, z = base.z}):set_string("infotext", txt) end
+	core.add_particlespawner({amount = 25, time = 0.4,
+		minpos = {x = base.x - 0.2, y = base.y, z = base.z - 0.2}, maxpos = {x = base.x + 0.2, y = top.y + 0.4, z = base.z + 0.2},
+		minvel = {x = -1, y = -0.5, z = -1}, maxvel = {x = 1, y = 1, z = 1}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
+		minexptime = 0.5, maxexptime = 1.2, minsize = 0.8, maxsize = 1.6, texture = "[fill:4x4:#8a5a3a"})
+	core.sound_play("default_dug_metal", {pos = top, gain = 1.0, max_hear_distance = 32}, true)
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), top) <= 32 then
+			rockmech.notify(pl:get_player_name(), S("[Steel set] The steel set at @1 yielded and bent: capacity down to @2%, add support", core.pos_to_string(top), d(scfg.steel_residual * 100)))
+		end
+	end
+	core.log("action", ("[rockmech] 鋼支保降伏彎曲 %s（長 %d m）"):format(core.pos_to_string(top), len))
+	resolve(top)
 end
 
 -- a：應力解範圍的原點、n：格數；failed：這一輪破壞的格（世界座標）；
@@ -512,12 +681,17 @@ function rockmech.timber_fem_check(a, n, failed, roof_fs, force)
 				if f and (not N or f > N) then N = f end
 			end
 		end
-		local P = L and capacity(L) / Nm
-		if N and P and N > P then crushed = true end
-		if crushed then
+		local tn = core.get_node(t).name
+		local mat, bent = MAT_OF[tn], IS_BENT[tn]
+		local P = L and capacity(L, mat, bent) / Nm
+		local over = N and P and N > P
+		if mat == "steel" and not bent and (over or crushed) then
+			-- 鋼材延性：第一次超載先彎（不倒），之後的應力解照彎掉的勁度、承載力重算
+			bend_post(t)
+		elseif crushed or over then
 			break_post(t)
 		else
-			local lines = {info(L or 1, L ~= nil)}
+			local lines = {info(L or 1, L ~= nil, mat, bent)}
 			if N and P then lines[#lines + 1] = S("Axial force @1 kN / capacity @2 kN (@3%)", d(math.floor(N + 0.5)), d(math.floor(P + 0.5)), d(math.floor(N / P * 100 + 0.5))) end
 			if L and low then
 				lines[#lines + 1] = S("Roof above: FS @1", low == math.huge and "∞" or ("%.2f"):format(low))
@@ -566,7 +740,12 @@ end
 -- 判定用的方塊 id（groundsupport.lua 建好 rockmech.support_ids 之後補上木柱、木磚）
 core.register_on_mods_loaded(function()
 	if rockmech.support_ids then
-		rockmech.support_ids.post = {[core.get_content_id(POST)] = true, [core.get_content_id(POST_TOP)] = true}
+		local ids, r = {}, {}
+		for _, nm in ipairs(ALL_POSTS) do ids[core.get_content_id(nm)] = true end
+		-- 應力解的勁度比（femstress.lua）：鋼支保 steel_fem_area；彎掉的變軟（降伏後荷重轉給周圍岩體）
+		for _, nm in ipairs({STEEL, STEEL_TOP}) do r[core.get_content_id(nm)] = scfg.steel_fem_area end
+		for _, nm in pairs(STEEL_BENT) do r[core.get_content_id(nm)] = scfg.steel_fem_area * 0.1 end
+		rockmech.support_ids.post, rockmech.support_ids.post_r = ids, r
 		if core.registered_nodes[WOOD_BLOCK] then
 			rockmech.support_ids.wood_block = {[core.get_content_id(WOOD_BLOCK)] = true}
 		end

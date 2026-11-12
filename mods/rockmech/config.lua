@@ -168,6 +168,7 @@ config.shop = {
 	{key = "fea_tablet", shop = "geotech", item = "rockmech:fea_tablet", label = TR("Numerical analysis tablet"), price = 3000},
 	{key = "stress_cell", shop = "geotech", item = "rockmech:stress_cell", label = TR("Borehole stress cell"), price = 12000},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = TR("Timber post"), price = 200, count = 10},
+	{key = "steel_set", shop = "tools", item = "rockmech:steel_set", label = TR("Steel set"), price = 2000, count = 10},
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = TR("Timber plank"), price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = TR("Timber slab"), price = 100, count = 10},
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = TR("Drone"), price = 2000},
@@ -340,6 +341,14 @@ config.support_defaults = {
 	-- 真實斷面（直徑 20 cm）只有 0.031 m²，太軟，對頂板幾乎沒幫助；假設性放大到 0.5 m²。越大分到的荷重越多、
 	-- 越容易被壓斷（1.0 m² 時 9 m 跨度軸力就到承載力 80%）。承載力照真實直徑，不跟著變
 	post_fem_area = 0.5,
+	-- 鋼支保（H200×200 型鋼，timber.lua）：放法同木柱。承載力 P = min(降伏 fy·A, 尤拉挫屈 π²EI_min/L²)：
+	-- 2–4 m 約 1590 kN（降伏）、6 m 約 880 kN（挫屈）。超載先降伏彎曲（延性），承載力剩 steel_residual，再超載才倒
+	steel_fy = 250,           -- 降伏強度 fy (MPa)
+	steel_e = 200000,         -- 彈性模數 E (MPa)
+	steel_a = 0.00635,        -- 斷面積 A (m²)
+	steel_i = 1.6e-5,         -- 弱軸慣性矩 I_min (m⁴)
+	steel_residual = 0.5,     -- 降伏彎曲後剩下的承載力比例
+	steel_fem_area = 1.0,     -- 應力解裡的等效斷面積（同 post_fem_area；鋼的 EA 約木柱 4 倍，取 1.0 m² 跟岩石同級）
 	-- 木磚（整格的木頭方塊，像木垛）：應力解裡是有勁度的一格，勁度 = 岩石 × block_fem（橫紋受壓的木材比岩石軟很多）；
 	-- σv × 1 m² 超過承載力 block_ucs (MPa，木材橫紋抗壓強度) × 1 m² 就壓碎（不退還）
 	block_fem = 0.1,

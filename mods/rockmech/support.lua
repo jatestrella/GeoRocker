@@ -99,7 +99,9 @@ function support.scan(g, ids, prm)
 					end
 				end
 				if L and L > 0 then
-					local P = support.post_capacity(L, prm.post_d, prm.post_ucs or 0, prm.post_e or 0) / N
+					-- 承載力：post_cap（timber.lua，照材料：木柱、鋼支保、彎掉的鋼支保）；沒有就照木柱參數
+					local P = (prm.post_cap and prm.post_cap(g.ox + x, g.oy + y, g.oz + z, L)
+						or support.post_capacity(L, prm.post_d, prm.post_ucs or 0, prm.post_e or 0)) / N
 					for u = -1, 1 do for v = -1, 1 do
 						local j = idx(x + u, y + 1, z + v)
 						local jo = idx(x + u, y, z + v)

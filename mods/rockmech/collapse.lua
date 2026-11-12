@@ -714,7 +714,7 @@ function collapse.read_grid(minp, maxp, no_overburden)
                 return v > 0 and v or hd
              end,
              post_d = sc.post_d, post_ucs = sc.post_ucs, post_e = sc.post_e,
-             post_len = rockmech.timber_post_len})
+             post_len = rockmech.timber_post_len, post_cap = rockmech.post_capacity_at})
     end
     return g
 end

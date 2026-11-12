@@ -178,6 +178,8 @@ local function make_job(pos)
 	-- 跟碎石一樣沒有現地應力、不加重力，頂板往下收斂壓它才受力；這格的 σv × 1 m² 就是木柱的軸力
 	local post_ids = rockmech.support_ids and rockmech.support_ids.post or {}
 	local post_r = math.max(1e-4, cfg.support.post_fem_area or 0.5)
+	-- 鋼支保（timber.lua）：自己的等效斷面積（support_ids.post_r：方塊 id → 勁度比）
+	local post_rs = rockmech.support_ids and rockmech.support_ids.post_r or {}
 	-- 木磚（timber.lua）：整格木頭，勁度 = 岩石 × block_fem，受力的算法跟木柱一樣
 	local block_ids = rockmech.support_ids and rockmech.support_ids.wood_block or {}
 	local block_r = math.max(1e-4, cfg.support.block_fem or 0.1)
@@ -202,7 +204,7 @@ local function make_job(pos)
 			local gamma = lith and lith.gamma or cfg.failure.gamma_other
 			local solid = g.bonded_of[cid] and true or false
 			local soft = fcfg.rubble_e > 0 and g.rubble_of[cid] == 1
-			if post_ids[cid] then soft = post_r elseif block_ids[cid] then soft = block_r end
+			if post_ids[cid] then soft = post_rs[cid] or post_r elseif block_ids[cid] then soft = block_r end
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			local sv = gamma * math.max(0, top + 0.5 - wy) + (wy <= top and sv_soil or 0)     -- kPa
 			job.solid[c] = solid or (soft and true) or false
