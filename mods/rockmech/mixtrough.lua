@@ -5,7 +5,7 @@
 --   可以像箱子一樣拖放（右鍵一次放一個、分一半都行），也可以打數字按「倒入」；
 --   按「翻拌」，翻拌 MIX_TIME 秒：左邊的料和槽裡的餘料拌在一起，
 --   一包 BAG_KG kg 的 ANFO 出在右邊的格子（包數 = 總重 ÷ BAG_KG 無條件捨去），不滿一包的餘料照比例留在槽裡，下次一起拌。
---   右邊格子還有不同配比的 ANFO 時不能拌（不同威力的不能疊在一起）。「倒掉」：餘料丟掉。
+--   ANFO 的物品說明寫上重量比（硝酸銨 : 柴油）；右邊格子還有不同比例的 ANFO 時，拌好的全部留成餘料（不同比例不能疊在一起）。「倒掉」：餘料丟掉。
 --   配比（柴油佔總重的比例）決定 ANFO 的相對能量（rockmech.anfo_power），存在每包 ANFO 的 meta q，
 --   倒進孔裡記在孔上（drilling.lua），爆破半徑乘 q^(1/3)。標準配比 94:6（柴油 5.7 %）能量最大。
 --   不寫配比說明：玩家要自己算（25 kg 硝酸銨配約 1.8 L 柴油），wiki 有公式。
@@ -125,12 +125,16 @@ local function mix_done(pos, name)
 	inv:set_stack("an", 1, ""); inv:set_stack("fo", 1, "")
 	local total = an + fo * FO_KG_L
 	local bags = math.floor(total / BAG_KG + 1e-6)
-	local q = rockmech.anfo_power(fuel_frac(an, fo))
+	local f = fuel_frac(an, fo)
+	local q = rockmech.anfo_power(f)
 	local qs = ("%.3f"):format(q)
+	-- 物品說明寫上重量比（同一比例的才疊在一起）
+	local desc = S("ANFO") .. "\n" .. S("Ammonium nitrate : diesel = @1 : @2", ("%.1f"):format(100 - 100 * f), ("%.1f"):format(100 * f))
 	local out = inv:get_stack("out", 1)
-	if bags > 0 and (out:is_empty() or out:get_meta():get_string("q") == qs) then
+	if bags > 0 and (out:is_empty() or out:get_meta():get_string("description") == desc) then
 		local stack = ItemStack(ANFO .. " " .. (out:get_count() + bags))
 		stack:get_meta():set_string("q", qs)
+		stack:get_meta():set_string("description", desc)
 		inv:set_stack("out", 1, stack)
 		core.log("action", ("[rockmech] %s 在拌和槽拌出 ANFO %d 包（硝酸銨 %.1f kg、柴油 %.1f L，比例 %.1f %%，能量 %.2f）")
 			:format(name or "?", bags, an, fo, 100 * fuel_frac(an, fo), q))

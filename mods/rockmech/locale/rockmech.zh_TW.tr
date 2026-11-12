@@ -679,6 +679,7 @@ Leftover @1 kg=槽裡餘料 @1 kg
 Pour=倒入
 Mix=翻拌
 Dump=倒掉
+Ammonium nitrate : diesel = @1 : @2=硝酸銨 : 柴油 = @1 : @2
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=監測稜鏡@n還沒有讀數（附近開挖、算過應力後才有）

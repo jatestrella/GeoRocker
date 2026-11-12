@@ -679,6 +679,7 @@ Leftover @1 kg=
 Pour=
 Mix=
 Dump=
+Ammonium nitrate : diesel = @1 : @2=
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=
