@@ -427,7 +427,9 @@ if core.get_modpath("sfinv") and sfinv then
 			local function add(f, ...) fs[#fs + 1] = f:format(...) end
 			local y = 0
 			if t then
-				add("label[0,%g;%s]", y, F(S("Team @1   Funds @2", t, money_text(rockmech.money(name)))))
+				local debt = rockmech.loan_debt and rockmech.loan_debt(rockmech.account_of(name)) or 0
+				add("label[0,%g;%s]", y, F(S("Team @1   Funds @2", t, money_text(rockmech.money(name)))
+					.. (debt > 0 and S("   Loan owed $@1", ("%.0f"):format(debt)) or "")))
 				y = y + 0.5
 				add("label[0,%g;%s]", y, F(S("Members:")))
 				for _, line in ipairs(name_lines(online_marked(t), 3)) do
@@ -458,7 +460,8 @@ if core.get_modpath("sfinv") and sfinv then
 					local acc = "team:" .. tn
 					local col, row = i <= half and 0 or 4, (i - 1) % half
 					add("label[%g,%g;%s]", col, y + row * 0.4, F(S("Team @1 @2 (@3 players)", tn,
-						rockmech.has_account(acc) and money_text(rockmech.money(acc)) or S("not opened"), tostring(#members_of(tn)))))
+						rockmech.has_account(acc) and money_text(rockmech.money(acc)) or S("not opened"), tostring(#members_of(tn)))
+						.. (rockmech.loan_debt and rockmech.loan_debt(acc) > 0 and S(" owes $@1", ("%.0f"):format(rockmech.loan_debt(acc))) or "")))
 				end
 				y = y + half * 0.4 + 0.5
 				local teams = {}

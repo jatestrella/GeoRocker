@@ -317,20 +317,97 @@ local function report(name)
 	return lines
 end
 
+---------------------------------------------------------------------------
+-- 貸款（分析師兼辦）：一次借 LOAN_STEPS 其中一個金額，最多 $300,000；欠款沒還清不能再借。
+-- 利息：每過一個交易日欠款 ×(1 + LOAN_RATE)。讀的時候才把經過的天數一次算上去（不用計時器）。
+---------------------------------------------------------------------------
+local LOAN_RATE = 0.01
+local LOAN_STEPS = {50000, 100000, 200000, 300000}
+local REPAY_STEPS = {50000, 100000}
+local LOAN, LOAN_DAY = "loan:", "loan_day:"      -- 帳戶 → 欠款、上次算利息的交易日
+
+local function loan_debt(acc)
+	local d = storage:get_float(LOAN .. acc)
+	if d <= 0 then return 0 end
+	local today, last = rockmech.market_day(), storage:get_int(LOAN_DAY .. acc)
+	if today > last then
+		d = d * (1 + LOAN_RATE) ^ (today - last)
+		storage:set_float(LOAN .. acc, d)
+		storage:set_int(LOAN_DAY .. acc, today)
+	end
+	return d
+end
+local function set_debt(acc, d)
+	if d < 0.5 then d = 0 end
+	storage:set_float(LOAN .. acc, d)
+	storage:set_int(LOAN_DAY .. acc, rockmech.market_day())
+end
+rockmech.loan_debt = loan_debt      -- 帳戶 → 欠款（老師分頁用）
+
+local function loan_form(out, name, y)
+	local debt = loan_debt(rockmech.account_of(name))
+	if debt > 0 then
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(y, F(S("Loan owed $@1 (interest @2% per trading day)", ("%.0f"):format(debt), LOAN_RATE * 100)))
+		for i, v in ipairs(REPAY_STEPS) do
+			out[#out + 1] = ("button[%g,%g;2.4,0.7;repay_%d;%s]"):format(0.5 + (i - 1) * 2.5, y + 0.4, i, F(S("Repay $@1", v)))
+		end
+		out[#out + 1] = ("button[5.5,%g;2.4,0.7;repay_all;%s]"):format(y + 0.4, F(S("Repay all")))
+	else
+		out[#out + 1] = ("label[0.5,%g;%s]"):format(y, F(S("Loan (interest @1% per trading day; repay it before borrowing again)", LOAN_RATE * 100)))
+		for i, v in ipairs(LOAN_STEPS) do
+			out[#out + 1] = ("button[%g,%g;2.4,0.7;loan_%d;%s]"):format(0.5 + (i - 1) * 2.5, y + 0.4, i, F(("$%d"):format(v)))
+		end
+	end
+end
+
+local function loan_fields(name, fields)
+	local acc = rockmech.account_of(name)
+	local debt = loan_debt(acc)
+	for i, v in ipairs(LOAN_STEPS) do
+		if fields["loan_" .. i] then
+			if debt > 0 then
+				rockmech.notify(name, S("[Analyst] Repay the loan first"))
+			else
+				set_debt(acc, v)
+				rockmech.add_money(name, v)
+				rockmech.notify(name, S("[Analyst] Borrowed $@1", v))
+			end
+			return true
+		end
+	end
+	local pay
+	for i, v in ipairs(REPAY_STEPS) do
+		if fields["repay_" .. i] then pay = math.min(v, debt) end
+	end
+	if fields.repay_all then pay = debt end
+	if not pay then return false end
+	if pay <= 0 then return true end
+	pay = math.ceil(pay - 1e-6)
+	if rockmech.money(name) < pay then
+		rockmech.notify(name, S("[Analyst] Not enough money: you need $@1", pay))
+		return true
+	end
+	rockmech.add_money(name, -pay)
+	set_debt(acc, debt - pay)
+	rockmech.notify(name, debt - pay < 0.5 and S("[Analyst] Loan repaid") or S("[Analyst] Repaid $@1", pay))
+	return true
+end
+
 local function form(name)
 	local acc = rockmech.account_of(name)
 	local paid = storage:get_int(PAID .. acc) == rockmech.market_day() + 1     -- 存 day + 1（0 = 沒付過）
-	local out = {"formspec_version[6]size[11,8.6]", ("label[0.5,0.6;%s]"):format(F(S("Economic Analyst")))}
+	local out = {"formspec_version[6]size[11,10]", ("label[0.5,0.6;%s]"):format(F(S("Economic Analyst")))}
+	loan_form(out, name, 1.2)
 	if paid then
-		local y = 1.3
+		local y = 2.7
 		for _, l in ipairs(report(name)) do
 			out[#out + 1] = ("label[0.5,%g;%s]"):format(y, F(l))
 			y = y + 0.42
 		end
 	else
-		out[#out + 1] = ("label[0.5,1.4;%s]"):format(F(S("I estimate today's cut-off grade and where prices are heading over the next 5 days")))
-		out[#out + 1] = ("label[0.5,1.9;%s]"):format(F(S("Want to save money? Work it out yourself from the crusher statement")))
-		out[#out + 1] = ("button[0.5,2.6;4,0.8;buy;%s]"):format(F(S("Today's report $@1", REPORT_COST)))
+		out[#out + 1] = ("label[0.5,2.8;%s]"):format(F(S("I estimate today's cut-off grade and where prices are heading over the next 5 days")))
+		out[#out + 1] = ("label[0.5,3.3;%s]"):format(F(S("Want to save money? Work it out yourself from the crusher statement")))
+		out[#out + 1] = ("button[0.5,4.0;4,0.8;buy;%s]"):format(F(S("Today's report $@1", REPORT_COST)))
 	end
 	return table.concat(out)
 end
@@ -347,6 +424,10 @@ end
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= FORM then return end
 	local name = player:get_player_name()
+	if loan_fields(name, fields) then
+		core.show_formspec(name, FORM, form(name))
+		return true
+	end
 	if fields.buy then
 		local acc = rockmech.account_of(name)
 		local day1 = rockmech.market_day() + 1
