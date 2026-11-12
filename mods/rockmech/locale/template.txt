@@ -675,9 +675,9 @@ Old Miner=
 Ammonium nitrate @1 kg, diesel @2 L=
 1 kg ammonium nitrate=
 1 L diesel=
-Mixed ANFO @1 kg=
+Leftover @1 kg=
 Pour=
-Take out ANFO=
+Mix=
 Dump=
 
 ### monitor.lua

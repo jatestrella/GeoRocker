@@ -675,9 +675,9 @@ Old Miner=老礦工
 Ammonium nitrate @1 kg, diesel @2 L=硝酸銨 @1 kg、柴油 @2 L
 1 kg ammonium nitrate=1公斤硝酸銨
 1 L diesel=1L柴油
-Mixed ANFO @1 kg=拌好的 ANFO @1 kg
+Leftover @1 kg=槽裡餘料 @1 kg
 Pour=倒入
-Take out ANFO=取出 ANFO
+Mix=翻拌
 Dump=倒掉
 
 ### monitor.lua
