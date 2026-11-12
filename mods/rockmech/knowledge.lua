@@ -1149,7 +1149,9 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 		end
 		if changed then sfinv.set_player_inventory_formspec(player); return true end
 	end)
-	-- 回傳一段 formspec（sfinv 舊座標，y 0–4.9；物品欄從 5.2 開始）
+	-- 回傳一段 formspec（sfinv 舊座標）和用到的高度 y；頁面寬 PROFILE_W，物品欄接在下面（nocraft.lua）
+	local PROFILE_W, PROFILE_COL = 10.2, 3.5      -- 頁寬、「來源／怎麼學」那一欄的 x（能力名稱最長約 8 個中文字）
+	rockmech.PROFILE_W = PROFILE_W
 	function rockmech.profile_fs(player)
 			local name = player:get_player_name()
 			local team = rockmech.team_of and rockmech.team_of(name)
@@ -1182,18 +1184,21 @@ if core.get_modpath("sfinv") and sfinv and cfg.career then
 					fs[#fs + 1] = ("label[0,%g;%s]"):format(y, F("○ " .. S(a.label)))
 				end
 				if has then
-					fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F(S("Source: @1", src)))
+					fs[#fs + 1] = ("label[%g,%g;%s]"):format(PROFILE_COL, y, F(S("Source: @1", src)))
 				else
 					local cd = cooldown_left(player, a.key)
 					local how = HOW[a.key] or ""
-				fs[#fs + 1] = ("label[2.4,%g;%s]"):format(y, F(cd > 0 and S("@1 (retake in @2)", how, mmss(cd)) or how))
+					fs[#fs + 1] = ("label[%g,%g;%s]"):format(PROFILE_COL, y, F(cd > 0 and S("@1 (retake in @2)", how, mmss(cd)) or how))
 				end
 				y = y + 0.45
 			end
-			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.1, F(S("Grade assessment: grades   Rock mass classification: lithology, GSI, overburden thickness   Rock mechanics: stress, factor of safety, cracks")))
-			fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.5, F(S("Untick an ability to hide what it shows automatically (instruments still work)")))
+			-- 說明文字用 textarea（唯讀）：照頁面寬度自動換行，字型、語言不同也不會超出框
+			fs[#fs + 1] = ("textarea[0.3,%g;%g,1.2;;;%s]"):format(y + 0.1, PROFILE_W - 0.2,
+				F(S("Grade assessment: grades   Rock mass classification: lithology, GSI, overburden thickness   Rock mechanics: stress, factor of safety, cracks")
+				.. "\n" .. S("Untick an ability to hide what it shows automatically (instruments still work)")))
+			y = y + 1.2
 			local m = rockmech.nick_message and rockmech.nick_message(name)
-			if m then fs[#fs + 1] = ("label[0,%g;%s]"):format(y + 0.9, F(m)) end
-			return table.concat(fs)
+			if m then fs[#fs + 1] = ("label[0,%g;%s]"):format(y, F(m)); y = y + 0.4 end
+			return table.concat(fs), y
 	end
 end

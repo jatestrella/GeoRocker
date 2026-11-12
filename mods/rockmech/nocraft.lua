@@ -16,9 +16,16 @@ if core.get_modpath("sfinv") and sfinv and sfinv.pages["sfinv:crafting"] then
 	sfinv.override_page("sfinv:crafting", {
 		title = S("Backpack"),
 		get = function(self, player, context)
-			-- 物品欄上面放個人資料（knowledge.lua；經營模式才有）
-			local top = rockmech.profile_fs and rockmech.profile_fs(player) or ""
-			return sfinv.make_formspec(player, context, top, true)
+			-- 物品欄上面放個人資料（knowledge.lua；經營模式才有）。頁面變寬、物品欄置中、接在個人資料下面（高度跟著內容走）
+			if not rockmech.profile_fs then return sfinv.make_formspec(player, context, "", true) end
+			local top, h = rockmech.profile_fs(player)
+			local W = rockmech.PROFILE_W or 8
+			local x0, y0 = (W - 8) / 2, math.max(5.2, h + 0.4)
+			local inv = {}
+			for i = 0, 7 do inv[#inv + 1] = ("image[%g,%g;1,1;gui_hb_bg.png]"):format(x0 + i, y0) end
+			inv[#inv + 1] = ("list[current_player;main;%g,%g;8,1;]list[current_player;main;%g,%g;8,3;8]")
+				:format(x0, y0, x0, y0 + 1.15)
+			return sfinv.make_formspec(player, context, top .. table.concat(inv), false, ("size[%g,%g]"):format(W, y0 + 3.9))
 		end,
 	})
 end
