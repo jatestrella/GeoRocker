@@ -14,8 +14,8 @@
 --   gen_ores     要哪幾種礦，逗號分開（coal、marble；舊的 gen_ore 只寫一種）。煤礦（預設）或大理岩（花蓮大南澳片岩，大理岩夾在黑色片岩裡）。
 --                兩種以上：每種礦一個地質區，第一種在出生點那一區，隔著直立斷層（斷層帶是斷層角礫岩）往外排，
 --                各區自己的柱狀圖、傾角、傾向（rockmech_strata_2…、rockmech_faults，見 config.lua）；節理組全圖共用（第 1 組照第 1 區）。
---                大理岩：single = 片岩裡一層厚大理岩（15–40 m），inter = 片岩、大理岩互層；傾角 20–70°（比煤陡）；
---                第 1 組節理是葉理（間距密、面平滑、有綠泥石雲母，Jr 1、Ja 2–4），世界設定 rockmech_ores = marble
+--                大理岩：single = 片岩裡一層厚大理岩（15–40 m），inter = 片岩、大理岩互層；傾角 20–45°；
+--                第 1 組節理是葉理（間距密、面平滑、有綠泥石雲母，Jr 1.5–2、Ja 2），世界設定 rockmech_ores = marble
 -- 其他：節理第 1 組是層面（地層的平均位態），第 2、3 組陡傾、走向大致互相垂直，Jr、Ja 取 Q 法表格值；
 -- 各岩性的 GSI；現地應力 K_Hmax、K_hmin、σHmax 方位。
 -- 地質不直接顯示（要自己鑽岩心、量節理）；老師用 /rockmech_geology 查（單機版看不到，直接看世界資料夾的 rockmech.conf）。
@@ -79,7 +79,8 @@ M.RECIPES = {
 		end,
 	},
 	marble = {
-		dip = function(f) return round(20 + 50 * f) end,
+		-- 傾角 20–45°：葉理再陡，坡面一露出就沿葉理一層層往後滑（連鎖崩塌、卡頓）
+		dip = function(f) return round(20 + 25 * f) end,
 		host_only = true,      -- 圍岩只有片岩
 		column = function(r, mode, nseam, add, sum, range, count)
 			local main_top, main_i
@@ -107,7 +108,8 @@ M.RECIPES = {
 			return main_top, main_i
 		end,
 		joint1 = function(r, dip, dipdir, round, range, pick)
-			return ("%d,%d,%g,0.9,1,%d"):format(dip, dipdir, round(range(r, 1, 2), 0.5), pick(r, {2, 3, 4}))
+			-- 葉理：平滑～粗糙起伏、輕微蝕變（Jr 1.5–2、Ja 2 → φj 37–45°），間距 2–4 m（跟水泥礦一樣）
+			return ("%d,%d,%g,0.9,%g,2"):format(dip, dipdir, round(range(r, 2, 4), 0.5), pick(r, {1.5, 2}))
 		end,
 		-- 層控節理：大理岩裡疏、片岩裡密
 		p32 = function(r, round, range)
