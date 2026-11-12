@@ -392,7 +392,9 @@ No charges within @1 m=
 Rock drill@nHold left-click on a rock face=
 Rock drill: hold left-click on a rock face to drill a hole=
 Emulsion explosive@nRight-click a drill hole=
-ANFO@nRight-click a downward hole=
+1 kg ANFO@nRight-click a downward hole=
+1 kg ANFO=
+ANFO @1 / @2 kg=
 ANFO=
 Blasting machine@nRight-click to fire=
 
@@ -675,10 +677,8 @@ Old Miner=
 Ammonium nitrate @1 kg, diesel @2 L=
 1 kg ammonium nitrate=
 1 L diesel=
-Leftover @1 kg=
 Pour=
 Mix=
-Dump=
 Ammonium nitrate : diesel = @1 : @2=
 
 ### monitor.lua
@@ -1484,7 +1484,6 @@ Deleted @1 (vehicles already using it keep running)=
 
 ### vehicle_bulktruck.lua
 Emulsion explosive (sticks)=
-ANFO (bags)=
 Right-click to get in; Space loads, E charges the holes=
 Ammonium nitrate @1 kg  Diesel @2 L  Emulsion @3=
 Filling holes @1 / @2=

@@ -65,6 +65,16 @@ local function hole_len(pos)
 	local d = core.get_meta(pos):get_float("depth")
 	return d > 0 and d or bcfg.hole_depth
 end
+-- ANFO 用量：裝藥柱 = 孔深 − 孔口 0.5 m − 填塞，每公尺 ANFO_KG_M kg（airq.lua 同一個數）
+local ANFO_KG_M = 7 / 1.5
+local function anfo_col(pos) return math.max(1.5, hole_len(pos) - 0.5 - bcfg.anfo_stemming) end
+local function anfo_need(pos) return math.ceil(anfo_col(pos) * ANFO_KG_M) end
+-- 孔裡已經倒了多少 kg（舊存檔沒有記 = 裝滿）
+local function anfo_have(pos)
+	local kg = core.get_meta(pos):get_float("kg")
+	return kg > 0 and kg or anfo_need(pos)
+end
+rockmech.anfo_need = anfo_need
 
 -- 方塊外觀：貼壁方塊（paramtype2 wallmounted）的 fixed 方塊以「貼在地上」的方向定義，引擎依 param2 轉到各面。
 -- 上面（+Y）的貼圖就是朝外那一面；側面貼圖的最下一列對應貼著岩面的那層
@@ -91,9 +101,11 @@ local function set_info(pos)
 	local meta = core.get_meta(pos)
 	local kind = kind_of(node.name)
 	if kind == ANFO_PRIMED then
-		meta:set_string("infotext", S("ANFO column charge (hole depth @1 m) + @2 primer cartridge(s)\nLight it with flint and steel, or use the blasting machine", ("%.0f"):format(hole_len(pos)), tostring(n)))
+		meta:set_string("infotext", S("ANFO column charge (hole depth @1 m) + @2 primer cartridge(s)\nLight it with flint and steel, or use the blasting machine", ("%.0f"):format(hole_len(pos)), tostring(n))
+			.. "\n" .. S("ANFO @1 / @2 kg", ("%.0f"):format(anfo_have(pos)), tostring(anfo_need(pos))))
 	elseif kind == ANFO_HOLE then
-		meta:set_string("infotext", S("ANFO column charge (hole depth @1 m)\nNo primer yet: add one emulsion cartridge, otherwise it will misfire", ("%.0f"):format(hole_len(pos))))
+		meta:set_string("infotext", S("ANFO column charge (hole depth @1 m)\nNo primer yet: add one emulsion cartridge, otherwise it will misfire", ("%.0f"):format(hole_len(pos)))
+			.. "\n" .. S("ANFO @1 / @2 kg", ("%.0f"):format(anfo_have(pos)), tostring(anfo_need(pos))))
 	elseif kind == CHARGED then
 		meta:set_string("infotext", S("Charged hole: @1 emulsion cartridge(s) (max @2)\nLight it with flint and steel, or use the blasting machine", tostring(n), tostring(bcfg.max_cartridges)))
 	elseif kind == SURFACE then
@@ -159,14 +171,17 @@ local function detonate(pos)
 		-- 配比（拌和槽拌的 ANFO，meta q = 相對能量，裝藥車混的是 1）：半徑跟能量的立方根走
 		local q = meta:get_float("q")
 		if q <= 0 then q = 1 end
-		local R = bcfg.anfo_radius * bm * q ^ (1 / 3)
+		-- 倒了多少：裝藥柱從孔底往上 L m；不到一段（1.5 m）的話半徑照藥量的立方根縮小
+		local kg = anfo_have(pos)
+		local L = math.min(anfo_col(pos), kg / ANFO_KG_M)
+		local R = bcfg.anfo_radius * bm * q ^ (1 / 3) * math.min(1, L / 1.5) ^ (1 / 3)
 		local bottom = vector.add(pos, vector.multiply(dir, depth))
 		local B = burden(bottom, dir, R, depth)
 		local f = bcfg.confine_factor * (B and (1 + bcfg.free_face_k * (1 - B / R)) or 1)
 		core.log("action", ("[rockmech] ANFO 柱狀裝藥 %s 孔深 %.0f m：抵抗線 B = %s，每段半徑 %.1f × %.2f"):format(
 			core.pos_to_string(pos), depth, B and ("%.1f m"):format(B) or "（沒有側向自由面）", R, f))
 		core.remove_node(pos)
-		local t = 0.5 + bcfg.anfo_stemming + 0.75
+		local t = depth - L + 0.75
 		local last
 		local segs = 0
 		repeat
@@ -176,7 +191,7 @@ local function detonate(pos)
 			segs = segs + 1
 		until t > depth + 0.5
 		-- 炮煙（airq.lua）：每段 1.5 m 的 ANFO
-		if rockmech.airq_blast then rockmech.airq_blast(pos, segs * 1.5 * rockmech.airq_kg.anfo_per_m) end
+		if rockmech.airq_blast then rockmech.airq_blast(pos, kg) end
 		R = R * f + depth
 		local center = last
 		local r = math.ceil(R) + 1
@@ -526,32 +541,54 @@ function rockmech.load_charge(under, above, player)
 	return true
 end
 
--- 倒 ANFO：只能倒進往下的鑽孔（靠重力）；一袋裝滿整根孔。q：相對能量（拌和槽的配比，mixtrough.lua；沒給 = 1）。回傳 true 表示用掉一袋
-function rockmech.pour_anfo(pos, player, q)
-	if forbidden(player, pos) then return false end
+-- 倒 ANFO：只能倒進往下的鑽孔（靠重力）；kg 公斤（nil = 倒滿），倒到滿為止，可以分幾次倒。
+-- f：柴油重量比例（拌和槽的配比，mixtrough.lua；沒給 = 標準配比），分次倒不同比例的照重量平均，
+-- 孔上記 f 和相對能量 q（rockmech.anfo_power）。回傳倒進去的 kg（沒倒 = nil）
+local F_IDEAL = 0.057
+local function power(f) return rockmech.anfo_power and rockmech.anfo_power(f) or 1 end
+function rockmech.pour_anfo(pos, player, f, kg)
+	f = f or F_IDEAL
+	if forbidden(player, pos) then return nil end
 	local node = core.get_node(pos)
 	local kind = kind_of(node.name)
+	local need = anfo_need(pos)
 	if kind == ANFO_HOLE or kind == ANFO_PRIMED then
-		tell(player, S("This hole is already full of ANFO"))
-		return false
+		local meta = core.get_meta(pos)
+		local have = anfo_have(pos)
+		local add = math.floor(math.min(kg or need, need - have))
+		if add <= 0 then
+			tell(player, S("This hole is already full of ANFO"))
+			return nil
+		end
+		local f0 = meta:get_string("f") ~= "" and meta:get_float("f") or F_IDEAL
+		local fm = (f0 * have + f * add) / (have + add)
+		meta:set_float("f", fm)
+		meta:set_float("q", power(fm))
+		meta:set_float("kg", have + add)
+		set_info(pos)
+		return add
 	end
 	if kind ~= HOLE and kind ~= CHARGED then
 		tell(player, S("ANFO goes into drill holes (downward holes drilled by the surface drill rig)"))
-		return false
+		return nil
 	end
 	if core.wallmounted_to_dir(node.param2).y >= 0 then
 		tell(player, S("ANFO can only be poured into downward drill holes"))
-		return false
+		return nil
 	end
+	local add = math.floor(math.min(kg or need, need))
+	if add <= 0 then return nil end
 	local meta = core.get_meta(pos)
 	mark(pos, player)
 	-- 空孔 → 只有 ANFO；先放了乳膠炸藥的孔 → 那條就是起爆藥包
 	become(pos, node, kind == HOLE and ANFO_HOLE or ANFO_PRIMED)
 	if kind == HOLE then meta:set_int("n", 0) end
-	meta:set_float("q", q or 1)
+	meta:set_float("f", f)
+	meta:set_float("q", power(f))
+	meta:set_float("kg", add)
 	set_info(pos)
 	if meta:get_int("n") < 1 then tell(player, S("No primer yet: add one emulsion cartridge, otherwise it will misfire")) end
-	return true
+	return add
 end
 
 rockmech.hole_kind = kind_of        -- 噴過凝土的孔 → 同狀態的一般孔
@@ -627,16 +664,16 @@ core.register_craftitem(EMULSION, {
 	end,
 })
 core.register_craftitem(ANFO, {
-	description = S("ANFO\nRight-click a downward hole"),
-	short_description = S("ANFO"),
+	description = S("1 kg ANFO\nRight-click a downward hole"),
+	short_description = S("1 kg ANFO"),
+	stack_max = 1000,
 	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#e8e4d8^[fill:10x2:3,3:#c8c0a8^[fill:6x3:5,8:#d03020",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
-		local q = tonumber(itemstack:get_meta():get_string("q"))
-		if rockmech.pour_anfo(pointed.under, placer, q)
-			and not core.is_creative_enabled(placer and placer:get_player_name() or "") then
-			itemstack:take_item()
-		end
+		local f = tonumber(itemstack:get_meta():get_string("f"))
+		local creative = core.is_creative_enabled(placer and placer:get_player_name() or "")
+		local got = rockmech.pour_anfo(pointed.under, placer, f, not creative and itemstack:get_count() or nil)
+		if got and not creative then itemstack:take_item(got) end
 		return itemstack
 	end,
 })

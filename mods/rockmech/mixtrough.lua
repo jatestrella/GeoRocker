@@ -3,18 +3,16 @@
 --   物品：1 公斤硝酸銨、1 L 柴油（數量就是公斤、公升，學生自己算配比）。
 --   右鍵打開拌和槽，介面像熔爐：左邊硝酸銨格（最多 MAX_KG kg）、柴油格（最多 MAX_L L），
 --   可以像箱子一樣拖放（右鍵一次放一個、分一半都行），也可以打數字按「倒入」；
---   按「翻拌」，翻拌 MIX_TIME 秒：左邊的料和槽裡的餘料拌在一起，
---   一包 BAG_KG kg 的 ANFO 出在右邊的格子（包數 = 總重 ÷ BAG_KG 無條件捨去），不滿一包的餘料照比例留在槽裡，下次一起拌。
---   ANFO 的物品說明寫上重量比（硝酸銨 : 柴油）；右邊格子還有不同比例的 ANFO 時，拌好的全部留成餘料（不同比例不能疊在一起）。「倒掉」：餘料丟掉。
---   配比（柴油佔總重的比例）決定 ANFO 的相對能量（rockmech.anfo_power），存在每包 ANFO 的 meta q，
---   倒進孔裡記在孔上（drilling.lua），爆破半徑乘 q^(1/3)。標準配比 94:6（柴油 5.7 %）能量最大。
+--   按「翻拌」，翻拌 MIX_TIME 秒：左邊的料全部拌成 ANFO（1 個 = 1 kg，總重四捨五入），出在右邊的格子，不留餘料。
+--   右邊格子原本有 ANFO 的話合在一起，柴油比例照重量平均（現實裡兩批拌在一起也是這樣）。
+--   ANFO 的物品說明寫上重量比（硝酸銨 : 柴油）。meta f = 柴油比例、q = 相對能量（rockmech.anfo_power），
+--   倒進孔裡記在孔上（drilling.lua，分次倒的也照重量平均），爆破半徑乘 q^(1/3)。標準配比 94:6（柴油 5.7 %）能量最大。
 --   不寫配比說明：玩家要自己算（25 kg 硝酸銨配約 1.8 L 柴油），wiki 有公式。
 
 local S = rockmech.S
 local F = core.formspec_escape
 local AN, DIESEL, ANFO = "rockmech:ammonium_nitrate", "rockmech:diesel", "rockmech:anfo"
 local TROUGH = "rockmech:mix_trough"
-local BAG_KG = 25           -- 一包 ANFO (kg)
 local FO_KG_L = 0.84        -- 柴油密度 (kg/L)
 local IDEAL = 0.057         -- 能量最大的柴油重量比例（氧平衡為零）
 local MAX_KG, MAX_L = 250, 40
@@ -52,32 +50,43 @@ local WALL = {{-0.5, -0.5, -0.5, 0.5, -0.4, 0.5}, {-0.5, -0.4, -0.5, 0.5, 0.1, -
 local STATES = {[""] = nil, an = "#f2f0ea", wet = "#cfc6ac", mix = "#e9c4c8"}
 local function node_name(state) return state == "" and TROUGH or TROUGH .. "_" .. state end
 local function is_trough(pos) return core.get_node(pos).name:sub(1, #TROUGH) == TROUGH end
-local function num(v) return (("%.1f"):format(v):gsub("%.0$", "")) end
 
 local function get_inv(pos)
 	local inv = core.get_meta(pos):get_inventory()
 	if inv:get_size("out") == 0 then inv:set_size("an", 1); inv:set_size("fo", 1); inv:set_size("out", 1) end      -- 舊版放下的槽
 	return inv
 end
--- 槽裡：左邊格子（kg、L）、餘料（mix_an kg、mix_fo L）、右邊的 ANFO 包數
+-- 槽裡：左邊格子（kg、L）、右邊的 ANFO（kg）
 local function contents(pos)
-	local meta = core.get_meta(pos)
 	local inv = get_inv(pos)
-	return inv:get_stack("an", 1):get_count(), inv:get_stack("fo", 1):get_count(), meta:get_float("mix_an"), meta:get_float("mix_fo"),
-		inv:get_stack("out", 1):get_count()
+	return inv:get_stack("an", 1):get_count(), inv:get_stack("fo", 1):get_count(), inv:get_stack("out", 1):get_count()
 end
+
+-- ANFO 物品：n kg、柴油重量比例 f；meta f（比例）、q（威力）、description（寫上重量比）
+local function anfo_f(stack)
+	local f = tonumber(stack:get_meta():get_string("f"))
+	return f or IDEAL
+end
+local function anfo_stack(n, f)
+	local stack = ItemStack(ANFO .. " " .. n)
+	local m = stack:get_meta()
+	m:set_string("f", ("%.4f"):format(f))
+	m:set_string("q", ("%.3f"):format(rockmech.anfo_power(f)))
+	m:set_string("description", S("1 kg ANFO") .. "\n" .. S("Ammonium nitrate : diesel = @1 : @2", ("%.1f"):format(100 - 100 * f), ("%.1f"):format(100 * f)))
+	return stack
+end
+rockmech.anfo_f = anfo_f
 
 local function refresh(pos)
 	local meta = core.get_meta(pos)
-	local an, fo, man, mfo, out = contents(pos)
-	if man + mfo * FO_KG_L < 0.05 then man, mfo = 0, 0; meta:set_float("mix_an", 0); meta:set_float("mix_fo", 0) end
-	local state = an + fo > 0 and (fo > 0 and "wet" or "an") or (man + mfo + out > 0 and "mix" or "")
+	local an, fo, out = contents(pos)
+	local state = an + fo > 0 and (fo > 0 and "wet" or "an") or (out > 0 and "mix" or "")
 	local node = core.get_node(pos)
 	local want = node_name(state)
 	if node.name ~= want then core.swap_node(pos, {name = want, param2 = node.param2}) end
 	local t = {}
 	if an + fo > 0 then t[#t + 1] = S("Ammonium nitrate @1 kg, diesel @2 L", an, fo) end
-	if out > 0 then t[#t + 1] = "ANFO " .. out end
+	if out > 0 then t[#t + 1] = "ANFO " .. out .. " kg" end
 	meta:set_string("infotext", table.concat(t, "\n"))
 end
 
@@ -87,22 +96,16 @@ local ARROW = "gui_furnace_arrow_bg.png^[transformR270"
 local ARROW_ON = "gui_furnace_arrow_fg.png^[transformR270"
 local function formspec(pos)
 	local spos = ("nodemeta:%d,%d,%d"):format(pos.x, pos.y, pos.z)
-	local _, _, man, mfo = contents(pos)
-	local rest = man + mfo * FO_KG_L
 	local row = function(y, key, unit, cap)
 		return ("list[%s;%s;0.4,%.2f;1,1;]field[1.65,%.2f;1.5,0.8;n_%s;;]label[3.25,%.2f;%s]button[3.85,%.2f;1.5,0.8;pour_%s;%s]tooltip[%s;≤ %d %s]")
 			:format(spos, key, y, y + 0.1, key, y + 0.5, unit, y + 0.1, key, F(S("Pour")), key, cap, unit)
 	end
-	local fs = {"formspec_version[6]size[10.75,9.6]",
-		row(0.5, "an", "kg", MAX_KG), row(1.8, "fo", "L", MAX_L),
-		("image[5.9,1.15;1,1;%s]button[5.6,2.3;1.6,0.8;mix;%s]"):format(busy(pos) and ARROW_ON or ARROW, F(S("Mix"))),
-		("list[%s;out;7.6,1.15;1,1;]"):format(spos)}
-	if rest > 0 then
-		fs[#fs + 1] = ("label[0.4,3.25;%s]button[3.85,2.9;1.5,0.7;dump;%s]"):format(F(S("Leftover @1 kg", num(rest))), F(S("Dump")))
-	end
-	fs[#fs + 1] = "list[current_player;main;0.4,4.0;8,4;]"
-	fs[#fs + 1] = ("listring[%s;out]listring[current_player;main]listring[%s;an]listring[current_player;main]"):format(spos, spos)
-	return table.concat(fs)
+	return "formspec_version[6]size[10.75,8.9]"
+		.. row(0.5, "an", "kg", MAX_KG) .. row(1.8, "fo", "L", MAX_L)
+		.. ("image[5.9,1.15;1,1;%s]button[5.6,2.3;1.6,0.8;mix;%s]"):format(busy(pos) and ARROW_ON or ARROW, F(S("Mix")))
+		.. ("list[%s;out;7.6,1.15;1,1;]"):format(spos)
+		.. "list[current_player;main;0.4,3.4;8,4;]"
+		.. ("listring[%s;out]listring[current_player;main]listring[%s;an]listring[current_player;main]"):format(spos, spos)
 end
 local open = {}      -- 玩家 → 打開的槽
 local function show(pos, name)
@@ -115,48 +118,36 @@ local function reshow(pos)      -- 開著這個槽的人重畫介面
 	end
 end
 
--- 翻拌：左邊的料＋餘料 → 右邊出整包 ANFO，不滿一包的留著
+-- 翻拌：左邊的料全部拌成 ANFO（總重四捨五入到 kg），跟右邊格子原有的 ANFO 合在一起，比例照重量平均
 local function mix_done(pos, name)
 	if not is_trough(pos) then return end
-	local meta = core.get_meta(pos)
 	local inv = get_inv(pos)
-	local an = meta:get_float("mix_an") + inv:get_stack("an", 1):get_count()
-	local fo = meta:get_float("mix_fo") + inv:get_stack("fo", 1):get_count()
+	local an, fo = inv:get_stack("an", 1):get_count(), inv:get_stack("fo", 1):get_count()
 	inv:set_stack("an", 1, ""); inv:set_stack("fo", 1, "")
-	local total = an + fo * FO_KG_L
-	local bags = math.floor(total / BAG_KG + 1e-6)
-	local f = fuel_frac(an, fo)
-	local q = rockmech.anfo_power(f)
-	local qs = ("%.3f"):format(q)
-	-- 物品說明寫上重量比（同一比例的才疊在一起）
-	local desc = S("ANFO") .. "\n" .. S("Ammonium nitrate : diesel = @1 : @2", ("%.1f"):format(100 - 100 * f), ("%.1f"):format(100 * f))
-	local out = inv:get_stack("out", 1)
-	if bags > 0 and (out:is_empty() or out:get_meta():get_string("description") == desc) then
-		local stack = ItemStack(ANFO .. " " .. (out:get_count() + bags))
-		stack:get_meta():set_string("q", qs)
-		stack:get_meta():set_string("description", desc)
-		inv:set_stack("out", 1, stack)
-		core.log("action", ("[rockmech] %s 在拌和槽拌出 ANFO %d 包（硝酸銨 %.1f kg、柴油 %.1f L，比例 %.1f %%，能量 %.2f）")
-			:format(name or "?", bags, an, fo, 100 * fuel_frac(an, fo), q))
-		local keep = 1 - bags * BAG_KG / total
-		an, fo = an * keep, fo * keep
+	local n = math.floor(an + fo * FO_KG_L + 0.5)
+	if n > 0 then
+		local f = fuel_frac(an, fo)
+		local out = inv:get_stack("out", 1)
+		local n0 = out:get_count()
+		local fm = (anfo_f(out) * n0 + f * n) / (n0 + n)
+		inv:set_stack("out", 1, anfo_stack(n0 + n, fm))
+		core.log("action", ("[rockmech] %s 在拌和槽拌出 ANFO %d kg（硝酸銨 %d kg、柴油 %d L，比例 %.1f %%，能量 %.2f）；槽裡 ANFO 共 %d kg，比例 %.1f %%")
+			:format(name or "?", n, an, fo, 100 * f, rockmech.anfo_power(f), n0 + n, 100 * fm))
 	end
-	meta:set_float("mix_an", an); meta:set_float("mix_fo", fo)
 	refresh(pos)
 	reshow(pos)
 end
 
--- 開始翻拌：要有新加的料、有硝酸銨（右邊格子有不同配比的 ANFO 時，拌完全部留成餘料，見 mix_done）
+-- 開始翻拌：左邊要有硝酸銨；右邊格子放得下
 local function mix(pos, name)
 	if busy(pos) then return false end
-	local an, fo, man, mfo = contents(pos)
-	if an + fo <= 0 or an + man <= 0 then return false end
-	local fo_now = fo
+	local an, fo, out = contents(pos)
+	if an <= 0 or out + an + fo > 1000 then return false end
 	core.get_meta(pos):set_float("until", core.get_gametime() + MIX_TIME)
 	core.add_particlespawner({amount = 40, time = MIX_TIME, minpos = vector.offset(pos, -0.35, -0.1, -0.35), maxpos = vector.offset(pos, 0.35, 0.05, 0.35),
 		minvel = {x = -0.6, y = 1.2, z = -0.6}, maxvel = {x = 0.6, y = 2.2, z = 0.6}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
 		minexptime = 0.3, maxexptime = 0.6, minsize = 0.6, maxsize = 1.2, collisiondetection = true,
-		texture = "[fill:2x2:" .. ((fo_now + mfo) > 0 and STATES.wet or STATES.an)})
+		texture = "[fill:2x2:" .. (fo > 0 and STATES.wet or STATES.an)})
 	for k = 0, MIX_TIME - 1 do
 		core.after(k, function() core.sound_play("default_dig_crumbly", {pos = pos, gain = 0.8, max_hear_distance = 16}, true) end)
 	end
@@ -195,11 +186,6 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		end
 	end
 	if fields.mix then mix(pos, name) end
-	if fields.dump then
-		local meta = core.get_meta(pos)
-		meta:set_float("mix_an", 0); meta:set_float("mix_fo", 0); changed = true
-		core.sound_play("default_dig_crumbly", {pos = pos, gain = 0.6, max_hear_distance = 12}, true)
-	end
 	if changed then
 		refresh(pos)
 		if not fields.quit then show(pos, name) end
@@ -251,8 +237,8 @@ for state, color in pairs({[""] = false, an = STATES.an, wet = STATES.wet, mix =
 		on_metadata_inventory_take = slot_changed,
 		-- 裡面還有東西不能拆
 		can_dig = function(pos)
-			local an, fo, man, mfo, out = contents(pos)
-			return an + fo + man + mfo + out <= 0
+			local an, fo, out = contents(pos)
+			return an + fo + out <= 0
 		end,
 	})
 end

@@ -392,7 +392,9 @@ No charges within @1 m=@1 m 內沒有裝藥
 Rock drill@nHold left-click on a rock face=鑿岩機@n對岩面按住左鍵
 Rock drill: hold left-click on a rock face to drill a hole=鑿岩機：對岩面按住左鍵鑽孔
 Emulsion explosive@nRight-click a drill hole=乳膠炸藥@n對鑽孔右鍵
-ANFO@nRight-click a downward hole=ANFO@n對往下的鑽孔右鍵
+1 kg ANFO@nRight-click a downward hole=1公斤 ANFO@n對往下的鑽孔右鍵
+1 kg ANFO=1公斤 ANFO
+ANFO @1 / @2 kg=ANFO @1 / @2 kg
 ANFO=ANFO（銨油炸藥）
 Blasting machine@nRight-click to fire=起爆器@n右鍵起爆
 
@@ -675,10 +677,8 @@ Old Miner=老礦工
 Ammonium nitrate @1 kg, diesel @2 L=硝酸銨 @1 kg、柴油 @2 L
 1 kg ammonium nitrate=1公斤硝酸銨
 1 L diesel=1L柴油
-Leftover @1 kg=槽裡餘料 @1 kg
 Pour=倒入
 Mix=翻拌
-Dump=倒掉
 Ammonium nitrate : diesel = @1 : @2=硝酸銨 : 柴油 = @1 : @2
 
 ### monitor.lua
@@ -1484,7 +1484,6 @@ Deleted @1 (vehicles already using it keep running)=已刪除@1（已經套用�
 
 ### vehicle_bulktruck.lua
 Emulsion explosive (sticks)=乳膠炸藥（條）
-ANFO (bags)=ANFO（袋）
 Right-click to get in; Space loads, E charges the holes=右鍵上車；空白鍵裝料、E 灌孔
 Ammonium nitrate @1 kg  Diesel @2 L  Emulsion @3=硝酸銨 @1 kg　柴油 @2 L　乳膠炸藥 @3
 Filling holes @1 / @2=灌孔中 @1 / @2
