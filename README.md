@@ -1,5 +1,7 @@
 <p align="center"><img src="menu/header.png" alt="GeoRocker — Rock Mechanics · Mining · Geotechnics"></p>
 
+<p align="center"><img src="docs/cover.jpg" alt="水泥礦地圖：台階式大理岩採場與機具"></p>
+
 GeoRocker 是一款岩石力學、隧道與大地工程的採礦模擬遊戲，以 [Luanti](https://www.luanti.org/) 引擎製作。
 玩家要自己探勘地質、鑽孔爆破、開挖支撐、運輸賣礦。岩體會依應力和節理崩塌，炸藥配比不對威力就打折。
 
