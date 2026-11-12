@@ -667,7 +667,7 @@ core.register_craftitem(ANFO, {
 	description = S("1 kg ANFO\nRight-click a downward hole"),
 	short_description = S("1 kg ANFO"),
 	stack_max = 1000,
-	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#e8e4d8^[fill:10x2:3,3:#c8c0a8^[fill:6x3:5,8:#d03020",
+	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#a8506c^[fill:10x2:3,3:#804058^[fill:6x3:5,7:#f0d0dc",
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
 		local f = tonumber(itemstack:get_meta():get_string("f"))

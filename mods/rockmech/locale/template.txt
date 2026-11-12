@@ -139,9 +139,6 @@ Heavy haul trailer=
 Bulldozer=
 Mobile mixing truck=
 Bulk ANFO truck=
-ANFO @1 kg  Emulsion @2=
-Out of ANFO (filled @1 holes)=
-The tank is empty: load ANFO and emulsion first=
 Charging unit=
 Core drill rig=
 Aerial work platform=
@@ -363,6 +360,7 @@ the hopper is dug on your side; check the preview frame on the ground first=
 
 ### drilling.lua
 ANFO column charge (hole depth @1 m) + @2 primer cartridge(s)@nLight it with flint and steel, or use the blasting machine=
+ANFO @1 / @2 kg=
 ANFO column charge (hole depth @1 m)@nNo primer yet: add one emulsion cartridge, otherwise it will misfire=
 Charged hole: @1 emulsion cartridge(s) (max @2)@nLight it with flint and steel, or use the blasting machine=
 Surface charge: @1 cartridge(s) (no drill hole, power ×@2)@nLight it with flint and steel, or use the blasting machine=
@@ -398,8 +396,6 @@ Rock drill: hold left-click on a rock face to drill a hole=
 Emulsion explosive@nRight-click a drill hole=
 1 kg ANFO@nRight-click a downward hole=
 1 kg ANFO=
-ANFO @1 / @2 kg=
-ANFO=
 Blasting machine@nRight-click to fire=
 
 ### drone.lua
@@ -678,12 +674,11 @@ Good. Respect the rock and it lets you go home.=
 Old Miner=
 
 ### mixtrough.lua
-Ammonium nitrate @1 kg, diesel @2 L=
 1 kg ammonium nitrate=
 1 L diesel=
-Pour=
+Ammonium nitrate : diesel @= @1 : @2=
+Ammonium nitrate @1 kg, diesel @2 L=
 Mix=
-Ammonium nitrate : diesel = @1 : @2=
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=
@@ -1487,9 +1482,9 @@ Deleted @1 (vehicles already using it keep running)=
 [AHS] @1=
 
 ### vehicle_bulktruck.lua
-Emulsion explosive (sticks)=
 Right-click to get in; Space loads, E charges the holes=
 Ammonium nitrate @1 kg  Diesel @2 L  Emulsion @3=
+ANFO @1 kg  Emulsion @2=
 Filling holes @1 / @2=
 Fill holes (within @1 m of the boom)=
 Space=
@@ -1497,10 +1492,13 @@ Tank=
 Filled @1 holes; @2 holes have no primer (not enough emulsion)=
 Filled @1 holes=
 Out of ammonium nitrate or diesel (filled @1 holes)=
+Out of ANFO (filled @1 holes)=
 No downward holes to fill within @1 m of the boom=
 charge the holes=
 Filling holes=
 The tank is empty: load ammonium nitrate, diesel and emulsion first=
+The tank is empty: load ANFO and emulsion first=
+Emulsion explosive (sticks)=
 
 ### vehicle_cart.lua
 Cart=

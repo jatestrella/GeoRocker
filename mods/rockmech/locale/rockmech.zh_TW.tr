@@ -139,9 +139,6 @@ Heavy haul trailer=重型拖車
 Bulldozer=推土機
 Mobile mixing truck=現場混裝車
 Bulk ANFO truck=散裝 ANFO 車
-ANFO @1 kg  Emulsion @2=ANFO @1 kg　乳膠炸藥 @2
-Out of ANFO (filled @1 holes)=ANFO 用完了（灌了 @1 孔）
-The tank is empty: load ANFO and emulsion first=儲槽是空的：先裝 ANFO 和乳膠炸藥
 Charging unit=裝藥台車
 Core drill rig=岩芯鑽探車
 Aerial work platform=高空作業車
@@ -363,6 +360,7 @@ the hopper is dug on your side; check the preview frame on the ground first=受�
 
 ### drilling.lua
 ANFO column charge (hole depth @1 m) + @2 primer cartridge(s)@nLight it with flint and steel, or use the blasting machine=ANFO 柱狀裝藥（孔深 @1 m）＋ 起爆藥包 @2 條@n打火石點火、或用起爆器
+ANFO @1 / @2 kg=ANFO @1 / @2 kg
 ANFO column charge (hole depth @1 m)@nNo primer yet: add one emulsion cartridge, otherwise it will misfire=ANFO 柱狀裝藥（孔深 @1 m）@n還沒有起爆藥包：放一條乳膠炸藥，否則會拒爆
 Charged hole: @1 emulsion cartridge(s) (max @2)@nLight it with flint and steel, or use the blasting machine=裝藥鑽孔：@1 條乳膠炸藥（最多 @2）@n打火石點火、或用起爆器
 Surface charge: @1 cartridge(s) (no drill hole, power ×@2)@nLight it with flint and steel, or use the blasting machine=貼面裝藥：@1 條（沒有鑽孔，威力 ×@2）@n打火石點火、或用起爆器
@@ -398,8 +396,6 @@ Rock drill: hold left-click on a rock face to drill a hole=鑿岩機：對岩面
 Emulsion explosive@nRight-click a drill hole=乳膠炸藥@n對鑽孔右鍵
 1 kg ANFO@nRight-click a downward hole=1公斤 ANFO@n對往下的鑽孔右鍵
 1 kg ANFO=1公斤 ANFO
-ANFO @1 / @2 kg=ANFO @1 / @2 kg
-ANFO=ANFO（銨油炸藥）
 Blasting machine@nRight-click to fire=起爆器@n右鍵起爆
 
 ### drone.lua
@@ -678,12 +674,11 @@ Good. Respect the rock and it lets you go home.=好。你尊重石頭，石頭�
 Old Miner=老礦工
 
 ### mixtrough.lua
-Ammonium nitrate @1 kg, diesel @2 L=硝酸銨 @1 kg、柴油 @2 L
 1 kg ammonium nitrate=1公斤硝酸銨
 1 L diesel=1L柴油
-Pour=倒入
+Ammonium nitrate : diesel @= @1 : @2=硝酸銨 : 柴油 @= @1 : @2
+Ammonium nitrate @1 kg, diesel @2 L=硝酸銨 @1 kg、柴油 @2 L
 Mix=翻拌
-Ammonium nitrate : diesel = @1 : @2=硝酸銨 : 柴油 = @1 : @2
 
 ### monitor.lua
 Survey prism@nNo readings yet (they appear after nearby excavation and a stress solve)=監測稜鏡@n還沒有讀數（附近開挖、算過應力後才有）
@@ -1487,9 +1482,9 @@ Deleted @1 (vehicles already using it keep running)=已刪除@1（已經套用�
 [AHS] @1=[無人駕駛] @1
 
 ### vehicle_bulktruck.lua
-Emulsion explosive (sticks)=乳膠炸藥（條）
 Right-click to get in; Space loads, E charges the holes=右鍵上車；空白鍵裝料、E 灌孔
 Ammonium nitrate @1 kg  Diesel @2 L  Emulsion @3=硝酸銨 @1 kg　柴油 @2 L　乳膠炸藥 @3
+ANFO @1 kg  Emulsion @2=ANFO @1 kg　乳膠炸藥 @2
 Filling holes @1 / @2=灌孔中 @1 / @2
 Fill holes (within @1 m of the boom)=灌孔（吊臂 @1 m 內）
 Space=空白鍵
@@ -1497,10 +1492,13 @@ Tank=儲槽
 Filled @1 holes; @2 holes have no primer (not enough emulsion)=灌好 @1 孔，@2 孔沒有起爆藥包（乳膠炸藥不夠）
 Filled @1 holes=灌好 @1 孔
 Out of ammonium nitrate or diesel (filled @1 holes)=硝酸銨或柴油用完了（灌了 @1 孔）
+Out of ANFO (filled @1 holes)=ANFO 用完了（灌好 @1 孔）
 No downward holes to fill within @1 m of the boom=吊臂 @1 m 內沒有要灌的往下鑽孔
 charge the holes=裝藥
 Filling holes=裝藥中
 The tank is empty: load ammonium nitrate, diesel and emulsion first=儲槽是空的：先裝硝酸銨、柴油和乳膠炸藥
+The tank is empty: load ANFO and emulsion first=儲槽是空的，先裝 ANFO 和乳膠炸藥
+Emulsion explosive (sticks)=乳膠炸藥（條）
 
 ### vehicle_cart.lua
 Cart=推車
@@ -1841,9 +1839,9 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+ANFO=ANFO（銨油炸藥）
+Pour=倒入
 Tank: ANFO @1 / @2 bags  Emulsion @3 / @4 sticks=儲槽：ANFO @1 / @2 袋　乳膠炸藥 @3 / @4 條
-Out of ANFO (filled @1 holes)=ANFO 用完了（灌好 @1 孔）
-The tank is empty: load ANFO and emulsion first=儲槽是空的，先裝 ANFO 和乳膠炸藥
 Money in your pocket. That's how everyone starts.=錢入袋了。大家都是這樣開始的。
 Now you're working smart.=這樣才對，做工也要用頭腦。
 Oh, you've already figured that out.=喔，這你已經會了。
