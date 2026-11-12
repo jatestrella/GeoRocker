@@ -25,16 +25,11 @@ GeoRocker 是一款岩石力學、隧道與大地工程的採礦模擬遊戲，�
 | 自訂煤礦（單機） | 自己設定地層、煤層、褶皺 |
 | 水泥礦（單機） | 仿花蓮和平礦場山頂採場，1:1 地形 |
 
-## 安裝
+## 下載與安裝
 
-1. 安裝 **Luanti 5.15**（Windows、macOS、Linux、Android 都有官方版本）。
-2. 下載本 repo（綠色 **Code** 按鈕 → Download ZIP），解壓縮。
-3. 把資料夾**改名為 `mining_sim`**，放到 Luanti 的 `games` 資料夾。
-4. 開啟 Luanti，選 GeoRocker 建立新世界。
+**Windows**：到 [Releases](https://github.com/jatestrella/GeoRocker/releases/latest) 下載 `GeoRocker.zip`，解壓縮後點兩下 `開始遊戲.bat`。不用另外安裝任何東西。
 
-上面的地圖選單在 Windows 打包版的開始畫面裡；一般安裝建立的世界使用預設地圖。
-
-連線到別人開的 GeoRocker 伺服器只需要裝 Luanti，遊戲內容會自動下載。
+**macOS、Linux**：先安裝 [Luanti](https://www.luanti.org/) 5.15，再下載本 repo（綠色 **Code** 按鈕 → Download ZIP），把解壓出來的資料夾**改名為 `georocker`**，放進 Luanti 的 `games` 資料夾，開 Luanti 選 GeoRocker 建立新世界。這種裝法沒有 GeoRocker 的開始畫面，建立的世界會用預設地圖。
 
 ## 意見與合作
 

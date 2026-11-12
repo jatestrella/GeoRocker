@@ -13,7 +13,7 @@ Add-Type -AssemblyName System.Drawing
 New-Item -ItemType Directory -Force $Out | Out-Null
 $log = "$Sp\g.log"
 Remove-Item $log -ErrorAction SilentlyContinue
-$srv = Start-Process -FilePath "$Root\bin\luanti.exe" -ArgumentList @("--server","--world","`"$Sp\gw`"","--gameid","mining_sim","--logfile","`"$log`"","--port","30131","--config","`"$Sp\gallery_server.conf`"") -WindowStyle Hidden -PassThru
+$srv = Start-Process -FilePath "$Root\bin\luanti.exe" -ArgumentList @("--server","--world","`"$Sp\gw`"","--gameid","georocker","--logfile","`"$log`"","--port","30131","--config","`"$Sp\gallery_server.conf`"") -WindowStyle Hidden -PassThru
 Start-Sleep -Seconds 8
 $cli = Start-Process -FilePath "$Root\bin\luanti.exe" -ArgumentList @("--address","127.0.0.1","--port","30131","--name","wikibot","--password","wiki","--go","--config","`"$Sp\gallery_client.conf`"") -PassThru
 $seen = 0

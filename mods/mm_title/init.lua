@@ -1,3 +1,3 @@
--- mm_title：標題畫面的圖（背景插圖 mm_title_bg.png、標題字 mm_title_logo.png），由 games/mining_sim/menu/make_menu_art.ps1 產生。
--- 標題畫面本身在開始畫面（games/mining_sim/standalone/mainmenu.lua）：先看到標題和選單，進了世界就直接玩，
+-- mm_title：標題畫面的圖（背景插圖 mm_title_bg.png、標題字 mm_title_logo.png），由 games/georocker/menu/make_menu_art.ps1 產生。
+-- 標題畫面本身在開始畫面（games/georocker/standalone/mainmenu.lua）：先看到標題和選單，進了世界就直接玩，
 -- 遊戲裡不再跳標題畫面。這個 mod 只留著圖（伺服器也會把圖傳給連線的玩家）。

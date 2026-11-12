@@ -12,13 +12,28 @@
 --   設定：音量、全螢幕。
 -- 遊戲裡 Esc →「回主選單」也會回到這裡。
 
-local GAME = "mining_sim"
+local GAME = "georocker"
 local F = core.formspec_escape
 local DS = DIR_DELIM
 
+-- 遊戲資料夾從 mining_sim 改名成 georocker（2026-11）：舊存檔的 world.mt 還寫 gameid = mining_sim，開的時候改成新的
+for _, w in ipairs(core.get_worlds()) do
+	if w.gameid == "mining_sim" then
+		local mt = w.path .. DS .. "world.mt"
+		local f = io.open(mt, "rb")
+		local txt = f and f:read("*a")
+		if f then f:close() end
+		if txt then
+			txt = txt:gsub("gameid%s*=%s*mining_sim", "gameid = " .. GAME)
+			local o = io.open(mt, "wb")
+			if o then o:write(txt); o:close() end
+		end
+	end
+end
+
 gamedata = gamedata or {}
 
--- 點陣字型（俐方體11號 Cubic 11，OFL，games/mining_sim/fonts）：整個遊戲的文字都用它。
+-- 點陣字型（俐方體11號 Cubic 11，OFL，games/georocker/fonts）：整個遊戲的文字都用它。
 -- 每次開都檢查一次（絕對路徑：資料夾搬了也跟著改），舊的安裝 git pull 之後也會換上；字型設定改了引擎會馬上重載
 do
 	local FONT = core.get_builtin_path() .. ".." .. DS .. "games" .. DS .. GAME .. DS .. "fonts" .. DS .. "Cubic_11.ttf"

@@ -9,7 +9,7 @@ GeoRocker 班級伺服器（只有伺服器，沒有遊戲畫面）
 
 資料夾：
   bin\、builtin\、minetest.conf   Luanti 引擎
-  games\mining_sim\               遊戲（git，release 分支，只抓最新版）
+  games\georocker\               遊戲（git，release 分支，只抓最新版）
   worlds\class_coal\              班級世界（名單 students.csv、設定 rockmech.conf 在這裡）
   backups\                        自動備份（第一次啟動才會出現）
 

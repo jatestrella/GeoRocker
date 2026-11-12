@@ -18,7 +18,7 @@ def make_world():
 	if os.path.isdir(WORLD): shutil.rmtree(WORLD)
 	os.makedirs(os.path.join(WORLD, "worldmods", "uidump"))
 	with open(os.path.join(WORLD, "world.mt"), "w", encoding="utf-8") as f:
-		f.write("gameid = mining_sim\nbackend = sqlite3\nplayer_backend = sqlite3\nauth_backend = sqlite3\nmod_storage_backend = sqlite3\n")
+		f.write("gameid = georocker\nbackend = sqlite3\nplayer_backend = sqlite3\nauth_backend = sqlite3\nmod_storage_backend = sqlite3\n")
 	conf = os.path.join(ROOT, "worlds", "class_coal", "rockmech.conf")
 	if os.path.isfile(conf): shutil.copy(conf, os.path.join(WORLD, "rockmech.conf"))
 	shutil.copy(os.path.join(HERE, "uidump.lua"), os.path.join(WORLD, "worldmods", "uidump", "init.lua"))
@@ -28,7 +28,7 @@ def make_world():
 def run_server():
 	log = os.path.join(WORLD, "server.log")
 	with open(log, "w", encoding="utf-8") as lf:
-		subprocess.run([EXE, "--server", "--world", WORLD, "--gameid", "mining_sim", "--port", "30199"],
+		subprocess.run([EXE, "--server", "--world", WORLD, "--gameid", "georocker", "--port", "30199"],
 			stdout=lf, stderr=subprocess.STDOUT, timeout=240, cwd=ROOT)
 	path = os.path.join(WORLD, "ui_screens.json")
 	if not os.path.isfile(path):
