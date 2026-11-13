@@ -37,12 +37,12 @@ for _, k in ipairs({"cart", "suv", "truck", "excavator", "lowboy", "heavyhaul", 
 		"vent_fan", "vent_duct", "bolt", "drill", "mix_trough", "steel_set"}) do SHOP_INDEX[k] = "steel" end
 
 -- 事件：影響是對數（+0.15 ≈ 漲 16%、+0.3 ≈ 35%、+0.5 ≈ 65%），days 持續幾個交易日
--- fx 的礦價用礦種的 key（coal、marble）；別種礦的事件照樣會發生，只是對這張地圖的礦價沒影響
+-- fx 的礦價用礦種的 key（coal、marble、copper）；別種礦的事件照樣會發生，只是對這張地圖的礦價沒影響
 local U1, U2, U3 = 0.15, 0.3, 0.5
 local EVENTS = {
 	{id = "miyi_war", label = S("Miyi War"), days = 12, fx = {coal = U1, diesel = U3, explosive = U2, steel = U1},
 		news = S("War breaks out between Mi and Yi; oil tankers cannot get through")},
-	{id = "wue_war", label = S("Wu-E War"), days = 20, fx = {coal = U2, diesel = U2, explosive = U2, steel = U2},
+	{id = "wue_war", label = S("Wu-E War"), days = 20, fx = {coal = U2, copper = U1, diesel = U2, explosive = U2, steel = U2},
 		news = S("War between Wu and E; energy and metals both scarce")},
 	{id = "opec_cut", label = S("Oupeike output cut"), days = 7, fx = {coal = U1, diesel = U2, explosive = U1},
 		news = S("Oil producers agree to cut output")},
@@ -56,9 +56,9 @@ local EVENTS = {
 		news = S("The government orders power plants to burn less coal")},
 	{id = "carbon_fee", label = S("Carbon fee"), days = 12, fx = {coal = -U1, marble = -U1, diesel = U1},
 		news = S("A carbon fee takes effect")},
-	{id = "recession", label = S("Recession"), days = 12, fx = {coal = -U1, marble = -U2, diesel = -U1, explosive = -U1, steel = -U2},
+	{id = "recession", label = S("Recession"), days = 12, fx = {coal = -U1, marble = -U2, copper = -U2, diesel = -U1, explosive = -U1, steel = -U2},
 		news = S("The economy slows; demand falls everywhere")},
-	{id = "infrastructure", label = S("Infrastructure boom"), days = 7, fx = {marble = U2, explosive = U1, steel = U2},
+	{id = "infrastructure", label = S("Infrastructure boom"), days = 7, fx = {marble = U2, copper = U1, explosive = U1, steel = U2},
 		news = S("A big public works budget passes; steel and explosives in demand")},
 	{id = "housing_cool", label = S("Housing market cools"), days = 12, fx = {marble = -U2, steel = -U1},
 		news = S("Home sales slump; builders order less cement")},
@@ -66,6 +66,12 @@ local EVENTS = {
 		news = S("A building boom overseas; cement plants run at full capacity")},
 	{id = "kiln_overhaul", label = S("Cement kiln overhaul"), days = 5, fx = {marble = -U1},
 		news = S("A big cement kiln shuts for overhaul and buys less limestone")},
+	{id = "ev_boom", label = S("Electric car boom"), days = 10, fx = {copper = U2},
+		news = S("Electric car sales soar; motors and batteries need a lot of copper")},
+	{id = "copper_strike", label = S("Overseas copper mine strike"), days = 7, fx = {copper = U2},
+		news = S("Workers at a giant overseas copper mine go on strike")},
+	{id = "smelter_cut", label = S("Smelter cuts output"), days = 6, fx = {copper = -U1},
+		news = S("A copper smelter cuts output for environmental checks and buys less ore")},
 }
 local EVENT_BY_ID = {}
 for _, e in ipairs(EVENTS) do EVENT_BY_ID[e.id] = e end

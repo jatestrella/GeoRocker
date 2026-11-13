@@ -16,6 +16,8 @@
 --                各區自己的柱狀圖、傾角、傾向（rockmech_strata_2…、rockmech_faults，見 config.lua）；節理組全圖共用（第 1 組照第 1 區）。
 --                大理岩：single = 片岩裡一層厚大理岩（15–40 m），inter = 片岩、大理岩互層；傾角 20–45°；
 --                第 1 組節理是葉理（間距密、面平滑、有綠泥石雲母，Jr 1.5–2、Ja 2），世界設定 rockmech_ores = marble
+--                copper：斑岩銅礦（安山岩裡一根直立斑岩體，鐵帽 → 氧化帶 → 次生富集帶 → 原生帶），不分 single／inter
+--   gen_wtdepth  銅礦的古地下水位深 10–40 m（富集帶在它底下）
 -- 其他：節理第 1 組是層面（地層的平均位態），第 2、3 組陡傾、走向大致互相垂直，Jr、Ja 取 Q 法表格值；
 -- 各岩性的 GSI；現地應力 K_Hmax、K_hmin、σHmax 方位。
 -- 地質不直接顯示（要自己鑽岩心、量節理）；老師用 /rockmech_geology 查（單機版看不到，直接看世界資料夾的 rockmech.conf）。
@@ -121,6 +123,32 @@ M.RECIPES = {
 		end,
 	},
 }
+-- 斑岩銅礦：整張圖都是安山岩（緩傾的熔岩流，第 1 組節理是流理），中間一根直立的斑岩體（body，見 stress.copper_at）：
+-- 從地表往下鐵帽 → 氧化帶 → 次生富集帶 → 原生帶，分帶照古地下水位（rockmech_gen_wtdepth 10–40 m）。
+-- 斑岩體半徑 30–75 m，第 1 區的邊緣在出生點外 dist + 25 m（45–80 m，方位隨機），其他區在斷層外
+M.RECIPES.copper = {
+	dip = function(f) return round(5 + 20 * f) end,
+	host_only = true,
+	no_var = true,
+	body = true,
+	column = function(r, mode, nseam, add, sum, range, count)
+		add("andesite", 300)
+		return 0, 1
+	end,
+	-- 流理：緩傾、面中等粗糙
+	joint1 = function(r, dip, dipdir, round, range, pick)
+		return ("%d,%d,%g,0.7,%g,1"):format(dip, dipdir, round(range(r, 2, 4), 0.5), pick(r, {1.5, 2}))
+	end,
+	-- 蝕變、風化過的岩石節理密：富集帶、鐵帽最密，安山岩、原生帶疏
+	p32 = function(r, round, range)
+		return ("andesite:%g,cu_primary:%g,cu_enriched:%g,cu_oxide:%g,gossan:%g"):format(round(range(r, 0.5, 0.8), 0.1),
+			round(range(r, 0.7, 1), 0.1), round(range(r, 1.5, 2), 0.1), round(range(r, 1.3, 1.8), 0.1), round(range(r, 1.5, 2.2), 0.1))
+	end,
+	dfn1 = function(r, round, range)
+		return ("%d,1,%d,3"):format(round(range(r, 20, 40)), round(range(r, 12, 25)))
+	end,
+}
+
 -- 水泥礦（仿和平礦場）：賣的還是大理岩（ore = marble），整張地圖都是大理岩，中間夾很多薄的透鏡狀片岩（稀釋）：
 -- 每 6–25 m 大理岩一層透鏡，厚 1–4 m、一塊塊 25–60 m 大，其他地方尖滅。透鏡帶 1600 m 厚，置中在礦場；帶外上下也是大理岩。
 -- 傾角 20–45°。不分 single／inter，也不用厚度變化（透鏡本身就是變化）
@@ -279,6 +307,19 @@ function M.generate(world_conf)
 		local parts = {}
 		for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) .. (b[3] and (":" .. b[3]) or "") end
 		local sfx = k == 1 and "" or ("_" .. k)
+		if R.body then
+			-- 斑岩體：x0,z0,半徑,地下水位深,富集帶厚,氧化帶厚,富集倍率,中心品位
+			local Rr = r:next(30, 75)
+			local bx, bz
+			if k == 1 then
+				local az, d = math.rad(r:next(0, 359)), Rr + dist + 25      -- 邊緣在營地外 45–80 m（營地不壓在礦上）
+				bx, bz = d * math.sin(az), d * math.cos(az)
+			else bx, bz = px + Rr * 0.5 * fnx, pz + Rr * 0.5 * fnz end
+			local D, E, ox = round(10 + 30 * frac("wtdepth")), round(range(r, 6, 12)), round(range(r, 3, 6))
+			local fac, g0 = round(range(r, 2, 3.5), 0.1), r:next(90, 130)
+			set("copper" .. sfx, ("%d,%d,%d,%d,%d,%d,%g,%d"):format(round(bx), round(bz), Rr, D, E, ox, fac, g0))
+			logs[#logs + 1] = ("斑岩銅礦 (%d, %d) 半徑 %d m、地下水位 %d m、富集帶 %d m ×%g"):format(round(bx), round(bz), Rr, D, E, fac)
+		end
 		set("strata" .. sfx, table.concat(parts, ","))
 		set("strata_attitude" .. sfx, ("%d,%d,%g"):format(dip, dipdir, round(y0, 0.1)))
 		if foldA > 0 then set("strata_fold" .. sfx, ("%d,%d,%d"):format(foldA, foldL, foldAz)) end
@@ -332,6 +373,13 @@ function M.generate(world_conf)
 			set("gsi_schist", round(range(r, 50, 70)))
 			set("ucs_schist", round(range(r, 60, 80)))
 		else set("gsi_schist", round(range(r, 30, 55))) end
+	end
+	if seen.copper then
+		set("gsi_andesite", round(range(r, 55, 75)))
+		set("gsi_cu_primary", round(range(r, 50, 70)))
+		set("gsi_cu_oxide", round(range(r, 30, 45)))
+		set("gsi_cu_enriched", round(range(r, 20, 35)))
+		set("gsi_gossan", round(range(r, 15, 30)))
 	end
 	local okeys, oseen = {}, {}
 	for _, k in ipairs(ores) do

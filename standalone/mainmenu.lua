@@ -69,8 +69,9 @@ local state = {page = "title", map = nil, msg = nil, confirm = false}
 -- 自訂地圖的地質選項（mods/rockmech/worldgen.lua 的 rockmech_gen_*）。滑桿 0–100，旁邊顯示換算的實際值
 -- 礦種（隨機地圖也可以選）：每種礦一個勾選框，至少勾一種。煤礦；大理岩（花蓮大南澳片岩：大理岩夾在黑色片岩裡，傾角比較陡）。
 -- 勾兩種以上：每種礦一個地質區，隔著斷層（worldgen.lua 的 rockmech_gen_ores）。加一種礦：這裡加一列、worldgen.lua 加它的地質
-local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}}
-local gen = {ores = {true, false}, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30, seed = ""}
+-- 銅礦：斑岩銅礦（安山岩裡一根直立斑岩體，鐵帽、氧化帶、次生富集帶、原生帶）
+local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}, {"copper", "銅礦", "銅"}}
+local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30, seed = ""}
 local function chosen()
 	local t = {}
 	for i, o in ipairs(GEN_ORE) do if gen.ores[i] then t[#t + 1] = o end end
@@ -83,11 +84,12 @@ local function ore_keys()
 	return table.concat(t, ",")
 end
 -- 地層：選單文字照勾的礦（只有煤、只有大理岩、兩種以上）
-local GEN_STRATA = {{"single", "單一煤層", "單一大理岩層", "每區一層礦"}, {"inter", "砂頁岩煤互層", "片岩大理岩互層", "每區互層"}}
-local function strata_col() return #chosen() > 1 and 4 or only("marble") and 3 or 2 end
--- 傾角滑桿換算成各礦的傾角（煤 3–40°、大理岩 20–70°）
+local GEN_STRATA = {{"single", "單一煤層", "單一大理岩層", "每區一層礦", "斑岩銅礦"}, {"inter", "砂頁岩煤互層", "片岩大理岩互層", "每區互層", "斑岩銅礦"}}
+local function strata_col() return #chosen() > 1 and 4 or only("marble") and 3 or only("copper") and 5 or 2 end
+-- 傾角滑桿換算成各礦的傾角（煤 3–40°、大理岩 20–45°、銅礦的安山岩 5–25°）
 local DIP = {coal = function(v) return math.max(3, math.floor(40 * v / 100 + 0.5)) end,
-	marble = function(v) return math.floor(20 + 50 * v / 100 + 0.5) end}
+	marble = function(v) return math.floor(20 + 25 * v / 100 + 0.5) end,
+	copper = function(v) return math.floor(5 + 20 * v / 100 + 0.5) end}
 local GEN_TERRAIN = {{"hills", "丘陵"}, {"cuesta", "單面山"}}
 local GEN_SLIDERS = {
 	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end},
@@ -100,6 +102,7 @@ local GEN_SLIDERS = {
 		return table.concat(t, "／") end},
 	{"thickvar", "厚度變化", function(v) return ("±%d%%"):format(math.floor(60 * v / 100 + 0.5)) end},
 	{"fold", "褶皺", function(v) return ("振幅 %d m"):format(math.floor(25 * v / 100 + 0.5)) end},
+	{"wtdepth", "銅礦古地下水位", function(v) return ("地表下 %d m"):format(math.floor(10 + 30 * v / 100 + 0.5)) end},
 }
 local function gen_randomize()
 	math.randomseed(os.time())
@@ -404,7 +407,7 @@ local function formspec()
 		return table.concat(fs)
 	end
 	local cm = state.page == "new_custom"
-	local PH = cm and 17.2 or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
+	local PH = cm and 17.9 or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
 	local PW = state.page:sub(1, 4) == "new_" and 22 or 14     -- 開新遊戲的頁面比較寬（選項多）
 	local fs = {("formspec_version[6]size[%g,%g]bgcolor[#00000000;true]"):format(PW, PH), ("box[0,0;%g,%g;#000000b0]"):format(PW, PH)}
 	header(fs, PW)

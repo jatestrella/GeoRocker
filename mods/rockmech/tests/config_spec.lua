@@ -32,7 +32,7 @@ describe("config.load", function()
 		assert.are.equal(0, cfg.surface_y)
 		assert.are.equal(0.5, cfg.k0)
 		assert.is_true(cfg.replace_stone)
-		assert.are.equal(7, #cfg.lithology_order)
+		assert.are.equal(12, #cfg.lithology_order)
 		assert.are.equal(3, #cfg.joint_sets)
 		assert.are.equal(0, #warn)
 		assert.are.equal("coal", cfg.main_ore.lith)      -- 沒設定 rockmech_ores 就是煤
@@ -172,6 +172,32 @@ describe("config.is_soil", function()
 	it("rockmech_strip_soil 預設關閉、可由設定開啟", function()
 		assert.is_false(config.load(function() return nil end).strip_soil)
 		assert.is_true(config.load(function(k) return k == "rockmech_strip_soil" and "true" or nil end).strip_soil)
+	end)
+end)
+
+describe("斑岩銅礦（rockmech_copper）", function()
+	local stress = load_module("stress")
+	local set = {
+		rockmech_strata = "andesite:300", rockmech_strata_attitude = "10,0,0",
+		rockmech_copper = "100,0,40,20,10,5,3,100",     -- 中心 (100, 0)、半徑 40、地下水位 20 m、富集帶 10、氧化帶 5、×3、品位 100
+		rockmech_ores = "copper",
+	}
+	it("由上往下鐵帽、氧化帶、富集帶、原生帶；斑岩體外是安山岩", function()
+		local cfg, w = config.load(getter(set))
+		assert.are.equal(0, #w)
+		assert.is_not_nil(cfg.strata.body)
+		assert.are.equal("andesite", (stress.strata_at(cfg.strata, 0, -30, 0)))
+		local order, last = {}, nil
+		for y = 0, -80, -1 do
+			local l = stress.strata_at(cfg.strata, 100, y, 0)
+			if l ~= last then order[#order + 1] = l; last = l end
+		end
+		assert.are.same({"gossan", "cu_oxide", "cu_enriched", "cu_primary"}, order)
+		local _, _, _, pe = stress.strata_at(cfg.strata, 100, -22, 0)      -- 地下水位 −20 底下：富集帶
+		local _, _, _, pp = stress.strata_at(cfg.strata, 100, -60, 0)
+		assert.is_true(pe > 2 * pp)
+		assert.are.equal("copper", cfg.lithologies.cu_enriched.ore)
+		assert.is_nil(cfg.lithologies.gossan.ore)
 	end)
 end)
 

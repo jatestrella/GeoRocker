@@ -152,7 +152,8 @@ local function natural_soil_m(wx, wz, top)
 	if S.has_terrain(cfg) then rise = math.floor(S.terrain_rise(cfg, wx, wz) + 0.5) else rise = top - sy end
 	if top < sy + rise then return 0 end      -- 從頂上挖低了：表土跟岩石一起挖掉了
 	local key = S.lith_key_at(cfg, wx, sy + rise, wz)
-	local ore = key and cfg.lithologies[key] and cfg.lithologies[key].ore
+	local L = key and cfg.lithologies[key]
+	local ore = L and (L.ore or L.bare)
 	local function rise_at(x, z)
 		if S.has_terrain(cfg) then return math.floor(S.terrain_rise(cfg, x, z) + 0.5) end
 		return 0

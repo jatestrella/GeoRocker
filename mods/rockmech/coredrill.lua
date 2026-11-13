@@ -548,7 +548,7 @@ local function seg_tex(r)
 	if type(t) == "table" then t = t.name or "blank.png" end
 	local lith = rockmech.lith_of_node[name]
 	if def.paramtype2 == "color" and lith and lith.ore and rockmech.ore_color then
-		t = t .. "^[multiply:" .. rockmech.ore_color(lith.ore, r.p2 or r.grade or 0)
+		t = t .. "^[multiply:" .. rockmech.ore_color(lith.ore, r.p2 or r.grade or 0, lith)
 	end
 	return t
 end

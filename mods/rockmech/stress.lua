@@ -284,6 +284,10 @@ function stress.strata_at(S, x, y, z, col)
 	local D = domain_of(S, x, z)
 	if not D then return S.faults.lith, 0, 0.5 end
 	S = D
+	if S.body then       -- 斑岩銅礦：斑岩體裡照風化分帶，第 4 個回傳值是品位 param2
+		local lith, p2 = stress.copper_at(S.body, x, y, z)
+		if lith then return lith, 1, 0.5, p2 end
+	end
 	local d = (stress.strata_ref_y(S, x, z) - y) * S.cos_dip
 	if d < 0 then return S.beds[1].lith, 1, 0 end           -- 柱狀圖頂面以上：最上面那層往上延伸
 	col = col or stress.strata_column(S, x, z, d)
@@ -310,6 +314,37 @@ function stress.strata_grade(x, z, frac)
 	local d = 2 * frac - 1
 	local g = 228 - 75 * d * d + 7 * math.sin(x / 37) + 7 * math.sin(z / 29)
 	return math.max(1, math.min(255, math.floor(g + 0.5)))
+end
+
+-- 斑岩銅礦（S.body，地圖產生器的 copper）：中心 (x0, z0)、半徑約 R 的直立圓柱，邊界有起伏。
+-- 品位（param2）中心最高（g0），往外降到三成五左右，再加上下左右緩慢的變化。從地表往下的風化分帶看古地下水位 wt：
+-- 地下水位是地形的平滑版（山丘底下比地表低得多、谷底比較淺）：wt = surface_y + 0.4·起伏 − D
+--   wt + ox 以上：鐵帽（銅被淋走，不是礦）
+--   wt … wt + ox：氧化帶（孔雀石），品位八成
+--   wt − E … wt：次生富集帶（輝銅礦），品位 × fac
+--   再往下：原生帶
+-- ox、E 沿水平緩慢變化（0.6–1.4 倍）。回傳 岩性, param2；不在斑岩體裡回傳 nil
+local function clamp_p2(v) return math.max(1, math.min(250, math.floor(v + 0.5))) end
+function stress.copper_at(B, x, y, z)
+	local dx, dz = x - B.x0, z - B.z0
+	local R = B.R * (0.8 + 0.4 * fbm(x / 30, z / 30, 211))
+	local rr = dx * dx + dz * dz
+	if rr >= R * R then return nil end
+	local c = B._col
+	if not (c and c.x == x and c.z == z) then
+		local C = B.cfg
+		local rise = C and stress.has_terrain(C) and stress.terrain_rise(C, x, z) or 0
+		local sy = C and C.surface_y or 0
+		c = {x = x, z = z, wt = sy + 0.4 * rise - B.D,
+			E = B.E * (0.6 + 0.8 * fbm(x / 20, z / 20, 223)), ox = B.ox * (0.6 + 0.8 * fbm(x / 17, z / 17, 227))}
+		B._col = c
+	end
+	if y > c.wt + c.ox then return "gossan" end
+	local u2 = rr / (R * R)
+	local prim = B.g0 * (1 - 0.65 * u2) * (0.85 + 0.3 * fbm(x / 23 + y / 41, z / 23 - y / 37, 229))
+	if y > c.wt then return "cu_oxide", clamp_p2(prim * 0.8) end
+	if y > c.wt - c.E then return "cu_enriched", clamp_p2(prim * B.fac) end
+	return "cu_primary", clamp_p2(prim)
 end
 
 -- 自由地形（cfg.terrain，非礦帶世界）：(x, z) 這一欄比 surface_y 高出幾公尺（≥ 0），第二個值同第一個（礦區山丘：表土鋪薄，看得到岩層）

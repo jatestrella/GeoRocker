@@ -82,10 +82,50 @@ config.lithologies.breccia = {
 	rn = 0.25, rt = 0.70, mu_roll = 0.55, break_height = 1.5,
 }
 
+-- 斑岩銅礦地圖：安山岩裡一根直立的斑岩體，從地表往下風化成四層（worldgen.lua 的 copper、stress.copper_at）：
+--   鐵帽（淋濾帶，銅被雨水淋走，只剩褐鐵礦，多孔、軟）→ 氧化帶（孔雀石，綠色）→ 次生富集帶（輝銅礦，黑灰，品位最高，
+--   黏土化、偏弱）→ 原生帶（黃銅礦，灰底黃銅色斑點）。三種銅礦岩性都是同一種礦（copper），品位不同；
+--   pure：這種岩性在調色盤上品位 100% 的顏色（沒寫就用礦種的 pure），各帶顏色不一樣，一眼看得出來
+config.lithologies.andesite = {
+	name = "andesite", description = TR("Andesite"),
+	gamma = 26.0, ucs = 120.0, tensile = 8.0, mi = 25,
+	color = "#77726c", cracky = 2,
+	rn = 0.40, rt = 0.85, mu_roll = 0.40, break_height = 6.0,
+}
+config.lithologies.gossan = {
+	name = "gossan", description = TR("Gossan"),
+	gamma = 21.0, ucs = 15.0, tensile = 1.0, mi = 10,
+	color = "#8c3f1c", cracky = 3, bare = true,
+	texture = "default_stone.png^[colorize:#8c3f1c:170^(default_mineral_iron.png^[colorize:#d07020:200)",
+	rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 1.5,
+}
+config.lithologies.cu_oxide = {
+	name = "cu_oxide", description = TR("Oxide copper ore"), ore = "copper", pure = "#2fa86a",
+	gamma = 24.0, ucs = 35.0, tensile = 2.5, mi = 12,
+	color = "#4f9a72", cracky = 3,
+	texture = "default_stone.png^[colorize:#e0e0e0:200^default_mineral_copper.png",
+	rn = 0.30, rt = 0.80, mu_roll = 0.45, break_height = 2.5,
+}
+config.lithologies.cu_enriched = {
+	name = "cu_enriched", description = TR("Enriched copper ore"), ore = "copper", pure = "#24282e",
+	gamma = 25.0, ucs = 25.0, tensile = 1.5, mi = 10,
+	color = "#3a3e44", cracky = 3,
+	texture = "default_stone.png^[colorize:#e0e0e0:200",
+	rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 2.0,
+}
+config.lithologies.cu_primary = {
+	name = "cu_primary", description = TR("Primary copper ore"), ore = "copper", pure = "#c8a040",
+	gamma = 27.0, ucs = 110.0, tensile = 7.0, mi = 20,
+	color = "#8a8270", cracky = 2,
+	texture = "default_stone.png^[colorize:#e0e0e0:200^default_mineral_copper.png",
+	rn = 0.40, rt = 0.85, mu_roll = 0.40, break_height = 6.0,
+}
+
 -- 方塊尺度的小節理（方塊 = 岩體，裡面的小節理只用 GSI 代表）的面況：Q 系統的 Jr、Ja。
 -- 只用來把 GSI 換成岩芯看得到的 RQD（Hoek、Carter & Diederichs 2013：GSI = 52·(Jr/Ja)/(1 + Jr/Ja) + RQD/2），不影響力學。
 -- 沒列的岩性用 Jr 2、Ja 1
-for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}, marble = {2, 1}, schist = {1, 3}, breccia = {1, 6}}) do
+for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}, marble = {2, 1}, schist = {1, 3}, breccia = {1, 6},
+		andesite = {2, 1}, gossan = {1, 4}, cu_oxide = {1.5, 3}, cu_enriched = {1, 4}, cu_primary = {2, 1}}) do
 	local l = config.lithologies[key]
 	if l then l.jr, l.ja = v[1], v[2] end
 end
@@ -107,6 +147,10 @@ config.ores = {
 	marble = {lith = "marble", waste = "schist", pure = "#f6f4ee", waste_color = "#4b544d",
 		label = TR("Marble"), default = 230, price = 40, recovery = 0.95, fee = 50, gangue = TR("Waste rock"),
 		product = TR("Sorted marble"), buyer = TR("Cement Plant Buyer"), contracts = TR("Marble contracts"), specs = {0.75, 0.80, 0.85}},
+	-- 銅礦（斑岩銅礦）：原生帶品位低、量大；次生富集帶薄但品位是原生的 2–3.5 倍。三個帶都是 copper（lith 是原生帶）
+	copper = {lith = "cu_primary", waste = "andesite", pure = "#b8943c", waste_color = "#6e6a66",
+		label = TR("Copper ore"), default = 100, price = 300, recovery = 0.85, gangue = TR("Waste rock"),
+		product = TR("Copper concentrate"), buyer = TR("Smelter Buyer"), contracts = TR("Copper contracts"), specs = {0.35, 0.45, 0.55}},
 }
 
 -- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個；
@@ -197,7 +241,8 @@ function config.crush_income(tons, grade, ore, fee, ratio)
 end
 
 -- 註冊順序（固定，讓 content id / 測試結果可重現）
-config.lithology_order = {"sandstone", "shale", "granite", "coal", "marble", "schist", "breccia"}
+config.lithology_order = {"sandstone", "shale", "granite", "coal", "marble", "schist", "breccia",
+	"andesite", "gossan", "cu_oxide", "cu_enriched", "cu_primary"}
 
 -- 依深度分層：h = y0 - y，h < bottom 即屬於該層（由上往下排列）。
 -- h < 0（高於 y0 的山丘）歸入第一層。
@@ -698,6 +743,13 @@ function config.load(get, opts)
 		end
 		local v = numbers("rockmech_strata_var" .. sfx, 2)
 		if v and v[1] > 0 then S.var = {f = math.min(0.95, v[1]), scale = math.max(10, v[2])} end
+		-- rockmech_copper = x0,z0,半徑,地下水位深,富集帶厚,氧化帶厚,富集倍率,中心品位（param2）：
+		-- 這一區有一根斑岩銅礦（stress.copper_at）
+		local b = numbers("rockmech_copper" .. sfx, 8)
+		if b and b[3] > 0 then
+			S.body = {x0 = b[1], z0 = b[2], R = b[3], D = b[4], E = math.max(0, b[5]), ox = math.max(0, b[6]),
+				fac = math.max(1, b[7]), g0 = math.max(1, math.min(250, b[8])), cfg = cfg}
+		end
 		return S
 	end
 	cfg.strata = parse_strata("")

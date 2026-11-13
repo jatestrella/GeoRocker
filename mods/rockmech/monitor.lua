@@ -12,7 +12,8 @@ local PRISM = "rockmech:survey_prism"
 local FORM = "rockmech:survey_prism"
 local HIST_N = 60
 local E_FEM = 1e6           -- kPa，fem.lua 的數值勁度
-local MR = {shale = 150, sandstone = 275, granite = 425, coal = 200, marble = 850, schist = 675, breccia = 290}   -- Hoek 表的中間值
+local MR = {shale = 150, sandstone = 275, granite = 425, coal = 200, marble = 850, schist = 675, breccia = 290,
+	andesite = 400, gossan = 200, cu_oxide = 250, cu_enriched = 250, cu_primary = 400}   -- Hoek 表的中間值
 
 -- 岩體變形模數 (MPa)
 function rockmech.erm(lith_key, gsi, D)

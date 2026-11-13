@@ -125,9 +125,9 @@ if TS then
 	for _, t in pairs(c_var) do for _, id in pairs(t) do is_rock[id] = true end end
 	for _, t in pairs(c_plane) do for _, id in pairs(t) do is_rock[id] = true end end
 end
-local is_ore = {}            -- 礦石岩性的方塊（露頭不鋪土）
+local is_ore = {}            -- 礦石岩性的方塊（露頭不鋪土）；bare：不是礦但也不鋪土（鐵帽：找礦的線索要看得到）
 for key, lith in pairs(cfg.lithologies) do
-	if lith.ore then
+	if lith.ore or lith.bare then
 		for _, id in pairs(c_var[key] or {}) do is_ore[id] = true end
 		for _, id in pairs(c_plane[key] or {}) do is_ore[id] = true end
 	end
@@ -284,11 +284,12 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 						cv, pv = var_x[x], plane_x[x]
 					end
 					local coal = seam and stress.in_seam(seam, x, y, z)
-					local sfrac
+					local sfrac, sp2
 					if strata then
-						local key, _, fr = stress.strata_at(strata, x, y, z, cols[x .. "," .. z])
+						local key, _, fr, p2 = stress.strata_at(strata, x, y, z, cols[x .. "," .. z])
 						cv, pv = c_var[key], c_plane[key]
-						if cfg.lithologies[key].ore then sfrac = fr end      -- 礦層（煤、大理岩）：品位照在層裡的位置
+						if p2 then sp2 = p2                                 -- 斑岩銅礦：品位直接算好
+						elseif cfg.lithologies[key].ore then sfrac = fr end      -- 礦層（煤、大理岩）：品位照在層裡的位置
 					end
 					if plane then
 						data[vi] = (coal and c_plane.coal or pv)[suffix(cell_traces(joints, sets, x, y, z, MAXL))]
@@ -296,6 +297,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 						data[vi] = (coal and c_var.coal or cv)[use_joints and cell_mask(sets, x, y, z) or 0]
 					end
 					if coal then p2data[vi] = stress.seam_grade(seam, x, y, z)
+					elseif sp2 then p2data[vi] = sp2
 					elseif sfrac then p2data[vi] = stress.strata_grade(x, z, sfrac) end
 					changed = true
 					n = n + 1
@@ -319,8 +321,8 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 				local key = stress.lith_key_at(cfg, p.x, p.y, p.z)
 				if cfg.lithologies[key].ore then
 					if strata then
-						local _, _, fr = stress.strata_at(strata, p.x, p.y, p.z)
-						p2data[i] = stress.strata_grade(p.x, p.z, fr)
+						local _, _, fr, p2 = stress.strata_at(strata, p.x, p.y, p.z)
+						p2data[i] = p2 or stress.strata_grade(p.x, p.z, fr)
 					else
 						p2data[i] = stress.seam_grade(seam, p.x, p.y, p.z)
 					end

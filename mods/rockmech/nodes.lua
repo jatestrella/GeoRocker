@@ -74,28 +74,34 @@ local function rgb(hex)
 	return tonumber(hex:sub(2, 3), 16), tonumber(hex:sub(4, 5), 16), tonumber(hex:sub(6, 7), 16)
 end
 -- 礦石方塊的調色盤：param2 i → 廢石與純礦的 RGB 線性混合（0 = 沒指定品位，用 default）
-local function ore_palette(key)
+-- lith（可選）：岩性有自己的 pure（銅礦的氧化帶、富集帶、原生帶顏色不一樣）就用自己的調色盤
+local lith_palette = {}
+local function ore_palette(key, lith)
 	local ore = cfg.ores[key]
-	local fname = "rockmech_ore_" .. key .. ".png"
-	if ore.palette then return ore.palette end
+	local own = lith and lith.pure
+	local fname = own and ("rockmech_ore_" .. lith.name .. ".png") or ("rockmech_ore_" .. key .. ".png")
+	if own then
+		if lith_palette[lith.name] then return lith_palette[lith.name] end
+	elseif ore.palette then return ore.palette end
 	local r0, g0, b0 = rgb(ore.waste_color)
-	local r1, g1, b1 = rgb(ore.pure)
+	local r1, g1, b1 = rgb(own or ore.pure)
 	local px = {}
 	for i = 0, 255 do
 		local t = (i == 0 and ore.default or i) / 255
 		px[i + 1] = string.char(math.floor(r0 + (r1 - r0) * t + 0.5), math.floor(g0 + (g1 - g0) * t + 0.5),
 			math.floor(b0 + (b1 - b0) * t + 0.5), 255)
 	end
-	ore.palette = add_png(fname, 256, 1, table.concat(px))
-	return ore.palette
+	local png = add_png(fname, 256, 1, table.concat(px))
+	if own then lith_palette[lith.name] = png else ore.palette = png end
+	return png
 end
 
 -- 礦石方塊 param2 那一格的顏色（跟調色盤同一個公式），岩芯箱畫岩芯用
-function rockmech.ore_color(key, p2)
+function rockmech.ore_color(key, p2, lith)
 	local ore = cfg.ores[key]
 	if not ore then return "#ffffff" end
 	local r0, g0, b0 = rgb(ore.waste_color)
-	local r1, g1, b1 = rgb(ore.pure)
+	local r1, g1, b1 = rgb(lith and lith.pure or ore.pure)
 	local t = ((p2 or 0) == 0 and ore.default or p2) / 255
 	return ("#%02x%02x%02x"):format(math.floor(r0 + (r1 - r0) * t + 0.5), math.floor(g0 + (g1 - g0) * t + 0.5), math.floor(b0 + (b1 - b0) * t + 0.5))
 end
@@ -124,7 +130,7 @@ for _, key in ipairs(cfg.lithology_order) do
 			short_description = S(lith.description),
 			tiles = mask == 0 and {base_tile} or joint_tiles(base_tile, mask),
 			is_ground_content = true,
-			paramtype2 = lith.ore and "color" or nil, palette = lith.ore and ore_palette(lith.ore),
+			paramtype2 = lith.ore and "color" or nil, palette = lith.ore and ore_palette(lith.ore, lith),
 			groups = groups,
 			sounds = sounds,
 		})
@@ -211,7 +217,7 @@ do
 					short_description = base_def.short_description,
 					tiles = tiles,
 					is_ground_content = true,
-					paramtype2 = lith.ore and "color" or nil, palette = lith.ore and ore_palette(lith.ore),
+					paramtype2 = lith.ore and "color" or nil, palette = lith.ore and ore_palette(lith.ore, lith),
 					groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1,
 						not_in_creative_inventory = 1},
 					sounds = sounds,
@@ -369,6 +375,11 @@ do
 		ore.rubble, ore.waste_rubble, ore.comp = mix_pair[comp][waste], waste, comp
 		rockmech.rubble_of_lith[ore.lith] = ore.rubble
 		rockmech.lith_of_rubble[ore.rubble] = ore.lith
+	end
+	-- 同一種礦有好幾種岩性（銅礦的氧化帶、富集帶、原生帶）：碎了都是那種礦的碎石
+	for key, lith in pairs(cfg.lithologies) do
+		local ore = lith.ore and cfg.ores[lith.ore]
+		if ore and ore.rubble and not rockmech.rubble_of_lith[key] then rockmech.rubble_of_lith[key] = ore.rubble end
 	end
 	family(rockmech.modname .. ":colluvium", rockmech.RUBBLE_SOIL, tile(rockmech.RUBBLE_SOIL), rockmech.RUBBLE,
 		S("Colluvium\nRubble and soil mixed together"), nil, S("Colluvium"))
