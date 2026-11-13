@@ -348,7 +348,9 @@ api.build_mesh = build_mesh
 if QE then
 	local D = jt.q_div
 	local N = 4 * D
-	local R = 16                                  -- 貼圖解析度（跟方塊一樣 16 像素）
+	-- 貼圖解析度：D 的倍數 + 1，等分點都落在整數像素上。16 像素的話中點在 7.5，
+	-- 兩個面從邊的不同端數過來會一個捨成 7、一個 8，在交界差一個像素
+	local R = D * math.ceil(16 / D) + 1
 	-- 第 k 個點（0..N−1）的面內座標：邊 0：v = −½，u 由 −½ 到 ½；邊 1：u = ½；邊 2：v = ½，u 由 ½ 到 −½；邊 3：u = −½
 	local function point(k)
 		local e, i = math.floor(k / D), k % D
@@ -394,7 +396,7 @@ if QE then
 	core.mkdir(dir)
 	local function px_of(k)
 		local u, v = point(k)
-		return math.floor((u + 0.5) * (R - 1) + 0.5), math.floor((0.5 - v) * (R - 1) + 0.5)
+		return math.floor((u + 0.5) * (R - 1) + 0.5), math.floor((0.5 - v) * (R - 1) + 0.5)      -- 都是整數
 	end
 	local n_png = 0
 	for i = 0, N - 1 do
