@@ -122,6 +122,12 @@ for _, key in ipairs(cfg.lithology_order) do
 	rockmech.lith_variant[key] = {}
 	for mask = 0, 63 do
 		local name = variant_name(base, mask)
+		-- 遮罩變體只有 edges 樣式用得到：其他樣式（plane、mesh、q5e）只註冊基本方塊，其餘做成別名（舊地圖裡的變體變回基本方塊）
+		if mask > 0 and jt.style ~= "edges" then
+			core.register_alias(name, base)
+			rockmech.lith_variant[key][mask] = base
+			goto continue
+		end
 		local groups = {cracky = lith.cracky or 3, stone = 1, rockmech_rock = 1, rockmech_ore = lith.ore and 1 or nil, rockmech_ore = lith.ore and 1 or nil}
 		if mask ~= 0 then groups.not_in_creative_inventory = 1 end
 		core.register_node(name, {
@@ -137,6 +143,7 @@ for _, key in ipairs(cfg.lithology_order) do
 		rockmech.lith_of_node[name] = lith
 		rockmech.lith_nodes[#rockmech.lith_nodes + 1] = name
 		rockmech.lith_variant[key][mask] = name
+		::continue::
 	end
 end
 
@@ -145,7 +152,7 @@ end
 -- 再以 dynamic_add_media（filepath）傳給客戶端。
 -- （用 filedata 直接傳在 Windows 上會有部分檔案「failed writing media file」。）
 rockmech.lith_plane_variant = {} -- 岩性名稱 → {[後綴] = node 名稱}，後綴 "" 為基本 node
-do
+if jt.style == "plane" then      -- 只有 plane 樣式才註冊（DFN 地圖是 mesh 或 q5e，用不到這幾千個方塊）
 	local jtx = rockmech.jointtex
 	local R, MAXL = jt.plane_res, jt.max_lines
 	-- 只需法向量與級數，與種子無關
@@ -246,7 +253,7 @@ end
 
 -- 依目前的節理材質設定，取得某岩性在某位置應顯示的 node 名稱
 function rockmech.joint_variant_for(key, pos)
-	if not jt.enabled or jt.style == "mesh" then return rockmech.node_of_lith[key] end
+	if not jt.enabled or jt.style == "mesh" or jt.style == "q5e" then return rockmech.node_of_lith[key] end
 	local sets = rockmech.get_joint_sets()
 	if jt.style == "plane" then
 		return rockmech.plane_variant_name(key, sets, pos.x, pos.y, pos.z)

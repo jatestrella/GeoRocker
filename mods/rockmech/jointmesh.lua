@@ -13,8 +13,10 @@
 
 local cfg = rockmech.cfg
 local jt = cfg.jointtex
-local overlay = jt.mesh_overlay and jt.style == "plane"
-if not jt.enabled or (jt.style ~= "mesh" and not overlay) then return end
+local QE = jt.style == "q5e"                     -- 量化跡線：每格一個實體疊線段貼圖（見檔尾「量化跡線」）
+local overlay = jt.mesh_overlay and (jt.style == "plane" or QE)
+local MESH = jt.style == "mesh" or overlay       -- 要不要做區塊網格（mesh 模式、或檢查用的紅色疊層）
+if not jt.enabled or not (MESH or QE) then return end
 
 local joints, jtx = rockmech.joints, rockmech.jointtex
 local api = {}
@@ -87,6 +89,7 @@ local function build_mesh(bx, by, bz)
 	vm:close()
 	local verts, faces = {}, {}
 	local nv = 0
+	local qcells = {}             -- 量化模式：有跡線的格 "x,y,z" → {x, y, z, f = {[面] = {[線段] = true}}}
 	local function vert(p)
 		nv = nv + 1
 		-- X 預先反轉（見 XFLIP）
@@ -100,8 +103,19 @@ local function build_mesh(bx, by, bz)
 	local D = sets.dfn          -- 離散裂隙網路：跡線是圓盤和岩面的交線（dfn.face_traces）
 	local info
 	if D then live = {}; info = D:info_cache() end
-	-- 一條跡線（面內座標 a → b）加寬成四邊形
-	local function quad(c, ax, sg, u, v, a, b)
+	-- 一條跡線（面內座標 a → b）加寬成四邊形；量化模式另外記下這一格這一面的線段（di：面的序號，DIRS）
+	local function quad(c, ax, sg, u, v, a, b, di)
+		if QE and di then
+			local k = c[1] .. "," .. c[2] .. "," .. c[3]
+			local cell = qcells[k]
+			if not cell then cell = {x = c[1], y = c[2], z = c[3], f = {}}; qcells[k] = cell end
+			local id = api.q_segment(a, b)
+			if id then
+				cell.f[di] = cell.f[di] or {}
+				cell.f[di][id] = true
+			end
+		end
+		if not MESH then return end
 		local function world(q)
 			local p = {c[1], c[2], c[3]}
 			p[ax] = p[ax] + 0.5 * sg + OFF * sg
@@ -125,14 +139,14 @@ local function build_mesh(bx, by, bz)
 		for x = minp.x, maxp.x do
 			if rock_cid[data[vi]] then
 				local c = {x, y, z}
-				for _, d in ipairs(DIRS) do
+				for di, d in ipairs(DIRS) do
 					local nb = data[area:index(x + d[1], y + d[2], z + d[3])]
 					if not solid_cid[nb] then
 						local ax, sg = d[4], d[5]
 						local u, v = OTHER[ax][1], OTHER[ax][2]
 						if D then
 							for _, t in ipairs(D:face_traces(x, y, z, ax, sg, info)) do
-								quad(c, ax, sg, u, v, {t[1], t[2]}, {t[3], t[4]})
+								quad(c, ax, sg, u, v, {t[1], t[2]}, {t[3], t[4]}, di)
 							end
 						end
 						for _, js in ipairs(live) do
@@ -162,27 +176,7 @@ local function build_mesh(bx, by, bz)
 												pts[#pts + 1] = {a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t}
 											end
 										end
-										if #pts >= 2 then
-											-- 面內座標 → 世界座標
-											local function world(q, w)
-												local p = {c[1], c[2], c[3]}
-												p[ax] = p[ax] + 0.5 * sg + OFF * sg
-												p[u] = p[u] + q[1]
-												p[v] = p[v] + q[2]
-												return p
-											end
-											local a, b = pts[1], pts[2]
-											local du, dv = b[1] - a[1], b[2] - a[2]
-											local l = math.sqrt(du * du + dv * dv)
-											if l > 1e-4 then
-												local nu, nv_ = -dv / l * HW, du / l * HW
-												local i1 = vert(world({a[1] + nu, a[2] + nv_}))
-												local i2 = vert(world({b[1] + nu, b[2] + nv_}))
-												local i3 = vert(world({b[1] - nu, b[2] - nv_}))
-												local i4 = vert(world({a[1] - nu, a[2] - nv_}))
-												faces[#faces + 1] = ("f %d/1 %d/1 %d/1 %d/1"):format(i1, i2, i3, i4)
-											end
-										end
+										if #pts >= 2 then quad(c, ax, sg, u, v, pts[1], pts[2], di) end
 									end
 								end
 							end
@@ -193,8 +187,8 @@ local function build_mesh(bx, by, bz)
 			vi = vi + 1
 		end
 	end end
-	if #faces == 0 then return nil, 0 end
-	return table.concat(verts, "\n") .. "\nvt 0.5 0.5\n" .. table.concat(faces, "\n") .. "\n", #faces
+	if #faces == 0 then return nil, 0, qcells end
+	return table.concat(verts, "\n") .. "\nvt 0.5 0.5\n" .. table.concat(faces, "\n") .. "\n", #faces, qcells
 end
 
 local function remove_block(key)
@@ -204,6 +198,7 @@ local function remove_block(key)
 		if le then le.rm_key = nil end
 		b.obj:remove()
 	end
+	if b and b.q then for _, e in pairs(b.q) do e.obj:remove() end end
 	blocks[key] = nil
 end
 
@@ -214,7 +209,9 @@ local function rebuild(bx, by, bz)
 	b.dirty = false
 	b.bx, b.by, b.bz = bx, by, bz
 	b.built = core.get_us_time()
-	local obj_text, n = build_mesh(bx, by, bz)
+	local obj_text, n, qcells = build_mesh(bx, by, bz)
+	if QE then api.q_apply(b, key, qcells or {}) end
+	if not MESH then return end
 	if not obj_text then
 		if b.obj then b.obj:remove(); b.obj = nil end
 		return
@@ -340,3 +337,161 @@ core.register_on_leaveplayer(function()
 end)
 
 api.build_mesh = build_mesh
+
+---------------------------------------------------------------------------
+-- 量化跡線（rockmech_jointtex_style = q5e）：不做動態網格，每一格露出、有跡線的岩石放一個實體（略大一點的立方體，
+-- 靜態模型 models/rockmech_jointq_cube.obj，六面各一個材質），每一面的貼圖是線段小圖疊起來（a.png^b.png…）。
+-- 量化：面的每條邊切 D = q_div 段，面上一圈 4D 個點（角 + 等分點）；跡線的兩端各自吸到最近的邊上的點。
+-- 端點落在兩格（或兩面）共用的邊上時，兩邊算出來是同一點，所以跡線一定接得起來。DFN 圓盤的跡線在面內結束的話，
+-- 那一端吸到最近的邊。節理組數不限（同一面幾條線就疊幾張），線段小圖只有 C(4D, 2) 張，啟動時產生一次
+---------------------------------------------------------------------------
+if QE then
+	local D = jt.q_div
+	local N = 4 * D
+	local R = 16                                  -- 貼圖解析度（跟方塊一樣 16 像素）
+	-- 第 k 個點（0..N−1）的面內座標：邊 0：v = −½，u 由 −½ 到 ½；邊 1：u = ½；邊 2：v = ½，u 由 ½ 到 −½；邊 3：u = −½
+	local function point(k)
+		local e, i = math.floor(k / D), k % D
+		local t = i / D
+		if e == 0 then return -0.5 + t, -0.5
+		elseif e == 1 then return 0.5, -0.5 + t
+		elseif e == 2 then return 0.5 - t, 0.5
+		else return -0.5, 0.5 - t end
+	end
+	-- 面內一點吸到最近的邊上最近的等分點 → 序號
+	local function snap(a)
+		local u, v = math.max(-0.5, math.min(0.5, a[1])), math.max(-0.5, math.min(0.5, a[2]))
+		local d = {v + 0.5, 0.5 - u, 0.5 - v, u + 0.5}
+		local e = 1
+		for i = 2, 4 do if d[i] < d[e] then e = i end end
+		local t = ({u + 0.5, v + 0.5, 0.5 - u, 0.5 - v})[e]
+		return ((e - 1) * D + math.floor(t * D + 0.5)) % N
+	end
+	-- 點在哪幾條邊上（角在兩條）
+	local function edges_of(k)
+		local e, i = math.floor(k / D), k % D
+		if i == 0 then return {e, (e + 3) % 4} end
+		return {e}
+	end
+	local function same_edge(i, j)
+		for _, a in ipairs(edges_of(i)) do for _, b in ipairs(edges_of(j)) do if a == b then return true end end end
+		return false
+	end
+	local function seg_name(i, j) return ("rockmech_jq%d_%d_%d.png"):format(D, i, j) end
+	-- 線段 → 名稱（貼圖檔名）；兩端吸到同一點、或整段貼在一條邊上就不畫
+	function api.q_segment(a, b)
+		local i, j = snap(a), snap(b)
+		if i == j or same_edge(i, j) then return nil end
+		if i > j then i, j = j, i end
+		return seg_name(i, j)
+	end
+
+	-- 線段小圖：透明底、Bresenham 一像素寬的線。像素 (px, py)：px 由左到右是 u，py 由上到下是 −v（模型的 vt = (u+½, v+½)）
+	local lr = tonumber(jt.line_color:sub(2, 3), 16)
+	local lg = tonumber(jt.line_color:sub(4, 5), 16)
+	local lb = tonumber(jt.line_color:sub(6, 7), 16)
+	local dir = core.get_worldpath() .. DIR_DELIM .. "rockmech_jointq"
+	core.mkdir(dir)
+	local function px_of(k)
+		local u, v = point(k)
+		return math.floor((u + 0.5) * (R - 1) + 0.5), math.floor((0.5 - v) * (R - 1) + 0.5)
+	end
+	local n_png = 0
+	for i = 0, N - 1 do
+		for j = i + 1, N - 1 do
+			if not same_edge(i, j) then
+				local on = {}
+				local x0, y0 = px_of(i)
+				local x1, y1 = px_of(j)
+				local dx, dy = math.abs(x1 - x0), -math.abs(y1 - y0)
+				local sx, sy = x0 < x1 and 1 or -1, y0 < y1 and 1 or -1
+				local err = dx + dy
+				while true do
+					on[y0 * R + x0] = true
+					if x0 == x1 and y0 == y1 then break end
+					local e2 = 2 * err
+					if e2 >= dy then err = err + dy; x0 = x0 + sx end
+					if e2 <= dx then err = err + dx; y0 = y0 + sy end
+				end
+				local px = {}
+				for k = 0, R * R - 1 do
+					px[k + 1] = on[k] and string.char(lr, lg, lb, jt.line_alpha) or "\0\0\0\0"
+				end
+				local name = seg_name(i, j)
+				local path = dir .. DIR_DELIM .. name
+				local fh = io.open(path, "wb")
+				if fh then
+					fh:write(core.encode_png(R, R, table.concat(px)))
+					fh:close()
+					core.dynamic_add_media({filepath = path})      -- 載入時不能給 callback
+					n_png = n_png + 1
+				end
+			end
+		end
+	end
+	core.log("action", ("[rockmech] 量化跡線：每邊 %d 點、%d 張線段貼圖"):format(D + 1, n_png))
+
+	local QENT = "rockmech:jointq"
+	local BLANK = "blank.png"
+	core.register_entity(QENT, {
+		initial_properties = {
+			visual = "mesh", mesh = "rockmech_jointq_cube.obj",
+			textures = {BLANK, BLANK, BLANK, BLANK, BLANK, BLANK},
+			use_texture_alpha = true, backface_culling = false,
+			physical = false, pointable = false, static_save = false,
+			collisionbox = {0, 0, 0, 0, 0, 0}, selectionbox = {0, 0, 0, 0, 0, 0},
+			shaded = false,
+		},
+		on_step = function(self)
+			if not self.rm_key then self.object:remove() end
+		end,
+	})
+	-- 一格的六面貼圖
+	local function textures_of(cell)
+		local t = {}
+		for di = 1, 6 do
+			local f = cell.f[di]
+			if f then
+				local list = {}
+				for name in pairs(f) do list[#list + 1] = name end
+				table.sort(list)
+				t[di] = table.concat(list, "^")
+			else
+				t[di] = BLANK
+			end
+		end
+		return t, table.concat(t, "|")
+	end
+	-- 區塊重建後：多的實體刪掉、少的補上、貼圖變了才換
+	function api.q_apply(b, key, qcells)
+		b.q = b.q or {}
+		local keep = {}
+		for k, cell in pairs(qcells) do
+			local tex, sig = textures_of(cell)
+			if sig ~= "blank.png|blank.png|blank.png|blank.png|blank.png|blank.png" then
+				keep[k] = true
+				local e = b.q[k]
+				if not (e and e.obj:get_pos()) then
+					local obj = core.add_entity({x = cell.x, y = cell.y, z = cell.z}, QENT)
+					if obj then
+						obj:get_luaentity().rm_key = key
+						obj:set_properties({textures = tex})
+						b.q[k] = {obj = obj, sig = sig}
+					end
+				elseif e.sig ~= sig then
+					e.obj:set_properties({textures = tex})
+					e.sig = sig
+				end
+			end
+		end
+		for k, e in pairs(b.q) do
+			if not keep[k] then e.obj:remove(); b.q[k] = nil end
+		end
+	end
+	-- 檢查用：目前的實體數
+	function api.q_count()
+		local n = 0
+		for _, b in pairs(blocks) do if b.q then for _ in pairs(b.q) do n = n + 1 end end end
+		return n
+	end
+end

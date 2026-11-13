@@ -341,7 +341,9 @@ config.jointtex_defaults = {
 	                          -- mesh：不用方塊變體，跡線以區塊網格疊在岩面上（組數不限；jointmesh.lua）
 	mesh_range = 3,           -- mesh：玩家周圍幾個區塊（16 m）內顯示
 	mesh_width = 0.06,        -- mesh：跡線寬度 (m)
-	mesh_overlay = false,     -- plane 模式下另外疊一層紅色網格跡線（檢查用）
+	mesh_overlay = false,     -- plane、q5e 模式下另外疊一層紅色網格跡線（檢查用：真實位置）
+	                          -- q5e：跡線量化到每邊 q_div + 1 個點（角 + 等分點），每格一個實體疊線段貼圖（組數不限、沒有動態網格）
+	q_div = 4,                -- q5e：每條邊切幾段（2 = 角 + 中點，4 = 四等分；16 像素貼圖對得齊的是 2、4）
 	mesh_debug = false,       -- mesh：記錄地形改變到網格送達的延遲
 	max_lines = 2,            -- plane：每格最多畫幾組節理
 	plane_res = 32,           -- plane：跡線貼圖解析度（像素）
@@ -952,10 +954,11 @@ function config.load(get, opts)
 	local jt = load_section("jointtex", config.jointtex_defaults)
 	jt.line_alpha = math.max(0, math.min(255, math.floor(jt.line_alpha)))
 	jt.face_ratio = math.max(0, math.min(255, math.floor(jt.face_ratio)))
-	if jt.style ~= "plane" and jt.style ~= "edges" and jt.style ~= "mesh" then
-		warnings[#warnings + 1] = "rockmech_jointtex_style 只能是 plane、edges 或 mesh，改用 plane"
+	if jt.style ~= "plane" and jt.style ~= "edges" and jt.style ~= "mesh" and jt.style ~= "q5e" then
+		warnings[#warnings + 1] = "rockmech_jointtex_style 只能是 plane、edges、mesh 或 q5e，改用 plane"
 		jt.style = "plane"
 	end
+	jt.q_div = math.max(1, math.min(8, math.floor(jt.q_div)))
 	jt.mesh_range = math.max(1, math.min(6, math.floor(jt.mesh_range)))
 	jt.mesh_width = math.max(0.01, math.min(0.5, jt.mesh_width))
 	jt.max_lines = math.max(1, math.min(3, math.floor(jt.max_lines)))
@@ -1261,7 +1264,7 @@ function config.load(get, opts)
 			js.kappa = js.kappa or 30
 			js.rmin, js.rmax, js.a = js.rmin or 1, js.rmax or 10, js.a or 3.5
 		end
-		cfg.jointtex.style = "mesh"
+		if cfg.jointtex.style ~= "q5e" then cfg.jointtex.style = "mesh" end      -- DFN：只有網格或量化實體畫得出來
 	end
 	-- 一組 persistence = 0 等同停用，保留在表中（羅盤仍會顯示其平面）
 

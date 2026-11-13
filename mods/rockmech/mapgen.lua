@@ -47,7 +47,7 @@ end
 
 -- 節理組（與主環境相同的種子與前處理，結果一致）
 -- mesh 模式：方塊不帶跡線（跡線由 jointmesh.lua 疊上），一律用基本方塊
-local use_joints = cfg.jointtex.enabled and cfg.jointtex.style ~= "mesh"
+local use_joints = cfg.jointtex.enabled and (cfg.jointtex.style == "plane" or cfg.jointtex.style == "edges")
 local sets = joints.prepare(cfg.joint_sets,
 	joints.seed_from_string(core.get_mapgen_setting("seed") or "0"), cfg.joint_lattice, cfg.joint_persistence)
 local cell_mask = joints.cell_mask
