@@ -108,7 +108,7 @@ config.lithologies.cu_oxide = {
 }
 config.lithologies.cu_enriched = {
 	name = "cu_enriched", description = TR("Enriched copper ore"), ore = "copper", pure = "#24282e",
-	gamma = 26.0, ucs = 55.0, tensile = 4.0, mi = 14,
+	gamma = 26.0, ucs = 65.0, tensile = 4.5, mi = 14,
 	color = "#3a3e44", cracky = 3,
 	texture = "default_stone.png^[colorize:#e0e0e0:200",
 	rn = 0.30, rt = 0.80, mu_roll = 0.45, break_height = 3.5,
