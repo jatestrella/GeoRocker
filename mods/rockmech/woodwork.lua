@@ -476,7 +476,9 @@ local function push_aside(p, push)
 	local k = rockmech.rubble_level[node.name] or TOPSOIL_K[node.name]
 	if not k or k >= NLEV then return end
 	local base = rockmech.rubble_base[node.name] or SOIL
+	local ca = rockmech.assay.get(p, node)
 	core.swap_node(p, {name = "air"})
+	rockmech.assay.set(p, "air")
 	if not push then return end
 	local V = rockmech.vehicles
 	if not (V and V.deposit_column) then return end
@@ -491,7 +493,7 @@ local function push_aside(p, push)
 		if TOPSOIL_K[qn] and TOPSOIL_K[qn] < NLEV then rockmech.loosen_under(q, qn); qn = core.get_node(q).name end
 		local qk = rockmech.rubble_level[qn]
 		if qn == "air" or (qk and qk < NLEV) then
-			k = V.deposit_column(q.x, q.z, p.y, base, k, 2, nil, node.param2)
+			k = V.deposit_column(q.x, q.z, p.y, base, k, 2, nil, ca)
 			if k <= 0 then return end
 		end
 	end
@@ -701,10 +703,12 @@ local function check_topsoil(pos)
 			if not (ka and kb) or not rockmech.rubble_mixable(ba, bb) then break end
 			local put = math.min(NLEV - ka, kb)
 			if put > 0 then
-				local b2, g2 = rockmech.rubble_merge(ba, ka, na.param2, bb, put, nb.param2)
-				core.swap_node(a, {name = rockmech.rubble_with_level(b2, ka + put, g2), param2 = g2})
-				if kb - put > 0 then core.swap_node(b, {name = rockmech.rubble_with_level(bb, kb - put, nb.param2), param2 = nb.param2})
-				else core.swap_node(b, {name = "air"}) end
+				local A = rockmech.assay
+				local cb = A.get(b, nb)
+				local b2, c2 = A.merge(ba, ka, A.get(a, na), bb, put, cb)
+				A.place(a, b2, ka + put, c2, true)
+				if kb - put > 0 then A.place(b, bb, kb - put, cb, true)
+				else core.swap_node(b, {name = "air"}); A.set(b, "air") end
 			end
 		end
 	end

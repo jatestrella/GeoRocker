@@ -858,7 +858,7 @@ local function excavator(kind, P)
 			for base, lv in pairs(self.load) do
 				local m = math.min(lv, room)
 				if m > 0 then
-					V.load_put(truck, base, m, V.load_grade(self, base))
+					V.load_put(truck, base, m, V.load_assay(self, base))
 					room = room - m
 					V.load_keep(self, base, lv - m)
 				end
@@ -883,9 +883,9 @@ local function excavator(kind, P)
 		for _, c in ipairs(cells) do
 			if want <= 0 then break end
 			if rockmech.dig_topsoil then rockmech.dig_topsoil(c) end      -- 表土：鏟斗挖鬆了再挖起來
-			local t, base, g = V.take_rubble(c, want)
+			local t, base, _, ca = V.take_rubble(c, want)
 			if t > 0 then
-				V.load_put(self, base, t, g)
+				V.load_put(self, base, t, ca)
 				want = want - t
 				got = got + t
 			end
@@ -917,10 +917,13 @@ local function excavator(kind, P)
 					dg.done = true
 					local node = core.get_node(dg.target)
 					if rockmech.lith_of_node[node.name] then
-						local rn, rp = rockmech.rubble_node(node)
+						local rn, ca = rockmech.assay.break_rock(dg.target, node)
 						core.remove_node(dg.target)          -- 跟鎬子一樣：先移除（觸發開挖、穩定、應力解），原地留碎石
 						local tn = core.get_node(dg.target).name      -- 空氣（或車燈：vehicle_lights.lua）
-						if tn == "air" or tn:find("^rockmech:vehicle_light") then core.set_node(dg.target, {name = rn, param2 = rp}) end
+						if tn == "air" or tn:find("^rockmech:vehicle_light") then
+							core.set_node(dg.target, {name = rn, param2 = rockmech.assay.p2(ca)})
+							rockmech.assay.set(dg.target, rn, ca)
+						end
 					end
 					dg.t = DIG_PHASES[1] + DIG_PHASES[2] + 1e-3
 				end

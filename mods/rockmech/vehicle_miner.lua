@@ -156,8 +156,8 @@ local function cut_cell(self, c)
 		if room < NLEV then return "full" end
 		self.cut_now = (self.cut_now or 0) + 1
 		if rockmech.lith_of_node[n].ore then self.cut_coal = (self.cut_coal or 0) + 1; self.cut_ore = rockmech.cfg.ores[rockmech.lith_of_node[n].ore] end      -- 切到礦層（煤、大理岩）
-		local rn, rp = rockmech.rubble_node(node)
-		V.load_put(self, rockmech.rubble_base[rn], NLEV, rp)
+		local rn, ca = rockmech.assay.break_rock(c, node)
+		V.load_put(self, rockmech.rubble_base[rn], NLEV, ca)
 		core.remove_node(c)
 		collapse.mark_excavated(c)
 		if rockmech.shotcrete_uncover then rockmech.shotcrete_uncover(c) end
@@ -165,9 +165,9 @@ local function cut_cell(self, c)
 	end
 	if rockmech.rubble_level[n] then
 		if room <= 0 then return "full" end
-		local t, base, g = V.take_rubble(c, room)
+		local t, base, _, ca = V.take_rubble(c, room)
 		if t > 0 then
-			V.load_put(self, base, t, g)
+			V.load_put(self, base, t, ca)
 			self.cut_now = (self.cut_now or 0) + 1
 			if rockmech.ore_of_rubble[base] then self.cut_coal = (self.cut_coal or 0) + 1; self.cut_ore = rockmech.ore_of_rubble[base] end
 		end
@@ -217,7 +217,7 @@ local function unload(self, n, put)
 	local moved = 0
 	for base, lv in pairs(table.copy(self.load)) do
 		local want = math.min(lv, math.max(1, math.floor(n * lv / total + 0.5)))
-		local g = V.load_grade(self, base)
+		local g = V.load_assay(self, base)
 		local k = put(base, want, g)
 		if k > 0 then
 			V.load_keep(self, base, lv - k)

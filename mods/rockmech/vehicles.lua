@@ -11,6 +11,7 @@
 local NLEV = rockmech.RUBBLE_LEVELS
 local S = rockmech.S
 local collapse = rockmech.collapse
+local A = rockmech.assay      -- 碎石的成分（assay.lua）
 
 local V = {NLEV = NLEV}
 rockmech.vehicles = V
@@ -741,7 +742,7 @@ end
 -- 地面層（車身最下面那層格子的高程）。half：碰撞箱半邊長（預設 1）
 function V.ground_y(pos, half) return math.floor(pos.y - (half or 1) + 0.5) end
 
--- 從 cell 取走最多 want 級碎石。回傳 取走的級數, 碎石種類, 品位（param2）
+-- 從 cell 取走最多 want 級碎石。回傳 取走的級數, 碎石種類, 品位（param2 的刻度）, 成分（assay.lua 的表，副產品也在裡面）
 function V.take_rubble(cell, want)
 	local node = core.get_node(cell)
 	local name = node.name
@@ -749,8 +750,8 @@ function V.take_rubble(cell, want)
 	if not k or want <= 0 then return 0 end
 	local base = rockmech.rubble_base[name]
 	local t = math.min(k, want)
-	local rest = rockmech.rubble_with_level(base, k - t, node.param2)
-	if rest then core.swap_node(cell, {name = rest, param2 = node.param2}) else core.remove_node(cell) end
+	local c = A.get(cell, node)      -- 成分（assay.lua）：取走的那份跟著走
+	local rest = A.place(cell, base, k - t, c, true)
 	collapse.check_cell({x = cell.x, y = cell.y + 1, z = cell.z})   -- 上方的碎石往下掉
 	-- 這格拿空了：旁邊（同一層、上一層）的碎石也判定一次，比安息角陡就流進來
 	-- （不然料堆底下的輸送帶吸料時，兩側會留下直立的碎石牆）
@@ -762,15 +763,28 @@ function V.take_rubble(cell, want)
 			end
 		end
 	end
-	return t, base, node.param2
+	return t, base, A.g(c), c
 end
 
--- 車上的碎石：self.load[種類] = 級數；礦石碎石另外記 self.loadq[種類] = Σ 級數 × 品位
+-- 車上的碎石：self.load[種類] = 級數；礦石碎石另外記 self.loadq[種類] = Σ 級數 × 品位（主成分），
+-- 副產品記 self.loada[種類] = {鍵 = Σ 級數 × 含量}（assay.lua）。g：數字（param2）或成分表
 function V.load_put(self, base, lv, g)
 	self.load[base] = (self.load[base] or 0) + lv
 	if rockmech.mix_of[base] then      -- 混合碎石（礦石品位、崩積土的土比例）都記加權的 param2
-		self.loadq[base] = (self.loadq[base] or 0) + lv * (g or 0)
+		self.loadq[base] = (self.loadq[base] or 0) + lv * A.g(g)
+		local ex = A.extras_add(self.loada and self.loada[base], g, lv)
+		if ex then
+			self.loada = self.loada or {}
+			self.loada[base] = ex
+		end
 	end
+end
+-- 車上這種碎石的平均成分（倒出來、轉給別台車用；副產品跟著走）
+function V.load_assay(self, base)
+	local c = A.new(V.load_grade(self, base))
+	local lv, ex = self.load[base], self.loada and self.loada[base]
+	if ex and lv and lv > 0 then for k, v in pairs(ex) do c[k] = v / lv end end
+	return c
 end
 -- 車上這種碎石的平均品位（param2）
 function V.load_grade(self, base)
@@ -781,6 +795,9 @@ end
 function V.load_keep(self, base, rest)
 	local lv = self.load[base]
 	if self.loadq[base] then self.loadq[base] = rest > 0 and self.loadq[base] * rest / lv or nil end
+	if self.loada and self.loada[base] then
+		self.loada[base] = rest > 0 and A.acc_scale(self.loada[base], rest / lv) or nil
+	end
 	self.load[base] = rest > 0 and rest or nil
 end
 
@@ -788,7 +805,7 @@ end
 -- 在 (x, z) 這一欄、從 ytop 往下找落點，倒 a 級 base 碎石；滿了往上堆（最多 max_h 格，預設 8）。
 -- placed（可選）：收集倒下的格子，不立即做安息角流動（推土機推著的那堆）。回傳倒不下的級數
 local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
-	g = g or 0
+	local c = A.c(g)      -- 數字（param2）或成分表（assay.lua）
 	local passable = rockmech.rubble_passable or passable      -- 碎石：風管這類擋碎石的方塊不能倒進去
 	local y = ytop
 	for _ = 1, 8 do
@@ -802,13 +819,13 @@ local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
 		local k = rockmech.rubble_level[n]
 		if passable(n) then
 			local put = math.min(NLEV, a)
-			core.set_node(p, {name = rockmech.rubble_with_level(base, put, g), param2 = g})
+			A.place(p, base, put, c)
 			a = a - put
 			if placed then placed[#placed + 1] = p else collapse.check_cell(p) end
 		elseif k and k < NLEV and rockmech.rubble_mixable(rockmech.rubble_base[n], base) then
 			local put = math.min(NLEV - k, a)
-			local b2, g2 = rockmech.rubble_merge(rockmech.rubble_base[n], k, core.get_node(p).param2, base, put, g)
-			core.swap_node(p, {name = rockmech.rubble_with_level(b2, k + put, g2), param2 = g2})
+			local b2, c2 = A.merge(rockmech.rubble_base[n], k, A.get(p), base, put, c)
+			A.place(p, b2, k + put, c2, true)
 			a = a - put
 			if placed then placed[#placed + 1] = p else collapse.check_cell(p) end
 		end
@@ -1206,7 +1223,7 @@ function V.dump_to_ground(self, cells, ytop)
 			V.load_keep(self, base, rest)
 			goto continue
 		end
-		local g = V.load_grade(self, base)
+		local g = V.load_assay(self, base)
 		for i, c in ipairs(cells) do
 			local share = math.ceil(lv / (#cells - i + 1))
 			lv = lv - share
@@ -1599,7 +1616,7 @@ function V.register(kind, def)
 		},
 		vkind = kind,
 		on_activate = function(self, staticdata)
-			self.load, self.store, self.loadq = {}, {}, {}
+			self.load, self.store, self.loadq, self.loada = {}, {}, {}, {}
 			local data = staticdata ~= "" and core.deserialize(staticdata) or nil
 			-- 快照比地圖裡的資料新（伺服器被強制結束，地圖沒存到最新的車）：用快照，車子放回快照的位置
 			local snap = data and data.uid and V.snapshot_of(data.uid)
@@ -1616,6 +1633,7 @@ function V.register(kind, def)
 			if data then
 				self.load = data.load or {}
 				self.loadq = data.loadq or {}
+				self.loada = data.loada or {}
 				self.store = data.store or {}
 				if data.yaw then self.object:set_yaw(data.yaw) end
 				if data.owner then V.set_owner(self, data.owner) end
@@ -1644,7 +1662,7 @@ function V.register(kind, def)
 			drop_chase(self)
 		end,
 		get_staticdata = function(self)
-			local data = {load = self.load, loadq = self.loadq, store = self.store, yaw = self.object:get_yaw(), uid = self.uid,
+			local data = {load = self.load, loadq = self.loadq, loada = self.loada, store = self.store, yaw = self.object:get_yaw(), uid = self.uid,
 				owner = self.owner, wall = os.time()}
 			if def.on_save then def.on_save(self, data) end
 			return core.serialize(data)

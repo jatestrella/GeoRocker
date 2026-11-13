@@ -85,7 +85,7 @@ function rockmech.blast_rock(center, R, floor_y, D)
 	local p2data = vm:get_param2_data()
 	local ejected, n_eject, n_rubble = {}, 0, 0   -- ejected：滿格碎石名稱 → 累計級數
 	local thrown = {}      -- 經營模式：炸飛的碎石 {base, 級數, 品位}，落回爆破坑（世界不掉落碎石）
-	local removed, rubbled = {}, {}
+	local removed, rubbled, made = {}, {}, {}      -- made：新的碎石 {p, name, c}（寫完 VoxelManip 再寫成分）
 	local changes = {}     -- 開挖前的方塊（只有開挖造成的惡化才破壞）
 	for z = p1.z, p2.z do for y = p1.y, p2.y do
 		local vi = area:index(p1.x, y, z)
@@ -106,16 +106,17 @@ function rockmech.blast_rock(center, R, floor_y, D)
 					local rname = rockmech.rubble_for(li.name)
 					if zone then changes[#changes + 1] = {pos = p, name = li.name} end
 					if zone == "eject" then
-						thrown[#thrown + 1] = {rname, rockmech.RUBBLE_LEVELS, rockmech.rubble_p2({name = li.name, param2 = p2data[vi]})}
+						thrown[#thrown + 1] = {rname, rockmech.RUBBLE_LEVELS, rockmech.assay.get(p, {name = li.name, param2 = p2data[vi]})}
 						data[vi] = c_air
 						ejected[rname] = (ejected[rname] or 0) + rockmech.RUBBLE_LEVELS
 						n_eject = n_eject + 1
 						removed[#removed + 1] = p
 					elseif zone == "rubble" then
-						local rn, rp = rockmech.rubble_node({name = li.name, param2 = p2data[vi]})
-						data[vi], p2data[vi] = core.get_content_id(rn), rp
+						local rn, ca = rockmech.assay.break_rock(p, {name = li.name, param2 = p2data[vi]})
+						data[vi], p2data[vi] = core.get_content_id(rn), rockmech.assay.p2(ca)
 						n_rubble = n_rubble + 1
 						rubbled[#rubbled + 1] = p
+						made[#made + 1] = {p = p, name = rn, c = ca}
 					end
 				elseif d <= bcfg.inner * R then
 					-- 已經是碎石：中心區一樣炸飛
@@ -123,7 +124,7 @@ function rockmech.blast_rock(center, R, floor_y, D)
 					data[vi] = c_air
 					-- 不滿格的碎石：依級數累加到滿格碎石（8 級 = 1 個），物品才會疊在同一堆
 					local base = rockmech.rubble_base[rb] or rb
-					thrown[#thrown + 1] = {base, rockmech.rubble_level[rb] or rockmech.RUBBLE_LEVELS, p2data[vi]}
+					thrown[#thrown + 1] = {base, rockmech.rubble_level[rb] or rockmech.RUBBLE_LEVELS, rockmech.assay.get(p, {name = rb, param2 = p2data[vi]})}
 					ejected[base] = (ejected[base] or 0) + (rockmech.rubble_level[rb] or rockmech.RUBBLE_LEVELS)
 					n_eject = n_eject + 1
 					removed[#removed + 1] = p
@@ -141,6 +142,9 @@ function rockmech.blast_rock(center, R, floor_y, D)
 		if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
 	end
 	vm:close()
+	-- VoxelManip 不管 metadata：新的碎石寫上成分，炸飛的格子清掉舊的
+	for _, e in ipairs(made) do rockmech.assay.set(e.p, e.name, e.c) end
+	for _, p in ipairs(removed) do rockmech.assay.set(p, "air") end
 	for _, p in ipairs(damaged) do rockmech.collapse.mark_damage(p, D) end
 	-- 級數 → 個數（四捨五入）
 	for name, lv in pairs(ejected) do ejected[name] = math.floor(lv / rockmech.RUBBLE_LEVELS + 0.5) end

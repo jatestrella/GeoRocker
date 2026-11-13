@@ -50,18 +50,25 @@ local function place_cells(self, drop, off)
 	for _, c in ipairs(self.cells) do
 		local p = {x = self.origin.x + c.dx + ox, y = self.origin.y + c.dy - drop, z = self.origin.z + c.dz + oz}
 		local name, param2 = c.name, c.param2 or 0
+		local A = rockmech.assay
+		local a = c.assay or A.from_metatable(nil, {name = name, param2 = param2})      -- 成分（assay.lua）
+		local function to_rubble()
+			name = rockmech.rubble_with_level(rockmech.rubble_for(name), rockmech.RUBBLE_LEVELS, A.p2(a))
+			param2 = A.p2(a)
+		end
 		if self.to_rubble and rockmech.lith_of_node[name] then
 			-- 沿節理滑動的岩塊：落地時整塊變成碎石
-			name, param2 = rockmech.rubble_node({name = name, param2 = param2})
+			to_rubble()
 		elseif fb.enabled and not rockmech.is_rubble(name) then
 			local lith = rockmech.lith_of_node[name]
 			local h_ref = lith and lith.break_height or fb.break_height
 			if math.random() < rf.break_probability(drop, h_ref) then
-				name, param2 = rockmech.rubble_node({name = name, param2 = param2})
+				to_rubble()
 			end
 		end
 		if can_place(p) then
 			core.set_node(p, {name = name, param2 = param2})
+			A.set(p, name, a)
 			placed[#placed + 1] = {pos = p, name = name}
 		else
 			core.add_item(p, name) -- 落點被佔（理論上不會發生）
@@ -174,7 +181,8 @@ function api.spawn(cells, drop)
 	le.drop = drop
 	le.cells = {}
 	for i, c in ipairs(cells) do
-		le.cells[i] = {dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z, name = c.name, param2 = c.param2}
+		le.cells[i] = {dx = c.x - o.x, dy = c.y - o.y, dz = c.z - o.z, name = c.name, param2 = c.param2,
+			assay = c.assay}
 	end
 	parent:set_properties({node = {name = o.name}, is_visible = true})
 	for i = 2, #cells do

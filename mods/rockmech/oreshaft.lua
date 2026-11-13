@@ -68,7 +68,9 @@ local function build(i, s, owner)
 					if natural(core.get_node(p).name) then core.swap_node(p, {name = "air"}) end
 				elseif hole and y >= bottom then
 					C.mark_excavated(p)
-					if y <= fill_top then core.swap_node(p, {name = base, param2 = 200})      -- 填料
+					if y <= fill_top then
+						core.swap_node(p, {name = base, param2 = 200})      -- 填料
+						rockmech.assay.set(p, base, rockmech.assay.new(200))
 					else core.swap_node(p, {name = "air"}) end
 				elseif y <= top and rockmech.lith_of_node[core.get_node(p).name] then
 					core.swap_node(p, {name = WALL, param2 = 230})      -- 井壁和井底：硬大理岩

@@ -251,7 +251,7 @@ local function sync(acc)
 	local tr, st = trains[acc], states[acc]
 	if not (tr and st) then return end
 	for i, e in ipairs(tr.wagons) do
-		if e.object:get_pos() then st.loads[i] = {load = table.copy(e.load), loadq = table.copy(e.loadq)} end
+		if e.object:get_pos() then st.loads[i] = {load = table.copy(e.load), loadq = table.copy(e.loadq), loada = table.copy(e.loada or {})} end
 	end
 end
 local function despawn(acc)
@@ -293,7 +293,7 @@ local function spawn(acc)
 	end
 	for i = 1, N do
 		local ld = st.loads[i] or {}
-		local data = core.serialize({uid = uid_of(acc, i), owner = acc, load = ld.load or {}, loadq = ld.loadq or {}, wall = os.time() + 1,
+		local data = core.serialize({uid = uid_of(acc, i), owner = acc, load = ld.load or {}, loadq = ld.loadq or {}, loada = ld.loada or {}, wall = os.time() + 1,
 			yaw = YAW})
 		local obj = core.add_entity({x = st.head - L_LOCO - (i - 1) * PITCH - PITCH / 2, y = y, z = RAIL_Z + 0.5}, ENAME, data)
 		local e = obj and obj:get_luaentity()
@@ -352,7 +352,7 @@ local function depart(acc)
 	local rows, net, total_t = {}, 0, 0
 	for i = 1, N do
 		local ld = st.loads[i] or {}
-		local wagon = {load = ld.load or {}, loadq = ld.loadq or {}}
+		local wagon = {load = ld.load or {}, loadq = ld.loadq or {}, loada = ld.loada or {}}
 		-- 每節照車上最多的那種礦計價，別種礦算廢石（多種礦的地圖要分開裝）
 		local ore, lv, g = cfg.main_ore, 0, -1
 		for _, o in ipairs(cfg.active_ores) do
@@ -383,7 +383,7 @@ local function depart(acc)
 	-- 車廂的料跟著火車走了：畫面上清空
 	st.loads = {}
 	local tr = trains[acc]
-	if tr then for _, e in ipairs(tr.wagons) do e.load, e.loadq = {}, {}; V.refresh(e) end end
+	if tr then for _, e in ipairs(tr.wagons) do e.load, e.loadq, e.loada = {}, {}, {}; V.refresh(e) end end
 	st.phase = "leaving"
 	save(acc)
 end

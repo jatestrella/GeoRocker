@@ -296,7 +296,7 @@ function V.dump_to_ground(self, cells, ytop)
 					for base, lv in pairs(self.load) do
 						local m = math.min(lv, room)
 						if m > 0 then
-							V.load_put(e, base, m, V.load_grade(self, base))
+							V.load_put(e, base, m, V.load_assay(self, base))
 							room = room - m
 							V.load_keep(self, base, lv - m)
 						end

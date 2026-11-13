@@ -217,16 +217,18 @@ local function pave(c)
 	local full = {name = rockmech.compact_of[rockmech.rubble_with_level(base, NLEV, P2)], param2 = P2}
 	local top = {name = rockmech.compact_of[rockmech.rubble_with_level(base, k, P2)] or full.name, param2 = P2}
 	core.swap_node({x = c.x, y = yb, z = c.z}, top)
+	rockmech.assay.set({x = c.x, y = yb, z = c.z}, top.name, rockmech.assay.new(P2))
 	-- 往下填到實心
 	for y = yb - 1, yb - 15, -1 do
 		local p = {x = c.x, y = y, z = c.z}
 		local n = core.get_node(p).name
 		local def = core.registered_nodes[n]
 		if n ~= "air" and def and def.walkable ~= false and not rockmech.rubble_level[n] and n ~= "default:leaves" then
-			if rockmech.lith_of_node[n] then core.swap_node(p, full) end      -- 路面下第一格岩石也鋪平
+			if rockmech.lith_of_node[n] then core.swap_node(p, full); rockmech.assay.set(p, full.name, rockmech.assay.new(P2)) end      -- 路面下第一格岩石也鋪平
 			break
 		end
 		core.swap_node(p, full)
+		rockmech.assay.set(p, full.name, rockmech.assay.new(P2))
 	end
 	-- 往上清空，連續 4 格空氣就停
 	local air = 0

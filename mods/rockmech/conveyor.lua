@@ -15,6 +15,7 @@ local S = rockmech.S
 local V = rockmech.vehicles
 local H = rockmech.hopper_lib
 local storage = rockmech.collapse.storage
+local AS = rockmech.assay      -- 碎石的成分（assay.lua；這個檔裡 A 另有用途）
 
 local ITEM = "rockmech:belt"
 local BELT_H, BELT_ST, NAME = {}, {}, {}    -- node 名稱 → 表面高度 h（0..7，表面在 (h+1)/8 m）、外觀狀態（"" 空、"w" 載廢石、"o" 載礦）
@@ -105,7 +106,7 @@ local function leg_of(p)
 	return "n"
 end
 local cells = {}            -- 位置 hash → 位置（目前知道的輸送帶格）
-local loads = {}            -- 位置 hash → {{b = 碎石種類, k = 級數, g = 品位 param2}, ...}（空的不存）
+local loads = {}            -- 位置 hash → {{b = 碎石種類, k = 級數, g = 品位 param2, x = 副產品或 nil}, ...}（空的不存）
 local dirty = false
 do
 	local s = storage:get_string("belt_loads")
@@ -117,20 +118,24 @@ local function total(L)
 	if L then for _, q in ipairs(L) do n = n + q.k end end
 	return n
 end
--- 加料到一格（能混的併在一起，品位依級數加權）
+-- 一份料的成分（assay.lua 的表）
+local function comp(q) return AS.with(q.g, q.x) end
+-- 加料到一格（能混的併在一起，品位依級數加權）。g：數字（param2）或成分表
 local function add_load(h, b, k, g)
 	if k <= 0 then return end
 	local L = loads[h] or {}
 	loads[h] = L
 	dirty = true
+	local gp, x = AS.g(g), AS.extras(g)
 	for _, q in ipairs(L) do
 		if rockmech.rubble_mixable(q.b, b) then
-			q.b, q.g = rockmech.rubble_merge(q.b, q.k, q.g, b, k, g)
+			q.x = AS.extras_mix(q.x, q.k, x, k)
+			q.b, q.g = rockmech.rubble_merge(q.b, q.k, q.g, b, k, gp)
 			q.k = q.k + k
 			return
 		end
 	end
-	L[#L + 1] = {b = b, k = k, g = g or 0}
+	L[#L + 1] = {b = b, k = k, g = gp, x = x}
 end
 
 local function register_cell(pos)
@@ -179,7 +184,7 @@ for h = 0, 7 do
 			after_destruct = function(pos)
 				local hh = core.hash_node_position(pos)
 				cells[hh] = nil
-				for _, q in ipairs(loads[hh] or {}) do V.deposit_column(pos.x, pos.z, pos.y, q.b, q.k, nil, nil, q.g) end
+				for _, q in ipairs(loads[hh] or {}) do V.deposit_column(pos.x, pos.z, pos.y, q.b, q.k, nil, nil, comp(q)) end
 				loads[hh], dirty = nil, true
 			end,
 		})
@@ -314,7 +319,7 @@ local function move(ha, hb)
 	while room > 0 and #A > 0 do
 		local q = A[1]
 		local k = math.min(q.k, room)
-		add_load(hb, q.b, k, q.g)
+		add_load(hb, q.b, k, comp(q))
 		q.k, room = q.k - k, room - k
 		if q.k <= 0 then table.remove(A, 1) end
 	end
@@ -382,7 +387,7 @@ local function discharge(p, d)
 	local out = 0
 	for i = #L, 1, -1 do
 		local q = L[i]
-		local rest = V.deposit_column(f.x, f.z, ytop, q.b, q.k, nil, nil, q.g)
+		local rest = V.deposit_column(f.x, f.z, ytop, q.b, q.k, nil, nil, comp(q))
 		out = out + q.k - rest
 		q.k = rest
 		if rest <= 0 then table.remove(L, i) end
@@ -464,8 +469,8 @@ local function tick()
 			local room = C - total(loads[h])
 			if room > 0 then
 				local up = {x = p.x, y = p.y + 1, z = p.z}
-				local t, b, g = V.take_rubble(up, room)
-				if t > 0 then add_load(h, b, t, g) end
+				local t, b, _, c = V.take_rubble(up, room)
+				if t > 0 then add_load(h, b, t, c) end
 			end
 		end
 	end

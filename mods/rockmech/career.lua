@@ -250,7 +250,7 @@ function rockmech.career_load(player, self, def)
 		rockmech.notify(player:get_player_name(), S("The bed is full"))
 		return true
 	end
-	V.load_put(self, c.base, put, c.p2)
+	V.load_put(self, c.base, put, rockmech.assay.with(c.p2, c.x))
 	V.refresh(self)
 	c.lv = c.lv - put
 	set_carried(player, c.lv > 0 and c or nil)
@@ -276,7 +276,7 @@ local function put_down(player, pos)
 		else rockmech.notify(player:get_player_name(), S("The log does not fit here")) end
 		return
 	end
-	local rest = V.deposit_column(pos.x, pos.z, pos.y, c.base, c.lv, nil, nil, c.p2)
+	local rest = V.deposit_column(pos.x, pos.z, pos.y, c.base, c.lv, nil, nil, rockmech.assay.with(c.p2, c.x))
 	c.lv = rest
 	set_carried(player, rest > 0 and c or nil)
 end
@@ -324,21 +324,25 @@ function core.node_dig(pos, node, digger)
 			rockmech.notify(name, S("You are holding a different kind of rubble: put it down first"))
 			return false
 		end
-		local t, b, p2 = V.take_rubble(pos, NLEV - (c and c.lv or 0))
+		local t, b, p2, ca = V.take_rubble(pos, NLEV - (c and c.lv or 0))
+		local A = rockmech.assay
 		if c then
 			local nb, g = rockmech.rubble_merge(c.base, c.lv, c.p2, b, t, p2)
-			c = {base = nb, lv = c.lv + t, p2 = g}
+			c = {base = nb, lv = c.lv + t, p2 = g, x = A.extras_mix(c.x, c.lv, ca, t)}
 		else
-			c = {base = b, lv = t, p2 = p2}
+			c = {base = b, lv = t, p2 = p2, x = A.extras(ca)}      -- x：副產品（assay.lua）
 		end
 		set_carried(digger, c)
 		return true
 	end
 	if rockmech.lith_of_node[node.name] then
 		-- 岩石挖開就是原地一格碎石，品位留著
-		local rn, rp = rockmech.rubble_node(node)
+		local rn, ca = rockmech.assay.break_rock(pos, node)
 		local ok = node_dig(pos, node, digger)
-		if ok ~= false and core.get_node(pos).name == "air" then core.set_node(pos, {name = rn, param2 = rp}) end
+		if ok ~= false and core.get_node(pos).name == "air" then
+			core.set_node(pos, {name = rn, param2 = rockmech.assay.p2(ca)})
+			rockmech.assay.set(pos, rn, ca)
+		end
 		return ok
 	end
 	return node_dig(pos, node, digger)

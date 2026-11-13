@@ -111,6 +111,7 @@ local function clear(cells, p1, p2, pname, any)
 	vm:write_to_map(true)
 	if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
 	for _, p in ipairs(removed) do rockmech.shotcrete_uncover(p) end
+	for _, p in ipairs(removed) do rockmech.assay.set(p, "air") end      -- VoxelManip 不清 metadata：清掉碎石的成分
 
 	-- 鄰格：緊貼岩石（或其他實心非碎石）的移除點 → 穩定判定與破壞檢查；
 	-- 沒被清掉的鄰近碎石 → 重新判定掉落／顆粒流

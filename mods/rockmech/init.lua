@@ -150,6 +150,7 @@ end
 
 -- 引擎端模組
 dofile(modpath .. "/nodes.lua")
+dofile(modpath .. "/assay.lua")         -- 碎石的成分存在 metadata（跟著碎石走；rockmech.assay）
 dofile(modpath .. "/rockfall_entity.lua")
 dofile(modpath .. "/rigidfall_entity.lua")
 dofile(modpath .. "/collapse.lua") -- 沿用 physics_core 的坍塌機制，階段 3 由 keyblock.lua 取代
