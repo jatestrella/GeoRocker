@@ -198,6 +198,22 @@ describe("斑岩銅礦（rockmech_copper）", function()
 		assert.is_true(pe > 2 * pp)
 		assert.are.equal("copper", cfg.lithologies.cu_enriched.ore)
 		assert.is_nil(cfg.lithologies.gossan.ore)
+		assert.is_nil(cfg.body_hills)                                   -- 舊格式（8 個數字）：沒有山丘、不遞減
+	end)
+	it("原生帶品位往深處遞減；鐵帽是突起的山丘", function()
+		local s2 = {}
+		for k, v in pairs(set) do s2[k] = v end
+		s2.rockmech_copper = "100,0,40,20,10,5,3,100,200,12"
+		local cfg, w = config.load(getter(s2))
+		assert.are.equal(0, #w)
+		local _, _, _, p1 = stress.strata_at(cfg.strata, 100, -60, 0)
+		local _, _, _, p2 = stress.strata_at(cfg.strata, 100, -260, 0)
+		assert.is_true(p2 < p1 * 0.45)                                  -- 深 200 m：約 e^-1
+		assert.is_true(stress.has_terrain(cfg))
+		local top = stress.terrain_rise(cfg, 100, 0)
+		assert.is_true(top > 8 and top < 17)                            -- 斑岩體中心：山頂
+		assert.are.equal(0, (stress.terrain_rise(cfg, 0, 0)))           -- 斑岩體外：平地
+		assert.are.equal("gossan", (stress.strata_at(cfg.strata, 100, math.floor(top) - 1, 0)))      -- 山丘是鐵帽
 	end)
 end)
 

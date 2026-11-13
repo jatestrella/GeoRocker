@@ -322,7 +322,8 @@ end
 --   wt + ox 以上：鐵帽（銅被淋走，不是礦）
 --   wt … wt + ox：氧化帶（孔雀石），品位八成
 --   wt − E … wt：次生富集帶（輝銅礦），品位 × fac
---   再往下：原生帶
+--   再往下：原生帶，品位隨深度 × e^(−深度/dd)（dd 有給才遞減；從富集帶底部算）
+-- 鐵帽抗風化，地表在斑岩體上方是突起的小山丘（hg 有給才有；見 stress.body_hill）
 -- ox、E 沿水平緩慢變化（0.6–1.4 倍）。回傳 岩性, param2；不在斑岩體裡回傳 nil
 local function clamp_p2(v) return math.max(1, math.min(250, math.floor(v + 0.5))) end
 function stress.copper_at(B, x, y, z)
@@ -344,6 +345,7 @@ function stress.copper_at(B, x, y, z)
 	local prim = B.g0 * (1 - 0.65 * u2) * (0.85 + 0.3 * fbm(x / 23 + y / 41, z / 23 - y / 37, 229))
 	if y > c.wt then return "cu_oxide", clamp_p2(prim * 0.8) end
 	if y > c.wt - c.E then return "cu_enriched", clamp_p2(prim * B.fac) end
+	if B.dd then prim = prim * math.exp(-(c.wt - c.E - y) / B.dd) end      -- 原生帶：往深處品位遞減（礦底由截止品位決定）
 	return "cu_primary", clamp_p2(prim)
 end
 
@@ -377,12 +379,37 @@ function stress.free_terrain(cfg, x, z)
 	h = math.max(0, h) * smooth((rr - 60) / 40)
 	return h, h
 end
--- 有沒有公式地形（礦帶或自由地形）；有的話 (x, z) 比 surface_y 高幾公尺
-function stress.has_terrain(cfg) return cfg.lane_terrain ~= nil or cfg.terrain ~= nil end
+-- 鐵帽山丘（cfg.body_hills：有 hg 的斑岩銅礦）：鐵帽比周圍的安山岩耐風化，留成突起的小山丘。
+-- 邊界跟斑岩體一樣（copper_at 同一個起伏的半徑），外圈 35% 是山坡、裡面是起伏的山頂；回傳高出幾公尺
+function stress.body_hill(cfg, x, z)
+	local L = cfg.body_hills
+	if not L then return 0 end
+	local h = 0
+	for _, B in ipairs(L) do
+		local dx, dz = x - B.x0, z - B.z0
+		local rr = dx * dx + dz * dz
+		local Rmax = B.R * 1.2
+		if rr < Rmax * Rmax then
+			local R = B.R * (0.8 + 0.4 * fbm(x / 30, z / 30, 211))
+			local r = math.sqrt(rr)
+			if r < R then
+				h = math.max(h, B.hg * smooth((1 - r / R) / 0.35) * (0.8 + 0.4 * fbm(x / 15, z / 15, 233)))
+			end
+		end
+	end
+	return h
+end
+-- 有沒有公式地形（礦帶、自由地形或鐵帽山丘）；有的話 (x, z) 比 surface_y 高幾公尺
+function stress.has_terrain(cfg) return cfg.lane_terrain ~= nil or cfg.terrain ~= nil or cfg.body_hills ~= nil end
 function stress.terrain_rise(cfg, x, z)
 	if cfg.lane_terrain then return stress.lane_terrain(cfg, x, z) end
-	if cfg.terrain then return stress.free_terrain(cfg, x, z) end
-	return 0, 0
+	local t, hill = 0, 0
+	if cfg.terrain then t, hill = stress.free_terrain(cfg, x, z) end
+	if cfg.body_hills then
+		local b = stress.body_hill(cfg, x, z)
+		if b > 0 then t, hill = t + b, (hill or 0) + b end
+	end
+	return t, hill
 end
 
 -- 煤的品位（param2 1..255，煤佔的比例）：煤層中央最好，靠頂底板變差（夾雜質），再加緩慢的橫向變化

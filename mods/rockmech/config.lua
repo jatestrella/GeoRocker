@@ -760,12 +760,17 @@ function config.load(get, opts)
 		end
 		local v = numbers("rockmech_strata_var" .. sfx, 2)
 		if v and v[1] > 0 then S.var = {f = math.min(0.95, v[1]), scale = math.max(10, v[2])} end
-		-- rockmech_copper = x0,z0,半徑,地下水位深,富集帶厚,氧化帶厚,富集倍率,中心品位（param2）：
-		-- 這一區有一根斑岩銅礦（stress.copper_at）
+		-- rockmech_copper = x0,z0,半徑,地下水位深,富集帶厚,氧化帶厚,富集倍率,中心品位（param2）[,品位遞減深度[,鐵帽山丘高]]：
+		-- 這一區有一根斑岩銅礦（stress.copper_at）。後兩個可省（舊世界：品位不隨深度變、沒有山丘）
 		local b = numbers("rockmech_copper" .. sfx, 8)
 		if b and b[3] > 0 then
 			S.body = {x0 = b[1], z0 = b[2], R = b[3], D = b[4], E = math.max(0, b[5]), ox = math.max(0, b[6]),
-				fac = math.max(1, b[7]), g0 = math.max(1, math.min(250, b[8])), cfg = cfg}
+				fac = math.max(1, b[7]), g0 = math.max(1, math.min(250, b[8])), cfg = cfg,
+				dd = b[9] and b[9] > 0 and b[9] or nil, hg = b[10] and b[10] > 0 and b[10] or nil}
+			if S.body.hg then
+				cfg.body_hills = cfg.body_hills or {}
+				table.insert(cfg.body_hills, S.body)
+			end
 		end
 		return S
 	end
