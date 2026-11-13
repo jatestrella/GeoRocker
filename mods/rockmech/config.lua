@@ -83,8 +83,8 @@ config.lithologies.breccia = {
 }
 
 -- 斑岩銅礦地圖：安山岩裡一根直立的斑岩體，從地表往下風化成四層（worldgen.lua 的 copper、stress.copper_at）：
---   鐵帽（淋濾帶，銅被雨水淋走，只剩褐鐵礦，多孔、軟）→ 氧化帶（孔雀石，綠色）→ 次生富集帶（輝銅礦，黑灰，品位最高，
---   黏土化、偏弱）→ 原生帶（黃銅礦，灰底黃銅色斑點）。三種銅礦岩性都是同一種礦（copper），品位不同；
+--   鐵帽（淋濾帶，銅被雨水淋走，只剩褐鐵礦和矽質膠結的硬殼，抗風化，常突出地表；節理是原岩留下來的）→ 氧化帶（孔雀石，綠色）→ 次生富集帶（輝銅礦，黑灰，品位最高，
+--   沿裂隙黏土化，四帶裡最弱，但還是硬岩）→ 原生帶（黃銅礦，灰底黃銅色斑點）。三種銅礦岩性都是同一種礦（copper），品位不同；
 --   pure：這種岩性在調色盤上品位 100% 的顏色（沒寫就用礦種的 pure），各帶顏色不一樣，一眼看得出來
 config.lithologies.andesite = {
 	name = "andesite", description = TR("Andesite"),
@@ -94,24 +94,24 @@ config.lithologies.andesite = {
 }
 config.lithologies.gossan = {
 	name = "gossan", description = TR("Gossan"),
-	gamma = 21.0, ucs = 15.0, tensile = 1.0, mi = 10,
-	color = "#8c3f1c", cracky = 3, bare = true,
+	gamma = 24.0, ucs = 70.0, tensile = 5.0, mi = 14,
+	color = "#8c3f1c", cracky = 2, bare = true,
 	texture = "default_stone.png^[colorize:#8c3f1c:170^(default_mineral_iron.png^[colorize:#d07020:200)",
-	rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 1.5,
+	rn = 0.35, rt = 0.80, mu_roll = 0.45, break_height = 4.0,
 }
 config.lithologies.cu_oxide = {
 	name = "cu_oxide", description = TR("Oxide copper ore"), ore = "copper", pure = "#2fa86a",
-	gamma = 24.0, ucs = 35.0, tensile = 2.5, mi = 12,
-	color = "#4f9a72", cracky = 3,
+	gamma = 25.0, ucs = 70.0, tensile = 5.0, mi = 16,
+	color = "#4f9a72", cracky = 2,
 	texture = "default_stone.png^[colorize:#e0e0e0:200^default_mineral_copper.png",
-	rn = 0.30, rt = 0.80, mu_roll = 0.45, break_height = 2.5,
+	rn = 0.35, rt = 0.80, mu_roll = 0.45, break_height = 4.0,
 }
 config.lithologies.cu_enriched = {
 	name = "cu_enriched", description = TR("Enriched copper ore"), ore = "copper", pure = "#24282e",
-	gamma = 25.0, ucs = 25.0, tensile = 1.5, mi = 10,
+	gamma = 26.0, ucs = 55.0, tensile = 4.0, mi = 14,
 	color = "#3a3e44", cracky = 3,
 	texture = "default_stone.png^[colorize:#e0e0e0:200",
-	rn = 0.25, rt = 0.75, mu_roll = 0.50, break_height = 2.0,
+	rn = 0.30, rt = 0.80, mu_roll = 0.45, break_height = 3.5,
 }
 config.lithologies.cu_primary = {
 	name = "cu_primary", description = TR("Primary copper ore"), ore = "copper", pure = "#c8a040",
@@ -125,7 +125,7 @@ config.lithologies.cu_primary = {
 -- 只用來把 GSI 換成岩芯看得到的 RQD（Hoek、Carter & Diederichs 2013：GSI = 52·(Jr/Ja)/(1 + Jr/Ja) + RQD/2），不影響力學。
 -- 沒列的岩性用 Jr 2、Ja 1
 for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}, marble = {2, 1}, schist = {1, 3}, breccia = {1, 6},
-		andesite = {2, 1}, gossan = {1, 4}, cu_oxide = {1.5, 3}, cu_enriched = {1, 4}, cu_primary = {2, 1}}) do
+		andesite = {2, 1}, gossan = {2, 2}, cu_oxide = {1.5, 2}, cu_enriched = {1.5, 2}, cu_primary = {2, 1}}) do
 	local l = config.lithologies[key]
 	if l then l.jr, l.ja = v[1], v[2] end
 end

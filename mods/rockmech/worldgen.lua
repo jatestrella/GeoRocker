@@ -139,10 +139,10 @@ M.RECIPES.copper = {
 	joint1 = function(r, dip, dipdir, round, range, pick)
 		return ("%d,%d,%g,0.7,%g,1"):format(dip, dipdir, round(range(r, 2, 4), 0.5), pick(r, {1.5, 2}))
 	end,
-	-- 蝕變、風化過的岩石節理密：富集帶、鐵帽最密，安山岩、原生帶疏
+	-- 斑岩體裡蝕變過、節理比安山岩密；富集帶沿裂隙黏土化，稍微再密一點
 	p32 = function(r, round, range)
 		return ("andesite:%g,cu_primary:%g,cu_enriched:%g,cu_oxide:%g,gossan:%g"):format(round(range(r, 0.5, 0.8), 0.1),
-			round(range(r, 0.7, 1), 0.1), round(range(r, 1.5, 2), 0.1), round(range(r, 1.3, 1.8), 0.1), round(range(r, 1.5, 2.2), 0.1))
+			round(range(r, 0.8, 1.1), 0.1), round(range(r, 1.1, 1.4), 0.1), round(range(r, 1, 1.3), 0.1), round(range(r, 0.9, 1.2), 0.1))
 	end,
 	dfn1 = function(r, round, range)
 		return ("%d,1,%d,3"):format(round(range(r, 20, 40)), round(range(r, 12, 25)))
@@ -377,9 +377,9 @@ function M.generate(world_conf)
 	if seen.copper then
 		set("gsi_andesite", round(range(r, 55, 75)))
 		set("gsi_cu_primary", round(range(r, 50, 70)))
-		set("gsi_cu_oxide", round(range(r, 30, 45)))
-		set("gsi_cu_enriched", round(range(r, 20, 35)))
-		set("gsi_gossan", round(range(r, 15, 30)))
+		set("gsi_cu_oxide", round(range(r, 45, 60)))
+		set("gsi_cu_enriched", round(range(r, 35, 50)))
+		set("gsi_gossan", round(range(r, 35, 50)))
 	end
 	local okeys, oseen = {}, {}
 	for _, k in ipairs(ores) do
