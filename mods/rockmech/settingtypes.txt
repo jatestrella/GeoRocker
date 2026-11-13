@@ -333,6 +333,10 @@ rockmech_career_camp_dx (Camp offset from lane centre) float 0 -500 500
 # before; the world is saved by a normal shutdown, and start_class_server.bat backs up, git pulls and starts again. Empty = off.
 rockmech_daily_restart (Daily restart time) string
 
+# Dedicated server: every this many seconds write one line to debug.txt with Lua memory, players and entity counts
+# (for diagnosing freezes; see standalone/mem_log.ps1). 0 = off.
+rockmech_memwatch (Memory log interval) int 300 0 86400
+
 # Drone: maximum horizontal distance from the take-off point (m).
 rockmech_drone_range (Drone range) float 200 20 2000
 
