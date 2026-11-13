@@ -376,10 +376,10 @@ function M.generate(world_conf)
 	end
 	if seen.copper then
 		set("gsi_andesite", round(range(r, 55, 75)))
-		set("gsi_cu_primary", round(range(r, 50, 70)))
-		set("gsi_cu_oxide", round(range(r, 50, 62)))
-		set("gsi_cu_enriched", round(range(r, 52, 62)))      -- 50 以下：40 m 深的豎井一挖到就連鎖崩到地表（K 1.9 的地圖實測）
-		set("gsi_gossan", round(range(r, 45, 55)))
+		set("gsi_cu_primary", round(range(r, 55, 75)))
+		set("gsi_cu_oxide", round(range(r, 50, 65)))
+		set("gsi_cu_enriched", round(range(r, 48, 60)))      -- 斑岩銅礦露天礦常見 45–65；富集帶沿裂隙黏土化，取偏低
+		set("gsi_gossan", round(range(r, 45, 60)))
 	end
 	local okeys, oseen = {}, {}
 	for _, k in ipairs(ores) do
