@@ -13,6 +13,14 @@
 
 local storage = rockmech.collapse.storage
 local S = rockmech.S
+-- 岩心一段的品位文字（不含 %）：岩石照岩性的礦種，碎石照碎石的礦種；銅是含銅量（nodes.lua 的 rockmech.grade_num）
+local function grade_pct(r)
+	local cfg_ = rockmech.cfg
+	local L = cfg_.lithologies[r.lith]
+	local ore = L and L.ore and cfg_.ores[L.ore] or (r.node and rockmech.ore_of_rubble[rockmech.rubble_base[r.node] or ""])
+	if ore and rockmech.grade_num then return rockmech.grade_num(ore, r.grade / 255) end
+	return ("%.0f"):format(r.grade / 255 * 100)
+end
 local joints = rockmech.joints
 
 local ITEM, CASING = "rockmech:core_drill", "rockmech:borehole"
@@ -150,7 +158,7 @@ local function log_form(name, bh, rm, gr)
 		out[#out + 1] = ("box[3.0,%g;1.0,%g;%s]"):format(y + 0.02, H - 0.04, rm and lith_color(r.lith) or "#707070")
 		out[#out + 1] = ("label[4.4,%g;%s]"):format(y + H / 2, core.formspec_escape(rm and lith_label(r.lith) or S("Rock")))
 		local g = "—"
-		if is_ore or r.grade then g = gr and r.grade and ("%.0f%%"):format(r.grade / 255 * 100) or (gr and "—" or "?") end
+		if is_ore or r.grade then g = gr and r.grade and (grade_pct(r) .. "%") or (gr and "—" or "?") end
 		out[#out + 1] = ("label[7.4,%g;%s]"):format(y + H / 2, core.formspec_escape(g))
 		local soil = r.lith == "soil"
 		out[#out + 1] = ("label[9.6,%g;%s]"):format(y + H / 2, soil and "—" or rm and tostring(r.joints or 0) or "?")
@@ -632,7 +640,7 @@ local function corebox_form(name, bh, acc, pos)
 				end
 				if is_ore or r.grade then
 					out[#out + 1] = ("label[%g,%g;%s]"):format(x + 0.06, y0 + 1.93, esc((gr and r.grade)
-						and S("grade @1%", ("%.0f"):format(r.grade / 255 * 100)) or S("grade ?")))
+						and S("grade @1%", grade_pct(r)) or S("grade ?")))
 				end
 			end
 		end
@@ -953,7 +961,7 @@ local function core_page(out, h, stack)
 		local soil = r.lith == "soil"
 		local is_ore = rockmech.cfg.ores[r.lith] ~= nil or (rockmech.cfg.lithologies[r.lith] or {}).ore ~= nil
 		local g = "—"
-		if is_ore or r.grade then g = gr and r.grade and ("%.0f%%"):format(r.grade / 255 * 100) or (gr and "—" or "?") end
+		if is_ore or r.grade then g = gr and r.grade and (grade_pct(r) .. "%") or (gr and "—" or "?") end
 		local p = plt[i - 1]
 		local cells = {("%d–%d"):format(i - 1, i), nil, rm and lith_label(r.lith) or "?", g,
 			soil and "—" or rm and tostring(r.joints or 0) or "?",

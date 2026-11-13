@@ -33,6 +33,7 @@ end
 
 -- 各成分的體積 → 一種碎石（base, param2）
 function M.compose(ctx, v)
+	if ctx.merge_family then ctx.merge_family(v) end      -- 同一族金屬礦（銅原礦、精礦、尾礦）按含銅量合併（copper.lua）
 	local list = {}
 	for c, x in pairs(v) do if x > 0 then list[#list + 1] = c end end
 	table.sort(list, function(p, q)

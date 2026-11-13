@@ -316,7 +316,7 @@ function M.generate(world_conf)
 				bx, bz = d * math.sin(az), d * math.cos(az)
 			else bx, bz = px + Rr * 0.5 * fnx, pz + Rr * 0.5 * fnz end
 			local D, E, ox = round(10 + 30 * frac("wtdepth")), round(range(r, 6, 12)), round(range(r, 3, 6))
-			local fac, g0 = round(range(r, 2, 3.5), 0.1), r:next(90, 130)
+			local fac, g0 = round(range(r, 2, 3.5), 0.1), r:next(40, 60)      -- 中心品位 param2 40–60 = 含銅 0.8–1.2%（ores.copper.metal.scale）
 			set("copper" .. sfx, ("%d,%d,%d,%d,%d,%d,%g,%d"):format(round(bx), round(bz), Rr, D, E, ox, fac, g0))
 			logs[#logs + 1] = ("斑岩銅礦 (%d, %d) 半徑 %d m、地下水位 %d m、富集帶 %d m ×%g"):format(round(bx), round(bz), Rr, D, E, fac)
 		end

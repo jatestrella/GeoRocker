@@ -25,6 +25,12 @@ local ITEMS = {
 	{key = "plant_misplaced", who = "mechanic", label = TR("Cleaner clean coal"), max = 4, base = 20000, minutes = 10,
 		desc = TR("Share of waste rock misplaced into clean coal at the pre-sorting plant −2%"),
 		value = function(acc) return ("%.0f%%"):format(rockmech.eff_plant_misplaced(acc) * 100) end},
+	{key = "conc_grade", who = "mechanic", label = TR("Concentrate grade"), max = 5, base = 20000, minutes = 10,
+		desc = TR("Copper concentrate from the flotation plant +1% Cu"), metal = true,
+		value = function(acc)
+			for _, ore in ipairs(cfg.active_ores) do if ore.metal then return ("%.0f%%"):format(rockmech.eff_conc_grade(acc, ore) * 100) end end
+			return "—"
+		end},
 	{key = "crusher_rate", who = "mechanic", label = TR("Crusher upgrade"), max = 5, base = 30000, minutes = 15,
 		desc = TR("Crushing station throughput +10%"),
 		value = function(acc) return ("×%.1f"):format(rockmech.eff_crusher_mult(acc)) end},
@@ -64,6 +70,7 @@ local function item_img(name) local d = core.registered_items[name]; return d an
 local ICON = {
 	plant_recovery = function() return badged("rockmech_icon_plant.png", "plus") end,
 	plant_misplaced = function() return badged("rockmech_icon_plant.png", "minus") end,
+	conc_grade = function() return badged("rockmech_icon_plant.png", "up") end,
 	crusher_rate = function() return badged("rockmech_icon_crusher.png", "up") end,
 	conveyor_rate = function() return badged("rockmech_icon_belt.png", "up") end,
 	maintenance = function() return badged(item_img("rockmech:truck_item"), "up") end,
@@ -199,8 +206,10 @@ local function form(name, who)
 	local y = 2.0
 	local col = 0
 	local TW = 3.4                     -- 每格寬
+	local has_metal = false
+	for _, o in ipairs(cfg.active_ores) do if o.metal then has_metal = true end end
 	for i, it in ipairs(ITEMS) do
-		if it.who == who then
+		if it.who == who and (not it.metal or has_metal) then      -- 精礦品位：有金屬礦的地圖才有
 			local lv = rockmech.research_level(acc, it.key)
 			local maxed = lv >= it.max
 			local x = 0.5 + col * TW

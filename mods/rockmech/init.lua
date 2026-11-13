@@ -36,6 +36,7 @@ rockmech.granular = dofile(modpath .. "/granular.lua")
 rockmech.blast = dofile(modpath .. "/blast.lua")
 rockmech.airflow = dofile(modpath .. "/airflow.lua")   -- 空氣品質（純函式；引擎那邊在 airq.lua）
 rockmech.rockmass = dofile(modpath .. "/rockmass.lua")
+rockmech.copper = dofile(modpath .. "/copper.lua")     -- 銅（金屬礦）的選礦與計價（純函式）
 
 -- 解析設定：世界資料夾的 rockmech.conf 優先於 minetest.conf（全域）
 local world_conf_path = core.get_worldpath() .. "/rockmech.conf"

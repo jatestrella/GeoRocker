@@ -129,9 +129,7 @@ local sums = {}      -- 井 → {t, money, last}
 local function pay(i, d, levels, base, p2)
 	local t = tons_of(levels)
 	local ore = cfg.main_ore
-	local g = rockmech.grade_for(base, p2, ore)
-	local gross = t * g * rockmech.eff_ore_recovery(d.owner, ore) * rockmech.ore_price(ore)
-	local fee = t * (1 - g) * rockmech.gangue_fee(ore)
+	local _, gross, fee = rockmech.sale_value(t, base, p2, ore, d.owner)      -- 跟破碎站同一條（crusher.lua）
 	rockmech.add_money(d.owner, gross - fee)
 	local s = sums[i] or {t = 0, money = 0}
 	s.t, s.money, s.last = s.t + t, s.money + gross - fee, core.get_us_time() / 1e6

@@ -11,6 +11,7 @@ dofile(dir .. "helper.lua")
 
 local SPECS = {
 	"config_spec.lua",
+	"copper_spec.lua",
 	"stress_spec.lua",
 	"joints_spec.lua",
 	"dfn_spec.lua",

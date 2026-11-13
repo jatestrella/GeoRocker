@@ -373,8 +373,10 @@ do
 				or S("@1 rubble, mixed with @2", S(ore.label), COMP_LABEL[x]), ore)
 		end
 		ore.rubble, ore.waste_rubble, ore.comp = mix_pair[comp][waste], waste, comp
-		rockmech.rubble_of_lith[ore.lith] = ore.rubble
-		rockmech.lith_of_rubble[ore.rubble] = ore.lith
+		if ore.lith then        -- 銅精礦、尾礦沒有岩性（只從選礦場出來）
+			rockmech.rubble_of_lith[ore.lith] = ore.rubble
+			rockmech.lith_of_rubble[ore.rubble] = ore.lith
+		end
 	end
 	-- 同一種礦有好幾種岩性（銅礦的氧化帶、富集帶、原生帶）：碎了都是那種礦的碎石
 	for key, lith in pairs(cfg.lithologies) do
@@ -393,6 +395,14 @@ local mix = dofile(rockmech.modpath .. "/mix.lua")
 rockmech.mix = mix
 local mix_ctx = {mix_of = rockmech.mix_of, pair = mix_pair, rank = COMP_RANK, ore_rubble = {}}
 for key, ore in pairs(cfg.ores) do mix_ctx.ore_rubble["ore:" .. key] = ore.rubble end
+-- 金屬礦（銅）：同一族的成分（原礦、精礦、尾礦）混在一起時按含銅量合併（copper.lua）
+do
+	local fam = {}
+	for key, ore in pairs(cfg.ores) do
+		if ore.metal then fam["ore:" .. key] = {family = ore.metal.family, scale = ore.metal.scale, waste = ore.waste_rubble} end
+	end
+	if next(fam) then mix_ctx.merge_family = function(parts) return rockmech.copper.merge_family(parts, fam) end end
+end
 
 -- 兩份碎石能不能放在同一格：都可以（混合碎石，最多記兩種成分）
 function rockmech.rubble_mixable(a, b)
@@ -437,8 +447,21 @@ function rockmech.rubble_p2(node)
 end
 
 -- 礦石品位的顯示文字（grade 0..1）：HUD、車輛載量共用
+-- 顯示用的品位數字（不含 %，grade 0..1 是 param2/255）：一般的礦是礦石佔的比例；
+-- 金屬礦（銅）是含銅量：原礦兩位小數、精礦一位、尾礦三位
+function rockmech.grade_num(ore, grade)
+	local m = ore and ore.metal
+	if not m then return ("%.0f"):format(grade * 100) end
+	local digits = m.scale >= 0.2 and 1 or m.scale < 0.02 and 3 or 2
+	return ("%." .. digits .. "f"):format(grade * m.scale * 100)
+end
 function rockmech.ore_text(ore, grade)
-	return S("@1 grade @2%", S(ore.label), ("%.0f"):format(grade * 100))
+	return S("@1 grade @2%", S(ore.label), rockmech.grade_num(ore, grade))
+end
+-- 顯示用的價格：一般的礦是每噸（品位 100%），金屬礦是每噸銅
+function rockmech.price_str(ore, p)
+	if ore and ore.metal then return S("$@1/t of copper", ("%.0f"):format(p)) end
+	return ("$%.0f/t"):format(p)
 end
 
 -- 不滿格的碎石（顆粒流用，granular.lua）：每格分 8 級，<碎石>_l1 … _l7 高度 1/8 … 7/8 m；

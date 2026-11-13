@@ -68,7 +68,7 @@ core.after(0, refresh)
 local function mode_text(s)
 	if s.mode == "stop" then return S("Stopped") end
 	if s.mode == "price" then
-		return S("Runs when the price is at least $@1/t", ("%.0f"):format(s.price or 0)) .. "  " .. (running(s) and S("Running") or S("Stopped"))
+		return S("Runs when the price is at least @1", rockmech.price_str(ore_of(s), s.price or 0)) .. "  " .. (running(s) and S("Running") or S("Stopped"))
 	end
 	return S("Running")
 end
@@ -87,7 +87,7 @@ local function form(ps)
 	return table.concat({
 		"formspec_version[6]size[10.4,4.6]",
 		("label[0.5,0.6;%s]"):format(E(S("Conveyor control box"))),
-		("label[0.5,1.2;%s]"):format(E(ore and S("Today's @1 price $@2/t", S(ore.label), ("%.0f"):format(price_now(s))) or "")),
+		("label[0.5,1.2;%s]"):format(E(ore and S("Today's @1 price @2", S(ore.label), rockmech.price_str(ore, price_now(s))) or "")),
 		rockmech.ore_dropdown and rockmech.ore_dropdown(6.9, 0.8, 3, "ore", ore) or "",
 		btn(0.5, "run", S("Run"), s.mode == "run"),
 		btn(3.7, "stop", S("Stop"), s.mode == "stop"),

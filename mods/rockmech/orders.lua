@@ -60,8 +60,10 @@ local function offers(acc)
 			local specs = ore.specs or SPECS      -- 品位規格：礦種自己的（水泥廠要的比較純）
 			local spec = specs[r:next(1, #specs)]
 			local premium = 1.15 + r:next(0, 20) / 100
+			-- 金屬礦（銅）收的是精礦：規格是含銅量，單價 = (銅價 × 含銅量 − 冶煉費) × 溢價
+			local base = ore.metal and (rockmech.ore_price(ore) * spec - ore.metal.tc) or rockmech.ore_price(ore) * spec
 			list[#list + 1] = {tons = sz.tons, days = sz.days, spec = spec, ore = ore.key,
-				price = math.floor(rockmech.ore_price(ore) * spec * premium + 0.5)}
+				price = math.floor(base * premium + 0.5)}
 		end
 	end
 	return list
@@ -201,12 +203,16 @@ local function spawn_truck(acc, o)
 end
 
 -- 料的總量、品位（礦石的 param2 加權）。給 ore 就只算這種礦（別種礦算廢石），沒給是任何礦
+-- 金屬礦（銅）：品位是含銅量，原礦、精礦、尾礦都按含銅量算（規格是精礦的含銅量，原礦當然不夠）
 local function load_grade(e, ore)
 	local total, q = 0, 0
+	local m = ore and ore.metal
 	for base, lv in pairs(e.load) do
 		total = total + lv
 		local o = rockmech.ore_of_rubble[base]
-		if o and (not ore or o == ore) then q = q + (e.loadq[base] or 0) end
+		if m then
+			if o and o.metal and o.metal.family == m.family then q = q + (e.loadq[base] or 0) * o.metal.scale end
+		elseif o and (not ore or o == ore) then q = q + (e.loadq[base] or 0) end
 	end
 	return total, total > 0 and q / total / 255 or 0
 end
@@ -562,7 +568,7 @@ if cfg.teacher then
 			if not tons then return false, S("Usage: /rockmech_order <tons> <grade %> <days> [price/t]") end
 			spec = tonumber(spec) / 100
 			local ore = cfg.main_ore
-			price = tonumber(price) or math.floor(rockmech.ore_price(ore) * spec * 1.25 + 0.5)
+			price = tonumber(price) or math.floor((rockmech.ore_price(ore) * spec - (ore.metal and ore.metal.tc or 0)) * 1.25 + 0.5)
 			local n, skip = 0, 0
 			for i = 0, cfg.career_teams or 0 do
 				local acc = "team:" .. i

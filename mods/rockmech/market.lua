@@ -296,6 +296,16 @@ local function report(name)
 		local function cutoff(price) return fee / (price * rec * r + fee) end
 		local cut = cutoff(p)
 		local p5 = ore.price * forecast(p / ore.price, target(ore.key), cfg.price_revert, 5)
+		if ore.metal then
+			-- 金屬礦（銅）：銅價、外包選礦的截止含銅量（copper.lua 的質量平衡，二分法）
+			local Cu = rockmech.copper
+			add(S("@1 today: @2", S(ore.label), rockmech.price_str(ore, p)), "#ffe080")
+			add(S("Cut-off grade at the crusher: @1%", ("%.2f"):format(Cu.cutoff(ore.metal, p * r, rec, fee) * 100)), "#80ff80")
+			add(S("  Below this the copper sold does not pay the tailings fee of $@1 per tonne", ("%g"):format(fee)))
+			add(S("  Rubble below this grade loses money even before hauling and fuel"))
+			add(S("In 5 days: about @1, cut-off @2%", rockmech.price_str(ore, p5), ("%.2f"):format(Cu.cutoff(ore.metal, p5 * r, rec, fee) * 100)))
+			goto next_ore
+		end
 		add(S("@1 today: $@2/t", S(ore.label), ("%.0f"):format(p)), "#ffe080")
 		add(S("Cut-off grade at the crusher: @1%", ("%.1f"):format(cut * 100)), "#80ff80")
 		local v = p * rec * r + fee
@@ -303,6 +313,7 @@ local function report(name)
 		add(S("  $@1 = price $@2 × recovery @3% × @4% + gangue fee", ("%.0f"):format(v), ("%.0f"):format(p), ("%.0f"):format(rec * 100), ("%.0f"):format(r * 100)))
 		add(S("  Rubble below this grade loses money even before hauling and fuel"))
 		add(S("In 5 days: about $@1/t, cut-off @2%", ("%.0f"):format(p5), ("%.1f"):format(cutoff(p5) * 100)))
+		::next_ore::
 	end
 	add("")
 	for _, key in ipairs(ORDER) do

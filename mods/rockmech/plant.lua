@@ -39,7 +39,27 @@ local function main_ore()
 	return cfg.main_ore      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）：塔的顏色
 end
 local function ore_of(meta) return rockmech.facility_ore(meta) end
-local function side_label(sd, ore) return sd.key == "p" and S(ore.product or "Clean coal") or sd.label end
+local function side_label(sd, ore)
+	if ore.metal then return S(sd.key == "p" and ore.product or ore.gangue) end      -- 銅：銅精礦、尾礦
+	return sd.key == "p" and S(ore.product or "Clean coal") or sd.label
+end
+-- 金屬礦（銅）：兩座塔吐出來的是精礦、尾礦（各自的碎石），塔裡記的是含銅量（噸）；一般的礦兩座都是那種礦的碎石、記礦石量
+local function out_ore(ore, sd)
+	local m = ore.metal
+	if not m then return ore end
+	return cfg.ores[sd.key == "p" and m.conc or m.tail] or ore
+end
+-- 塔裡的料 → param2（品位或含銅量的刻度）
+local function out_p2(ore, sd, lv, q)
+	local o = out_ore(ore, sd)
+	local g = q / lv
+	if o.metal then g = g / o.metal.scale end
+	return math.max(0, math.min(255, math.floor(g * 255 + 0.5)))
+end
+local function title(ore, stopped)
+	if ore.metal then return stopped and S("Flotation plant   Stopped") or S("Flotation plant   Running") end
+	return stopped and S("Pre-sorting plant   Stopped") or S("Pre-sorting plant   Running")
+end
 
 -- 機身 pos、受料倉朝 d：side s 的塔中心、放料口位置與朝外的方向
 local function layout(pos, dx, dz, s)
@@ -99,7 +119,9 @@ local function info(meta)
 		local label = side_label(sd, ore)
 		local lv, coal = meta:get_float(sd.key .. "_lv"), meta:get_float(sd.key .. "_coal")
 		local a, b, t = ("%.0f"):format(lv / NLEV), ("%.0f"):format(cfg.plant_bin), ("%.0f"):format(H.tons_of(lv))
-		parts[#parts + 1] = lv >= 1 and S("@1 bin @2 / @3 m³ (@4 t, grade @5%)", label, a, b, t, ("%.0f"):format(100 * coal / lv))
+		local o = out_ore(ore, sd)
+		parts[#parts + 1] = lv >= 1 and S("@1 bin @2 / @3 m³ (@4 t, grade @5%)", label, a, b, t,
+			rockmech.grade_num(o, out_p2(ore, sd, lv, coal) / 255))
 			or S("@1 bin @2 / @3 m³ (@4 t)", label, a, b, t)   -- 不到 1 級的零頭放不出來，品位也沒意義
 	end
 	return parts
@@ -135,7 +157,16 @@ local function step(pos, dtime)
 	if room >= 1 and not stopped then
 		local add = {p_lv = 0, p_coal = 0, r_lv = 0, r_coal = 0}
 		local target = ore_of(meta)
+		local mt = target.metal
+		local Cg, R0 = mt and rockmech.eff_conc_grade(owner, target), mt and rockmech.eff_flotation_recovery(owner, target)
 		eaten = H.eat(pos, dtime, cfg.plant_rate, math.floor(room), function(t, base, p2)
+			if mt then
+				-- 浮選（copper.lua）：精礦品位固定 Cg，回收率隨進料含銅量下降；塔裡記含銅量
+				local pt, pcu, tt, tcu = rockmech.copper.float(t, rockmech.metal_content(base, p2, target), Cg, R0, mt.k)
+				add.p_lv, add.p_coal = add.p_lv + pt, add.p_coal + pcu
+				add.r_lv, add.r_coal = add.r_lv + tt, add.r_coal + tcu
+				return
+			end
 			local g = rockmech.grade_for(base, p2, target)
 			local coal = t * g
 			local prod = R * coal + m * (t - coal)
@@ -143,6 +174,12 @@ local function step(pos, dtime)
 			add.r_lv, add.r_coal = add.r_lv + (t - prod), add.r_coal + (1 - R) * coal
 		end)
 		for k, v in pairs(add) do if v ~= 0 then meta:set_float(k, meta:get_float(k) + v) end end
+		-- 浮選的營運費（電、藥劑、磨球）：每噸 metal.op，從擁有者的帳扣
+		if mt and eaten > 0 and (mt.op or 0) > 0 then
+			local cost = H.tons_of(eaten) * mt.op
+			rockmech.add_money(owner, -cost)
+			meta:set_float("op_cost", meta:get_float("op_cost") + cost)
+		end
 	end
 	-- 停機（受料倉沒料，或有一座倉滿了）連續 STALL_T 秒：在放料臂下等的車看到這個，車上有半車以上就先走（vehicle_ahs.lua）。
 	-- 要連續停：倉裡零星的殘料一點一點流下來時會停停走走，車子不該每次只裝一點就跑
@@ -167,15 +204,16 @@ local function step(pos, dtime)
 			if tip then
 				local n = math.min(math.floor(lv), per_step)
 				local g = coal / lv
-				local gi = math.floor(g * 255 + 0.5)
+				local gi = out_p2(ore, sd, lv, coal)
+				local rub = out_ore(ore, sd).rubble
 				if e then
 					n = math.min(n, V.TYPES[e.vkind].cap - V.load_total(e))
-					V.load_put(e, ore.rubble, n, gi)
+					V.load_put(e, rub, n, gi)
 				else
 					-- 一格皮帶裝不下這一步的量：往旁邊幾格也放（belt_near 只找還有空位的格子）
 					local put, b = 0, belt
 					for _ = 1, 4 do
-						put = put + rockmech.belt_put(b, ore.rubble, n - put, gi)
+						put = put + rockmech.belt_put(b, rub, n - put, gi)
 						if put >= n then break end
 						b = rockmech.belt_near(chute, cfg.plant_reach)
 						if not b then break end
@@ -188,12 +226,14 @@ local function step(pos, dtime)
 				core.add_particlespawner({amount = 12, time = dtime, glow = 3,
 					pos = {min = vector.subtract(tip, {x = 0.3, y = 0.3, z = 0.3}), max = vector.add(tip, {x = 0.3, y = 0, z = 0.3})},
 					vel = {min = {x = -0.2, y = -6, z = -0.2}, max = {x = 0.2, y = -4, z = 0.2}}, exptime = 0.5, size = 3,
-					texture = "default_gravel.png^[colorize:" .. (sd.key == "p" and ore.pure or ore.waste_color) .. ":160"})
+					texture = "default_gravel.png^[colorize:" .. (sd.key == "p" and out_ore(ore, sd).pure or out_ore(ore, sd).waste_color) .. ":160"})
 			end
 		end
 	end
 	for _, sd in ipairs(SIDES) do show_fill(pos, meta, sd) end
-	meta:set_string("infotext", (stopped and S("Pre-sorting plant, stopped. Right-click to view") or S("Pre-sorting plant. Right-click to view"))
+	local io = ore_of(meta)
+	meta:set_string("infotext", (io.metal and (stopped and S("Flotation plant, stopped. Right-click to view") or S("Flotation plant. Right-click to view"))
+		or (stopped and S("Pre-sorting plant, stopped. Right-click to view") or S("Pre-sorting plant. Right-click to view")))
 		.. "\n" .. table.concat(info(meta), "\n"))
 end
 
@@ -204,11 +244,14 @@ local function formspec(pos)
 	local stopped = meta:get_int("stopped") == 1
 	return table.concat({
 		"formspec_version[6]size[9,4.5]",
-		("label[0.5,0.6;%s]"):format(core.formspec_escape(stopped and S("Pre-sorting plant   Stopped")
-			or S("Pre-sorting plant   Running"))),
+		("label[0.5,0.6;%s]"):format(core.formspec_escape(title(ore, stopped))),
 		("button[6,0.2;2.6,0.8;toggle;%s]"):format(core.formspec_escape(stopped and S("Start") or S("Stop"))),
 		("label[0.5,1.2;%s]"):format(core.formspec_escape(S("Capacity: @1 t/s   Loading: @2 t/s", ("%g"):format(cfg.plant_rate), ("%g"):format(cfg.plant_load_rate)))),
-		("label[0.5,1.8;%s]"):format(core.formspec_escape(S("Separation: @1 @2% into @3, @4 @5% misplaced into @6", S(ore.label),
+		("label[0.5,1.8;%s]"):format(core.formspec_escape(ore.metal
+			and S("Flotation: concentrate @1% Cu, recovery up to @2% (lower for poor feed), running cost $@3 per tonne",
+				("%.0f"):format(rockmech.eff_conc_grade(meta:get_string("owner"), ore) * 100),
+				("%.0f"):format(rockmech.eff_flotation_recovery(meta:get_string("owner"), ore) * 100), ("%g"):format(ore.metal.op or 0))
+			or S("Separation: @1 @2% into @3, @4 @5% misplaced into @6", S(ore.label),
 			("%.0f"):format(rockmech.eff_plant_recovery(meta:get_string("owner")) * 100), side_label(SIDES[1], ore), rockmech.gangue_label(ore),
 			("%.0f"):format(rockmech.eff_plant_misplaced(meta:get_string("owner")) * 100), side_label(SIDES[1], ore)))),
 		rockmech.multi_ore() and ("label[3.2,0.6;%s]"):format(core.formspec_escape(S("Sorts:"))) or "",

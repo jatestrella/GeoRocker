@@ -89,6 +89,34 @@ end
 function rockmech.grade_for(base, p2, ore)
 	return ore and rockmech.ore_of_rubble[base] == ore and p2 / 255 or 0
 end
+-- 碎石對某種金屬礦的含銅量（0..1）：同一族的原礦、精礦、尾礦都算，其他是 0
+function rockmech.metal_content(base, p2, ore)
+	local m = ore and ore.metal
+	local o = rockmech.ore_of_rubble[base]
+	if not (m and o and o.metal and o.metal.family == m.family) then return 0 end
+	return p2 / 255 * o.metal.scale
+end
+-- 一份料（tons 噸、碎石 base、param2）賣給收 ore 的破碎站 → 礦的噸數（剝採比用）, 貨款, 廢料處理費, 廢料噸數, 含銅噸數。
+--   一般的礦（config.crush_income）：品位 × 回收率 × 價格 × 收購比例；廢料（矸石、片岩）照 (1 − 品位) 收處理費。
+--   金屬礦（copper.lua）：精礦照含銅量計價、扣冶煉費；原礦是外包選礦，尾礦每噸收處理費；別的碎石整車變尾礦
+function rockmech.sale_value(tons, base, p2, ore, owner)
+	local m = ore and ore.metal
+	if not m then
+		local g = rockmech.grade_for(base, p2, ore)
+		local gross = tons * g * rockmech.eff_ore_recovery(owner, ore) * rockmech.ore_price(ore) * rockmech.yard_ratio()
+		local w = tons * (1 - g)
+		return tons * g, gross, w * rockmech.gangue_fee(ore), w, 0
+	end
+	local c = rockmech.metal_content(base, p2, ore)
+	local Cu = rockmech.copper
+	local price = rockmech.ore_price(ore) * rockmech.yard_ratio()
+	if rockmech.ore_of_rubble[base] == cfg.ores[m.conc] then        -- 精礦：直接賣給冶煉廠
+		return tons, Cu.conc_value(tons, tons * c, price, m.tc), 0, 0, tons * c
+	end
+	local fee = rockmech.gangue_fee(ore)
+	local value, tail = Cu.toll(tons, c, m, price, rockmech.eff_ore_recovery(owner, ore), fee)
+	return c > 0 and tons or 0, value, tail * fee, tail, tons * c
+end
 -- 選礦種的下拉選單（formspec）；只有一種礦時是空字串
 function rockmech.ore_dropdown(x, y, w, field, ore)
 	if not rockmech.multi_ore() then return "" end
@@ -106,7 +134,7 @@ function rockmech.ore_from_field(v)
 end
 local function price_text(ore)
 	local c = price_change(ore)
-	return S("@1 price $@2/t (@3 @4%)", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)), c >= 0 and "▲" or "▼", ("%.0f"):format(math.abs(c) * 100))
+	return S("@1 price @2 (@3 @4%)", S(ore.label), rockmech.price_str(ore, rockmech.ore_price(ore)), c >= 0 and "▲" or "▼", ("%.0f"):format(math.abs(c) * 100))
 end
 local function gauss()
 	return math.sqrt(-2 * math.log(1 - math.random())) * math.cos(2 * math.pi * math.random())
@@ -204,6 +232,9 @@ function rockmech.support_mult_at(pos)
 end
 function rockmech.eff_dig_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "skilled_miner") end   -- 熟練礦工：挖礦、鑽孔速度   -- 定期保養：車速
 function rockmech.eff_ore_recovery(owner, ore) return math.min(1, ore.recovery + 0.01 * rockmech.research_level(owner, "ore_recovery")) end
+-- 浮選（選礦場處理金屬礦）：精礦品位（研發「精礦品位」每級 +1%）、最高回收率（研發「排矸站回收率」每級 +1%，跟煤共用）
+function rockmech.eff_conc_grade(owner, ore) return ore.metal.conc_grade + 0.01 * rockmech.research_level(owner, "conc_grade") end
+function rockmech.eff_flotation_recovery(owner, ore) return math.min(0.99, ore.recovery + 0.01 * rockmech.research_level(owner, "plant_recovery")) end
 
 local money_hud = {}        -- 玩家名稱 → HUD id
 
@@ -492,13 +523,20 @@ local function report(meta, owner, dump, day)
 	else
 		local ore = ore_of(meta)
 		local rows = {}
-		if ore then
+		local bw = meta:get_float("batch_w")
+		if ore and ore.metal then
+			-- 金屬礦：平均含銅量、貨款（精礦照含銅量、原礦外包選礦）
+			local bc = meta:get_float("batch_cu")
+			rows[#rows + 1] = {S("@1 (grade @2%)", S(ore.label), rockmech.grade_num(ore, bt > 0 and bc / bt / ore.metal.scale or 0)),
+				("%.1f t"):format(bt), rockmech.price_str(ore, rockmech.ore_price(ore)), money_text(bg), GREEN}
+		elseif ore then
 			local r = rockmech.yard_ratio()
 			rows[#rows + 1] = {S("@1 (grade @2%)", S(ore.label), ("%.0f"):format(100 * bq / bt)), ("%.1f t"):format(bq),
 				("$%.0f × %.0f%%"):format(rockmech.ore_price(ore), rockmech.eff_ore_recovery(owner, ore) * 100) .. (r < 1 and (" × %.0f%%"):format(r * 100) or ""),
 				money_text(bg), GREEN}
+			if bw <= 0 then bw = bt - bq end          -- 舊存檔沒記廢料噸數
 		end
-		rows[#rows + 1] = {rockmech.gangue_label(ore), ("%.1f t"):format(bt - bq), ("$%g"):format(rockmech.gangue_fee(ore)), money_text(-bf), RED}
+		rows[#rows + 1] = {S("Waste disposal (@1)", rockmech.gangue_label(ore)), ("%.1f t"):format(bw), ("$%g"):format(rockmech.gangue_fee(ore)), money_text(-bf), RED}
 		-- 人事費（wages.lua：雇員薪水在組員在線時已經陸續扣了，這裡列出來、算進淨收入）
 		local wage = 0
 		local wamt, wsec = (rockmech.wage_take or function() end)(rockmech.account_of(owner), day)
@@ -526,7 +564,7 @@ local function report(meta, owner, dump, day)
 			end
 		end)
 	end
-	for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m"}) do meta:set_float(k, 0) end
+	for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m", "batch_w", "batch_cu"}) do meta:set_float(k, 0) end
 end
 
 rockmech.show_bill, rockmech.money_text = show_bill, money_text     -- wages.lua 的人事費單子
@@ -571,16 +609,13 @@ local function crush(pos, dtime)
 	-- 這一步的帳：煤的噸數、煤的貨款（煤噸 × 價格 × 回收率 × 收購比例）、廢石處理費（廢石噸 × 每噸；廢石場是全部噸數 × 棄置費）
 	-- 只收這座選的礦：別種礦和廢石一樣算廢石、照這種礦的廢石處理費扣
 	local ore = ore_of(meta)
-	local ore_t, gross, fee = 0, 0, 0
+	local ore_t, gross, fee, waste, cu = 0, 0, 0, 0, 0
 	local eaten = eat(pos, dtime, rate_of(pos), nil, function(t, base, p2)
 		local tons = tons_of(t)
-		local grade = rockmech.grade_for(base, p2, ore)
-		ore_t = ore_t + tons * grade
+		local q, g, f, w, c = rockmech.sale_value(tons, base, p2, ore, meta:get_string("owner"))
+		ore_t, cu = ore_t + q, cu + c
 		if dump then fee = fee + tons * cfg.dump_fee
-		else
-			gross = gross + tons * grade * rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * rockmech.ore_price(ore) * rockmech.yard_ratio()
-			fee = fee + tons * (1 - grade) * rockmech.gangue_fee(ore)
-		end
+		else gross, fee, waste = gross + g, fee + f, waste + w end
 	end)
 	local income = gross - fee
 	local owner = meta:get_string("owner")
@@ -598,8 +633,8 @@ local function crush(pos, dtime)
 	local acc = rockmech.account_of and rockmech.account_of(owner) or owner
 	storage:set_float("strip_o:" .. acc, storage:get_float("strip_o:" .. acc) + ore_t)
 	storage:set_float("strip_w:" .. acc, storage:get_float("strip_w:" .. acc) + math.max(0, t - ore_t))
-	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_g = gross, batch_f = fee, batch_m = income,
-			total_t = t, total_q = ore_t, total_g = gross, total_f = fee, total_m = income}) do
+	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_g = gross, batch_f = fee, batch_m = income, batch_w = waste, batch_cu = cu,
+			total_t = t, total_q = ore_t, total_g = gross, total_f = fee, total_m = income, total_cu = cu}) do
 		meta:set_float(key, meta:get_float(key) + v)
 	end
 end
@@ -621,6 +656,9 @@ local function formspec(pos, viewer)
 	local ore = ore_of(meta)
 	local prices = {S("@1 at 100% grade: $@2 per tonne today (base $@3), recovery @4%", S(ore.label), ("%.0f"):format(rockmech.ore_price(ore)),
 		("%g"):format(ore.price), ("%.0f"):format(rockmech.eff_ore_recovery(meta:get_string("owner"), ore) * 100))}
+	if ore.metal then        -- 金屬礦：銅價、精礦冶煉費、原礦外包選礦
+		prices = {S("Copper @1 today (base @2)", rockmech.price_str(ore, rockmech.ore_price(ore)), rockmech.price_str(ore, ore.price))}
+	end
 	return table.concat({
 		"formspec_version[6]size[11,8.4]",
 		("label[0.5,0.6;%s]"):format(core.formspec_escape(dump and S("Waste dump (rubble dumped here is discarded, no income)") or title_of(pos))),
@@ -636,7 +674,8 @@ local function formspec(pos, viewer)
 		("label[0.5,2.4;%s]"):format(core.formspec_escape(S("Hopper: @1 / @2 m³ (@3 t)", ("%.1f"):format(queue / V.NLEV),
 			("%.0f"):format(capacity_of(size_of(meta)) / V.NLEV), ("%.1f"):format(tons_of(queue))))),
 		("label[0.5,3.0;%s]"):format(core.formspec_escape(S("Total processed: @1 t, average grade @2%", ("%.1f"):format(total),
-			("%.0f"):format(total > 0 and 100 * meta:get_float("total_q") / total or 0)))),
+			ore.metal and rockmech.grade_num(ore, total > 0 and meta:get_float("total_cu") / total / ore.metal.scale or 0)
+			or ("%.0f"):format(total > 0 and 100 * meta:get_float("total_q") / total or 0)))),
 		("label[0.5,3.6;%s]"):format(core.formspec_escape(S("Totals: sales $@1 − gangue $@2 = net income $@3", ("%.0f"):format(meta:get_float("total_g")),
 			("%.0f"):format(meta:get_float("total_f")), ("%.0f"):format(meta:get_float("total_m"))))),
 		("label[0.5,4.2;%s]"):format(core.formspec_escape(S("Funds (@1): $@2", rockmech.account_label(meta:get_string("owner")),

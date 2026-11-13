@@ -145,12 +145,27 @@ config.ores = {
 		product = TR("Clean coal"), buyer = TR("Power Plant Buyer"), contracts = TR("Coal contracts"), specs = {0.60, 0.70, 0.80}},
 	-- 水泥原料：單價低、片岩（矽、鎂）混進來水泥廠要罰款，所以截止品位高，邊緣靠近片岩的部分要小心稀釋
 	marble = {lith = "marble", waste = "schist", pure = "#f6f4ee", waste_color = "#4b544d",
-		label = TR("Marble"), default = 230, price = 40, recovery = 0.95, fee = 50, gangue = TR("Waste rock"),
+		label = TR("Marble"), default = 230, price = 40, recovery = 0.95, fee = 50, gangue = TR("Schist"),
 		product = TR("Sorted marble"), buyer = TR("Cement Plant Buyer"), contracts = TR("Marble contracts"), specs = {0.75, 0.80, 0.85}},
-	-- 銅礦（斑岩銅礦）：原生帶品位低、量大；次生富集帶薄但品位是原生的 2–3.5 倍。三個帶都是 copper（lith 是原生帶）
+	-- 銅礦（斑岩銅礦）：銅礦物是浸染狀的（細粒散在岩石裡），挑不出純礦塊，所以 param2 直接是含銅量：
+	--   metal.scale：param2 255 代表的含銅量（原礦 5.1%，每級 0.02%）。原生帶 0.3–1%、富集帶 1–3%。
+	--   混到廢石照體積稀釋（mix.lua）；同一個 metal.family 的碎石（原礦、精礦、尾礦）互相混合時按含銅量合併。
+	--   價格 price 是每噸銅（已扣冶煉精煉的淨價，跟著市場漲跌）；精礦賣的時候冶煉廠另扣每噸精礦 metal.tc。
+	--   選礦（copper.lua）：排矸站處理銅礦就是浮選選礦場，出精礦（metal.conc_grade 起，研發到 +5%）和尾礦，每噸營運費 metal.op；
+	--   回收率 = recovery × c ÷ (c + metal.k)（進料越貧越難選）。原礦直接送破碎站 = 外包選礦：回收率再 × metal.outsource，
+	--   扣尾礦的廢料處理費 fee（每噸尾礦）。外包的截止品位約 0.34% Cu（自己選礦更低）
 	copper = {lith = "cu_primary", waste = "andesite", pure = "#b8943c", waste_color = "#6e6a66",
-		label = TR("Copper ore"), default = 100, price = 300, recovery = 0.85, gangue = TR("Waste rock"),
-		product = TR("Copper concentrate"), buyer = TR("Smelter Buyer"), contracts = TR("Copper contracts"), specs = {0.35, 0.45, 0.55}},
+		label = TR("Copper ore"), default = 40, price = 10500, recovery = 0.85, fee = 20, gangue = TR("Tailings"),
+		product = TR("Copper concentrate"), buyer = TR("Smelter Buyer"), contracts = TR("Copper concentrate contracts"), specs = {0.25, 0.27, 0.29},
+		metal = {family = "copper", scale = 0.051, conc = "cu_conc", tail = "cu_tail", conc_grade = 0.25, tc = 200, op = 8, k = 0.001,
+			outsource = 0.9}},
+	-- 銅精礦、尾礦：只從選礦場出來（不是地圖上的礦種，不會出現在礦種選單）。精礦 0–51%（每級 0.2%）、尾礦 0–1.02%
+	cu_conc = {waste = "andesite", pure = "#5a4a20", waste_color = "#6e6a66", label = TR("Copper concentrate"), default = 125,
+		price = 10500, recovery = 1, fee = 0, gangue = TR("Waste rock"), hidden = true,
+		metal = {family = "copper", scale = 0.51}},
+	cu_tail = {waste = "andesite", pure = "#8a8470", waste_color = "#c4beb2", label = TR("Tailings"), default = 40,
+		price = 10500, recovery = 0.85, fee = 20, gangue = TR("Tailings"), hidden = true,
+		metal = {family = "copper", scale = 0.0102}},
 }
 
 -- 經營模式的供應商（career.lua）：key 用在設定 rockmech_price_<key>；count：一次買幾個；
@@ -1100,7 +1115,7 @@ function config.load(get, opts)
 	-- 這張地圖賣哪幾種礦（逗號分開，第一種是主要的礦：行情、合約、選礦場）；碎石都照樣註冊
 	cfg.active_ores = {}
 	for k in (get("rockmech_ores") or "coal"):gmatch("[%w_]+") do
-		if cfg.ores[k] then cfg.active_ores[#cfg.active_ores + 1] = cfg.ores[k]
+		if cfg.ores[k] and not cfg.ores[k].hidden then cfg.active_ores[#cfg.active_ores + 1] = cfg.ores[k]
 		else warnings[#warnings + 1] = "rockmech_ores: 沒有礦種 " .. k .. "（忽略）" end
 	end
 	if #cfg.active_ores == 0 then cfg.active_ores[1] = cfg.ores.coal end
