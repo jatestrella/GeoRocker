@@ -317,8 +317,8 @@ function M.generate(world_conf)
 			else bx, bz = px + Rr * 0.5 * fnx, pz + Rr * 0.5 * fnz end
 			local D, E, ox = round(10 + 30 * frac("wtdepth")), round(range(r, 6, 12)), round(range(r, 3, 6))
 			local fac, g0 = round(range(r, 2, 3.5), 0.1), r:next(40, 60)      -- 中心品位 param2 40–60 = 含銅 0.8–1.2%（ores.copper.metal.scale）
-			-- 原生帶品位遞減深度 150–250 m（中心 1% 約在富集帶下 160–270 m 降到截止品位）；鐵帽山丘高 6–15 m
-			local dd, hg = r:next(150, 250), r:next(6, 15)
+			-- 原生帶品位遞減深度 150–250 m（中心 1% 約在富集帶下 160–270 m 降到截止品位）；鐵帽山丘高 0–15 m（斑岩銅礦的淋濾帽多半不明顯突起，有的地圖要靠顏色和鑽探找）
+			local dd, hg = r:next(150, 250), r:next(0, 15)
 			set("copper" .. sfx, ("%d,%d,%d,%d,%d,%d,%g,%d,%d,%d"):format(round(bx), round(bz), Rr, D, E, ox, fac, g0, dd, hg))
 			logs[#logs + 1] = ("斑岩銅礦 (%d, %d) 半徑 %d m、地下水位 %d m、富集帶 %d m ×%g、品位遞減 %d m、鐵帽山丘 %d m"):format(
 				round(bx), round(bz), Rr, D, E, fac, dd, hg)

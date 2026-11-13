@@ -93,7 +93,7 @@ config.lithologies.andesite = {
 	rn = 0.40, rt = 0.85, mu_roll = 0.40, break_height = 6.0,
 }
 config.lithologies.gossan = {
-	name = "gossan", description = TR("Gossan"),
+	name = "gossan", description = TR("Limonite"),
 	gamma = 24.0, ucs = 80.0, tensile = 5.5, mi = 14,
 	color = "#8c3f1c", cracky = 2, bare = true,
 	texture = "default_stone.png^[colorize:#8c3f1c:170^(default_mineral_iron.png^[colorize:#d07020:200)",
