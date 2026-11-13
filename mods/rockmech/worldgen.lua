@@ -388,7 +388,7 @@ function M.generate(world_conf)
 	end
 	set("ores", table.concat(okeys, ","))
 	set("joint_persistence", "patch")
-	set("jointtex_style", "q5e")      -- 分支 q5-joints：新地圖預設量化跡線
+	set("jointtex_style", "q5e")      -- 量化跡線（jointmesh.lua 檔尾）
 	set("surface_y", sy)
 	set("joint_lattice", 8)
 	set("k_hmax", kH)
