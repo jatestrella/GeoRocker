@@ -275,20 +275,23 @@ core.register_node(ITEM, {
 		local look = placer:get_look_dir()
 		local dx, dz = 0, 0
 		if math.abs(look.x) > math.abs(look.z) then dx = look.x > 0 and -1 or 1 else dz = look.z > 0 and -1 or 1 end
+		local rec
 		if rockmech.clear_site then
 			pos = vector.copy(pos)
 			local sc = {}
 			for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do sc[#sc + 1] = {x, z} end end
-			rockmech.clear_site(sc, pos)
+			rec = rockmech.clear_site(sc, pos)
 		end
 		if not site_ok(pos, dx, dz) then
+			rockmech.site_undo(rec)
 			tell(name, S("Build it on flat ground: 3×3 m of level ground with @1 m of clearance above", tostring(BIN_H + 2)))
 			return itemstack
 		end
 		local cells = {}
 		for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do cells[#cells + 1] = {x, z} end end
 		local who = rockmech.cells_blocked and rockmech.cells_blocked(cells, pos.y - 1, pos.y + BIN_H, placer)
-		if who then tell(name, S("There is @1 in the construction area: move it first", who)); return itemstack end
+		if who then rockmech.site_undo(rec); tell(name, S("There is @1 in the construction area: move it first", who)); return itemstack end
+		rockmech.site_charge(rec, name)
 		build(pos, dx, dz, rockmech.account_of and rockmech.account_of(name) or name)
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack

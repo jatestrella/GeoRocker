@@ -190,10 +190,14 @@ core.register_globalstep(function(dtime)
 					draw(name, cells, a.y, not (rockmech.cells_blocked and rockmech.cells_blocked(cells, a.y, a.y + 2 * vdef.half, player)))
 				else
 					-- 機身、受料倉（選礦場再加兩座塔）；地不平，或範圍裡有人、有車（delivery.lua）就標紅色
+					-- 先試整地（woodwork.lua），判斷完復原
 					local cells = rockmech.facility_cells(item, a, dx, dz)
-					local ok = is_plant and rockmech.plant_site_ok(a, dx, dz) or (not is_plant and H.site_ok(a, dx, dz))
+					local b = vector.copy(a)
+					local rec = rockmech.clear_site and rockmech.clear_site(cells, b)
+					local ok = is_plant and rockmech.plant_site_ok(b, dx, dz) or (not is_plant and H.site_ok(b, dx, dz))
+					if rockmech.site_undo then rockmech.site_undo(rec) end
 					if ok and rockmech.cells_blocked(cells, a.y - 1, a.y + 4, player) then ok = false end
-					draw(name, cells, a.y, ok)
+					draw(name, cells, b.y, ok)
 				end
 			end
 		end

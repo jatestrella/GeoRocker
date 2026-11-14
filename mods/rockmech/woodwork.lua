@@ -499,17 +499,81 @@ local function push_aside(p, push)
 	end
 	end)
 end
--- cells = {{x, z}, …}，pos = 要蓋的位置（地面在 pos.y − 1）。地面那一層的薄片清掉；整片都是薄片就把 pos 往下一格（直接改 pos）
+-- 整地（建築物）：cells = {{x, z}, …}，pos = 要蓋的位置（地面在 pos.y − 1）。
+--   每一欄往下找岩盤（土、鬆土、不滿格的碎石都不算，最多往下 SITE_DEEP 格；更深就停在那裡，底下的土當地基）；
+--   基地面 = 最高那欄岩盤頂的上一格。基地面以上的土清掉；比較低的欄用整格表土回填（最多 1 m，再低就不整，讓 site_ok 判地不平）。
+--   直接改 pos.y，回傳施工紀錄 rec（rockmech.site_undo 復原、rockmech.site_charge 收整地費）；沒得整回傳 nil
+local SITE_DEEP, SITE_FILL = 4, 1
+local function removable(n)
+	return TOPSOIL_K[n] ~= nil or rockmech.rubble_base[n] == SOIL or rockmech.is_thin_ground(n)
+end
+local function level_of(n) return rockmech.rubble_level[n] or TOPSOIL_K[n] or NLEV end
 function rockmech.clear_site(cells, pos)
-	local all = #cells > 0
-	for _, c in ipairs(cells) do
-		local p = {x = c[1], y = pos.y - 1, z = c[2]}
-		if rockmech.is_thin_ground(core.get_node(p).name) then push_aside(p, false) else all = false end
-		local p2 = {x = c[1], y = pos.y, z = c[2]}
-		if rockmech.is_thin_ground(core.get_node(p2).name) then push_aside(p2, false) end
+	if #cells == 0 then return nil end
+	local passable = rockmech.vehicles and rockmech.vehicles.passable or function(n) return n == "air" end
+	local tops, maxr = {}, nil
+	for i, c in ipairs(cells) do
+		local r, full
+		for y = pos.y, pos.y - SITE_DEEP, -1 do
+			local n = core.get_node({x = c[1], y = y, z = c[2]}).name
+			if n == "ignore" then return nil end
+			if not passable(n) and not removable(n) then r = y; break end
+			if not full and not passable(n) and level_of(n) >= NLEV then full = y end
+		end
+		r = r or full or (pos.y - SITE_DEEP - 1)                  -- 土太厚找不到岩盤：最上面那格整格的土當地基
+		tops[i] = r
+		if not maxr or r > maxr then maxr = r end
 	end
-	if all then pos.y = pos.y - 1 end
-	return pos
+	if maxr >= pos.y then return nil end                       -- 範圍裡有東西擋著：照原樣讓 site_ok 判
+	local L = maxr + 1
+	for _, r in ipairs(tops) do if L - 1 - r > SITE_FILL then return nil end end
+	local rec = {ch = {}, cut = 0, fill = 0}
+	local function save(p, node)
+		rec.ch[#rec.ch + 1] = {p = p, node = node, meta = core.get_meta(p):to_table()}
+	end
+	for i, c in ipairs(cells) do
+		for y = L, pos.y + 1 do                                   -- 基地面以上的土清掉
+			local p = {x = c[1], y = y, z = c[2]}
+			local node = core.get_node(p)
+			if removable(node.name) then
+				save(p, node)
+				rec.cut = rec.cut + level_of(node.name) / NLEV
+				core.swap_node(p, {name = "air"})
+				core.get_meta(p):from_table(nil)
+			end
+		end
+		for y = tops[i] + 1, L - 1 do                             -- 低的欄回填整格表土
+			local p = {x = c[1], y = y, z = c[2]}
+			local node = core.get_node(p)
+			local had = removable(node.name) and level_of(node.name) or 0
+			if had < NLEV and (had > 0 or passable(node.name)) then
+				save(p, node)
+				rec.fill = rec.fill + (NLEV - had) / NLEV
+				core.swap_node(p, {name = TOPSOIL})
+				core.get_meta(p):from_table(nil)
+			end
+		end
+	end
+	pos.y = L
+	return rec
+end
+-- 沒蓋成：整地復原
+function rockmech.site_undo(rec)
+	if not rec then return end
+	for i = #rec.ch, 1, -1 do
+		local c = rec.ch[i]
+		core.swap_node(c.p, c.node)
+		core.get_meta(c.p):from_table(c.meta)
+	end
+end
+-- 蓋成了：收整地費（清土＋回填，每 m³ cfg.site_prep_rate）
+function rockmech.site_charge(rec, name)
+	if not (rec and name) or rec.cut + rec.fill < 0.05 then return end
+	local cost = math.floor((rec.cut + rec.fill) * (cfg.site_prep_rate or 20) + 0.5)
+	if cost <= 0 then return end
+	rockmech.add_money(rockmech.account_of(name), -cost)
+	rockmech.notify(name, S("[Site work] Soil removed @1 m³, filled @2 m³: $@3",
+		("%.1f"):format(rec.cut), ("%.1f"):format(rec.fill), tostring(cost)))
 end
 -- 營地範圍（a..b）裡，岩盤頂在地表 sy 的欄：上面的表土、鬆土整成剛好 CAMP_SOIL 格整格的表土（地面平整在 sy + CAMP_SOIL），
 -- 營地的建築、家具蓋在土上面（career.lua 的 ground_y 會找到土的頂面）

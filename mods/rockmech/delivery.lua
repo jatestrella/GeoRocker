@@ -263,7 +263,11 @@ for _, o in ipairs(ORDERS) do
 				end
 				local tmp = ItemStack(o.item)
 				local res = orig.on_place(tmp, placer, pointed)
-				if core.get_node(a).name ~= o.item then return itemstack end      -- 沒蓋成（地不平…，原本的訊息已經講了）
+				local built                                                       -- 整地會把設施往下移（woodwork.lua 的 clear_site）
+				for y = a.y, a.y - 6, -1 do
+					if core.get_node({x = a.x, y = y, z = a.z}).name == o.item then built = true; break end
+				end
+				if not built then return itemstack end      -- 沒蓋成（地不平…，原本的訊息已經講了）
 				if not core.is_creative_enabled(name) and res and res:get_count() == 0 then itemstack:take_item() end
 				-- 自己站在施工範圍裡：移到受料倉外（倉朝自己這邊挖，不移會掉進去）
 				local pp = placer:get_pos()

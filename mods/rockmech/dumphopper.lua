@@ -237,19 +237,22 @@ core.register_node(K.item, {
 		if pointed.type ~= "node" or not placer then return itemstack end
 		local name = placer:get_player_name()
 		local pos = vector.copy(pointed.above)
+		local rec
 		if rockmech.clear_site then
 			local sc = {}
 			for _, c in ipairs(cells_of(pos, K)) do sc[#sc + 1] = {c.x, c.z} end
-			rockmech.clear_site(sc, pos)
+			rec = rockmech.clear_site(sc, pos)
 		end
 		if not site_ok(pos, K) then
+			rockmech.site_undo(rec)
 			tell(name, S("Build it on flat ground: @1×@1 m of level ground", tostring(K.size)))
 			return itemstack
 		end
 		local sc = {}
 		for _, c in ipairs(cells_of(pos, K)) do sc[#sc + 1] = {c.x, c.z} end
 		local who = rockmech.cells_blocked and rockmech.cells_blocked(sc, pos.y - 1, pos.y + 2, placer)
-		if who then tell(name, S("There is @1 in the construction area: move it first", who)); return itemstack end
+		if who then rockmech.site_undo(rec); tell(name, S("There is @1 in the construction area: move it first", who)); return itemstack end
+		rockmech.site_charge(rec, name)
 		build(pos, rockmech.account_of and rockmech.account_of(name) or name, K)
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack
