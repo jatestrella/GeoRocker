@@ -515,6 +515,27 @@ local function report(pos, job, res, meta)
 end
 rockmech.fem_report = report
 
+-- 天然地形的解（fem.solve_nested 的 res.nat）的快取：同一個範圍、天然地形（填回去之後的格子與現地應力）沒變就直接沿用，
+-- 不送去背景再解；變了就用上次的位移當初始值。天然地形只在放東西、碎石移動、從頂上挖岩石時才會變
+local NAT_KEEP = 6
+local nat_cache = {}          -- {key, sig, res}，最近用的在後面
+local function nat_signature(nat)
+	local h1, h2 = 0, 0
+	for c, s in pairs(nat.solid) do
+		if s then
+			local v = c * 7 + (nat.soft[c] and 1 or 0) + (nat.soil[c] and 2 or 0)
+			h1 = (h1 * 31 + v) % 2147483647
+			h2 = (h2 * 37 + math.floor((nat.syy[c] or 0) * 10 + (nat.sxx[c] or 0))) % 2147483629
+		end
+	end
+	return h1 .. ":" .. h2
+end
+local function nat_lookup(key)
+	for i = #nat_cache, 1, -1 do
+		if nat_cache[i].key == key then return nat_cache[i], i end
+	end
+end
+
 -- 同一個範圍上次的解當初始值，迭代會少很多（u 留在主執行緒）
 local last_key, last_u, last_ckey, last_cu
 local last_job, last_res, last_meta      -- 最後一次的解（HUD 用）
@@ -531,15 +552,36 @@ function rockmech.fem_run(pos, callback)
 		if ckey == last_ckey then cj.u0 = last_cu end
 		job.coarse = cj
 	end
+	-- 天然地形：快取有、天然地形也沒變 → 不送去解（handle_async 呼叫時就複製好 job，之後再把 nat 放回來）
+	local nat, nat_sig, nat_hit = job.nat, nil, nil
+	if nat then
+		nat_sig = nat_signature(nat)
+		local e = nat_lookup(key)
+		if e and e.sig == nat_sig then nat_hit = e.res
+		elseif e then nat.u0 = e.res.u end
+		if nat_hit then job.nat = nil end
+	end
 	local t_build = (core.get_us_time() - t0) / 1000
 	core.handle_async(function(j)
 		return core.rockmech_fem.solve_nested(j)
 	end, function(res)
+		if nat then
+			job.nat = nat
+			nat.u0 = nil
+			if nat_hit then res.nat = nat_hit
+			elseif res.nat then
+				local _, i = nat_lookup(key)
+				if i then table.remove(nat_cache, i) end
+				nat_cache[#nat_cache + 1] = {key = key, sig = nat_sig, res = res.nat}
+				if #nat_cache > NAT_KEEP then table.remove(nat_cache, 1) end
+			end
+		end
 		last_key, last_u, last_ckey, last_cu = key, res.u, ckey, res.cu
 		last_job, last_res, last_meta = job, res, meta
 		if rockmech.monitor_update then rockmech.monitor_update(job, res, meta) end     -- 監測稜鏡（monitor.lua）
 		callback(job, res, meta, (core.get_us_time() - t0) / 1000, t_build)
 	end, job)
+	if nat_hit then job.nat = nat end
 end
 
 -- 最後一次解涵蓋 pos 時回傳 {s1, s3, fs}（MPa），給 HUD

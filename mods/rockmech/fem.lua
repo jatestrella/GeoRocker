@@ -387,7 +387,7 @@ function fem.natural_job(job)
 	if not n then return nil end
 	return {nx = job.nx, ny = job.ny, nz = job.nz, solid = n.solid, soft = n.soft, soil = n.soil, gam = n.gam,
 		sxx = n.sxx, syy = n.syy, szz = n.szz, sxz = n.sxz, gamma = job.gamma, nu = job.nu, tol = job.tol,
-		max_iter = job.max_iter, soft_e = job.soft_e, soil_e = job.soil_e, blend = job.blend}
+		max_iter = job.max_iter, soft_e = job.soft_e, soil_e = job.soil_e, blend = job.blend, u0 = n.u0}
 end
 
 -- job.nat 有給：另外解一次天然地形（外緣 Δu = 0），放在 res.nat。用來分辨「開挖造成的破壞」和天然就有的應力集中
