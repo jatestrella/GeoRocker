@@ -97,3 +97,16 @@ describe("assay 成分", function()
 end)
 
 rockmech, core = saved_rm, saved_core
+
+rockmech = {mix = mix, mix_ctx = ctx, mix_of = ctx.mix_of, rubble_base = {}, lith_of_node = {}}
+core = {register_chatcommand = function() end}
+describe("assay 三種成分的外觀", function()
+	it("崩積土裡混了礦石：土的像素照土真正的比例，不把礦石算成土", function()
+		-- 碎石 4、土 2、煤（純）1.5 級 → 碎石 53%、土 27%、煤 20%
+		local b, c = A.merge(R, 4, 0, S, 2, 0)
+		b, c = A.merge(b, 6, c, "rubble_coal", 1.5, 255)
+		assert.are.equal("colluvium", b)
+		assert.are.equal(68, c.g)                       -- 255 × 2 ÷ 7.5
+	end)
+end)
+rockmech, core = saved_rm, saved_core

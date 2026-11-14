@@ -198,8 +198,14 @@ local function compose(v)
 	local t = {}
 	for n, x in pairs(v) do t[n] = x end
 	local b, p = rockmech.mix.compose(rockmech.mix_ctx, t)
-	local cnt = 0
-	for _, x in pairs(t) do if x > 1e-9 then cnt = cnt + 1 end end
+	local cnt, tot = 0, 0
+	for _, x in pairs(t) do if x > 1e-9 then cnt = cnt + 1; tot = tot + x end end
+	-- 三種以上：外觀上 a 的像素照 a 真正的比例（不把畫不出來的成分算到 a 頭上）。
+	-- 礦石＋廢石那種本來就是礦石的真正比例（其餘併進廢石），不用改
+	local m = b and rockmech.mix_of[b]
+	if cnt > 2 and m and not m.ore and (t[m.a] or 0) > 0 then
+		p = math.max(1, math.min(254, math.floor(255 * t[m.a] / tot + 0.5)))
+	end
 	return b, p, cnt
 end
 A.compose = compose
