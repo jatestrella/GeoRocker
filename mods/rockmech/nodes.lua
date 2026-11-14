@@ -401,6 +401,7 @@ end
 local mix = dofile(rockmech.modpath .. "/mix.lua")
 rockmech.mix = mix
 local mix_ctx = {mix_of = rockmech.mix_of, pair = mix_pair, rank = COMP_RANK, ore_rubble = {}}
+rockmech.mix_ctx = mix_ctx      -- assay.lua：三種以上成分的體積表也用同一套規則決定方塊外觀
 for key, ore in pairs(cfg.ores) do mix_ctx.ore_rubble["ore:" .. key] = ore.rubble end
 -- 金屬礦（銅）：同一族的成分（原礦、精礦、尾礦）混在一起時按含銅量合併（copper.lua）
 do

@@ -28,6 +28,7 @@ local SPECS = {
 	"support_spec.lua",
 	"fem_spec.lua",
 	"mix_spec.lua",
+	"assay_spec.lua",
 	"airflow_spec.lua",
 }
 

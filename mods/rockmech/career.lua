@@ -327,8 +327,8 @@ function core.node_dig(pos, node, digger)
 		local t, b, p2, ca = V.take_rubble(pos, NLEV - (c and c.lv or 0))
 		local A = rockmech.assay
 		if c then
-			local nb, g = rockmech.rubble_merge(c.base, c.lv, c.p2, b, t, p2)
-			c = {base = nb, lv = c.lv + t, p2 = g, x = A.extras_mix(c.x, c.lv, ca, t)}
+			local nb, cc = A.merge(c.base, c.lv, A.with(c.p2, c.x), b, t, ca)
+			c = {base = nb, lv = c.lv + t, p2 = cc.g, x = A.extras(cc)}
 		else
 			c = {base = b, lv = t, p2 = p2, x = A.extras(ca)}      -- x：副產品（assay.lua）
 		end

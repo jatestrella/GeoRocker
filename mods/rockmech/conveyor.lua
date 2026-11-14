@@ -126,16 +126,15 @@ local function add_load(h, b, k, g)
 	local L = loads[h] or {}
 	loads[h] = L
 	dirty = true
-	local gp, x = AS.g(g), AS.extras(g)
 	for _, q in ipairs(L) do
 		if rockmech.rubble_mixable(q.b, b) then
-			q.x = AS.extras_mix(q.x, q.k, x, k)
-			q.b, q.g = rockmech.rubble_merge(q.b, q.k, q.g, b, k, gp)
+			local nb, c = AS.merge(q.b, q.k, comp(q), b, k, g)
+			q.b, q.g, q.x = nb, c.g, AS.extras(c)
 			q.k = q.k + k
 			return
 		end
 	end
-	L[#L + 1] = {b = b, k = k, g = gp, x = x}
+	L[#L + 1] = {b = b, k = k, g = AS.g(g), x = AS.extras(g)}
 end
 
 local function register_cell(pos)

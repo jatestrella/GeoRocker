@@ -769,14 +769,16 @@ end
 -- 車上的碎石：self.load[種類] = 級數；礦石碎石另外記 self.loadq[種類] = Σ 級數 × 品位（主成分），
 -- 副產品記 self.loada[種類] = {鍵 = Σ 級數 × 含量}（assay.lua）。g：數字（param2）或成分表
 function V.load_put(self, base, lv, g)
-	self.load[base] = (self.load[base] or 0) + lv
+	local lv0, q0 = self.load[base] or 0, self.loadq[base] or 0
+	self.load[base] = lv0 + lv
 	if rockmech.mix_of[base] then      -- 混合碎石（礦石品位、崩積土的土比例）都記加權的 param2
-		self.loadq[base] = (self.loadq[base] or 0) + lv * A.g(g)
-		local ex = A.extras_add(self.loada and self.loada[base], g, lv)
-		if ex then
-			self.loada = self.loada or {}
-			self.loada[base] = ex
-		end
+		self.loadq[base] = q0 + lv * A.g(g)
+	end
+	-- 副產品、三種以上成分的體積表（一般碎石也可能帶）
+	local ex = A.acc_put(self.loada and self.loada[base], base, lv0, q0, g, lv)
+	if ex then
+		self.loada = self.loada or {}
+		self.loada[base] = ex
 	end
 end
 -- 車上這種碎石的平均成分（倒出來、轉給別台車用；副產品跟著走）
@@ -784,6 +786,11 @@ function V.load_assay(self, base)
 	local c = A.new(V.load_grade(self, base))
 	local lv, ex = self.load[base], self.loada and self.loada[base]
 	if ex and lv and lv > 0 then for k, v in pairs(ex) do c[k] = v / lv end end
+	A.slim(c)
+	if A.has_v(c) then      -- 三種以上成分：外觀的 param2 照平均後的體積表重算
+		local _, p = A.compose(A.vol(nil, c, 1, {}))
+		c.g = p
+	end
 	return c
 end
 -- 車上這種碎石的平均品位（param2）
