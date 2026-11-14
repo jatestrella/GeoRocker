@@ -15,7 +15,8 @@
 param(
 	[string]$Out = "",        # default: the folder that contains the Luanti root (e.g. D:\Teaching\GeoRocker)
 	[string]$Name = "GeoRocker",
-	[switch]$Class            # also include the class maps (map.conf "mode = class"); the public package leaves them out
+	[switch]$Class,           # also include the class maps (map.conf "mode = class"); the public package leaves them out
+	[string]$Branch = "release"   # branch the one-click updater follows (update.txt); a dev package passes its branch
 )
 
 $ErrorActionPreference = "Stop"
@@ -97,6 +98,19 @@ $conf = @(
 $startName = [string]::new([char[]](0x958B, 0x59CB, 0x904A, 0x6232)) + ".bat"
 $bat = "@echo off`r`nstart `"`" `"%~dp0bin\luanti.exe`"`r`n"
 [System.IO.File]::WriteAllText((Join-Path $stage $startName), $bat, (New-Object System.Text.ASCIIEncoding))
+
+# One-click update ("update game" .bat): runs games\georocker\standalone\update.ps1 from a temp copy
+# (the game folder is replaced while it runs). update.txt tells it the branch and the installed commit.
+$updName = [string]::new([char[]](0x66F4, 0x65B0, 0x904A, 0x6232)) + ".bat"
+$upd = "@echo off`r`ncd /d `"%~dp0`"`r`ncopy /y `"games\georocker\standalone\update.ps1`" `"%TEMP%\georocker_update.ps1`" >nul`r`n" +
+	"powershell -NoProfile -ExecutionPolicy Bypass -File `"%TEMP%\georocker_update.ps1`" -Root `"%~dp0.`"`r`npause`r`n"
+[System.IO.File]::WriteAllText((Join-Path $stage $updName), $upd, (New-Object System.Text.ASCIIEncoding))
+$installed = ""
+try {
+	if ((git -C $game rev-parse --abbrev-ref HEAD) -eq $Branch -and -not (git -C $game status --porcelain)) { $installed = (git -C $game rev-parse HEAD) }
+} catch {}
+$cls = "0"; if ($Class) { $cls = "1" }
+[System.IO.File]::WriteAllLines((Join-Path $stage "update.txt"), @("branch = " + $Branch, "class = " + $cls, "installed = " + $installed))
 
 $notice = @(
 	"This package contains the Luanti engine 5.15.1 (https://www.luanti.org),",
