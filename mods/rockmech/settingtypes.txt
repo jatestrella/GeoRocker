@@ -431,9 +431,9 @@ rockmech_rr_loose (Rolling resistance: loose rubble, %) float 4 0 30
 
 rockmech_compact_passes (Traffic compaction: passes) int 4 1 100
 
-# Friction angle of compacted rubble (degrees). Loose rubble uses the residual friction angle (35). A higher angle makes slopes stand steeper and resists wheel ruts:
-# in this game a loaded truck stops rutting at about 54 degrees and a loaded haul truck at about 74 degrees.
-rockmech_compact_phi (Traffic compaction: friction angle) float 75 1 89
+# Friction angle of compacted rubble (degrees), a real value for dense angular rockfill (about 45). Loose rubble uses the residual friction angle (35).
+# Loaded trucks still rut compacted roads until bearing capacity is modelled (it used to be 75 to stop ruts).
+rockmech_compact_phi (Traffic compaction: friction angle) float 45 1 89
 
 # Friction between vehicles and rubble. A vehicle on a rubble slope steeper than atan(mu) slides down it. 0 turns it off.
 rockmech_vehicle_slide_mu (Vehicle friction on rubble) float 0.5 0 2

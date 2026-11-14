@@ -1190,7 +1190,7 @@ function config.load(get, opts)
 	cfg.rr = {paved = 0.015, firm = 0.02, loose = math.max(0, (tonumber(get("rockmech_rr_loose")) or 4) / 100),
 		rut_cm = 0.006, ref = 0.04}
 	cfg.compact_passes = math.max(1, math.floor(tonumber(get("rockmech_compact_passes")) or 4))
-	cfg.compact_phi = math.min(89, math.max(1, tonumber(get("rockmech_compact_phi")) or 75))
+	cfg.compact_phi = math.min(89, math.max(1, tonumber(get("rockmech_compact_phi")) or 45))
 	cfg.model_scale = tonumber(get("rockmech_model_scale")) or 1
 	if cfg.model_scale <= 0 then
 		warnings[#warnings + 1] = "rockmech_model_scale ≤ 0，改為 1"
