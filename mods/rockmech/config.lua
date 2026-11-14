@@ -181,8 +181,8 @@ config.shop = {
 	{key = "crusher", shop = "civil", item = "rockmech:crusher", label = TR("Crusher"), price = 20000},
 	{key = "crusher_big", shop = "civil", item = "rockmech:crusher_big", label = TR("Large crusher"), price = 300000},
 	{key = "plant", shop = "civil", item = "rockmech:plant", label = TR("Pre-sorting plant"), price = 30000},
-	-- 提金廠：只在有褐鐵礦（金）的地圖賣（needs_gold，career.lua 的商店清單）
-	{key = "gold_plant", shop = "civil", item = "rockmech:gold_plant", label = TR("Gold plant"), price = 120000, needs_gold = true},
+	-- 提金廠：先關掉（2026-11-14，鐵帽的金直接在破碎站算錢；以後改做堆浸場）。要開回來：取消註解，並把 goldplant.lua 的 ENABLED 設成 true
+	-- {key = "gold_plant", shop = "civil", item = "rockmech:gold_plant", label = TR("Gold plant"), price = 120000, needs_gold = true},
 	{key = "belt", shop = "civil", item = "rockmech:belt", label = TR("Conveyor belt"), price = 1000, count = 10},
 	{key = "belt_switch", shop = "civil", item = "rockmech:belt_switch", label = TR("Conveyor control box"), price = 3000},
 	{key = "lowboy", shop = "vehicle", item = "rockmech:lowboy_item", label = TR("Lowboy trailer"), price = 40000},

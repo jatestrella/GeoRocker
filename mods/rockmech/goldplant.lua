@@ -385,7 +385,9 @@ rockmech.gold_plant_step = step
 ---------------------------------------------------------------------------
 -- 貴金屬商：營地研究帳篷後面（經濟分析師旁邊），收購金。只在有褐鐵礦的地圖（斑岩銅礦）出現
 ---------------------------------------------------------------------------
-local has_gold = cfg.strata and cfg.strata.body ~= nil
+-- 先關掉（2026-11-14）：商店不賣提金廠、營地不出現貴金屬商，鐵帽的金直接在破碎站算錢。方塊和物品照樣註冊，舊地圖蓋好的不會變未知方塊
+local ENABLED = false
+local has_gold = ENABLED and cfg.strata and cfg.strata.body ~= nil
 local WHO, ENTITY, FORM = "dealer", "rockmech:npc_dealer", "rockmech:dealer"
 
 local function count_gold(inv)

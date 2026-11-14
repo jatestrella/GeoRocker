@@ -969,7 +969,7 @@ local function ensure_vendors(force)
 			for _, p in ipairs(players) do
 				if vector.distance(p:get_pos(), spot.pos) < VENDOR_NEAR then near = true; break end
 			end
-			if near then
+			if near and BOOTHS[spot.kind] then        -- 關掉的 NPC（例如貴金屬商）位置還記著：跳過
 				vendor_obj[i] = core.add_entity(spot.pos, BOOTHS[spot.kind].entity)
 				if vendor_obj[i] and spot.yaw then vendor_obj[i]:set_yaw(spot.yaw) end
 			end
