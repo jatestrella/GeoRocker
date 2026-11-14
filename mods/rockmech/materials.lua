@@ -91,6 +91,30 @@ function M.set(pos, t)
 	core.get_meta(pos):set_string(META, table.concat(parts, ";"))
 end
 
+-- 淺基礎的極限承載力（Terzaghi，承載力係數用 Vesic）：q_ult = sc·c·Nc + q·Nq + sγ·½·γ·B·Nγ (kPa)
+--   Nq = e^(π tanφ)·tan²(45° + φ/2)、Nc = (Nq − 1)·cot φ（φ = 0 時 5.14）、Nγ = 2·(Nq + 1)·tan φ；q = γ·D（基礎底面以上的覆土）
+--   square：方形基礎（sc = 1.3、sγ = 0.4），否則條形（1、0.5）。wet：凝聚力乘的比例（下雨，weather.lua）
+--   岩石：岩體的單軸強度 σcm = σci·s^a（Hoek-Brown，collapse.rock）當承載力
+function M.bearing(p, B, D, square, wet, pos)
+	if p.kind == "rock" then
+		local key = p.key and p.key:match("^lith:(.+)$")
+		local R = rockmech.collapse and rockmech.collapse.rock
+		if key and R and pos then
+			local node = core.get_node(pos)
+			return R.q_fail(R.at(key, pos.y, node.param2), 0) * 1000
+		end
+		return (p.ucs or 10) * 1000 * 0.1
+	end
+	local phi = math.rad(p.phi)
+	local c = (p.c or 0) * (wet or 1)
+	local Nq = math.exp(math.pi * math.tan(phi)) * math.tan(math.pi / 4 + phi / 2) ^ 2
+	local Nc = phi > 1e-6 and (Nq - 1) / math.tan(phi) or 5.14
+	local Ng = 2 * (Nq + 1) * math.tan(phi)
+	local sc, sg = 1, 0.5
+	if square then sc, sg = 1.3, 0.4 end
+	return sc * c * Nc + p.gamma * (D or 0) * Nq + sg * p.gamma * B * Ng
+end
+
 -- 顯示用的一行參數
 function M.text(p)
 	if p.kind == "rock" then

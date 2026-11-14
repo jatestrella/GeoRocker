@@ -450,6 +450,7 @@ There is @1 in the construction area: move it first=施工範圍裡有@1：先�
 @1 collapsed: its foundation gave way=@1的地基破壞，倒塌了
 @1 was destroyed by the blast=@1被炸毀了
 @1  durability @2%=@1  耐久度 @2%
+bearing FS @1=承載 FS @1
 
 ### femstress.lua
 tension=拉

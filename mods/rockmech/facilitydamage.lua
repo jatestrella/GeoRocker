@@ -8,6 +8,8 @@
 -- 地基（統一架構第 4 步）：設施是壓在地面上的均布荷重 q（rockmech.facility_footing），應力解把它算進去（femstress.lua）。
 --   地基格被應力解判破壞：每格扣 100 / 地基格數 %（rockmech.facility_ground_failed）。
 --   地基格被掏空（空氣、不滿一格）：損傷至少是掏空的比例；超過一半整座倒塌（ABM 抽查，修好了地基還是空的會再壞）。
+--   地基承載力：Terzaghi 方形基礎（materials.lua 的 M.bearing，B = 3 m，D = 周圍地面高出基礎底面的最小值），
+--   取地基格裡最弱的材料；q_ult < q 就承載破壞：地基的土鬆掉、整座倒塌。下雨時 c 降低，承載力跟著降。
 --   受料斗是挖進地裡的混凝土坑，不算荷重、也不判地基。
 
 local S = rockmech.S
@@ -186,7 +188,10 @@ function rockmech.facility_info(pos, name)
 	if not PART[name] then return nil end
 	local c = control_of(pos)
 	if not c then return nil end
-	return S("@1  durability @2%", label_of(core.get_node(c).name), ("%d"):format(math.floor(100 - dmg_of(c) + 0.5)))
+	local fs = rockmech.facility_bearing_fs and rockmech.facility_bearing_fs(c)
+	local line = S("@1  durability @2%", label_of(core.get_node(c).name), ("%d"):format(math.floor(100 - dmg_of(c) + 0.5)))
+	if fs then line = line .. "  " .. S("bearing FS @1", fs > 99 and ">99" or ("%.1f"):format(fs)) end
+	return line
 end
 
 -- 爆炸：同一步裡被炸到的格子先記下來，下一步一起算（一次爆炸最多扣 CAP %）
@@ -246,6 +251,43 @@ function rockmech.facility_ground_failed(failed)
 end
 
 -- 地基掏空（空氣、不滿一格的碎石或土）：損傷至少是掏空的比例，超過一半整座倒塌。新蓋的設施第一次被看到時排一次應力解（荷重壓下去）
+-- 地基承載的安全係數 q_ult / q：回傳 FS, q, q_ult
+local function bearing_fs(pos)
+	local cells, q = rockmech.facility_footing(pos)
+	if not cells or not rockmech.materials then return nil end
+	local in_foot = {}
+	for _, g in ipairs(cells) do in_foot[g.x .. "," .. g.z] = true end
+	-- 埋入深度 D：地基外圍一圈的地面高出基礎底面（pos.y − 0.5）多少，取最小
+	local base, D = pos.y - 0.5, math.huge
+	for _, g in ipairs(cells) do
+		for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
+			local x, z = g.x + d[1], g.z + d[2]
+			if not in_foot[x .. "," .. z] then
+				local top = base - 1
+				for y = pos.y + 3, pos.y - 1, -1 do
+					local n = core.get_node({x = x, y = y, z = z}).name
+					local k = rockmech.rubble_level[n] or (rockmech.is_thin_ground(n) and tonumber(n:match("_(%d)$")))
+					local def = core.registered_nodes[n]
+					if k and k < rockmech.RUBBLE_LEVELS then top = y - 0.5 + k / rockmech.RUBBLE_LEVELS; break end
+					if def and def.walkable ~= false and not CONTROLS[n] and not PART[n] then top = y + 0.5; break end
+				end
+				D = math.min(D, math.max(0, top - base))
+			end
+		end
+	end
+	if D == math.huge then D = 0 end
+	local rain = rockmech.rain_level and rockmech.rain_level() or 0
+	local wet = math.max(0, 1 - (rockmech.cfg.slope.rain_c_loss or 0) * rain)
+	local qult = math.huge
+	for _, g in ipairs(cells) do
+		local p = rockmech.materials.at(g)
+		if p then qult = math.min(qult, rockmech.materials.bearing(p, 3, D, true, wet, g)) end
+	end
+	if qult == math.huge then return nil end
+	return qult / q, q, qult
+end
+rockmech.facility_bearing_fs = bearing_fs
+
 local function hollow(g)
 	local n = core.get_node(g).name
 	if n == "ignore" then return false end
@@ -262,6 +304,14 @@ core.register_abm({
 		if meta:get_int("fload") == 0 then
 			meta:set_int("fload", 1)
 			if rockmech.fem_queue and rockmech.cfg.fem.drive then rockmech.fem_queue(pos, 1, false, false) end
+		end
+		-- 承載破壞：地基的土鬆掉、整座倒塌
+		local fs, q, qult = bearing_fs(pos)
+		if fs and fs < 1 then
+			core.log("action", ("[rockmech] 設施 %s 承載破壞 q %.0f kPa > q_ult %.0f kPa"):format(core.pos_to_string(pos), q, qult))
+			for _, g in ipairs(cells) do if rockmech.dig_topsoil then rockmech.dig_topsoil(g) end end
+			rockmech.facility_damage(pos, 100, true)
+			return
 		end
 		local n = 0
 		for _, g in ipairs(cells) do if hollow(g) then n = n + 1 end end

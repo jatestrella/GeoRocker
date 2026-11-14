@@ -450,6 +450,7 @@ There is @1 in the construction area: move it first=
 @1 collapsed: its foundation gave way=
 @1 was destroyed by the blast=
 @1  durability @2%=
+bearing FS @1=
 
 ### femstress.lua
 tension=
