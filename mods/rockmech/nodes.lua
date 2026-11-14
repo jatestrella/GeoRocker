@@ -313,7 +313,20 @@ core.register_node(rockmech.RUBBLE_SOIL, {
 	is_ground_content = false,   -- 否則相鄰區塊生成時，會被 rockmech_strip_soil 當成土壤剝掉（半格也是，見下面）
 })
 
-rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE, rockmech.RUBBLE_SOIL}
+-- 建築廢棄物：設施倒塌（被炸毀、地基破壞）變成的混凝土塊、鋼筋、浪板碎片（facilitydamage.lua）。跟碎石同一套，沒有價值
+rockmech.RUBBLE_DEBRIS = rockmech.modname .. ":rubble_debris"
+local DEBRIS_TILE = (has_default and "default_gravel.png^[colorize:#a09c94:170" or "[fill:16x16:#a09c94")
+	.. "^[fill:3x2:2,3:#6a4a30^[fill:1x3:11,2:#7a5236^[fill:2x2:6,10:#d0a828^[fill:3x1:10,12:#5a5e64^[fill:2x2:13,6:#c8c4bc"
+core.register_node(rockmech.RUBBLE_DEBRIS, {
+	description = S("Construction waste"),
+	short_description = S("Construction waste"),
+	tiles = {DEBRIS_TILE},
+	groups = {crumbly = 2, cracky = 3, rockmech_rubble = 1},
+	sounds = gravel_sounds,
+	is_ground_content = false,
+})
+
+rockmech.rubble_nodes = {rockmech.RUBBLE, rockmech.RUBBLE_GRANITE, rockmech.RUBBLE_SOIL, rockmech.RUBBLE_DEBRIS}
 
 -- 岩性 → 碎石（未列出的岩性用一般碎石）、碎石 → 岩性
 rockmech.rubble_of_lith = {granite = rockmech.RUBBLE_GRANITE}
@@ -328,8 +341,9 @@ rockmech.ore_of_rubble = {}           -- 碎石 base → 礦石
 rockmech.mix_of = {}                  -- 混合碎石 base → {a = 成分, b = 成分, ore = 礦石或 nil}；p2 = a 的比例
 local mix_pair = {}                   -- 成分 a → 成分 b → base
 local ore_root = {}                   -- 各段的滿格 node → base
-local COMP_LABEL = {[rockmech.RUBBLE] = S("Rubble"), [rockmech.RUBBLE_GRANITE] = S("Granite rubble"), [rockmech.RUBBLE_SOIL] = S("Soil")}   -- 顯示用（已翻譯）
-local COMP_RANK = {[rockmech.RUBBLE] = 2, [rockmech.RUBBLE_GRANITE] = 2, [rockmech.RUBBLE_SOIL] = 1}   -- 礦石 3
+local COMP_LABEL = {[rockmech.RUBBLE] = S("Rubble"), [rockmech.RUBBLE_GRANITE] = S("Granite rubble"), [rockmech.RUBBLE_SOIL] = S("Soil"),
+	[rockmech.RUBBLE_DEBRIS] = S("Construction waste")}   -- 顯示用（已翻譯）
+local COMP_RANK = {[rockmech.RUBBLE] = 2, [rockmech.RUBBLE_GRANITE] = 2, [rockmech.RUBBLE_SOIL] = 1, [rockmech.RUBBLE_DEBRIS] = 0.5}   -- 礦石 3
 do
 	local order, seed = {}, 12345     -- 固定順序：比例變高時 a 的像素只增不減
 	for i = 1, 256 do order[i] = i end
@@ -396,6 +410,12 @@ do
 		S("Granite colluvium\nGranite rubble and soil mixed together"), nil, S("Granite colluvium"))
 	family(rockmech.modname .. ":rubble_mixed", rockmech.RUBBLE_GRANITE, tile(rockmech.RUBBLE_GRANITE), rockmech.RUBBLE,
 		S("Mixed rubble\nGranite rubble and ordinary rubble mixed together"), nil, S("Mixed rubble"))
+	-- 建築廢棄物混進碎石、花崗岩碎石、土（跟礦石混：沒有這種組合，當礦石的廢石，mix.lua）
+	for _, x in ipairs({rockmech.RUBBLE, rockmech.RUBBLE_GRANITE, rockmech.RUBBLE_SOIL}) do
+		family(rockmech.modname .. ":rubble_debris" .. (x == rockmech.RUBBLE and "_mixed" or x == rockmech.RUBBLE_GRANITE and "_granite" or "_soil"),
+			rockmech.RUBBLE_DEBRIS, tile(rockmech.RUBBLE_DEBRIS), x,
+			S("@1, mixed with @2", S("Construction waste"), COMP_LABEL[x]), nil)
+	end
 end
 -- 合併規則是純函式（mix.lua，單元測試 tests/mix_spec.lua 也用）
 local mix = dofile(rockmech.modpath .. "/mix.lua")

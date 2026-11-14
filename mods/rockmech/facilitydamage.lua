@@ -145,17 +145,57 @@ local function label_of(name)
 	return d and (d.short_description or rockmech.desc_short(d)) or name
 end
 
--- 倒塌：拆掉控制方塊（各設施的 on_destruct 會拆掉整座），一陣塵土。why：通知的文字（預設：被炸毀）
+-- 倒塌後的建築廢棄物（m³）：外框體積的大約三成（建築大多是空的）。倉裡的料照原本的成分一起倒出來
+local DEBRIS_M3 = {["rockmech:crusher"] = 6, ["rockmech:crusher_big"] = 15, ["rockmech:plant"] = 20,
+	["rockmech:loadout"] = 6, ["rockmech:gold_plant"] = 8}
+local function spill(pos, name, meta)
+	local V = rockmech.vehicles
+	if not (V and V.deposit_column) then return {} end
+	local cells = rockmech.facility_footing and rockmech.facility_footing(pos) or nil
+	if not cells then
+		cells = {}
+		for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do cells[#cells + 1] = {x = x, y = pos.y - 1, z = z} end end
+	end
+	local loads = {}
+	local m3 = DEBRIS_M3[name]
+	if m3 then loads[#loads + 1] = {base = rockmech.RUBBLE_DEBRIS, lv = math.floor(m3 * rockmech.RUBBLE_LEVELS + 0.5)} end
+	for base, v in pairs(core.deserialize(meta.fields and meta.fields.bin or "") or {}) do      -- 裝車料斗倉裡的料
+		if (v.lv or 0) >= 1 then loads[#loads + 1] = {base = base, lv = math.floor(v.lv), c = rockmech.assay.bin_comp(v, base)} end
+	end
+	return {cells = cells, loads = loads}
+end
+local function dump_spill(sp, ytop)
+	local V = rockmech.vehicles
+	for _, l in ipairs(sp.loads or {}) do
+		local left = l.lv
+		for i, g in ipairs(sp.cells) do
+			local share = math.ceil(left / (#sp.cells - i + 1))
+			left = left - share + V.deposit_column(g.x, g.z, ytop, l.base, share, 8, nil, l.c)
+		end
+	end
+end
+
+-- 倒塌：拆掉控制方塊（各設施的 on_destruct 會拆掉整座），粉塵、碎塊、爆破聲，原地變成建築廢棄物。why：通知的文字（預設：被炸毀）
 local function collapse_facility(pos, why)
 	local name = core.get_node(pos).name
-	local owner = core.get_meta(pos):get_string("owner")
+	local meta0 = core.get_meta(pos)
+	local owner = meta0:get_string("owner")
+	local sp = spill(pos, name, meta0:to_table())
 	storage:set_string(key_of(pos), "")
 	local c, sz = bounds(pos)
-	core.add_particlespawner({amount = 80, time = 1.0,
-		minpos = vector.subtract(c, vector.divide(sz, 2)), maxpos = vector.add(c, vector.divide(sz, 2)),
-		minvel = {x = -2, y = 0, z = -2}, maxvel = {x = 2, y = 3, z = 2}, minacc = {x = 0, y = -9, z = 0}, maxacc = {x = 0, y = -9, z = 0},
-		minexptime = 0.8, maxexptime = 1.8, minsize = 3, maxsize = 6, texture = "[fill:4x4:#6a6458"})
+	local scale = math.max(1, (DEBRIS_M3[name] or 6) / 6)
+	local lo, hi = vector.subtract(c, vector.divide(sz, 2)), vector.add(c, vector.divide(sz, 2))
+	-- 粉塵：一大團往外擴散、慢慢飄
+	core.add_particlespawner({amount = math.floor(220 * scale), time = 1.5, minpos = lo, maxpos = hi,
+		minvel = {x = -3, y = 0.5, z = -3}, maxvel = {x = 3, y = 3, z = 3}, minacc = {x = 0, y = -0.3, z = 0}, maxacc = {x = 0, y = 0, z = 0},
+		minexptime = 2.5, maxexptime = 5, minsize = 8, maxsize = 18, texture = "[fill:8x8:#8a857c^[opacity:170", glow = 0})
+	-- 碎塊：往上噴、再掉下來
+	core.add_particlespawner({amount = math.floor(90 * scale), time = 0.4, minpos = lo, maxpos = hi,
+		minvel = {x = -5, y = 3, z = -5}, maxvel = {x = 5, y = 8, z = 5}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
+		minexptime = 1, maxexptime = 2, minsize = 2, maxsize = 5, collisiondetection = true, texture = "[fill:4x4:#6a6458"})
+	core.sound_play("tnt_explode", {pos = c, gain = 1.0, max_hear_distance = 96}, true)
 	core.remove_node(pos)
+	core.after(0.3, dump_spill, sp, math.floor(pos.y + sz.y))
 	local o = find_shell(pos)
 	if o then o:remove() end
 	if owner ~= "" and rockmech.account_members then

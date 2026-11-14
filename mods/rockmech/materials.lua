@@ -37,6 +37,7 @@ local DEFAULTS = {
 	loose_soil = function() return soil(S("Loose soil"), 17, 0, cfg.slope.phi_r) end,
 	rubble = function() return soil(S("Rubble"), 18, 0, cfg.slope.phi_r) end,
 	compacted = function() return soil(S("Compacted rubble"), 20, 0, cfg.compact_phi) end,
+	debris = function() return soil(S("Construction waste"), 16, 0, cfg.slope.phi_r) end,
 }
 
 -- 方塊名稱 → 材料種類（岩性的 key、或上面的土類）；不是大地材料回傳 nil
@@ -47,7 +48,8 @@ function M.kind_of(name)
 	if def and def.groups and (def.groups.rockmech_topsoil or 0) > 0 then return "topsoil" end
 	if rockmech.compacted and rockmech.compacted[name] then return "compacted" end
 	if rockmech.rubble_level[name] then
-		return rockmech.rubble_base[name] == rockmech.RUBBLE_SOIL and "loose_soil" or "rubble"
+		local b = rockmech.rubble_base[name]
+		return b == rockmech.RUBBLE_SOIL and "loose_soil" or b == rockmech.RUBBLE_DEBRIS and "debris" or "rubble"
 	end
 	return nil
 end

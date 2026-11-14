@@ -719,6 +719,7 @@ Broadcast radio@nKeep it on you to see prices and news at the top right=
 Topsoil=
 Loose soil=
 Compacted rubble=
+Construction waste=
 γ @1 kN/m³  σci @2 MPa  mi @3  σt @4 MPa=
 @1: γ @2 kN/m³  c @3 kPa  φ @4°=
 
