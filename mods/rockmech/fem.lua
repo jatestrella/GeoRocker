@@ -376,7 +376,28 @@ end
 -- 把它的位移內插到細網格外緣當邊界條件，再解細網格。範圍比開口小時也看得到整個開口。
 -- 粗網格的空節點（周圍 8 格都不是岩石）沒有解，不參與內插。
 -- res.hot：粗網格上拉力最大的頂板格（最多 16 個，{x, y, z, σ1, σ3}，kPa），細網格範圍外的頂板也看得到。
+-- 天然地形（開挖前）的工作：job.nat = {solid, soft, soil, gam, sxx, syy, szz, sxz}，其他照 job
+function fem.natural_job(job)
+	local n = job.nat
+	if not n then return nil end
+	return {nx = job.nx, ny = job.ny, nz = job.nz, solid = n.solid, soft = n.soft, soil = n.soil, gam = n.gam,
+		sxx = n.sxx, syy = n.syy, szz = n.szz, sxz = n.sxz, gamma = job.gamma, nu = job.nu, tol = job.tol,
+		max_iter = job.max_iter, soft_e = job.soft_e, blend = job.blend}
+end
+
+-- job.nat 有給：另外解一次天然地形（外緣 Δu = 0），放在 res.nat。用來分辨「開挖造成的破壞」和天然就有的應力集中
+local solve_nested_inner
 function fem.solve_nested(job)
+	local nj = fem.natural_job(job)
+	local nres = nj and fem.solve(nj)
+	local res = solve_nested_inner(job)
+	if nres then
+		res.nat = nres
+		res.ms = res.ms + nres.ms
+	end
+	return res
+end
+solve_nested_inner = function(job)
 	local cj = job.coarse
 	if not cj then return fem.solve(job) end
 	local cres = fem.solve(cj)

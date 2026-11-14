@@ -177,6 +177,10 @@ local function make_job(pos)
 		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, gamma = 25, soft = {}, soft_e = fcfg.rubble_e,
 		soil = {}, gam = {}}
 	local gam_soil = gamma_s(soil_cid)
+	-- 天然地形（開挖前）：開挖過的格填回去（岩石頂以上是土、以下是岩石），fem.solve_nested 另外解一次，
+	-- 只判定開挖造成的「穩定 → 不穩定」（天然台階凹角的應力集中不算）。土元素開著才做
+	local nat = fcfg.soil and {solid = {}, soft = {}, soil = {}, gam = {}, sxx = {}, syy = {}, szz = {}, sxz = {}} or nil
+	job.nat = nat
 	local gsy, gsz = g.nx, g.nx * g.ny
 	local gam_sum, gam_n = 0, 0
 	local is_excavated_at = rockmech.collapse.is_excavated_at
@@ -236,6 +240,19 @@ local function make_job(pos)
 			else
 				in_situ(job, c, sv)
 			end
+			if nat then
+				if not is_excavated_at(a.x + x, wy, a.z + z) then
+					nat.solid[c], nat.soft[c], nat.soil[c], nat.gam[c] = job.solid[c], job.soft[c], job.soil[c], job.gam[c]
+					nat.sxx[c], nat.syy[c], nat.szz[c], nat.sxz[c] = job.sxx[c], job.syy[c], job.szz[c], job.sxz[c]
+				elseif wy > top then             -- 挖掉的土
+					local s0 = gam_soil * math.max(0, top + 0.5 + soil_m - wy)
+					nat.solid[c], nat.soft[c], nat.soil[c], nat.gam[c] = true, true, true, gam_soil
+					nat.syy[c], nat.sxz[c], nat.sxx[c], nat.szz[c] = s0, 0, K0_SOIL * s0, K0_SOIL * s0
+				else                              -- 挖掉的岩石
+					nat.solid[c] = true
+					in_situ(nat, c, (lith and lith.gamma or 25) * math.max(0, top + 0.5 - wy) + sv_soil)
+				end
+			end
 		end
 	end end
 	if gam_n > 0 then job.gamma = gam_sum / gam_n end
@@ -269,7 +286,7 @@ local function make_job(pos)
 		end end end
 	end
 	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石算空：貼著它的岩面要判定，反力在 face_fs）
-	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}, dmg = {}, soil = {}}
+	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}, dmg = {}, soil = {}, open_nat = nat and {}}
 	-- 土的強度（Mohr-Coulomb，materials.lua）：c 換成 MPa；下雨時 c 降低（weather.lua，跟原本表土的規則同一個參數）
 	local sp = rockmech.materials.defaults("rockmech:topsoil")
 	local rain = rockmech.rain_level and rockmech.rain_level() or 0
@@ -290,6 +307,7 @@ local function make_job(pos)
 		meta.p2[c] = g.p2[gi]
 		meta.dmg[c] = damage_at(a.x + x, a.y + y, a.z + z)       -- 爆破擾動帶的 D（沒有是 nil）
 		meta.open[c] = not g.solid_of[g.data[gi]] or g.rubble_of[g.data[gi]] ~= nil
+		if nat then meta.open_nat[c] = meta.open[c] and not is_excavated_at(a.x + x, a.y + y, a.z + z) end
 	end
 	return job, meta
 end
@@ -385,6 +403,21 @@ local function cell_fs(job, res, meta, x, y, z)
 	return fs, s1, s3, mode
 end
 
+-- 天然地形（res.nat，開挖過的填回去）時這一格的 FS：天然的臨空面裡最小的；當時不是臨空面（在土裡、岩體裡）回傳 ∞
+local function natural_fs(job, res, meta, x, y, z)
+	local nj = fem.natural_job(job)
+	local nm = setmetatable({open = meta.open_nat}, {__index = meta})
+	local n = job.nx
+	local best = math.huge
+	for _, f in ipairs(FACES) do
+		if meta.open_nat[1 + (x + f[1]) + (y + f[2]) * n + (z + f[3]) * n * n] then
+			local fs = face_fs(nj, res.nat, nm, x, y, z, f)
+			if fs < best then best = fs end
+		end
+	end
+	return best
+end
+
 -- 對著開挖空間、或離開挖點 near 格內（center 為 nil 時只看開挖空間）的臨空格裡，FS < 1 的格（由上往下）。
 -- 回傳 failed, 檢查的面數
 local NEAR = 8
@@ -405,6 +438,9 @@ local function find_failed(job, res, meta, center)
 					local fs, mode = face_fs(job, res, meta, x, y, z, f)
 					if fs < low then low, lmode = fs, mode end
 				end
+			end
+			if low < 1 and res.nat and natural_fs(job, res, meta, x, y, z) < 1 then
+				low = math.huge          -- 天然地形就已經 FS < 1（台階凹角的應力集中）：不是開挖造成的，不算
 			end
 			if low < 1 then
 				failed[#failed + 1] = {x = a.x + x, y = a.y + y, z = a.z + z}
