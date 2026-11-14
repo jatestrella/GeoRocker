@@ -110,7 +110,7 @@ try {
 	if ((git -C $game rev-parse --abbrev-ref HEAD) -eq $Branch -and -not (git -C $game status --porcelain)) { $installed = (git -C $game rev-parse HEAD) }
 } catch {}
 $cls = "0"; if ($Class) { $cls = "1" }
-[System.IO.File]::WriteAllLines((Join-Path $stage "update.txt"), @("branch = " + $Branch, "class = " + $cls, "installed = " + $installed))
+[System.IO.File]::WriteAllLines((Join-Path $stage "update.txt"), @(("branch = " + $Branch), ("class = " + $cls), ("installed = " + $installed)))
 
 $notice = @(
 	"This package contains the Luanti engine 5.15.1 (https://www.luanti.org),",

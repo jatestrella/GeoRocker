@@ -30,7 +30,7 @@ if (Test-Path $conf) {
 	}
 }
 function Save-Conf {
-	$lines = @("branch = " + $set.branch, "class = " + $set.class, "installed = " + $set.installed)
+	$lines = @(("branch = " + $set.branch), ("class = " + $set.class), ("installed = " + $set.installed))
 	[System.IO.File]::WriteAllLines($conf, $lines)
 }
 
