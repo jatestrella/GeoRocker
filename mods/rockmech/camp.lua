@@ -132,11 +132,46 @@ local function pave(x0)
 			end
 		end
 	end
+	-- 畫黃線的地坪（交車區、收料區）在營地整地範圍外，地形有高低：整平成同一個高度（營地地面 base + 1），
+	-- 高出來的土、岩石、樹削掉，低的地方用混凝土墊到底。用 VoxelManip 寫（不算開挖，不觸發旁邊天然邊坡的判定）
+	local yt = base + 1
+	local c_air, c_con = core.get_content_id("air"), core.get_content_id(CONCRETE)
+	for _, r in ipairs(PADS) do
+		if r.line then
+			local vm = core.get_voxel_manip()
+			local e1, e2 = vm:read_from_map({x = x0 + r.x1, y = yt - 8, z = r.z1}, {x = x0 + r.x2, y = yt + 8, z = r.z2})
+			local area = VoxelArea(e1, e2)
+			local data = vm:get_data()
+			for x = x0 + r.x1, x0 + r.x2 do
+				for z = r.z1, r.z2 do
+					local want = in_rect(x0, SCALE, x, z) and SCALE_NODE
+						or (x == x0 + r.x1 or x == x0 + r.x2 or z == r.z1 or z == r.z2) and LINE or CONCRETE
+					for y = yt + 8, yt + 1, -1 do
+						local i = area:index(x, y, z)
+						local n = core.get_name_from_content_id(data[i])
+						if PAD_NODE[n] or pavable(n) or rockmech.rubble_level[n] or n:find("leaves") or n:find("tree")
+								or n:find("apple") or (core.registered_nodes[n] and core.registered_nodes[n].buildable_to) then
+							data[i] = c_air
+						end
+					end
+					data[area:index(x, yt, z)] = core.get_content_id(want)
+					for y = yt - 1, yt - 8, -1 do
+						local i = area:index(x, y, z)
+						local d = core.registered_nodes[core.get_name_from_content_id(data[i])]
+						if d and d.walkable ~= false and not rockmech.rubble_level[core.get_name_from_content_id(data[i])] then break end
+						data[i] = c_con
+					end
+				end
+			end
+			vm:set_data(data)
+			vm:write_to_map()
+		end
+	end
 	storage:set_string("pad:" .. x0, "1")
-	storage:set_string("pad6:" .. x0, "1")
+	storage:set_string("pad7:" .. x0, "1")
 	core.log("action", ("[rockmech] 營地 x = %d 鋪好混凝土地坪、收料區"):format(x0))
 end
-local function done(x0) return storage:get_string("pad6:" .. x0) == "1" end
+local function done(x0) return storage:get_string("pad7:" .. x0) == "1" end      -- pad7：黃線地坪整平過
 local function pave_when_loaded(x0)
 	local a, b = {x = math.huge, y = sy() - 8, z = math.huge}, {x = -math.huge, y = sy() + 10, z = -math.huge}
 	for _, list in ipairs({PADS, OLD_PADS}) do
