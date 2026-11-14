@@ -34,43 +34,43 @@ function Save-Conf {
 	[System.IO.File]::WriteAllLines($conf, $lines)
 }
 
-if (Test-Path (Join-Path $game ".git")) { Say (T '遊戲資料夾是 git 版本，請改用 git pull 更新') "Yellow"; exit 1 }
+if (Test-Path (Join-Path $game ".git")) { Say (T '\u904a\u6232\u8cc7\u6599\u593e\u662f git \u7248\u672c\uff0c\u8acb\u6539\u7528 git pull \u66f4\u65b0') "Yellow"; exit 1 }
 
 # The game must not be running from this package
 $running = Get-Process luanti -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($Root, [System.StringComparison]::OrdinalIgnoreCase) }
-if ($running) { Say (T '請先關掉遊戲再更新') "Yellow"; exit 1 }
+if ($running) { Say (T '\u8acb\u5148\u95dc\u6389\u904a\u6232\u518d\u66f4\u65b0') "Yellow"; exit 1 }
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-Say (T '正在檢查有沒有新版本…')
+Say (T '\u6b63\u5728\u6aa2\u67e5\u6709\u6c92\u6709\u65b0\u7248\u672c\u2026')
 try {
 	$info = Invoke-RestMethod -UseBasicParsing -Headers @{ "User-Agent" = "georocker-updater" } `
 		-Uri ("https://api.github.com/repos/{0}/commits/{1}" -f $Repo, $set.branch)
 } catch {
-	Say (T '連不上 GitHub，請檢查網路後再試一次') "Red"; exit 1
+	Say (T '\u9023\u4e0d\u4e0a GitHub\uff0c\u8acb\u6aa2\u67e5\u7db2\u8def\u5f8c\u518d\u8a66\u4e00\u6b21') "Red"; exit 1
 }
 $sha = $info.sha
 $when = $info.commit.committer.date
 if ($sha -and $sha -eq $set.installed -and (Test-Path (Join-Path $game "game.conf"))) {
-	Say ((T '已經是最新版了') + "  (" + $sha.Substring(0, 7) + ", " + $when + ")") "Green"; exit 0
+	Say ((T '\u5df2\u7d93\u662f\u6700\u65b0\u7248\u4e86') + "  (" + $sha.Substring(0, 7) + ", " + $when + ")") "Green"; exit 0
 }
 
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "georocker_update"
 if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
 New-Item -ItemType Directory -Force $tmp | Out-Null
 $zip = Join-Path $tmp "game.zip"
-Say ((T '下載新版本…') + "  (" + $sha.Substring(0, 7) + ", " + $when + ")")
+Say ((T '\u4e0b\u8f09\u65b0\u7248\u672c\u2026') + "  (" + $sha.Substring(0, 7) + ", " + $when + ")")
 try {
 	$ProgressPreference = "SilentlyContinue"      # the progress bar makes Invoke-WebRequest very slow on PowerShell 5
 	Invoke-WebRequest -UseBasicParsing -Uri ("https://codeload.github.com/{0}/zip/{1}" -f $Repo, $sha) -OutFile $zip
 } catch {
-	Say (T '連不上 GitHub，請檢查網路後再試一次') "Red"; exit 1
+	Say (T '\u9023\u4e0d\u4e0a GitHub\uff0c\u8acb\u6aa2\u67e5\u7db2\u8def\u5f8c\u518d\u8a66\u4e00\u6b21') "Red"; exit 1
 }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $x = Join-Path $tmp "x"
 [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $x)
 $src = Get-ChildItem $x -Directory | Select-Object -First 1
 if (-not $src -or -not (Test-Path (Join-Path $src.FullName "game.conf")) -or -not (Test-Path (Join-Path $src.FullName "mods\rockmech\init.lua"))) {
-	Say (T '下載的檔案不完整，沒有更新') "Red"; exit 1
+	Say (T '\u4e0b\u8f09\u7684\u6a94\u6848\u4e0d\u5b8c\u6574\uff0c\u6c92\u6709\u66f4\u65b0') "Red"; exit 1
 }
 $src = $src.FullName
 # Same contents as make_package.ps1: no docs, no class maps unless the package was built with -Class
@@ -94,12 +94,12 @@ try {
 	Move-Item $src $game
 } catch {
 	if ($moved -and -not (Test-Path $game)) { Move-Item $backup $game }
-	Say (T '更新失敗，已經換回原本的版本') "Red"
+	Say (T '\u66f4\u65b0\u5931\u6557\uff0c\u5df2\u7d93\u63db\u56de\u539f\u672c\u7684\u7248\u672c') "Red"
 	Say $_.Exception.Message "DarkGray"
 	exit 1
 }
 $set.installed = $sha
 Save-Conf
 Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-Say (T '更新完成！存檔和設定都沒有動。') "Green"
+Say (T '\u66f4\u65b0\u5b8c\u6210\uff01\u5b58\u6a94\u548c\u8a2d\u5b9a\u90fd\u6c92\u6709\u52d5\u3002') "Green"
 exit 0
