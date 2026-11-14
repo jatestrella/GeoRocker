@@ -651,7 +651,7 @@ function rockmech.loosen_under(p, name)
 	return true
 end
 -- 表土的凝聚力（根系，rockmech_topsoil_c）→ 自立高度 H_c = 4c/γ·tan(45° + φ/2)：表土旁邊挖開的臨空面不超過 H_c 就站得住。
--- γ 用非岩性格的單位重，φ 用殘餘摩擦角（鬆土沒有凝聚力，就是殘餘摩擦角）。c = 5 kPa、γ = 20、φ = 35° → H_c ≈ 1.9 m
+-- γ 用非岩性格的單位重，φ 用殘餘摩擦角（鬆土沒有凝聚力，就是殘餘摩擦角）。c = 10 kPa、γ = 20、φ = 35° → H_c ≈ 3.8 m（土元素關掉時才用）
 local HC = rockmech.mix.standing_height(cfg.topsoil_c, cfg.failure.gamma_other, cfg.slope.phi_r)
 rockmech.topsoil_hc = HC
 -- 下雨時的自立高度：凝聚力 c × (1 − rain_c_loss × L)，L = 時雨量 / rain_max（weather.lua）；H_c 跟 c 成正比

@@ -24,13 +24,16 @@ local FIELDS = {gamma = true, e_rel = true, nu = true, ucs = true, tensile = tru
 local function nscale() return cfg.model_scale or 1 end
 
 -- 預設參數（每次呼叫都新建一份，呼叫端可以改）。強度跟岩石一樣除以相似比 N（rockmech_model_scale）；
--- 勁度都是岩石的 rockmech_fem_rubble_e 倍（E 在教學裡不重要，先統一一個比例）
-local function soil(label, gamma, c, phi)
-	return {kind = "soil", label = label, gamma = gamma, e_rel = cfg.fem.rubble_e, nu = cfg.fem.nu,
-		c = c / nscale(), phi = phi, tensile = 0}
+-- 勁度：表土 rockmech_fem_soil_e（約 E 15 MPa ÷ 岩體 3–11 GPa；太硬的話岩石的變形會把土拉壞），
+-- 鬆散材料 rockmech_fem_rubble_e
+-- 張力強度取 Mohr-Coulomb 的頂點 c·cot φ（σt = 0 在數值上不適定：σ3 在 0 附近的正負號由收斂誤差決定）
+local function soil(label, gamma, c, phi, e_rel)
+	c = c / nscale()
+	return {kind = "soil", label = label, gamma = gamma, e_rel = e_rel or cfg.fem.rubble_e, nu = cfg.fem.nu,
+		c = c, phi = phi, tensile = c > 0 and c / math.tan(math.rad(phi)) or 0}
 end
 local DEFAULTS = {
-	topsoil = function() return soil(S("Topsoil"), 18, cfg.topsoil_c, cfg.slope.phi_r) end,
+	topsoil = function() return soil(S("Topsoil"), 18, cfg.topsoil_c, cfg.slope.phi_r, cfg.fem.soil_e) end,
 	loose_soil = function() return soil(S("Loose soil"), 17, 0, cfg.slope.phi_r) end,
 	rubble = function() return soil(S("Rubble"), 18, 0, cfg.slope.phi_r) end,
 	compacted = function() return soil(S("Compacted rubble"), 20, 0, cfg.compact_phi) end,

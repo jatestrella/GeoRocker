@@ -23,7 +23,7 @@
 -- job.soft（可選）= {[格] = true}：其中 solid 為 true 的格是碎石，job.soft_e = 勁度比例（預設 0.1）。
 --   [格] = 數字：這格是木柱（timber.lua），勁度比例就是這個數（一個網格裡只有一種木柱勁度）。
 --   碎石和木柱都沒有現地應力、不加重力，反力只來自岩壁收斂壓它（等於開挖前就在那裡）。
--- job.soil（可選）= {[格] = true}：土（表土）。勁度跟 soft 一樣（job.soft_e），但跟岩石一樣有現地應力、受重力
+-- job.soil（可選）= {[格] = true}：土（表土）。勁度比例 job.soil_e（沒有就用 job.soft_e），跟岩石一樣有現地應力、受重力
 --   （job.soft 裡也要有這一格）。
 -- job.gam（可選）= {[格] = γ}：這一格的單位重（沒有就用 job.gamma）。
 -- ## 輸出
@@ -84,12 +84,13 @@ fem.element_stiffness = element_stiffness
 -- 一個節點周圍 8 格（位元 e = ex + 2ey + 4ez，該格在節點的 (ex−1, ey−1, ez−1) 位置）的組合 → 模版
 -- {n, dx[], dy[], dz[], k[]（每鄰點 9 個）, d1, d2, d3（對角）}
 -- soft（可選）：mask 裡哪幾格是軟的元素，勁度乘 ratio；post（可選）：哪幾格是木柱，勁度乘 pratio
-local function make_stencil(Ke, mask, soft, ratio, post, pratio)
+local function make_stencil(Ke, mask, soft, ratio, post, pratio, soilm, sratio)
 	local sum = {}
 	for e = 0, 7 do
 		if math.floor(mask / 2 ^ e) % 2 == 1 then
 			local ex, ey, ez = e % 2, math.floor(e / 2) % 2, math.floor(e / 4)
 			local w = post and math.floor(post / 2 ^ e) % 2 == 1 and pratio
+				or soilm and math.floor(soilm / 2 ^ e) % 2 == 1 and sratio
 				or soft and math.floor(soft / 2 ^ e) % 2 == 1 and ratio or 1
 			local a = (1 - ex) + 2 * (1 - ey) + 4 * (1 - ez)   -- 這個節點是該格的第 a 個角
 			local ai, aj, ak = 1 - ex, 1 - ey, 1 - ez
@@ -165,7 +166,9 @@ function fem.solve(job)
 	local soft, ratio = job.soft or {}, job.soft_e or 0.1
 	local pratio = 1          -- 木柱的勁度比例（soft 裡的數字）
 	for _, v in pairs(soft) do if type(v) == "number" then pratio = v; break end end
+	local soil, sratio = job.soil or {}, job.soil_e or ratio
 	local function w_of(c)    -- 這格的勁度比例
+		if soil[c] then return sratio end
 		local s = soft[c]
 		if not s then return 1 end
 		return type(s) == "number" and s or ratio
@@ -181,25 +184,27 @@ function fem.solve(job)
 	local active, masks = {}, {}
 	local na = 0
 	for z = 1, Nz - 2 do for y = 1, Ny - 2 do for x = 1, Nx - 2 do
-		local m, sm, pm = 0, 0, 0
+		local m, sm, pm, om = 0, 0, 0, 0
 		for e = 0, 7 do
 			local ex, ey, ez = e % 2, math.floor(e / 2) % 2, math.floor(e / 4)
 			local cx, cy, cz = x + ex - 1, y + ey - 1, z + ez - 1
 			if is_solid(cx, cy, cz) then
 				m = m + 2 ^ e
-				local s = soft[1 + cx + cy * nx + cz * nx * ny]
-				if s then
+				local cc = 1 + cx + cy * nx + cz * nx * ny
+				local s = soft[cc]
+				if soil[cc] then om = om + 2 ^ e
+				elseif s then
 					if type(s) == "number" then pm = pm + 2 ^ e else sm = sm + 2 ^ e end
 				end
 			end
 		end
 		if m > 0 then
-			local key = m + 256 * sm + 65536 * pm
+			local key = m + 256 * sm + 65536 * pm + 16777216 * om
 			na = na + 1
 			active[na] = x + y * sy + z * sz
 			masks[na] = key
 			if not stencils[key] then
-				local st = make_stencil(Ke, m, sm, ratio, pm, pratio)
+				local st = make_stencil(Ke, m, sm, ratio, pm, pratio, om, sratio)
 				stencils[key] = st
 				local o = {}
 				for s = 1, st.n do o[s] = (st.dx[s] + st.dy[s] * sy + st.dz[s] * sz) * 3 end
@@ -382,7 +387,7 @@ function fem.natural_job(job)
 	if not n then return nil end
 	return {nx = job.nx, ny = job.ny, nz = job.nz, solid = n.solid, soft = n.soft, soil = n.soil, gam = n.gam,
 		sxx = n.sxx, syy = n.syy, szz = n.szz, sxz = n.sxz, gamma = job.gamma, nu = job.nu, tol = job.tol,
-		max_iter = job.max_iter, soft_e = job.soft_e, blend = job.blend}
+		max_iter = job.max_iter, soft_e = job.soft_e, soil_e = job.soil_e, blend = job.blend}
 end
 
 -- job.nat 有給：另外解一次天然地形（外緣 Δu = 0），放在 res.nat。用來分辨「開挖造成的破壞」和天然就有的應力集中
@@ -549,7 +554,8 @@ function fem.point_stress(job, res, x, y, z, xi, eta, zeta)
 	end
 	local c = 1 + x + y * nx + z * nx * ny
 	local sf = job.soft and job.soft[c]
-	local w = not sf and 1 or type(sf) == "number" and sf or (job.soft_e or 0.1)      -- 勁度比例（土、碎石較軟）
+	local w = job.soil and job.soil[c] and (job.soil_e or job.soft_e or 0.1)
+		or not sf and 1 or type(sf) == "number" and sf or (job.soft_e or 0.1)      -- 勁度比例（土、碎石較軟）
 	lam, mu = w * lam, w * mu
 	local tr = lam * (exx + eyy + ezz)
 	return job.sxx[c] - (tr + 2 * mu * exx), job.syy[c] - (tr + 2 * mu * eyy), job.szz[c] - (tr + 2 * mu * ezz),

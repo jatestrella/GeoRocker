@@ -406,7 +406,8 @@ config.fem_defaults = {
 	coarse_blend = 0.1,       -- 粗網格剪力項全積分的比例（其餘取格中心，避免一層元素太少時梁太硬）；1 = 全積分
 	nu = 0.25,                -- 帕松比
 	rubble_e = 0.1,           -- 滿格碎石的勁度 / 岩石的勁度（0 = 碎石沒有勁度）
-	soil = false,             -- 整格表土當應力解的土元素（materials.lua 的 γ、c、φ，取代自立高度 H_c 規則）；參數定案前先關
+	soil_e = 0.002,           -- 表土的勁度 / 岩石的勁度（materials.lua）
+	soil = true,              -- 整格表土當應力解的土元素（materials.lua 的 γ、c、φ，取代自立高度 H_c 規則）
 	active_range = 64,        -- 離所有玩家超過此距離 (m) 的應力解與連鎖崩落先暫停，玩家回來才接著算（0 = 不限）
 	tol = 0.001,              -- 共軛梯度法的相對殘差
 	max_iter = 1500,          -- 最多迭代幾輪
@@ -1178,7 +1179,7 @@ function config.load(get, opts)
 	-- 油壓破碎錘（vehicle_excavator.lua）：敲碎一格岩石的時間 = UCS × 這個 (s/MPa)。頁岩 30 MPa 約 1.5 秒、花崗岩 180 MPa 約 9 秒
 	cfg.breaker_rate = math.max(0, tonumber(get("rockmech_breaker_s_per_mpa")) or 0.05)
 	-- 表土（根系）的凝聚力 (kPa)：決定自立高度 H_c = 4c/γ·tan(45° + φ/2)（woodwork.lua）
-	cfg.topsoil_c = math.max(0, tonumber(get("rockmech_topsoil_c")) or 5)
+	cfg.topsoil_c = math.max(0, tonumber(get("rockmech_topsoil_c")) or 10)
 	-- 輸送帶（conveyor.lua）：運量 (t/s)、帶速 (m/s)、最大傾角 (deg，碎石在輸送帶上不往回滑的上限)
 	cfg.conveyor_rate = math.max(0.1, tonumber(get("rockmech_conveyor_rate")) or 4)
 	cfg.conveyor_speed = math.max(0.2, math.min(10, tonumber(get("rockmech_conveyor_speed")) or 2))

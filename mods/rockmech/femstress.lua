@@ -175,7 +175,7 @@ local function make_job(pos)
 	cid_tables()
 	local job = {nx = n, ny = n, nz = n, solid = {}, sxx = {}, syy = {}, szz = {}, sxz = {},
 		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, gamma = 25, soft = {}, soft_e = fcfg.rubble_e,
-		soil = {}, gam = {}}
+		soil = {}, gam = {}, soil_e = rockmech.materials.defaults("rockmech:topsoil").e_rel}
 	local gam_soil = gamma_s(soil_cid)
 	-- 天然地形（開挖前）：開挖過的格填回去（岩石頂以上是土、以下是岩石），fem.solve_nested 另外解一次，
 	-- 只判定開挖造成的「穩定 → 不穩定」（天然台階凹角的應力集中不算）。土元素開著才做

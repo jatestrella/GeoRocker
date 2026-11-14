@@ -490,8 +490,12 @@ rockmech_fem_nu (Poisson ratio) float 0.25 0 0.45
 rockmech_fem_rubble_e (Rubble stiffness ratio) float 0.1 0 1
 
 # Full topsoil blocks are soil elements in the stress solution (unit weight, cohesion c and friction angle phi from the material table),
-# replacing the critical standing height rule. Off until the soil parameters are settled.
-rockmech_fem_soil (Stress solution: topsoil as soil elements) bool false
+# replacing the critical standing height rule.
+rockmech_fem_soil (Stress solution: topsoil as soil elements) bool true
+
+# Topsoil stiffness / rock stiffness (topsoil E about 15 MPa against a rock mass of 3-11 GPa). Too stiff a soil picks up
+# the strain of the rock below and fails everywhere.
+rockmech_fem_soil_e (Stress solution: topsoil stiffness ratio) float 0.002 0.0001 1
 
 # Stress solves and collapse cascades farther than this (m) from every player pause, and resume from the same round when a player returns. 0 = no limit.
 rockmech_fem_active_range (Solver active range) float 64 0 1000
