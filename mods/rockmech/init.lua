@@ -170,6 +170,7 @@ dofile(modpath .. "/nocraft.lua")          -- 拿掉內建合成（只靠商店�
 dofile(modpath .. "/impact.lua")
 dofile(modpath .. "/crusher.lua")
 dofile(modpath .. "/plant.lua")
+dofile(modpath .. "/goldplant.lua")       -- 提金廠（褐鐵礦的金：碳浸法），營地的貴金屬商
 dofile(modpath .. "/conveyor.lua")
 dofile(modpath .. "/beltswitch.lua")   -- 輸送帶控制箱：運轉／停止／依礦價
 dofile(modpath .. "/loadout.lua")

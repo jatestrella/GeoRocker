@@ -181,6 +181,8 @@ config.shop = {
 	{key = "crusher", shop = "civil", item = "rockmech:crusher", label = TR("Crusher"), price = 20000},
 	{key = "crusher_big", shop = "civil", item = "rockmech:crusher_big", label = TR("Large crusher"), price = 300000},
 	{key = "plant", shop = "civil", item = "rockmech:plant", label = TR("Pre-sorting plant"), price = 30000},
+	-- 提金廠：只在有褐鐵礦（金）的地圖賣（needs_gold，career.lua 的商店清單）
+	{key = "gold_plant", shop = "civil", item = "rockmech:gold_plant", label = TR("Gold plant"), price = 120000, needs_gold = true},
 	{key = "belt", shop = "civil", item = "rockmech:belt", label = TR("Conveyor belt"), price = 1000, count = 10},
 	{key = "belt_switch", shop = "civil", item = "rockmech:belt_switch", label = TR("Conveyor control box"), price = 3000},
 	{key = "lowboy", shop = "vehicle", item = "rockmech:lowboy_item", label = TR("Lowboy trailer"), price = 40000},
@@ -252,22 +254,23 @@ config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, anfotr
 -- 化學成分（碎石的 metadata：assay.lua，質量比例 0..1）。有 chem 的岩性（褐鐵礦）挖下來就帶著這些成分，
 -- 混到廢石照體積稀釋。破碎站照成分計價（config.element_value）：
 --   fe    鐵：含量到 pay_min 以上才收，以鐵礦砂 basis（62%）每噸 price 為準照含量折算
---   au    金：每克 price，外包提金回收率 recovery
+--   au    金：每克 price（每個交易日浮動，goldplant.lua），外包提金回收率 recovery；
+--         自己的提金廠（碳浸法）回收 cil_recovery、每噸營運費 cil_op、藥劑費每噸 cil_reagent × 有害雜質比例（1% → $8/t）
 --   harm  有害雜質（P、S、As）：超過 free 的部分，每噸礦石罰 fee × 超過的比例（fee 4000 → 每多 1% 罰 $40/t）
 config.elements = {
 	fe = {label = TR("Iron"), pay_min = 0.30, basis = 0.62, price = 100},
-	au = {label = TR("Gold"), price = 80, recovery = 0.6},
+	au = {label = TR("Gold"), price = 80, recovery = 0.6, cil_recovery = 0.85, cil_op = 15, cil_reagent = 800},
 	harm = {label = TR("Harmful impurities"), free = 0.01, fee = 4000},
 }
 config.element_order = {"fe", "au", "harm"}
 config.lithologies.gossan.chem = true
 -- 一份料（tons 噸、成分表 c）的鐵貨款, 金貨款, 有害雜質罰款。ratio：收購比例
-function config.element_value(tons, c, ratio)
+function config.element_value(tons, c, ratio, au_price)
 	local E = config.elements
 	ratio = ratio or 1
 	local fe, au, hm = c.fe or 0, c.au or 0, c.harm or 0
 	local vfe = fe >= E.fe.pay_min and tons * fe / E.fe.basis * E.fe.price * ratio or 0
-	local vau = tons * au * 1e6 * E.au.recovery * E.au.price * ratio
+	local vau = tons * au * 1e6 * E.au.recovery * (au_price or E.au.price) * ratio
 	local fee = tons * math.max(0, hm - E.harm.free) * E.harm.fee
 	return vfe, vau, fee
 end

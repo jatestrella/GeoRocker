@@ -550,7 +550,7 @@ local function shop_form(name, kind)
 	local out = {"formspec_version[6]size[13.5,13.2]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local col, row = 0, 0
 	for i, it in ipairs(cfg.shop) do
-		if not kind or it.shop == kind then
+		if (not kind or it.shop == kind) and not (it.needs_gold and not (cfg.strata and cfg.strata.body)) then
 			local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
 			local p = rockmech.shop_price(it)      -- 炸藥、鋼材跟著市場走（market.lua）
 			local price = p == 0 and S("Free") or ("$%d"):format(p)

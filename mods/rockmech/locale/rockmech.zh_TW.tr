@@ -119,9 +119,6 @@ Schist=片岩
 Fault breccia=斷層角礫岩
 Andesite=安山岩
 Limonite=褐鐵礦
-Iron=鐵
-Gold=金
-Harmful impurities=有害雜質
 Oxide copper ore=氧化銅礦
 Enriched copper ore=富集銅礦
 Primary copper ore=原生銅礦
@@ -146,6 +143,7 @@ Excavator=挖土機
 Crusher=收煤站
 Large crusher=大型收煤站
 Pre-sorting plant=排矸站
+Gold plant=提金廠
 Conveyor belt=輸送帶
 Lowboy trailer=平板拖車
 Heavy haul trailer=重型拖車
@@ -201,6 +199,9 @@ Hand core drill=手持岩芯鑽機
 Geological compass=地質羅盤
 Field notebook=野帳本
 Locker=置物箱
+Iron=鐵
+Gold=金
+Harmful impurities=有害雜質
 
 ### conveyor.lua
 [Conveyor]=[輸送帶]
@@ -483,6 +484,28 @@ Warning cracks: rock cells whose FS drops to 1 < FS < threshold (default 2) beca
 Fuel @1 L/h (today @2 L)=油耗 @1 L/h（今天 @2 L）
 Fuel (diesel)=燃料費（柴油）
 $@1/L=$@1／L
+
+### goldplant.lua
+Gold (1 g)=金（1 g）
+Tailings pile full: clear it behind the plant=尾礦堆滿了：清掉機器後面的尾礦
+Start=開始運轉
+Feed: dump into the hopper in front   Queue @1 t=進料：倒進前面的受料倉　排隊 @1 t
+Recovery @1%   Running cost $@2/t   Reagents +$@3/t per 1% harmful impurities=回收率 @1%　營運費 $@2/t　藥劑費：有害雜質每 1% 加 $@3/t
+Processed @1 t, average gold @2 g/t=已處理 @1 t，平均含金 @2 g/t
+Gold recovered @1 g, costs $@2=產金 @1 g，成本 $@2
+Tailings come out behind the plant=尾礦從機器後面出來
+Gold goes into the chest beside the plant=金放進旁邊的置物箱
+Gold is kept in the plant=金存在機器裡
+Gold plant@nRight-click on flat ground to build=提金廠@n對著平地按右鍵蓋
+[Gold plant] Place it on flat ground: the 3×3 m plant and the @1×@2 m receiving hopper in front need level ground and solid rock below=[提金廠] 要蓋在平地上：3×3 m 的機器和前面 @1×@2 m 的受料倉要平、底下是實心岩石
+[Gold plant] Take the gold out first=[提金廠] 先把金拿出來
+Precious Metals Dealer=貴金屬商
+Gold today $@1/g (@2 @3%)=今日金價 $@1/g（@2 @3%）
+You have @1 g of gold (worth $@2)=你有 @1 g 金（值 $@2）
+Sell @1 g=賣 @1 g
+Sell all=全部賣
+[Precious Metals Dealer] Bought @1 g of gold: $@2=[貴金屬商] 收購 @1 g 金：$@2
+Buys gold=收購金
 
 ### groundsupport.lua
 Rock bolt (length @1 m, cut at @2 m: only the first @3 m is still anchored in rock, anchorage capacity @4 kN)=岩栓（長 @1 m，在 @2 m 處被挖斷：只剩前 @3 m 錨在岩石裡、錨定力 @4 kN）
@@ -952,7 +975,6 @@ Flotation plant, stopped. Right-click to view=選礦場（浮選），停機。�
 Flotation plant. Right-click to view=選礦場（浮選）。右鍵查看
 Pre-sorting plant, stopped. Right-click to view=排矸站 已停止，右鍵查看
 Pre-sorting plant. Right-click to view=排矸站，右鍵查看
-Start=開始運轉
 Capacity: @1 t/s   Loading: @2 t/s=處理能力：@1 t/s　放料：@2 t/s
 Flotation: concentrate @1% Cu, recovery up to @2% (lower for poor feed), running cost $@3 per tonne=浮選：精礦含銅 @1%，回收率最高 @2%（礦越貧越低），營運費每噸 $@3
 Separation: @1 @2% into @3, @4 @5% misplaced into @6=分選：@1 @2% 進@3，@4 @5% 混進@6

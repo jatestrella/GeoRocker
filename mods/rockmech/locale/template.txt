@@ -119,9 +119,6 @@ Schist=
 Fault breccia=
 Andesite=
 Limonite=
-Iron=
-Gold=
-Harmful impurities=
 Oxide copper ore=
 Enriched copper ore=
 Primary copper ore=
@@ -146,6 +143,7 @@ Excavator=
 Crusher=
 Large crusher=
 Pre-sorting plant=
+Gold plant=
 Conveyor belt=
 Lowboy trailer=
 Heavy haul trailer=
@@ -201,6 +199,9 @@ Hand core drill=
 Geological compass=
 Field notebook=
 Locker=
+Iron=
+Gold=
+Harmful impurities=
 
 ### conveyor.lua
 [Conveyor]=
@@ -483,6 +484,28 @@ Warning cracks: rock cells whose FS drops to 1 < FS < threshold (default 2) beca
 Fuel @1 L/h (today @2 L)=
 Fuel (diesel)=
 $@1/L=
+
+### goldplant.lua
+Gold (1 g)=
+Tailings pile full: clear it behind the plant=
+Start=
+Feed: dump into the hopper in front   Queue @1 t=
+Recovery @1%   Running cost $@2/t   Reagents +$@3/t per 1% harmful impurities=
+Processed @1 t, average gold @2 g/t=
+Gold recovered @1 g, costs $@2=
+Tailings come out behind the plant=
+Gold goes into the chest beside the plant=
+Gold is kept in the plant=
+Gold plant@nRight-click on flat ground to build=
+[Gold plant] Place it on flat ground: the 3×3 m plant and the @1×@2 m receiving hopper in front need level ground and solid rock below=
+[Gold plant] Take the gold out first=
+Precious Metals Dealer=
+Gold today $@1/g (@2 @3%)=
+You have @1 g of gold (worth $@2)=
+Sell @1 g=
+Sell all=
+[Precious Metals Dealer] Bought @1 g of gold: $@2=
+Buys gold=
 
 ### groundsupport.lua
 Rock bolt (length @1 m, cut at @2 m: only the first @3 m is still anchored in rock, anchorage capacity @4 kN)=
@@ -952,7 +975,6 @@ Flotation plant, stopped. Right-click to view=
 Flotation plant. Right-click to view=
 Pre-sorting plant, stopped. Right-click to view=
 Pre-sorting plant. Right-click to view=
-Start=
 Capacity: @1 t/s   Loading: @2 t/s=
 Flotation: concentrate @1% Cu, recovery up to @2% (lower for poor feed), running cost $@3 per tonne=
 Separation: @1 @2% into @3, @4 @5% misplaced into @6=

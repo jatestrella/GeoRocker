@@ -12,7 +12,7 @@ local storage = rockmech.collapse.storage
 local HIT, CAP = 10, 60
 local SHELL = "rockmech:crack_shell"
 local CONTROLS = {
-	["rockmech:crusher"] = true, ["rockmech:crusher_big"] = true, ["rockmech:plant"] = true,
+	["rockmech:crusher"] = true, ["rockmech:crusher_big"] = true, ["rockmech:plant"] = true, ["rockmech:gold_plant"] = true,
 	["rockmech:loadout"] = true, ["rockmech:dump_hopper"] = true, ["rockmech:dump_hopper_big"] = true,
 }
 local CTRL_LIST = {}
