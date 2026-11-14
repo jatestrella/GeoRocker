@@ -532,11 +532,12 @@ config.shear_defaults = {
 	max_span = 32,            -- 頂板荷重往外找支撐處最多幾格 (m)
 }
 
--- 安息角滑動（collapse.lua）；設定鍵為 rockmech_slope_<key>
+-- 殘餘摩擦角滑動（collapse.lua）；設定鍵為 rockmech_slope_<key>
 config.slope_defaults = {
-	enabled = true,           -- 碎石超過安息角會移動（完整岩石不受安息角影響）
-	angle = 35,               -- 碎石安息角 (deg)
-	rain_drop = 10,           -- 時雨量 rain_max 時，鬆土的安息角降低幾度（照時雨量比例；weather.lua，/rain 指令）
+	enabled = true,           -- 碎石超過殘餘摩擦角會移動（完整岩石不受殘餘摩擦角影響）
+	phi_r = 35,               -- 鬆散材料（碎石、鬆土）的殘餘摩擦角 φr (deg)：設定 rockmech_residual_phi（舊名 rockmech_slope_angle 也讀）。
+	                          -- 看到的殘餘摩擦角就是它：c = 0 的材料坡度超過 φr 就流
+	rain_drop = 10,           -- 時雨量 rain_max 時，鬆土的殘餘摩擦角降低幾度（照時雨量比例；weather.lua，/rain 指令）
 	rain_max = 100,           -- 時雨量的上限 (mm/h)：台灣颱風的量級。降雨弱化跟 時雨量 / rain_max 成正比
 	rain_c_loss = 0.35,       -- 時雨量 rain_max 時，表土凝聚力降低的比例（自立高度 H_c 跟著降）
 }
@@ -1079,9 +1080,10 @@ function config.load(get, opts)
 	cfg.shear.k = math.max(0, cfg.shear.k)
 	cfg.shear.max_span = math.max(1, math.floor(cfg.shear.max_span))
 
-	-- 安息角滑動
+	-- 殘餘摩擦角滑動
 	cfg.slope = load_section("slope", config.slope_defaults)
-	cfg.slope.angle = math.min(89, math.max(1, cfg.slope.angle))
+	cfg.slope.phi_r = tonumber(get("rockmech_residual_phi")) or tonumber(get("rockmech_slope_angle")) or cfg.slope.phi_r
+	cfg.slope.phi_r = math.min(89, math.max(1, cfg.slope.phi_r))
 
 	-- 落石翻滾
 	local rf = load_section("rockfall", config.rockfall_defaults)

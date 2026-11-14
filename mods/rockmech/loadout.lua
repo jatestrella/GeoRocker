@@ -282,7 +282,7 @@ core.register_node(ITEM, {
 			for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do sc[#sc + 1] = {x, z} end end
 			rec = rockmech.clear_site(sc, pos)
 		end
-		if not site_ok(pos, dx, dz) then
+		if rec == false or not site_ok(pos, dx, dz) then
 			rockmech.site_undo(rec)
 			tell(name, S("Build it on flat ground: 3×3 m of level ground with @1 m of clearance above", tostring(BIN_H + 2)))
 			return itemstack

@@ -277,7 +277,7 @@ if core.registered_nodes["default:stone"] then
 end
 
 -- 碎石：軸差破壞後的岩石。不參與軸差判定（非岩性），
--- 但在 collapse.lua 中套用懸空掉落與安息角滑動。
+-- 但在 collapse.lua 中套用懸空掉落與殘餘摩擦角滑動。
 -- 碎石種類：一般碎石（灰）與花崗岩碎石（粉紅，同花崗岩色調）。皆屬 group rockmech_rubble。
 local gravel_sounds = has_default and default.node_sound_gravel_defaults and default.node_sound_gravel_defaults() or sounds
 
@@ -301,7 +301,7 @@ core.register_node(rockmech.RUBBLE_GRANITE, {
 	sounds = gravel_sounds,
 })
 
--- 土壤：跟碎石同一套（顆粒流、安息角、8 級高度、有重量、可以搬、可以壓實），表面長草，樹苗種得活（group soil）。
+-- 土壤：跟碎石同一套（顆粒流、殘餘摩擦角、8 級高度、有重量、可以搬、可以壓實），表面長草，樹苗種得活（group soil）。
 -- 營地的林地鋪這個（woodwork.lua）。以後深開挖時，上覆的土壤一樣是荷重
 rockmech.RUBBLE_SOIL = rockmech.modname .. ":rubble_soil"
 core.register_node(rockmech.RUBBLE_SOIL, {
@@ -437,7 +437,7 @@ function rockmech.mix_text(base, p2)
 	end
 	return S("@1 @2%, @3 @4%", COMP_LABEL[m.a], ("%.0f"):format(f * 100), COMP_LABEL[m.b], ("%.0f"):format((1 - f) * 100))
 end
--- 混合碎石裡土的比例（0..1）：下雨時安息角照比例降低（collapse.lua）
+-- 混合碎石裡土的比例（0..1）：下雨時殘餘摩擦角照比例降低（collapse.lua）
 function rockmech.soil_fraction(base, p2)
 	if base == rockmech.RUBBLE_SOIL then return 1 end
 	local m = rockmech.mix_of[base]

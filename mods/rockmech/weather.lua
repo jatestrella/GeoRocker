@@ -1,9 +1,9 @@
 -- rockmech/weather.lua
 -- 降雨：老師用 /rain <時雨量 mm/h> [分鐘] 下雨。降雨弱化跟時雨量 I 成正比（L = I / rain_max，rain_max = 100 mm/h，
 -- 台灣颱風的時雨量量級）：
---   鬆土、崩積土：安息角降低 rain_drop × L × 土的比例（collapse.lua granular_settle，rockmech.rain_tan_for）
+--   鬆土、崩積土：殘餘摩擦角降低 rain_drop × L × 土的比例（collapse.lua granular_settle，rockmech.rain_tan_for）
 --   表土：凝聚力 c 降成 c × (1 − rain_c_loss × L)，自立高度 H_c 跟著降（woodwork.lua，rockmech.rain_level），
---         下雨時抽查露出來的表土陡壁，超過當下的 H_c 就鬆掉、照安息角流，可能連成邊坡滑動
+--         下雨時抽查露出來的表土陡壁，超過當下的 H_c 就鬆掉、照殘餘摩擦角流，可能連成邊坡滑動
 -- 碎石（岩石碎塊）透水、不受影響。雨停馬上回到原本的強度。
 -- 氣象站（rockmech:rain_gauge，工具室管理員）：指著看目前的時雨量、這場雨的累積雨量。
 -- 畫面：每個玩家身邊下雨（粒子，雨越大越密）、雲變厚變灰。雨的狀態存在 mod storage，伺服器重開照樣下完
@@ -34,11 +34,11 @@ function rockmech.rain_total()
 	local t1 = math.min(core.get_gametime(), rain_end())
 	return store:get_float("rain_acc") + math.max(0, t1 - t0) / 3600 * store:get_float("rain_i")
 end
--- 土佔 s（0..1）的碎石，下雨時的安息角 tan（沒下雨回傳 nil）：降低 rain_drop × L × s 度
+-- 土佔 s（0..1）的碎石，下雨時的殘餘摩擦角 tan（沒下雨回傳 nil）：降低 rain_drop × L × s 度
 function rockmech.rain_tan_for(s)
 	local L = rockmech.rain_level()
 	if L <= 0 then return nil end
-	return math.tan(math.rad(math.max(1, cfg.angle - math.max(0, cfg.rain_drop) * L * s)))
+	return math.tan(math.rad(math.max(1, cfg.phi_r - math.max(0, cfg.rain_drop) * L * s)))
 end
 
 local function start_fx(player, i)
@@ -127,8 +127,8 @@ core.register_chatcommand("rain", {
 		store:set_int("rain_end", now + math.floor(m * 60))
 		sync()
 		local L = i / RAIN_MAX
-		return true, S("Rain for @1 minutes at @2 mm/h: loose soil angle of repose @3° → @4°, topsoil cohesion × @5", g(m), g(i), g(cfg.angle),
-			("%.1f"):format(math.max(1, cfg.angle - cfg.rain_drop * L)), ("%.2f"):format(1 - (cfg.rain_c_loss or 0) * L))
+		return true, S("Rain for @1 minutes at @2 mm/h: loose soil residual friction angle @3° → @4°, topsoil cohesion × @5", g(m), g(i), g(cfg.phi_r),
+			("%.1f"):format(math.max(1, cfg.phi_r - cfg.rain_drop * L)), ("%.2f"):format(1 - (cfg.rain_c_loss or 0) * L))
 	end,
 })
 

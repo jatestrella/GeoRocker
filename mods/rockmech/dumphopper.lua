@@ -243,7 +243,7 @@ core.register_node(K.item, {
 			for _, c in ipairs(cells_of(pos, K)) do sc[#sc + 1] = {c.x, c.z} end
 			rec = rockmech.clear_site(sc, pos)
 		end
-		if not site_ok(pos, K) then
+		if rec == false or not site_ok(pos, K) then
 			rockmech.site_undo(rec)
 			tell(name, S("Build it on flat ground: @1×@1 m of level ground", tostring(K.size)))
 			return itemstack

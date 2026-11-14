@@ -6,7 +6,7 @@
 -- 只處理碎石：完整岩石要先爆破或用魔杖弄碎（爆破 → 裝載 → 運輸）。
 -- 操作：右鍵上車；駕駛中 Shift 下車，W/S 前進後退，A/D 轉向；Z 切換追蹤相機（從車子後上方看作動）。
 -- 駕駛的相機在車頂（挖土機：駕駛艙頂）前緣。不在車上時左鍵：收回成物品（車上的碎石換成碎石物品，8 級 = 1 個）
--- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依安息角流動。
+-- 碎石的增減用 set_node／remove_node，照常觸發開挖記錄、支撐判定；動過的碎石再依殘餘摩擦角流動。
 
 local NLEV = rockmech.RUBBLE_LEVELS
 local S = rockmech.S
@@ -753,7 +753,7 @@ function V.take_rubble(cell, want)
 	local c = A.get(cell, node)      -- 成分（assay.lua）：取走的那份跟著走
 	local rest = A.place(cell, base, k - t, c, true)
 	collapse.check_cell({x = cell.x, y = cell.y + 1, z = cell.z})   -- 上方的碎石往下掉
-	-- 這格拿空了：旁邊（同一層、上一層）的碎石也判定一次，比安息角陡就流進來
+	-- 這格拿空了：旁邊（同一層、上一層）的碎石也判定一次，比殘餘摩擦角陡就流進來
 	-- （不然料堆底下的輸送帶吸料時，兩側會留下直立的碎石牆）
 	if not rest then
 		for _, dy in ipairs({0, 1}) do
@@ -810,7 +810,7 @@ end
 
 -- g：品位（param2），和既有的碎石合併時加權平均
 -- 在 (x, z) 這一欄、從 ytop 往下找落點，倒 a 級 base 碎石；滿了往上堆（最多 max_h 格，預設 8）。
--- placed（可選）：收集倒下的格子，不立即做安息角流動（推土機推著的那堆）。回傳倒不下的級數
+-- placed（可選）：收集倒下的格子，不立即做殘餘摩擦角流動（推土機推著的那堆）。回傳倒不下的級數
 local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
 	local c = A.c(g)      -- 數字（param2）或成分表（assay.lua）
 	local passable = rockmech.rubble_passable or passable      -- 碎石：風管這類擋碎石的方塊不能倒進去
@@ -1161,7 +1161,7 @@ function V.engine_load(self, def, kind, rr, grade, v)
 end
 
 -- 車頭（倒車時車尾）的左右兩條輪跡壓到碎石：每一格每趟判定一次，碎石只往外側擠（往前後流會把車轍填回去）。
--- 在碎石坡上（tanθ > 0.35）整個車寬都判定、往下坡擠：坡在安息角附近時，加上車重就往下垮，並往坡上傳。
+-- 在碎石坡上（tanθ > 0.35）整個車寬都判定、往下坡擠：坡在殘餘摩擦角附近時，加上車重就往下垮，並往坡上傳。
 -- 夠重的車整個車寬都算壓實的趟數（車轍照樣只在輪跡）。
 -- 履帶車（沒有 def.tire：推土機、怪手、鑽機）不擠車轍：履帶把重量攤在很大的面積上，接地壓力只有輪胎的十分之一左右；
 -- 推土機整坡時履帶壓在剛推好的面上，擠出車轍就整不平。陡的碎石坡照樣往下垮（那是邊坡破壞）
@@ -1207,7 +1207,7 @@ function V.press_rubble(self, kind, def, pos, dir, f)
 	end
 end
 
--- 倒出車上的碎石：平均分到 cells 所在的欄（每欄往上最多堆 8 格），之後依安息角流開
+-- 倒出車上的碎石：平均分到 cells 所在的欄（每欄往上最多堆 8 格），之後依殘餘摩擦角流開
 function V.dump_to_ground(self, cells, ytop)
 	-- 旁邊有受料斗（dumphopper.lua）：自動對準，倒在它的格柵上
 	if rockmech.dump_hopper_cells then

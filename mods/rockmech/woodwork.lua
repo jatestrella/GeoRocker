@@ -440,10 +440,10 @@ end
 
 ---------------------------------------------------------------------------
 -- 表土（有植物根系的土）：根系凝聚力讓它在陡坡上也站得住，所以不參與顆粒流（不是碎石）。
--- 一被擾動，根系就斷，變成一般的鬆土（nodes.lua 的土壤碎石），照安息角流動：
+-- 一被擾動，根系就斷，變成一般的鬆土（nodes.lua 的土壤碎石），照殘餘摩擦角流動：
 --   學生挖表土 → 挖起來的就是一份土（同撿碎石）
 --   底下被掏空的表土變鬆土、掉下來
---   旁邊被挖開（挖、炸、坍塌、鬆土流走）：根系有凝聚力，臨空面不超過自立高度 H_c 就站得住；超過才鬆掉、照安息角流，
+--   旁邊被挖開（挖、炸、坍塌、鬆土流走）：根系有凝聚力，臨空面不超過自立高度 H_c 就站得住；超過才鬆掉、照殘餘摩擦角流，
 --   流走又讓上面的表土臨空，坡腳切太高就連鎖成整片邊坡滑動
 -- 不是岩體（is_ground_content = false）：應力解、崩落判定都不算它；樹苗種得活（group soil）
 ---------------------------------------------------------------------------
@@ -499,43 +499,63 @@ local function push_aside(p, push)
 	end
 	end)
 end
--- 整地（建築物）：cells = {{x, z}, …}，pos = 要蓋的位置（地面在 pos.y − 1）。
---   每一欄往下找岩盤（土、鬆土、不滿格的碎石都不算，最多往下 SITE_DEEP 格；更深就停在那裡，底下的土當地基）；
---   基地面 = 最高那欄岩盤頂的上一格。基地面以上的土清掉；比較低的欄用整格表土回填（最多 1 m，再低就不整，讓 site_ok 判地不平）。
---   直接改 pos.y，回傳施工紀錄 rec（rockmech.site_undo 復原、rockmech.site_charge 收整地費）；沒得整回傳 nil
-local SITE_DEEP, SITE_FILL = 4, 1
-local function removable(n)
-	return TOPSOIL_K[n] ~= nil or rockmech.rubble_base[n] == SOIL or rockmech.is_thin_ground(n)
-end
+-- 整地（建築物）：cells = {{x, z}, …}，pos = 要蓋的位置（地面在 pos.y − 1）。只削平、回填，不往下挖到岩盤：
+--   每一欄往下找第一格「整格的地面」（岩石、整格的表土、鬆土、碎石都算：地基是什麼材料就是什麼，撐不撐得住由力學判斷），
+--   不滿一格的薄片不算。基準 = 指到的那一欄（pos）的地面：
+--   比基準高的欄削掉（只削土和碎石，不削岩石，最多 SITE_CUT m），比基準低的欄用整格表土回填（最多 SITE_FILL m），
+--   基準面以上的薄片清掉。做不到回傳 false：不能蓋（薄片上不能直接蓋，會架空）。
+--   直接改 pos.y，回傳施工紀錄 rec（rockmech.site_undo 復原、rockmech.site_charge 收整地費）
+local SITE_DEEP, SITE_CUT, SITE_FILL = 3, 1, 1
+local function thin(n) return rockmech.is_thin_ground(n) end
+local function earth(n) return TOPSOIL_K[n] ~= nil or rockmech.rubble_level[n] ~= nil end      -- 土和碎石（削得動的）
 local function level_of(n) return rockmech.rubble_level[n] or TOPSOIL_K[n] or NLEV end
 function rockmech.clear_site(cells, pos)
-	if #cells == 0 then return nil end
+	if #cells == 0 then return false end
 	local passable = rockmech.vehicles and rockmech.vehicles.passable or function(n) return n == "air" end
-	local tops, maxr = {}, nil
-	for i, c in ipairs(cells) do
-		local r, full
-		for y = pos.y, pos.y - SITE_DEEP, -1 do
-			local n = core.get_node({x = c[1], y = y, z = c[2]}).name
-			if n == "ignore" then return nil end
-			if not passable(n) and not removable(n) then r = y; break end
-			if not full and not passable(n) and level_of(n) >= NLEV then full = y end
+	local function ground(x, z)          -- 這一欄第一格整格地面的 y；擋在 pos.y + 1 以上的不管（site_ok 會判）
+		for y = pos.y + 1, pos.y - SITE_DEEP, -1 do
+			local n = core.get_node({x = x, y = y, z = z}).name
+			if n == "ignore" then return false end
+			if not passable(n) and not thin(n) then return y end
 		end
-		r = r or full or (pos.y - SITE_DEEP - 1)                  -- 土太厚找不到岩盤：最上面那格整格的土當地基
-		tops[i] = r
-		if not maxr or r > maxr then maxr = r end
 	end
-	if maxr >= pos.y then return nil end                       -- 範圍裡有東西擋著：照原樣讓 site_ok 判
-	local L = maxr + 1
-	for _, r in ipairs(tops) do if L - 1 - r > SITE_FILL then return nil end end
+	local G0 = ground(pos.x, pos.z)
+	if not G0 or G0 >= pos.y then return false end
+	local tops = {}
+	for i, c in ipairs(cells) do
+		tops[i] = ground(c[1], c[2])
+		if not tops[i] then return false end
+	end
+	-- 基準面：指到的地面上下各 1 m 裡，不用削岩石、削填都在限度內、方量最少的（一樣多取指到的高度）
+	local function volume(G)
+		if G >= pos.y then return false end
+		local v = 0
+		for i, c in ipairs(cells) do
+			local r = tops[i]
+			if r - G > SITE_CUT or G - r > SITE_FILL then return false end
+			for y = G + 1, r do
+				if not earth(core.get_node({x = c[1], y = y, z = c[2]}).name) then return false end
+			end
+			v = v + math.abs(r - G)
+		end
+		return v
+	end
+	local G, best
+	for _, g in ipairs({G0, G0 + 1, G0 - 1}) do
+		local v = volume(g)
+		if v and (not best or v < best) then G, best = g, v end
+	end
+	if not G then return false end
+	local L = G + 1
 	local rec = {ch = {}, cut = 0, fill = 0}
 	local function save(p, node)
 		rec.ch[#rec.ch + 1] = {p = p, node = node, meta = core.get_meta(p):to_table()}
 	end
 	for i, c in ipairs(cells) do
-		for y = L, pos.y + 1 do                                   -- 基地面以上的土清掉
+		for y = L, pos.y + 1 do                                   -- 基準面以上的土、碎石削掉
 			local p = {x = c[1], y = y, z = c[2]}
 			local node = core.get_node(p)
-			if removable(node.name) then
+			if earth(node.name) then
 				save(p, node)
 				rec.cut = rec.cut + level_of(node.name) / NLEV
 				core.swap_node(p, {name = "air"})
@@ -545,7 +565,7 @@ function rockmech.clear_site(cells, pos)
 		for y = tops[i] + 1, L - 1 do                             -- 低的欄回填整格表土
 			local p = {x = c[1], y = y, z = c[2]}
 			local node = core.get_node(p)
-			local had = removable(node.name) and level_of(node.name) or 0
+			local had = thin(node.name) and level_of(node.name) or 0
 			if had < NLEV and (had > 0 or passable(node.name)) then
 				save(p, node)
 				rec.fill = rec.fill + (NLEV - had) / NLEV
@@ -630,8 +650,8 @@ function rockmech.loosen_under(p, name)
 	return true
 end
 -- 表土的凝聚力（根系，rockmech_topsoil_c）→ 自立高度 H_c = 4c/γ·tan(45° + φ/2)：表土旁邊挖開的臨空面不超過 H_c 就站得住。
--- γ 用非岩性格的單位重，φ 用安息角（鬆土沒有凝聚力，就是安息角）。c = 5 kPa、γ = 20、φ = 35° → H_c ≈ 1.9 m
-local HC = rockmech.mix.standing_height(cfg.topsoil_c, cfg.failure.gamma_other, cfg.slope.angle)
+-- γ 用非岩性格的單位重，φ 用殘餘摩擦角（鬆土沒有凝聚力，就是殘餘摩擦角）。c = 5 kPa、γ = 20、φ = 35° → H_c ≈ 1.9 m
+local HC = rockmech.mix.standing_height(cfg.topsoil_c, cfg.failure.gamma_other, cfg.slope.phi_r)
 rockmech.topsoil_hc = HC
 -- 下雨時的自立高度：凝聚力 c × (1 − rain_c_loss × L)，L = 時雨量 / rain_max（weather.lua）；H_c 跟 c 成正比
 local function hc_now()
@@ -784,7 +804,7 @@ core.register_abm({
 	action = check_topsoil,
 })
 -- 下雨時：表土的凝聚力降低，自立高度 H_c 跟著降。抽查露出來的表土：這一疊表土頂到旁邊較低那欄地面的落差
--- 超過當下的 H_c 就鬆掉（照安息角流，流走又讓上面的表土臨空，可能連成邊坡滑動）。沒下雨不跑
+-- 超過當下的 H_c 就鬆掉（照殘餘摩擦角流，流走又讓上面的表土臨空，可能連成邊坡滑動）。沒下雨不跑
 core.register_abm({
 	label = "rockmech: 下雨時表土陡壁鬆動（抽查）",
 	nodenames = {"group:rockmech_topsoil"}, neighbors = {"air"},

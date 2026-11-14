@@ -850,7 +850,7 @@ local function excavator(kind, P)
 		return cells
 	end
 
-	-- 倒出鏟斗：倒進車斗（裝得下多少倒多少），或倒在指到的那格周圍（之後依安息角攤開）
+	-- 倒出鏟斗：倒進車斗（裝得下多少倒多少），或倒在指到的那格周圍（之後依殘餘摩擦角攤開）
 	local function dump_bucket(self, dg)
 		local truck = dg.truck
 		if truck and truck.object:get_pos() then

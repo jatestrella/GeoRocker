@@ -167,7 +167,7 @@ function rockmech.blast_rock(center, R, floor_y, D)
 	col.queue_stability_check(center)
 	for _, p in ipairs(removed) do col.queue_stability_check(p) end
 	col.queue_failure_check(center)
-	-- 碎石：懸空就落下、超過安息角就滑動（下一個 tick，等其他判定排定）
+	-- 碎石：懸空就落下、超過殘餘摩擦角就滑動（下一個 tick，等其他判定排定）
 	table.sort(rubbled, function(a, b) return a.y < b.y end)
 	core.after(0.1, function()
 		for _, p in ipairs(rubbled) do col.check_cell(p) end

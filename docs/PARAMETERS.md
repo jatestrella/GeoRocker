@@ -1,6 +1,6 @@
 # GeoRocker 遊戲參數總表
 
-rockmech 模組所有可調參數，依學科分類。設定名都加上前綴 `rockmech_`（例如 `slope_angle` 是 `rockmech_slope_angle`）。
+rockmech 模組所有可調參數，依學科分類。設定名都加上前綴 `rockmech_`（例如 `residual_phi` 是 `rockmech_residual_phi`）。
 可以寫在世界資料夾的 `rockmech.conf`（優先）或 `minetest.conf`。完整英文說明與範圍見 `mods/rockmech/settingtypes.txt`。
 
 「class_coal」欄是全班伺服器世界 `worlds/class_coal/rockmech.conf` 實際設定的值，空白表示用預設值。
@@ -140,9 +140,9 @@ rockmech 模組所有可調參數，依學科分類。設定名都加上前綴 `
 | `rockfall_stop_speed` | 停止速度 (m/s) | 0.4 |  |
 | `fallbreak_enabled` | 掉落的岩塊依落下高度破碎成碎石 | true |  |
 | `fallbreak_break_height` | 非岩性岩塊的破碎高度 (m) | 4.0 |  |
-| `slope_enabled` | 碎石依安息角流動 | true |  |
-| `slope_angle` | 碎石安息角 (°) | 35 |  |
-| `slope_rain_drop` | 時雨量達 `rain_max` 時，鬆土安息角降低幾度（照時雨量比例、照土的比例）；岩石碎石不受影響 | 10 |  |
+| `slope_enabled` | 碎石依殘餘摩擦角流動 | true |  |
+| `residual_phi` | 鬆散材料（碎石、鬆土）的殘餘摩擦角 φr (°)，看到的安息角由它決定（舊名 `slope_angle` 也讀） | 35 |  |
+| `slope_rain_drop` | 時雨量達 `rain_max` 時，鬆土殘餘摩擦角降低幾度（照時雨量比例、照土的比例）；岩石碎石不受影響 | 10 |  |
 | `slope_rain_max` | 時雨量上限 (mm/h)，台灣颱風的量級；降雨弱化跟 時雨量 / rain_max 成正比 | 100 |  |
 | `slope_rain_c_loss` | 時雨量達 `rain_max` 時，表土凝聚力降低的比例（自立高度 H_c 跟著降） | 0.35 | 100 mm/h 時 H_c ≈ 1.25 m |
 | `mapgen_topsoil` | 產生地圖時天然岩石上鋪表土（任何世界都適用）：山坡 1–3 m（礦帶的礦區山丘 0.25–1 m）、平地 0.25–0.75 m、山腳漸薄的坡腳；礦石露頭不鋪；山坡稀疏種樹 | true |  |

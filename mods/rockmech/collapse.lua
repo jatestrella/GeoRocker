@@ -1,5 +1,5 @@
 -- rockmech/collapse.lua
--- 由 physics_core 移植的坍塌機制（懸空掉落 + 安息角滑動）。
+-- 由 physics_core 移植的坍塌機制（懸空掉落 + 殘餘摩擦角滑動）。
 -- 階段 3 的關鍵塊判定（keyblock.lua）完成後再取代此檔的觸發邏輯。
 --
 -- 與 physics_core 的差異：
@@ -14,8 +14,8 @@ local A = rockmech.assay      -- 碎石的成分（metadata，assay.lua）
 local collapse = {}
 rockmech.collapse = collapse
 
--- 碎石安息角（rockmech_slope_angle，預設 35°）：顆粒流（granular.lua）的臨界坡度
-local SLOPE_TAN = math.tan(math.rad(rockmech.cfg.slope.angle))
+-- 鬆散材料的殘餘摩擦角 φr（rockmech_residual_phi，舊名 rockmech_slope_angle，預設 35°）：顆粒流（granular.lua）的臨界坡度，看到的安息角就是它
+local SLOPE_TAN = math.tan(math.rad(rockmech.cfg.slope.phi_r))
 
 local physics_updating = false  -- 防止物理連鎖觸發
 
@@ -130,7 +130,7 @@ local try_escape_or_destroy
 local check_stability_and_move
 local update_affected_area
 
--- 3. 安息角輔助
+-- 3. 殘餘摩擦角輔助
 
 -- 預先計算掉落落點 y（第一個非空氣上方）
 local function compute_landing_y(pos)
@@ -187,7 +187,7 @@ collapse.debris = debris
 
 ---------------------------------------------------------------------------
 -- 碎石的顆粒流（模型見 granular.lua）
--- 碎石每格分 8 級（1/8 m）。一欄碎石的頂格與周圍 8 方向的表面比較，超過安息角就
+-- 碎石每格分 8 級（1/8 m）。一欄碎石的頂格與周圍 8 方向的表面比較，超過殘餘摩擦角就
 -- 分一部分流到最陡的一側；每一步間隔 GRAN_STEP_DELAY 秒，看得到碎石堆慢慢攤成斜坡。
 ---------------------------------------------------------------------------
 local granular = rockmech.granular
@@ -313,7 +313,7 @@ local function overload(T)
     return q
 end
 
-local PASSIVE_K = granular.passive_k(rockmech.cfg.slope.angle)
+local PASSIVE_K = granular.passive_k(rockmech.cfg.slope.phi_r)
 local COMPACT_TAN = math.tan(math.rad(rockmech.cfg.compact_phi))     -- 壓實的碎石（nodes.lua rockmech.compacted）
 local COMPACT_KP = granular.passive_k(rockmech.cfg.compact_phi)
 local SQUEEZE_CAP = math.ceil(rockmech.cfg.rubble_squeeze * NLEV)     -- 受壓時一步最多流幾級
@@ -367,7 +367,7 @@ collapse.rubble_sound = rubble_sound
 
 local fall_with_slope_settle
 
--- 顆粒流一步：先往下倒（下方是不滿格的同種碎石），否則依安息角流向最陡的一側。
+-- 顆粒流一步：先往下倒（下方是不滿格的同種碎石），否則依殘餘摩擦角流向最陡的一側。
 -- 之後在來源與承接位置排程下一步（最多 chain 步）。q_ext（kPa）：這一步外加的荷重（車輛、應力解）；
 -- side（可選，{x, z}）：這一步只往這一側流
 local granular_settle
@@ -430,11 +430,11 @@ granular_settle = function(pos, chain, q_ext, side)
         end
         return
     end
-    -- 壓實的碎石摩擦角比較高（rockmech_compact_phi）：安息角變陡，車輪也比較擠不動（懸空照樣掉）
+    -- 壓實的碎石摩擦角比較高（rockmech_compact_phi）：殘餘摩擦角變陡，車輪也比較擠不動（懸空照樣掉）
     local tan_r, kp = SLOPE_TAN, PASSIVE_K
     if rockmech.compacted[tn] then tan_r, kp = COMPACT_TAN, COMPACT_KP
     elseif rockmech.rain_tan_for then
-        -- 下雨：含土的碎石（鬆土、崩積土）安息角照土的比例暫時降低（weather.lua）
+        -- 下雨：含土的碎石（鬆土、崩積土）殘餘摩擦角照土的比例暫時降低（weather.lua）
         local s = rockmech.soil_fraction(base, core.get_node(T).param2)
         if s > 0 then tan_r = rockmech.rain_tan_for(s) or tan_r end
     end
@@ -493,7 +493,7 @@ granular_settle = function(pos, chain, q_ext, side)
 end
 collapse.granular_settle = granular_settle
 
--- 碎石超過安息角卻沒人叫它流（倒的時候旁邊的區塊沒載入、離玩家太遠）會一直立在那裡：
+-- 碎石超過殘餘摩擦角卻沒人叫它流（倒的時候旁邊的區塊沒載入、離玩家太遠）會一直立在那裡：
 -- 玩家附近定期掃一下表面，一欄走一步，穩定的格子什麼都不會發生
 core.register_abm({
     label = "rockmech: 立著的碎石繼續流",
@@ -588,7 +588,7 @@ try_escape_or_destroy = function(pos, node)
 end
 collapse.try_escape_or_destroy = try_escape_or_destroy
 
--- 5. 單點擾動檢查：懸空掉落 → 安息角滑動（不連鎖）
+-- 5. 單點擾動檢查：懸空掉落 → 殘餘摩擦角滑動（不連鎖）
 -- 某格是否為實心（walkable；未載入視為實心）
 local function is_solid_at(p)
     local n = core.get_node_or_nil(p)
@@ -597,7 +597,7 @@ local function is_solid_at(p)
     return not d or d.walkable ~= false
 end
 
--- 碎石：下方懸空就落下，否則依安息角滑動。
+-- 碎石：下方懸空就落下，否則依殘餘摩擦角滑動。
 -- 完整岩石：這裡不處理。是否懸空由穩定判定（stability.lua，連通性）決定；
 --           破壞由軸差破壞準則決定。
 check_stability_and_move = function(pos)
@@ -846,7 +846,7 @@ function collapse.failure_params(detail)
         surface_y = cfg.surface_y, k0 = cfg.k0, lithologies = cfg.lithologies,
         window = fcfg.window,
         rock = rock,
-        rubble_k = 1 - math.sin(math.rad(cfg.slope.angle)), rubble_gamma = fcfg.gamma_other,
+        rubble_k = 1 - math.sin(math.rad(cfg.slope.phi_r)), rubble_gamma = fcfg.gamma_other,
         KH = cfg.KH, Kh = cfg.Kh, sH0 = cfg.sH0, sh0 = cfg.sh0, sH_azimuth = cfg.sH_azimuth,
     }
 end
@@ -966,7 +966,7 @@ function collapse.evaluate_failure(centers, r)
 end
 
 -- 破壞格：原地換成碎石（swap_node 不觸發 on_destruct）。碎石仍是實心、提供側向
--- 支撐，避免在岩體內部產生空洞；之後是否移動交給懸空掉落／安息角滑動。
+-- 支撐，避免在岩體內部產生空洞；之後是否移動交給懸空掉落／殘餘摩擦角滑動。
 -- 目前正在處理的剝落連鎖輪數（0 = 不在剝落處理中）。物理造成的移除依此決定後續檢查的輪數
 local fail_gen = 0
 
@@ -1628,7 +1628,7 @@ local function run_stability_check()
     end
    -- 關鍵塊體沿節理滑動：每一格變成碎石外觀的翻滾落石，初速度沿滑動方向，
     -- 之後由落石的物理（碰撞、反彈、滾動）帶下坡，停下時放成碎石。
-    -- 翻滾落石已達上限或被關閉時：原地變成碎石，再依安息角往下滑
+    -- 翻滾落石已達上限或被關閉時：原地變成碎石，再依殘餘摩擦角往下滑
     local rfx = rockmech.rockfall_entity
     for _, b in ipairs(slides) do
         local cells = {}
@@ -1700,7 +1700,7 @@ local function press_rubble(pos)
     end
 end
 
--- 剛體落地後：碎石依安息角判定；落地的岩石算回填，壓在碎石上會把碎石擠開
+-- 剛體落地後：碎石依殘餘摩擦角判定；落地的岩石算回填，壓在碎石上會把碎石擠開
 function collapse.after_rigid_land(placed)
     -- 落地碎屑：只在底部的格子（正下方不是同一群）噴
     local own = {}
@@ -1722,7 +1722,7 @@ function collapse.after_rigid_land(placed)
     physics_updating = false
 end
 
--- 單格判定（碎石掉落／安息角滑動），供爆破等外部使用
+-- 單格判定（碎石掉落／殘餘摩擦角滑動），供爆破等外部使用
 function collapse.check_cell(pos)
     local prev = physics_updating
     physics_updating = true
@@ -1763,7 +1763,7 @@ end)
 
 -- 9. 掉落破碎：包裝原版 falling node entity
 -- 開始掉落時記下高度；落地放回 node 前，完整岩石依落下高度有機率變成碎石。
--- 變成碎石後接著依安息角判定。（原版 entity 的定義表是所有實例的 metatable，
+-- 變成碎石後接著依殘餘摩擦角判定。（原版 entity 的定義表是所有實例的 metatable，
 -- 直接包裝其方法即可套用到每個 falling node。）
 do
     local fb = cfg.fallbreak
@@ -1798,7 +1798,7 @@ do
         end
         local ok = orig_try_place(self, bcp, bcn)
         if ok and broke then
-            -- 碎石落地後依安息角判定（下一個 tick，等 node 放好）
+            -- 碎石落地後依殘餘摩擦角判定（下一個 tick，等 node 放好）
             local p = vector.round(self.object:get_pos())
             core.after(0, function()
                 for dy = 0, 1 do
@@ -1889,7 +1889,7 @@ local function register_physics_events(name, intact)
     if intact then
         overrides.drop = ""
         -- on_destruct 排定的檢查在之後的 tick 才執行，屆時這裡已經是碎石：
-        -- 碎石下方懸空就落下、超過安息角就滑動；軸差破壞要等碎石被清走、
+        -- 碎石下方懸空就落下、超過殘餘摩擦角就滑動；軸差破壞要等碎石被清走、
         -- 真正出現開口時才會觸發。
         overrides.after_dig_node = function(pos, oldnode, oldmeta)
             local c = A.from_metatable(oldmeta, oldnode, pos)

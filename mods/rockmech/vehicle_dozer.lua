@@ -263,7 +263,7 @@ local function overhang_blocked(pos, s, f, layers)
 	return false
 end
 
--- 停止推（停下、後退、收鏟）時，前面那堆照安息角攤開
+-- 停止推（停下、後退、收鏟）時，前面那堆照殘餘摩擦角攤開
 local function settle_pile(self)
 	if not self.pile then return end
 	local cells = self.pile

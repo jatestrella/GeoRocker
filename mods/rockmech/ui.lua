@@ -454,7 +454,7 @@ local function tab_overview()
 		{S("Overhang failure"), S("@1; radius @2@3", onoff(o.enabled), ("%d"):format(o.radius),
 			o.scale ~= 1 and S("; legacy setting overhang_scale @1", ("%g"):format(o.scale)) or "")},
 		{S("Stability check"), S("@1; radius @2, rigid-body limit @3 cells", onoff(sp.enabled), ("%d"):format(sp.radius), ("%d"):format(sp.rigid_max))},
-		{S("Rubble angle of repose"), ("%s; %g°"):format(onoff(sl.enabled), sl.angle)},
+		{S("Rubble residual friction angle"), ("%s; %g°"):format(onoff(sl.enabled), sl.phi_r)},
 		{S("Rockfall rolling"), S("@1; other surfaces Rn @2 Rt @3 μr @4", onoff(rf.enabled),
 			("%.2f"):format(rf.rn), ("%.2f"):format(rf.rt), ("%.2f"):format(rf.mu_roll))},
 		{S("Breakage on falling"), onoff(cfg.fallbreak.enabled)},

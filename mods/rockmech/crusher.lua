@@ -1,5 +1,5 @@
 -- rockmech/crusher.lua
--- 破碎站（賣礦）：放在平地上，朝玩家的方向挖一個受料倉：9×9 m、深 4 m 的階梯漏斗，壁坡 45° 比安息角陡，
+-- 破碎站（賣礦）：放在平地上，朝玩家的方向挖一個受料倉：9×9 m、深 4 m 的階梯漏斗，壁坡 45° 比殘餘摩擦角陡，
 -- 碎石不會留在壁上。底部 3×3 m 是格柵（給料口），只從這裡吃料，上方的料靠碎石流動自己補進來。
 -- 卡車、挖土機、推土機倒進來都一樣；每秒最多 rockmech_crusher_rate 噸，倒太快就在倉裡排隊。
 -- 過磅入帳：照品位拆成煤和廢石：煤噸 × 回收率 × 價格 × 收購比例 − 廢石噸 × 廢石處理費（config.crush_income）。
@@ -399,7 +399,7 @@ function rockmech.hopper_room(c)
 end
 
 -- 倉裡的碎石往給料口流：每次掃整個倉，每欄走一步。只叫給料口旁邊的格子的話，外圈階梯上的料不會動。
--- 倉裡被車壓過變成夯實碎石的（安息角較陡，會卡在倉壁階梯上）換回一般碎石：倉裡的料是鬆的
+-- 倉裡被車壓過變成夯實碎石的（殘餘摩擦角較陡，會卡在倉壁階梯上）換回一般碎石：倉裡的料是鬆的
 local loose_of
 local function drain(c, size)
 	if not loose_of then
@@ -910,7 +910,7 @@ function rockmech.crusher_build(pos, dx, dz, name, node, force)
 	local rec = not force and rockmech.clear_site and rockmech.facility_cells
 		and rockmech.clear_site(rockmech.facility_cells(node or CRUSHER, pos, dx, dz), pos)
 	local size = size_for(node or CRUSHER)
-	if not force and not site_ok(pos, dx, dz, size) then rockmech.site_undo(rec); return false end
+	if not force and (rec == false or not site_ok(pos, dx, dz, size)) then rockmech.site_undo(rec); return false end
 	if rec then rockmech.site_charge(rec, name) end
 	-- 進料溜槽、板式給料機朝受料倉（模型的 +Z 是進料那一側）
 	core.set_node(pos, {name = node or CRUSHER, param2 = core.dir_to_facedir({x = dx, y = 0, z = dz})})

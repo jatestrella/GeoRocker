@@ -5,7 +5,7 @@
 --   /rockmech_failure    軸差破壞檢查（回報／apply）
 --   /convert_rocks       stone 依深度換成岩性；既有岩性依目前節理設定重新上材質（舊世界用）
 --   方位 HUD             畫面上方顯示面向（沿用 physics_core）
---   物品欄「rockmech」分頁 / /rockmech_toggle   遊戲中開關（破壞準則、安息角滑動、翻滾）
+--   物品欄「rockmech」分頁 / /rockmech_toggle   遊戲中開關（破壞準則、殘餘摩擦角滑動、翻滾）
 
 local cfg = rockmech.cfg
 local S = rockmech.S
@@ -591,10 +591,10 @@ local TOGGLES = {
 	},
 	{
 		id = "slope", tbl = cfg.slope,
-		label = S("Rubble granular flow (8 levels per cell, spreads into slopes at the angle of repose; intact rock unaffected)"),
+		label = S("Rubble granular flow (8 levels per cell, spreads into slopes at the residual friction angle; intact rock unaffected)"),
 		short = S("Rubble granular flow"),
-		info = function() return S("Angle of repose @1°; unsupported rubble still falls vertically", ("%g"):format(cfg.slope.angle)) end,
-		off_note = S("Off: rubble does not move even beyond the angle of repose"),
+		info = function() return S("Residual friction angle @1°; unsupported rubble still falls vertically", ("%g"):format(cfg.slope.phi_r)) end,
+		off_note = S("Off: rubble does not move even beyond the residual friction angle"),
 	},
 	{
 		id = "rockfall", tbl = cfg.rockfall,
@@ -605,7 +605,7 @@ local TOGGLES = {
 				tostring(rockmech.rockfall_entity and rockmech.rockfall_entity.active_count() or 0),
 				tostring(cfg.rockfall.max_active))
 		end,
-		off_note = S("Off: key blocks that slide out turn into rubble in place, then flow at the angle of repose"),
+		off_note = S("Off: key blocks that slide out turn into rubble in place, then flow at the residual friction angle"),
 	},
 }
 rockmech.toggles = TOGGLES

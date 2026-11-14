@@ -128,11 +128,11 @@ end
 
 -- 上覆的鬆散材料（碎石、鬆土、崩積土、表土）的重量（collapse.lua 的 loose_of：cid → 厚度比例）：
 --   頂面荷重 q = γ·h：岩石格正上方疊著的鬆散材料，h = 那一疊的厚度（不滿格照比例）
---   側向土壓 K₀·γ·z（Jaky：K₀ = 1 − sin φ，φ = 安息角）：靠在岩壁上的鬆散材料，z = 那一格中心到鬆散材料表面的深度
+--   側向土壓 K₀·γ·z（Jaky：K₀ = 1 − sin φ，φ = 殘餘摩擦角）：靠在岩壁上的鬆散材料，z = 那一格中心到鬆散材料表面的深度
 -- 天然表土（mapgen 鋪的，stress.natural_soil 算得出厚度）的重量也算進現地應力 σ₀，所以沒動過的地形兩邊抵銷、照樣平衡；
 -- 剝掉表土等於卸載，堆上碎石等於加載。γ 用非岩性格的單位重（rockmech_failure_gamma_other）
 local GAMMA_S = cfg.failure.gamma_other
-local K0_S = 1 - math.sin(math.rad(cfg.slope.angle))
+local K0_S = 1 - math.sin(math.rad(cfg.slope.phi_r))
 -- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料厚度 (m)，從 ly 那一格開始算
 local function loose_above(g, gx, ly, gz)
 	local h = 0

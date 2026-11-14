@@ -194,7 +194,7 @@ core.register_globalstep(function(dtime)
 					local cells = rockmech.facility_cells(item, a, dx, dz)
 					local b = vector.copy(a)
 					local rec = rockmech.clear_site and rockmech.clear_site(cells, b)
-					local ok = is_plant and rockmech.plant_site_ok(b, dx, dz) or (not is_plant and H.site_ok(b, dx, dz))
+					local ok = rec ~= false and (is_plant and rockmech.plant_site_ok(b, dx, dz) or (not is_plant and H.site_ok(b, dx, dz)))
 					if rockmech.site_undo then rockmech.site_undo(rec) end
 					if ok and rockmech.cells_blocked(cells, a.y - 1, a.y + 4, player) then ok = false end
 					draw(name, cells, b.y, ok)

@@ -81,7 +81,7 @@ local function settle(self)
 		if n.name == "air" or (d and d.buildable_to) then
 			core.set_node(q, {name = self.node_name, param2 = self.param2 or 0})
 			rockmech.assay.set(q, self.node_name, self.assay or rockmech.assay.new(self.param2 or 0))
-			-- 停下來的碎石接著做顆粒流（併入下方不滿格的碎石、依安息角攤開）
+			-- 停下來的碎石接著做顆粒流（併入下方不滿格的碎石、依殘餘摩擦角攤開）
 			local col = rockmech.collapse
 			if col and rockmech.is_rubble(self.node_name) then
 				col.debris(q, self.node_name, 4)

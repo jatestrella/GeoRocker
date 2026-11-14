@@ -272,14 +272,14 @@ rockmech_rockfall_stop_speed (Stop speed) float 0.4 0 10
 # Maximum tumbling time (s).
 rockmech_rockfall_max_time (Max tumbling time) float 20 1 300
 
-[Angle of repose]
+[Residual friction angle (rubble, loose soil)]
 
-# Rubble steeper than the angle of repose moves (slides or tumbles). Intact rock is not affected.
+# Rubble steeper than the residual friction angle moves (slides or tumbles). Intact rock is not affected.
 # Can also be toggled in game.
-rockmech_slope_enabled (Enable rubble angle-of-repose sliding) bool true
+rockmech_slope_enabled (Enable rubble residual-friction-angle sliding) bool true
 
-# Angle of repose of rubble (degrees). Angular rock debris is typically 34-40.
-rockmech_slope_angle (Rubble angle of repose) float 35 1 89
+# Residual friction angle phi_r of loose material (rubble, loose soil), degrees. The slope you see (angle of repose) follows from it. Angular rock debris is typically 34-40. Old name: rockmech_slope_angle.
+rockmech_residual_phi (Residual friction angle of loose material) float 35 1 89
 
 # Most rubble (metres) moved aside by one load event: a vehicle passing, one stress solve, one step under a block.
 # Loads count as extra rubble height (q - Kp * gamma * h) / gamma, where h is how far the rubble beside rises above this cell. 0 turns it off.
@@ -431,7 +431,7 @@ rockmech_rr_loose (Rolling resistance: loose rubble, %) float 4 0 30
 
 rockmech_compact_passes (Traffic compaction: passes) int 4 1 100
 
-# Friction angle of compacted rubble (degrees). Loose rubble uses the angle of repose (35). A higher angle makes slopes stand steeper and resists wheel ruts:
+# Friction angle of compacted rubble (degrees). Loose rubble uses the residual friction angle (35). A higher angle makes slopes stand steeper and resists wheel ruts:
 # in this game a loaded truck stops rutting at about 54 degrees and a loaded haul truck at about 74 degrees.
 rockmech_compact_phi (Traffic compaction: friction angle) float 75 1 89
 

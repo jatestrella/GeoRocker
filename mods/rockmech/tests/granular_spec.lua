@@ -20,13 +20,13 @@ describe("granular 碎石顆粒流", function()
 		end
 	end)
 
-	it("坡度低於安息角不流", function()
+	it("坡度低於殘餘摩擦角不流", function()
 		-- 落差 5/8 m、水平 1 m：tan = 0.625 < tan35 = 0.70
 		local i = granular.choose_flow(10, 8, {{e = 5, d = 1}}, TAN35)
 		assert.is_nil(i)
 	end)
 
-	it("超過安息角：流向超出最多的一側，流量為超出量的一半（取上整）", function()
+	it("超過殘餘摩擦角：流向超出最多的一側，流量為超出量的一半（取上整）", function()
 		-- 鄰欄 A 落差 8（超出 8 − 5.6 = 2.4），鄰欄 B 落差 16（超出 10.4）
 		local i, a = granular.choose_flow(16, 8, {{e = 8, d = 1}, {e = 0, d = 1}}, TAN35)
 		assert.are.equal(2, i)
@@ -45,7 +45,7 @@ describe("granular 碎石顆粒流", function()
 		assert.is_nil(granular.choose_flow(7, 8, {{e = 0, d = math.sqrt(2)}}, TAN35))
 	end)
 
-	it("反覆流動後收斂到安息角以下", function()
+	it("反覆流動後收斂到殘餘摩擦角以下", function()
 		-- 一維：一堆 4 m 高的碎石（32 級）放在中央欄，兩側 6 欄平地
 		local h = {}
 		for x = -6, 6 do h[x] = 0 end

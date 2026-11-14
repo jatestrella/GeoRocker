@@ -257,7 +257,7 @@ function rockmech.career_load(player, self, def)
 	return true
 end
 
--- 放下手上的碎石（落在 pos 這一欄，會往下掉，也會依安息角流開）
+-- 放下手上的碎石（落在 pos 這一欄，會往下掉，也會依殘餘摩擦角流開）
 local function put_down(player, pos)
 	local c = carried(player)
 	if not c then return end

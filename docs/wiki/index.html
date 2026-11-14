@@ -359,7 +359,7 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <article class="page mech" id="m-soil"><p class="crumb"><a href="#home">首頁</a> › 機制 › 碎石、土、天氣</p><h1>碎石與土</h1>
 <h3>碎石、鬆土</h3>
 <ul>
-<li>每格 8 級高度（1/8 m 一級），照<b>安息角 35°</b> 往低處流；車子一直壓會壓實，壓實的不流動。</li>
+<li>每格 8 級高度（1/8 m 一級），照<b>殘餘摩擦角 35°</b> 往低處流；車子一直壓會壓實，壓實的不流動。</li>
 <li><b>混合</b>：一格最多記兩種成分（礦石、碎石、花崗岩碎石、土），外觀是兩種貼圖交錯。碎石＋土 = <a href="#i-colluvium">崩積土</a>。混進第三種，留最多的兩種，其餘併進比較不值錢的那種——品位只會被稀釋。</li>
 <li>碎石和土都有重量，會壓在下面的岩面上（見<a href="#m-stability">穩定性</a>）。</li>
 </ul>
@@ -367,11 +367,11 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <p>表土有根系的凝聚力 c = 5 kPa，旁邊挖開的陡壁不超過<b>自立高度</b>就站得住：</p>
 <div class="formula">H_c = 4c/γ · tan(45° + φ/2) ≈ 1.9 m</div>
 <ul>
-<li>表土被挖、底下被掏空、或旁邊陡壁超過 H_c，就變成鬆土照安息角流；流走又讓上面的表土臨空，可能連成整片邊坡滑動。</li>
+<li>表土被挖、底下被掏空、或旁邊陡壁超過 H_c，就變成鬆土照殘餘摩擦角流；流走又讓上面的表土臨空，可能連成整片邊坡滑動。</li>
 <li>懸空的表土會掉下來；滿格的鬆土放久了長回表土。</li>
 </ul><h2>計算公式</h2>
 <ul>
-<li>安息角流動：相鄰兩欄高差超過 tanφ × 距離（φ = 35°，每公尺約 0.7 m）就往低處流，一次流超出量的一半。</li>
+<li>殘餘摩擦角流動：相鄰兩欄高差超過 tanφ × 距離（φ = 35°，每公尺約 0.7 m）就往低處流，一次流超出量的一半。</li>
 <li>碎石、土的單位重 20 kN/m³（2 t/m³）；賣礦、載量顯示的噸數用 2.5 t/m³。岩石破碎後 1 格就是 1 格滿碎石。</li>
 <li>品位混合：照級數加權平均。</li>
 </ul>
@@ -386,7 +386,7 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 </ul></article>
 <article class="page mech" id="m-rain"><p class="crumb"><a href="#home">首頁</a> › 機制 › 碎石、土、天氣</p><h1>降雨</h1>
 <p>降雨弱化跟<b>時雨量</b>成正比（上限 100 mm/h，颱風級）：</p>
-<table><tr><th>時雨量</th><th>鬆土安息角</th><th>表土凝聚力</th><th>表土自立高度</th></tr>
+<table><tr><th>時雨量</th><th>鬆土殘餘摩擦角</th><th>表土凝聚力</th><th>表土自立高度</th></tr>
 <tr><td>晴天</td><td>35°</td><td>× 1.00</td><td>1.92 m</td></tr>
 <tr><td>30 mm/h</td><td>32°</td><td>× 0.90</td><td>1.72 m</td></tr>
 <tr><td>100 mm/h</td><td>25°</td><td>× 0.65</td><td>1.25 m</td></tr></table>
@@ -395,7 +395,7 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <li>岩石碎石透水、不受影響；崩積土照土的比例弱化。</li>
 <li>用<a href="#i-rain_gauge">氣象站</a>看目前的時雨量和這場雨的累積雨量。</li>
 </ul><h2>計算公式</h2>
-<div class="formula">L = min(1, 時雨量 ÷ 100 mm/h)　　安息角 = 35° − 10°·L·(土的比例)　　凝聚力 × (1 − 0.35·L)</div></article>
+<div class="formula">L = min(1, 時雨量 ÷ 100 mm/h)　　殘餘摩擦角 = 35° − 10°·L·(土的比例)　　凝聚力 × (1 − 0.35·L)</div></article>
 <article class="page mech" id="m-air"><p class="crumb"><a href="#home">首頁</a> › 機制 › 碎石、土、天氣</p><h1>空氣品質</h1>
 <p>柴油引擎的廢氣、爆破的炮煙會留在空氣裡，用 CO 濃度（ppm）表示。開放空間很快被風吹散；隧道裡只能沿著隧道慢慢擴散，<b>工作面、死巷最容易堆積</b>。</p>
 <table><tr><th>CO 濃度</th><th>影響</th></tr>
@@ -509,7 +509,7 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <article class="page mech" id="m-stockpile"><p class="crumb"><a href="#home">首頁</a> › 機制 › 能力與經營</p><h1>料場與囤貨</h1>
 <p>礦價每天變動，價格低的時候先把礦堆起來，價格好的時候再送去賣，就是<b>囤貨</b>。實務上最常見的是<b>錐形料堆</b>：</p>
 <ol>
-<li><b>進料</b>：輸送帶把料送到高處往下倒，料照安息角自然堆成小山。輸送帶最大傾角 16°，要堆 8 m 高的山大約要 28 m 長的斜坡（可以繞成螺旋）；也可以在坑裡堆，或從山坡、台階邊緣往下倒，輸送帶就短很多。</li>
+<li><b>進料</b>：輸送帶把料送到高處往下倒，料照殘餘摩擦角自然堆成小山。輸送帶最大傾角 16°，要堆 8 m 高的山大約要 28 m 長的斜坡（可以繞成螺旋）；也可以在坑裡堆，或從山坡、台階邊緣往下倒，輸送帶就短很多。</li>
 <li><b>出料</b>：料堆底下埋一條輸送帶。輸送帶被蓋住照樣會從頭頂吸料，等於料堆底下的取料隧道；上方的料往下塌，在料堆上形成一條 V 形凹槽。</li>
 <li><b>控制</b>：出料那條輸送帶旁邊放一個<a href="#i-belt_switch">輸送帶控制箱</a>，設「依礦價」：今天礦價達到設定值才運轉，把料送去收煤站賣；價格不到就整條停住，料留在山上。</li>
 </ol>
@@ -635,9 +635,9 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <article class="page item" id="i-loadout" data-text="裝車料斗 採礦技師（貨櫃辦公室 2 樓），$25,000 對著平地按右鍵蓋（3×3 m、高 5 m，放料臂朝自己這邊） 36 m³ 的料倉，頂上格柵接輸送帶（或卡車、怪手倒上去），放料臂裝 10 m 內停著的卡車、礦卡。" data-title="裝車料斗"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-building">建築物</a></p><h1>裝車料斗</h1><aside class="ibox"><div class="ibox-title">裝車料斗</div><img class="ibox-icon" src="img/loadout.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-building">建築物</a></td></tr><tr><th>取得</th><td>採礦技師（貨櫃辦公室 2 樓），$25,000</td></tr></table></aside><h2>操作</h2><p>對著平地按右鍵蓋（3×3 m、高 5 m，放料臂朝自己這邊）</p><h2>說明</h2><div>36 m³ 的料倉，頂上格柵接輸送帶（或卡車、怪手倒上去），放料臂裝 10 m 內停著的卡車、礦卡。</div></article>
 <article class="page item" id="i-dump_hopper" data-text="受料斗 採礦技師（貨櫃辦公室 2 樓），$12,000 對著平地按右鍵蓋（4×4 m、高 2 m）；四邊外面任何一格接輸送帶當出料口（往外、往旁邊走都可以） 裝車料斗反過來：卡車、怪手在格柵 3 m 內倒料會自動對準倒進斗裡（24 m³），再照輸送帶的運量放到輸送帶上運走。只接一條：第一條接上的鎖住，要改方向先把它敲掉。" data-title="受料斗"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-building">建築物</a></p><h1>受料斗</h1><aside class="ibox"><div class="ibox-title">受料斗</div><img class="ibox-icon" src="img/dump_hopper.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-building">建築物</a></td></tr><tr><th>取得</th><td>採礦技師（貨櫃辦公室 2 樓），$12,000</td></tr></table></aside><h2>操作</h2><p>對著平地按右鍵蓋（4×4 m、高 2 m）；四邊外面任何一格接輸送帶當出料口（往外、往旁邊走都可以）</p><h2>說明</h2><div>裝車料斗反過來：卡車、怪手在格柵 3 m 內倒料會自動對準倒進斗裡（24 m³），再照輸送帶的運量放到輸送帶上運走。只接一條：第一條接上的鎖住，要改方向先把它敲掉。</div><h2>計算公式</h2><div><p>容量 24 m³，出料 4 m³/s。</p></div></article>
 <article class="page item" id="i-rock" data-text="岩石 地形 用鎬、破碎錘、爆破、連續採礦機開挖 頁岩、砂岩、花崗岩、煤（礦石）。強度、節理、應力見 岩體強度 。煤的品位在礦層中央最好，往頂底板變差。" data-title="岩石"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>岩石</h1><aside class="ibox"><div class="ibox-title">岩石</div><img class="ibox-icon" src="img/rock.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>地形</td></tr></table></aside><h2>操作</h2><p>用鎬、破碎錘、爆破、連續採礦機開挖</p><h2>說明</h2><div>頁岩、砂岩、花崗岩、煤（礦石）。強度、節理、應力見<a href="#m-rockmass">岩體強度</a>。煤的品位在礦層中央最好，往頂底板變差。</div></article>
-<article class="page item" id="i-rubble" data-text="碎石 開挖、爆破、崩塌產生 用鎬或鏟子拿起來；卡車、怪手、推土機搬運 8 級高度，照安息角 35° 流動；車壓會壓實。礦石碎石帶著品位。" data-title="碎石"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>碎石</h1><aside class="ibox"><div class="ibox-title">碎石</div><img class="ibox-icon" src="img/rubble.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>開挖、爆破、崩塌產生</td></tr></table></aside><h2>操作</h2><p>用鎬或鏟子拿起來；卡車、怪手、推土機搬運</p><h2>說明</h2><div>8 級高度，照安息角 35° 流動；車壓會壓實。礦石碎石帶著品位。</div></article>
+<article class="page item" id="i-rubble" data-text="碎石 開挖、爆破、崩塌產生 用鎬或鏟子拿起來；卡車、怪手、推土機搬運 8 級高度，照殘餘摩擦角 35° 流動；車壓會壓實。礦石碎石帶著品位。" data-title="碎石"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>碎石</h1><aside class="ibox"><div class="ibox-title">碎石</div><img class="ibox-icon" src="img/rubble.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>開挖、爆破、崩塌產生</td></tr></table></aside><h2>操作</h2><p>用鎬或鏟子拿起來；卡車、怪手、推土機搬運</p><h2>說明</h2><div>8 級高度，照殘餘摩擦角 35° 流動；車壓會壓實。礦石碎石帶著品位。</div></article>
 <article class="page item" id="i-topsoil" data-text="表土 地形 鏟起來變成鬆土 長著草和樹根，有凝聚力（5 kPa），陡坡上也站得住。被挖、底下被掏空、或旁邊陡壁超過自立高度就變成鬆土流走；下大雨時凝聚力降低。見 碎石與土 、 降雨 。" data-title="表土"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>表土</h1><aside class="ibox"><div class="ibox-title">表土</div><img class="ibox-icon" src="img/topsoil.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>地形</td></tr></table></aside><h2>操作</h2><p>鏟起來變成鬆土</p><h2>說明</h2><div>長著草和樹根，有凝聚力（5 kPa），陡坡上也站得住。被挖、底下被掏空、或旁邊陡壁超過自立高度就變成鬆土流走；下大雨時凝聚力降低。見<a href="#m-soil">碎石與土</a>、<a href="#m-rain">降雨</a>。</div><h2>計算公式</h2><div><div class="formula">H<sub>c</sub> = 4c/γ · tan(45° + φ/2) × (1 − 0.35·L)</div><p>c = 5 kPa、γ = 20 kN/m³、φ = 35°；L：降雨程度（見<a href="#m-rain">降雨</a>）。</p></div></article>
-<article class="page item" id="i-rubble_soil" data-text="鬆土 表土被擾動產生 用鏟子拿起來 跟碎石一樣照安息角流動、有重量；下雨時安息角降低。滿格放久了長回表土。" data-title="鬆土"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>鬆土</h1><aside class="ibox"><div class="ibox-title">鬆土</div><img class="ibox-icon" src="img/rubble_soil.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>表土被擾動產生</td></tr></table></aside><h2>操作</h2><p>用鏟子拿起來</p><h2>說明</h2><div>跟碎石一樣照安息角流動、有重量；下雨時安息角降低。滿格放久了長回表土。</div></article>
+<article class="page item" id="i-rubble_soil" data-text="鬆土 表土被擾動產生 用鏟子拿起來 跟碎石一樣照殘餘摩擦角流動、有重量；下雨時殘餘摩擦角降低。滿格放久了長回表土。" data-title="鬆土"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>鬆土</h1><aside class="ibox"><div class="ibox-title">鬆土</div><img class="ibox-icon" src="img/rubble_soil.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>表土被擾動產生</td></tr></table></aside><h2>操作</h2><p>用鏟子拿起來</p><h2>說明</h2><div>跟碎石一樣照殘餘摩擦角流動、有重量；下雨時殘餘摩擦角降低。滿格放久了長回表土。</div></article>
 <article class="page item" id="i-colluvium" data-text="崩積土、混合碎石 碎石和土混在一起產生 跟碎石一樣搬運 一格最多兩種成分，外觀是兩種貼圖交錯，指著看得到比例。碎石＋土 = 崩積土；礦石混進土或廢石，品位被稀釋。" data-title="崩積土、混合碎石"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>崩積土、混合碎石</h1><aside class="ibox"><div class="ibox-title">崩積土、混合碎石</div><img class="ibox-icon" src="img/colluvium.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>碎石和土混在一起產生</td></tr></table></aside><h2>操作</h2><p>跟碎石一樣搬運</p><h2>說明</h2><div>一格最多兩種成分，外觀是兩種貼圖交錯，指著看得到比例。碎石＋土 = 崩積土；礦石混進土或廢石，品位被稀釋。</div></article>
 <article class="page item" id="i-log" data-text="樹、原木 用斧頭砍樹 左鍵扛起地上的原木（一次一根）；右鍵放下、裝車斗、對著鋸木台鋸 只有砍的才有原木；被土石流沖倒、樹根的土流失、被埋超過 1 m 的樹整棵毀掉。地上的原木底下空了也會毀掉。" data-title="樹、原木"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-material">地形與材料</a></p><h1>樹、原木</h1><aside class="ibox"><div class="ibox-title">樹、原木</div><img class="ibox-icon" src="img/log.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-material">地形與材料</a></td></tr><tr><th>取得</th><td>用斧頭砍樹</td></tr></table></aside><h2>操作</h2><p>左鍵扛起地上的原木（一次一根）；右鍵放下、裝車斗、對著鋸木台鋸</p><h2>說明</h2><div>只有砍的才有原木；被土石流沖倒、樹根的土流失、被埋超過 1 m 的樹整棵毀掉。地上的原木底下空了也會毀掉。</div></article>
 <article class="page item" id="i-vendor_vehicle" data-text="機械設備課長 貨櫃辦公室 1 樓 右鍵打開商店 賣車輛、改裝套件、操作員。" data-title="機械設備課長"><p class="crumb"><a href="#home">首頁</a> › <a href="#c-camp">營地人物</a></p><h1>機械設備課長</h1><aside class="ibox"><div class="ibox-title">機械設備課長</div><img class="ibox-icon" src="img/vendor_vehicle.png" alt="" loading="lazy"><div class="cap">圖示</div><table><tr><th>分類</th><td><a href="#c-camp">營地人物</a></td></tr><tr><th>取得</th><td>貨櫃辦公室 1 樓</td></tr></table></aside><h2>操作</h2><p>右鍵打開商店</p><h2>說明</h2><div>賣車輛、改裝套件、操作員。</div></article>
