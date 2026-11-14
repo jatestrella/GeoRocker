@@ -1,6 +1,6 @@
 -- rockmech/goldplant.lua
 -- 提金廠（碳浸法 CIL：氰化物溶出金、活性碳吸附、電解、熔鑄）：褐鐵礦裡的金是細粒金，包在氧化鐵裡，重力選選不出來，要用化學法。
--- 放在平地上，前面挖一個跟破碎站一樣的受料倉（crusher.lua 的 rockmech.hopper_lib），卡車、輸送帶倒進去。
+-- 3×3 的廠房，頂上一層格柵：輸送帶頭倒在格柵上進料（卡車、怪手倒上去也行），每秒 rockmech_plant_rate 噸。
 -- 每噸料：金回收 cfg.elements.au.cil_recovery，營運費 cil_op，藥劑費隨有害雜質增加（硫、砷會吃掉氰化物：每 1% 多 cil_reagent/100）。
 -- 提出來的金是背包物品「金」（1 個 = 1 g），存在機器裡，或切換成放進旁邊的箱子。
 -- 提完的料（尾礦：鐵和有害雜質還在、金只剩一點）從機身後面吐出來堆著，堆滿了就停機，要用怪手清走。
@@ -66,15 +66,26 @@ core.register_craftitem(GOLD, {
 })
 
 ---------------------------------------------------------------------------
--- 提金廠
+-- 提金廠：3×3 的廠房（高 BODY_H），頂上一層格柵；控制箱在最下面中央（物品放下去的那一格）
 ---------------------------------------------------------------------------
+local BODY_H = 3                    -- 廠房高 (m)，頂上再一層格柵
+local WALL, GRATE, RIM = "rockmech:gold_plant_wall", "rockmech:gold_plant_grate", "rockmech:gold_plant_rim"
+-- 擋邊：格柵外圍一圈 1 m 高（3×3 的小料斗），輸送帶倒下來的料不會從格柵邊流到地上
+local function rim_cells(pos)
+	local out, y = {}, pos.y + BODY_H + 1
+	for x = pos.x - 2, pos.x + 2 do for z = pos.z - 2, pos.z + 2 do
+		if math.abs(x - pos.x) == 2 or math.abs(z - pos.z) == 2 then out[#out + 1] = {x = x, y = y, z = z} end
+	end end
+	return out
+end
+local function top_of(pos) return pos.y + BODY_H end        -- 格柵那一層
 local function tails_of(meta) return core.deserialize(meta:get_string("tails")) or {} end
 local function tails_total(t) local n = 0; for _, v in pairs(t) do n = n + (v.lv or 0) end; return n end
--- 尾礦口：機身後面（受料倉的反方向）
+-- 尾礦口：廠房後面（背對蓋的人）緊貼牆外那一欄
 local function outlet(pos, meta)
-	return {x = pos.x - meta:get_int("dx") * 3, y = pos.y, z = pos.z - meta:get_int("dz") * 3}
+	return {x = pos.x - meta:get_int("dx") * 2, y = pos.y, z = pos.z - meta:get_int("dz") * 2}
 end
--- 旁邊的箱子（機身四周一圈、同一層或上一層，有 main 這個物品欄的方塊）
+-- 旁邊的置物箱（廠房四周一圈、地面那層或上一層，有 main 這個物品欄的方塊）
 local function chest_near(pos)
 	for x = pos.x - 2, pos.x + 2 do for z = pos.z - 2, pos.z + 2 do for y = pos.y, pos.y + 1 do
 		if math.abs(x - pos.x) == 2 or math.abs(z - pos.z) == 2 then
@@ -87,7 +98,7 @@ local function chest_near(pos)
 		end
 	end end end
 end
--- 整克的金放出去：存機器裡，或放進旁邊的箱子（箱子滿了留在機器裡）
+-- 整克的金放出去：存機器裡，或放進旁邊的置物箱（滿了留在機器裡）
 local function put_gold(pos, meta, grams)
 	if grams <= 0 then return end
 	local st = ItemStack(GOLD .. " " .. grams)
@@ -97,6 +108,22 @@ local function put_gold(pos, meta, grams)
 	end
 	if not st:is_empty() then st = meta:get_inventory():add_item("gold", st) end
 	if not st:is_empty() then meta:set_float("frac", meta:get_float("frac") + st:get_count()) end     -- 都滿了：先記著
+end
+-- 格柵上的碎石（往上 3 格）：輸送帶頭倒下來的、卡車怪手倒上去的
+local function intake(pos, want, take)
+	local top = top_of(pos)
+	local got = 0
+	for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do
+		for y = top + 3, top + 1, -1 do
+			if want - got < 1 then return got end
+			local p = {x = x, y = y, z = z}
+			if rockmech.rubble_level[core.get_node(p).name] then
+				local t, base, p2, ca = V.take_rubble(p, math.floor(want - got))
+				if t > 0 then got = got + t; take(t, base, p2, ca) end
+			end
+		end
+	end end
+	return got
 end
 
 local function step(pos, dtime)
@@ -113,12 +140,14 @@ local function step(pos, dtime)
 		end
 		if v.lv < 1e-6 then tails[base] = nil end
 	end
-	-- 2. 吃料、提金
+	-- 2. 吃料、提金（每秒 rockmech_plant_rate 噸）
 	local room = math.floor(TAIL_CAP - tails_total(tails))
 	local stopped = meta:get_int("stopped") == 1
 	local tons, au_in, gold, cost = 0, 0, 0, 0
 	if room >= 1 and not stopped then
-		H.eat(pos, dtime, cfg.plant_rate, room, function(t, base, p2, ca)
+		local budget = meta:get_float("carry") + cfg.plant_rate * dtime / H.tons_of(1)
+		local want = math.min(math.floor(budget), room)
+		local got = intake(pos, want, function(t, base, p2, ca)
 			ca = A.c(ca)
 			local tn = H.tons_of(t)
 			local au, harm = ca.au or 0, ca.harm or 0
@@ -130,6 +159,8 @@ local function step(pos, dtime)
 			if tc.au then tc.au = au * (1 - E.cil_recovery) end
 			tails[base] = A.bin_put(tails[base] or {lv = 0, q = 0}, base, t, tc)
 		end)
+		meta:set_float("carry", got > 0 and budget - math.floor(budget) or 0)
+		if got > 0 then rockmech.collapse.rubble_sound({x = pos.x, y = top_of(pos), z = pos.z}, got) end
 	end
 	meta:set_string("tails", core.serialize(tails))
 	if tons > 0 then
@@ -146,12 +177,19 @@ local function step(pos, dtime)
 	meta:set_string("infotext", S("Gold plant") .. (stopped and ("  " .. S("Stopped")) or ""))
 end
 
+local function queue_levels(pos)
+	local top, n = top_of(pos), 0
+	for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do for y = top + 1, top + 3 do
+		n = n + (rockmech.rubble_level[core.get_node({x = x, y = y, z = z}).name] or 0)
+	end end end
+	return n
+end
+
 local function formspec(pos)
 	local meta = core.get_meta(pos)
 	local spos = ("nodemeta:%d,%d,%d"):format(pos.x, pos.y, pos.z)
 	local stopped = meta:get_int("stopped") == 1
 	local t, au = meta:get_float("total_t"), meta:get_float("total_au")
-	local queue = H.hopper_levels(H.hopper_center(meta))
 	local status = stopped and S("Stopped") or meta:get_float("stall") > 0 and S("Tailings pile full: clear it behind the plant") or S("Running")
 	local chest = meta:get_string("mode") == "chest"
 	local L = function(x, y, s) return ("label[%g,%g;%s]"):format(x, y, core.formspec_escape(s)) end
@@ -159,14 +197,13 @@ local function formspec(pos)
 		"formspec_version[6]size[11.2,11]",
 		L(0.5, 0.6, S("Gold plant") .. "   " .. status),
 		("button[8,0.2;2.7,0.8;toggle;%s]"):format(core.formspec_escape(stopped and S("Start") or S("Stop"))),
-		L(0.5, 1.3, S("Feed: dump into the hopper in front   Queue @1 t", ("%.1f"):format(H.tons_of(queue)))),
+		L(0.5, 1.3, S("Feed: a conveyor belt onto the grating on top   On the grating @1 t", ("%.1f"):format(H.tons_of(queue_levels(pos))))),
 		L(0.5, 1.9, S("Recovery @1%   Running cost $@2/t   Reagents +$@3/t per 1% harmful impurities",
 			("%.0f"):format(E.cil_recovery * 100), ("%g"):format(E.cil_op), ("%g"):format(E.cil_reagent / 100))),
 		L(0.5, 2.6, S("Processed @1 t, average gold @2 g/t", ("%.0f"):format(t), ("%.2f"):format(t > 0 and au / t or 0))),
 		L(0.5, 3.2, S("Gold recovered @1 g, costs $@2", ("%.0f"):format(meta:get_float("total_gold")), ("%.0f"):format(meta:get_float("total_cost")))),
 		L(0.5, 3.8, S("Tailings come out behind the plant")),
 		"image[5.5,4.6;1,1;gui_furnace_arrow_bg.png^[transformR270]",
-		L(0.5, 5.1, S("Gold")),
 		("list[%s;gold;6.8,4.4;%d,1;]"):format(spos, SLOTS),
 		("button[0.5,4.4;4.5,0.8;mode;%s]"):format(core.formspec_escape(chest and S("Gold goes into the chest beside the plant") or S("Gold is kept in the plant"))),
 		"list[current_player;main;0.6,6;8,4;]",
@@ -191,30 +228,66 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 end)
 core.register_on_leaveplayer(function(player) form_pos[player:get_player_name()] = nil end)
 
+-- 能不能蓋：3×3 地面平、底下實心，廠房和格柵上面淨空
+local function site_ok(pos)
+	for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do
+		if V.passable(core.get_node({x = x, y = pos.y - 1, z = z}).name) then return false end
+		for y = pos.y, top_of(pos) + 3 do
+			local n = core.get_node({x = x, y = y, z = z}).name
+			if not (x == pos.x and y == pos.y and z == pos.z) and not V.passable(n) then return false end
+		end
+	end end
+	for _, p in ipairs(rim_cells(pos)) do if not V.passable(core.get_node(p).name) then return false end end
+	return true
+end
+rockmech.gold_plant_site_ok = site_ok
+
 local function build(pos, dx, dz, name)
-	if rockmech.clear_site and rockmech.facility_cells then rockmech.clear_site(rockmech.facility_cells(GOLD_PLANT, pos, dx, dz), pos) end
-	if not H.site_ok(pos, dx, dz) then return false end
+	if not site_ok(pos) then return false end
+	for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do
+		for y = pos.y, top_of(pos) - 1 do
+			if not (x == pos.x and y == pos.y and z == pos.z) then core.set_node({x = x, y = y, z = z}, {name = WALL}) end
+		end
+		core.set_node({x = x, y = top_of(pos), z = z}, {name = GRATE})
+	end end
+	for _, p in ipairs(rim_cells(pos)) do core.set_node(p, {name = RIM}) end
 	core.set_node(pos, {name = GOLD_PLANT})
-	H.dig_hopper(pos, dx, dz)
 	local meta = core.get_meta(pos)
 	meta:set_string("owner", rockmech.account_of(name))
 	meta:set_int("dx", dx)
 	meta:set_int("dz", dz)
 	meta:get_inventory():set_size("gold", SLOTS)
-	core.get_node_timer(pos):start(H.STEP)
-	H.keep_loaded(pos)
+	-- 區塊一直載入（人走遠了輸送帶、提金廠照常跑）；拆掉時放掉
+	local bp = {x = math.floor(pos.x / 16) * 16, y = math.floor(pos.y / 16) * 16, z = math.floor(pos.z / 16) * 16}
+	core.forceload_block(bp, false, -1)
+	meta:set_int("forceload", 1)
+	core.get_node_timer(pos):start(1)
 	step(pos, 0)
 	return true
 end
 
-local BODY = "[fill:16x16:#6a6a62^[fill:16x3:0,0:#c9a227^[fill:16x2:0,14:#303030^[fill:4x4:6,7:#3a3a3a"
+local BODY = "[fill:16x16:#6a6a62^[fill:16x3:0,0:#c9a227^[fill:16x2:0,14:#303030"
+local FRONT = BODY .. "^[fill:6x5:5,6:#2a2a2a^[fill:4x1:6,8:#40c040"
+core.register_node(WALL, {
+	description = S("Gold plant"),
+	tiles = {BODY}, groups = {not_in_creative_inventory = 1}, diggable = false, is_ground_content = false, drop = "",
+})
+core.register_node(GRATE, {
+	description = S("Gold plant"),
+	tiles = {"[fill:16x16:#181818^[fill:16x3:0,1:#8a8a8a^[fill:16x3:0,9:#8a8a8a^[fill:3x16:1,0:#8a8a8a^[fill:3x16:9,0:#8a8a8a", BODY},
+	groups = {not_in_creative_inventory = 1}, diggable = false, is_ground_content = false, drop = "",
+})
+core.register_node(RIM, {
+	description = S("Gold plant"),
+	drawtype = "nodebox", paramtype = "light",
+	node_box = {type = "fixed", fixed = {{-0.5, -0.5, -0.5, 0.5, 0.5, 0.5}}},
+	tiles = {"[fill:16x16:#c9a227^[fill:16x2:0,14:#303030", BODY},
+	groups = {not_in_creative_inventory = 1}, diggable = false, is_ground_content = false, drop = "",
+})
 core.register_node(GOLD_PLANT, {
 	description = S("Gold plant\nRight-click on flat ground to build"),
 	short_description = S("Gold plant"),
-	drawtype = "nodebox",
-	paramtype = "light",
-	node_box = {type = "fixed", fixed = {{-1.45, -0.5, -1.45, 1.45, 1.6, 1.45}, {-0.9, 1.6, -0.9, 0.9, 2.8, 0.9}}},
-	tiles = {BODY},
+	tiles = {BODY, BODY, FRONT, FRONT, FRONT, FRONT},
 	groups = {cracky = 2},
 	is_ground_content = false,
 	on_place = function(itemstack, placer, pointed)
@@ -226,8 +299,7 @@ core.register_node(GOLD_PLANT, {
 		else dz = look.z > 0 and -1 or 1 end
 		local name = placer:get_player_name()
 		if not build(pos, dx, dz, name) then
-			rockmech.notify(name, S("[Gold plant] Place it on flat ground: the 3×3 m plant and the @1×@2 m receiving hopper in front need level ground and solid rock below",
-				tostring(H.SIZE), tostring(H.SIZE)))
+			rockmech.notify(name, S("[Gold plant] Place it on flat ground: 3×3 m, solid below and @1 m clear above", tostring(BODY_H + 4)))
 			return itemstack
 		end
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
@@ -256,15 +328,28 @@ core.register_node(GOLD_PLANT, {
 		return stack:get_count()
 	end,
 	on_timer = function(pos, elapsed)
-		step(pos, math.min(elapsed, 5 * H.STEP))
+		step(pos, math.min(elapsed, 5))
 		return true
 	end,
 	on_destruct = function(pos)
 		local meta = core.get_meta(pos)
-		for _, c in ipairs(H.grate_cells(meta)) do
-			if core.get_node(c).name == H.GRATE then core.swap_node(c, {name = rockmech.RUBBLE}) end
+		for x = pos.x - 1, pos.x + 1 do for z = pos.z - 1, pos.z + 1 do for y = pos.y, top_of(pos) do
+			local p = {x = x, y = y, z = z}
+			local n = core.get_node(p).name
+			if n == WALL or n == GRATE then core.remove_node(p) end
+		end end end
+		for _, p in ipairs(rim_cells(pos)) do if core.get_node(p).name == RIM then core.remove_node(p) end end
+		if meta:get_int("forceload") == 1 then
+			core.forceload_free_block({x = math.floor(pos.x / 16) * 16, y = math.floor(pos.y / 16) * 16, z = math.floor(pos.z / 16) * 16}, false)
 		end
-		if meta:get_int("forceload") == 1 then H.each_block(pos, function(p) core.forceload_free_block(p, false) end) end
+	end,
+})
+core.register_abm({
+	label = "rockmech: 提金廠的計時器停了就重新啟動",
+	nodenames = {GOLD_PLANT}, interval = 5, chance = 1,
+	action = function(pos)
+		local t = core.get_node_timer(pos)
+		if not t:is_started() then t:start(1) end
 	end,
 })
 rockmech.gold_plant_build = build   -- 測試用

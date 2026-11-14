@@ -17,8 +17,7 @@ local CRUSHER, GRATE = "rockmech:crusher", "rockmech:crusher_grate"
 local PLANT = "rockmech:plant"     -- 選礦場（plant.lua），同一種受料倉
 local CRUSHER_BIG = "rockmech:crusher_big"   -- 大型破碎站：同一種受料倉，處理能力 rockmech_crusher_big_rate
 local CRUSHERS = {[CRUSHER] = true, [CRUSHER_BIG] = true}
-local GOLD_PLANT = "rockmech:gold_plant"     -- 提金廠（goldplant.lua），同一種受料倉
-local HOPPER_BODY = {[CRUSHER] = true, [CRUSHER_BIG] = true, [PLANT] = true, [GOLD_PLANT] = true}
+local HOPPER_BODY = {[CRUSHER] = true, [CRUSHER_BIG] = true, [PLANT] = true}
 -- 處理能力：一般／大型，乘上「破碎機改良」研究
 local function rate_of(pos)
 	return (core.get_node(pos).name == CRUSHER_BIG and cfg.crusher_big_rate or cfg.crusher_rate)
@@ -343,7 +342,7 @@ local function size_of(meta) local v = meta:get_int("size"); return v > 0 and v 
 local function size_for(name) return name == CRUSHER and SMALL_SIZE or SIZE end
 -- 格柵中心 c 的受料倉開口：找旁邊的機身
 local function size_at(c)
-	local b = core.find_node_near(c, 10, {CRUSHER, CRUSHER_BIG, "rockmech:plant", GOLD_PLANT})
+	local b = core.find_node_near(c, 10, {CRUSHER, CRUSHER_BIG, "rockmech:plant"})
 	return b and size_of(core.get_meta(b)) or SIZE
 end
 function rockmech.hopper_half_at(c) return size_at(c) / 2 end
@@ -1079,7 +1078,7 @@ core.register_lbm({
 -- 每 5 秒檢查一次，停了就重新啟動並記一行警告（強制載入的區塊一直是活動的，ABM 會跑到）
 core.register_abm({
 	label = "rockmech: 破碎站、選礦場的計時器停了就重新啟動",
-	nodenames = {CRUSHER, CRUSHER_BIG, "rockmech:plant", GOLD_PLANT},
+	nodenames = {CRUSHER, CRUSHER_BIG, "rockmech:plant"},
 	interval = 5, chance = 1,
 	action = function(pos, node)
 		local t = core.get_node_timer(pos)
