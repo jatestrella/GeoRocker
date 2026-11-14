@@ -69,8 +69,9 @@ core.register_craftitem(GOLD, {
 -- 提金廠：3×3 的廠房（高 BODY_H），頂上一層格柵；控制箱在最下面中央（物品放下去的那一格）
 ---------------------------------------------------------------------------
 local BODY_H = 3                    -- 廠房高 (m)，頂上再一層格柵
-local WALL, GRATE, RIM = "rockmech:gold_plant_wall", "rockmech:gold_plant_grate", "rockmech:gold_plant_rim"
--- 擋邊：格柵外圍一圈 1 m 高（3×3 的小料斗），輸送帶倒下來的料不會從格柵邊流到地上
+local WALL, GRATE, RIM, RIM_C = "rockmech:gold_plant_wall", "rockmech:gold_plant_grate", "rockmech:gold_plant_rim", "rockmech:gold_plant_rim_corner"
+-- 料斗：格柵外圍一圈 1 m 高、往內 45° 的斜面（3×3 的小料斗），輸送帶倒下來的料不會從格柵邊流到地上。
+-- 邊是斜楔（模型的高邊在 +z，照 param2 轉到朝外），四個角是內凹的角（高邊在 +x、+z）
 local function rim_cells(pos)
 	local out, y = {}, pos.y + BODY_H + 1
 	for x = pos.x - 2, pos.x + 2 do for z = pos.z - 2, pos.z + 2 do
@@ -250,7 +251,19 @@ local function build(pos, dx, dz, name)
 		end
 		core.set_node({x = x, y = top_of(pos), z = z}, {name = GRATE})
 	end end
-	for _, p in ipairs(rim_cells(pos)) do core.set_node(p, {name = RIM}) end
+	for _, p in ipairs(rim_cells(pos)) do
+		local ox, oz = p.x - pos.x, p.z - pos.z
+		if math.abs(ox) == 2 and math.abs(oz) == 2 then
+			-- 角：找轉向 f，讓模型的 +z（facedir_to_dir(f)）和 +x（facedir_to_dir(f + 1)）都朝外
+			for f = 0, 3 do
+				local a, b = core.facedir_to_dir(f), core.facedir_to_dir((f + 1) % 4)
+				if a.x + b.x == ox / 2 and a.z + b.z == oz / 2 then core.set_node(p, {name = RIM_C, param2 = f}); break end
+			end
+		else
+			local o = {x = math.abs(ox) == 2 and ox / 2 or 0, y = 0, z = math.abs(oz) == 2 and oz / 2 or 0}
+			core.set_node(p, {name = RIM, param2 = core.dir_to_facedir(o)})
+		end
+	end
 	core.set_node(pos, {name = GOLD_PLANT})
 	local meta = core.get_meta(pos)
 	meta:set_string("owner", rockmech.account_of(name))
@@ -277,13 +290,24 @@ core.register_node(GRATE, {
 	tiles = {"[fill:16x16:#181818^[fill:16x3:0,1:#8a8a8a^[fill:16x3:0,9:#8a8a8a^[fill:3x16:1,0:#8a8a8a^[fill:3x16:9,0:#8a8a8a", BODY},
 	groups = {not_in_creative_inventory = 1}, diggable = false, is_ground_content = false, drop = "",
 })
-core.register_node(RIM, {
-	description = S("Gold plant"),
-	drawtype = "nodebox", paramtype = "light",
-	node_box = {type = "fixed", fixed = {{-0.5, -0.5, -0.5, 0.5, 0.5, 0.5}}},
-	tiles = {"[fill:16x16:#c9a227^[fill:16x2:0,14:#303030", BODY},
-	groups = {not_in_creative_inventory = 1}, diggable = false, is_ground_content = false, drop = "",
-})
+-- 斜面的碰撞：四階（人站上去不會浮著）
+local side_box, corner_box = {}, {}
+for i = 0, 3 do
+	local y1, t = -0.5 + (i + 1) * 0.25, -0.5 + i * 0.25
+	side_box[#side_box + 1] = {-0.5, -0.5, t, 0.5, y1, 0.5}
+	corner_box[#corner_box + 1] = {-0.5, -0.5, t, 0.5, y1, 0.5}
+	corner_box[#corner_box + 1] = {t, -0.5, -0.5, 0.5, y1, 0.5}
+end
+local STEEL = "[fill:16x16:#8a8478^[fill:16x1:0,0:#6a645a^[fill:16x1:0,8:#6a645a"
+for _, d in ipairs({{RIM, "rockmech_hopper_side.obj", side_box}, {RIM_C, "rockmech_hopper_corner.obj", corner_box}}) do
+	core.register_node(d[1], {
+		description = S("Gold plant"),
+		drawtype = "mesh", mesh = d[2], paramtype = "light", paramtype2 = "facedir",
+		tiles = {{name = STEEL, backface_culling = false}},
+		collision_box = {type = "fixed", fixed = d[3]}, selection_box = {type = "fixed", fixed = d[3]},
+		groups = {not_in_creative_inventory = 1}, diggable = false, is_ground_content = false, drop = "",
+	})
+end
 core.register_node(GOLD_PLANT, {
 	description = S("Gold plant\nRight-click on flat ground to build"),
 	short_description = S("Gold plant"),
@@ -338,7 +362,10 @@ core.register_node(GOLD_PLANT, {
 			local n = core.get_node(p).name
 			if n == WALL or n == GRATE then core.remove_node(p) end
 		end end end
-		for _, p in ipairs(rim_cells(pos)) do if core.get_node(p).name == RIM then core.remove_node(p) end end
+		for _, p in ipairs(rim_cells(pos)) do
+			local n = core.get_node(p).name
+			if n == RIM or n == RIM_C then core.remove_node(p) end
+		end
 		if meta:get_int("forceload") == 1 then
 			core.forceload_free_block({x = math.floor(pos.x / 16) * 16, y = math.floor(pos.y / 16) * 16, z = math.floor(pos.z / 16) * 16}, false)
 		end
