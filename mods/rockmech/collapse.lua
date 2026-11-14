@@ -453,7 +453,9 @@ granular_settle = function(pos, chain, q_ext, side)
         if rockmech.granular_moved then rockmech.granular_moved(T) end
     else
         local q = SQUEEZE_CAP > 0 and overload(T) + (q_ext or 0) or 0
-        local src, gam = granular.surface(T.y, k), rockmech.cfg.failure.gamma_other
+        -- 單位重用材料表（materials.lua：碎石 18、鬆土 17、夯實碎石 20 kN/m³），跟應力解同一組
+        local mp = rockmech.materials and rockmech.materials.defaults(tn)
+        local src, gam = granular.surface(T.y, k), mp and mp.gamma or rockmech.cfg.failure.gamma_other
         local nbs, lands = {}, {}
         for i, d in ipairs(granular.DIRS) do
             local e, land = neighbor_surface(T.x + d[1], T.z + d[2], T.y, base, q > 0)
