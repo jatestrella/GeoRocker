@@ -1334,7 +1334,7 @@ core.register_globalstep(function(dtime)
 						row = {lith = lith.name, grade = lith.ore and node.param2 or nil, node = rockmech.node_of_lith[lith.name]}
 					elseif rockmech.is_rubble(node.name) then
 						local base = rockmech.rubble_base[node.name]
-						row = {lith = "rubble", grade = rockmech.ore_of_rubble[base] and node.param2 or nil, node = node.name}
+						row = {lith = "rubble", grade = rockmech.ore_of_rubble[base] and math.floor(rockmech.assay.get(cell, node).g + 0.5) or nil, node = node.name}      -- 礦的含量（param2 是體積比例）
 					end
 					if not row then
 						finish(name, d, node.name == "air" and S("hit a void") or node.name == "ignore" and S("map not loaded yet") or S("hit a facility"))

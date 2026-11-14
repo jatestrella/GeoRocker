@@ -110,3 +110,30 @@ describe("assay 三種成分的外觀", function()
 	end)
 end)
 rockmech, core = saved_rm, saved_core
+
+-- 兩條並行的規則：成分照體積（w，外觀）、礦的含量是元素（g）
+rockmech = {mix = mix, mix_ctx = ctx, mix_of = ctx.mix_of, rubble_base = {}, lith_of_node = {},
+	ore_of_rubble = {rubble_coal = ORE, rubble_coal_granite = ORE, rubble_coal_soil = ORE}}
+core = {register_chatcommand = function() end}
+describe("assay 礦的含量與體積分開", function()
+	it("煤碎石混廢石：含量照體積稀釋，外觀是體積比例", function()
+		local b, c = A.merge("rubble_coal", 4, {g = 191, w = 255}, R, 4, 0)
+		assert.are.equal("rubble_coal", b)
+		assert.are.equal(128, c.w)
+		assert.is_true(math.abs(c.g - 95.5) < 1e-6)
+		assert.are.equal(128, A.p2(c))
+	end)
+	it("舊存檔（只有品位數字）：當 100 % 煤碎石", function()
+		local b, c = A.merge("rubble_coal", 4, 191, "rubble_coal", 4, {g = 95, w = 128})
+		assert.are.equal("rubble_coal", b)
+		assert.is_true(math.abs(c.g - 143) < 1e-6)
+		assert.is_true(math.abs(c.w - 191.5) <= 0.5)
+	end)
+	it("一般碎石混土：沒有 w，g 還是體積比例", function()
+		local b, c = A.merge(R, 4, 0, S, 4, 0)
+		assert.are.equal("colluvium", b)
+		assert.is_nil(c.w)
+		assert.are.equal(128, c.g)
+	end)
+end)
+rockmech, core = saved_rm, saved_core

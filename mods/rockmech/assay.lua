@@ -2,8 +2,14 @@
 -- 碎石的成分（化驗值）：存在方塊的 metadata，跟著碎石走（掉落、搬運、混合、出售）。
 -- 原地的岩石不存：含量看 param2（礦石岩性的品位）或地質公式，挖下來變成碎石的那一刻才寫進 metadata。
 --
--- 成分 c 是一個表：c.g = 第一種成分的比例，刻度跟 param2 一樣（0..255；礦石碎石就是品位）。
--- 之後的多元素（副產品）會在 c 裡加其他鍵；param2 仍然照 c.g 寫，給外觀（品位段的顏色）和沒有 metadata 時備用。
+-- 兩條並行的規則（使用者 2026-11-15）：
+--   成分（體積）：這格由哪幾種碎石組成、各佔多少體積 → 方塊種類、外觀（param2）、名稱
+--   元素（含量）：銅、煤、碳酸鈣（礦的含量）、鐵、金、有害雜質 → 價值、選礦
+-- 成分 c 是一個表：
+--   c.g：礦石碎石是礦的含量（刻度跟以前的 param2 一樣 0..255，× 礦的單位：銅 metal.scale、煤和大理岩 1）；
+--        其他混合碎石（崩積土……）是第一種成分的體積比例
+--   c.w：礦石碎石裡礦石那種碎石的體積比例（0..255）= param2（外觀）。舊存檔沒有 w：當 100 %（礦石碎石），含量就是原本的品位
+--   其他鍵：fe、au、harm（化學成分）、v:<成分>（三種以上成分的體積表）
 --
 -- 岩石組成（體積表）：c["v:<成分>"] = 體積比例（總和 1；成分是 mix.lua 的成分：碎石 base 或 "ore:<礦種>"）。
 --   只有混了三種以上成分才記（兩種的話 方塊種類＋param2 就是完整的比例，跟原本一樣）；
@@ -27,6 +33,15 @@ function A.tracked(name)
 end
 
 function A.new(g) return {g = g or 0} end
+-- 礦石碎石（礦石＋廢石那種混合碎石）的礦種；單位：param2 刻度 255 等於多少含量
+local function ore_of(base) return base and rockmech.ore_of_rubble and rockmech.ore_of_rubble[base] or nil end
+local function unit(ore) return ore and ore.metal and ore.metal.scale or 1 end
+A.ore_of = ore_of
+-- 礦石碎石沒有體積比例 w（舊存檔、只傳品位數字的呼叫端）：當 100 % 礦石。直接改 c，回傳 c
+function A.norm(c, base)
+	if ore_of(base) and type(c) == "table" and c.w == nil then c.w = 255 end
+	return c
+end
 local VP = "v:"                    -- 體積表的鍵前綴
 A.VP = VP
 local function is_v(k) return type(k) == "string" and k:sub(1, 2) == VP end
@@ -68,9 +83,10 @@ function A.copy(c)
 	if t.g == nil then t.g = 0 end
 	return t
 end
--- 成分 → param2（外觀、備用）
+-- 成分 → param2（外觀）：礦石碎石是體積比例 w，其他是 g
 function A.p2(c)
-	return math.max(0, math.min(255, math.floor((c and c.g or 0) + 0.5)))
+	local x = c and (c.w or c.g) or 0
+	return math.max(0, math.min(255, math.floor(x + 0.5)))
 end
 
 -- 文字格式："g=123;au=0.6"（鍵照字母排，同樣的成分一定是同樣的字串）
@@ -113,16 +129,18 @@ function A.carries(name) return A.tracked(name) or ore_rock(name) or chem_lith(n
 function A.get(pos, node)
 	node = node or core.get_node(pos)
 	if A.tracked(node.name) then
+		local base = rockmech.rubble_base[node.name]
 		local c = A.decode(core.get_meta(pos):get_string(KEY))
-		if c then return c end
-		return A.new(node.param2)                       -- 舊世界、還沒改到的路徑：照 param2
+		if c then return A.norm(c, base) end
+		return A.norm(A.new(node.param2), base)         -- 舊世界、還沒改到的路徑：照 param2
 	end
 	if rockmech.rubble_level[node.name] then             -- 一般碎石：混了三種以上成分才有 metadata
 		return A.decode(core.get_meta(pos):get_string(KEY)) or A.new(0)
 	end
 	if ore_rock(node.name) then
-		local c = A.decode(core.get_meta(pos):get_string(KEY))
-		if c then return c end
+		local c = A.decode(core.get_meta(pos):get_string(KEY)) or A.new(rockmech.rubble_p2(node))
+		if c.w == nil then c.w = 255 end                -- 礦石岩塊碎了就是 100 % 的礦石碎石
+		return c
 	end
 	local cl = chem_lith(node.name)
 	if cl then                                           -- 褐鐵礦：搬動過的有 metadata，原地的照地質公式
@@ -139,6 +157,7 @@ end
 -- 原地的礦石不寫（成分看 param2）；被搬動過的礦石岩塊才寫
 function A.set(pos, name, c)
 	local meta = core.get_meta(pos)
+	if type(c) == "table" then A.norm(c, rockmech.rubble_base[name]) end
 	if A.carries(name) or (rockmech.rubble_level[name] and A.rich(c)) then
 		meta:set_string(KEY, A.encode(c))
 		meta:mark_as_private(KEY)
@@ -150,6 +169,8 @@ end
 -- 放 k 級 base 碎石、成分 c（swap = true 用 swap_node，不觸發 on_construct／on_destruct）。
 -- k ≤ 0 移除那格。回傳放下的方塊名稱或 nil
 function A.place(pos, base, k, c, swap)
+	c = A.copy(A.c(c))
+	if ore_of(base) then A.norm(c, base) else c.w = nil end
 	local p2 = A.p2(c)
 	local name = rockmech.rubble_with_level(base, k, p2)
 	if not name then
@@ -170,16 +191,21 @@ end
 -- pos（可省）：原來的位置，原地的褐鐵礦照地質公式算化學成分
 function A.from_metatable(mt, node, pos)
 	local c = A.decode(mt and mt.fields and mt.fields[KEY])
-	if c then return c end
+	if c then
+		if ore_rock(node.name) and c.w == nil then c.w = 255 end
+		return A.norm(c, rockmech.rubble_base[node.name])
+	end
 	local cl = pos and chem_lith(node.name)
 	if cl then
 		c = A.chem_at(cl, pos) or {}
 		c.g = rockmech.rubble_p2(node)
 		return c
 	end
-	if A.tracked(node.name) then return A.new(node.param2) end
+	if A.tracked(node.name) then return A.norm(A.new(node.param2), rockmech.rubble_base[node.name]) end
 	if rockmech.rubble_level[node.name] then return A.new(0) end
-	return A.new(rockmech.rubble_p2(node))
+	local c = A.new(rockmech.rubble_p2(node))
+	if ore_rock(node.name) then c.w = 255 end
+	return c
 end
 
 -- 副產品（g 以外的鍵；含量是「每單位碎石體積」的，所以混合照體積加權）：x1 是 k1 份、x2 是 k2 份 → 混合後
@@ -222,7 +248,8 @@ function A.vol(base, c, k, into)
 			if is_v(key) then local n = key:sub(3); into[n] = (into[n] or 0) + k * v end
 		end
 	elseif base then
-		rockmech.mix.parts(rockmech.mix_ctx, base, k, A.g(c), into)
+		local f = ore_of(base) and (type(c) == "table" and c.w or 255) or A.g(c)      -- 礦石碎石：體積比例 w
+		rockmech.mix.parts(rockmech.mix_ctx, base, k, f, into)
 	end
 	return into
 end
@@ -250,12 +277,40 @@ end
 -- 兩份碎石合併（b1 的 k1 級成分 c1，加 b2 的 k2 級成分 c2）→ 碎石種類, 成分。
 -- 各成分的體積相加；方塊照最大的兩種（mix.lua 的規則，param2 四捨五入；兩種成分時跟原本完全一樣），
 -- 三種以上時完整的體積表記在成分裡。副產品照體積加權
+-- 礦的含量：同一族（同一種礦，或同一種金屬的原礦、精礦、尾礦）換成絕對含量照體積加權，再換回結果那種礦的刻度
 function A.merge(b1, k1, c1, b2, k2, c2)
 	local v = A.vol(b2, c2, k2, A.vol(b1, c1, k1, {}))
 	local b, p, cnt = compose(v)
-	local c = A.with(p, A.extras_mix(c1, k1, c2, k2))
+	b = b or b1
+	local x = A.extras_mix(c1, k1, c2, k2)
+	local ore = ore_of(b)
+	local c
+	if ore then
+		local abs = 0
+		for _, it in ipairs({{b1, k1, c1}, {b2, k2, c2}}) do
+			local o = ore_of(it[1])
+			if o and (o == ore or (o.metal and ore.metal and o.metal.family == ore.metal.family)) then
+				abs = abs + it[2] * A.g(it[3]) / 255 * unit(o)
+			end
+		end
+		abs = abs / math.max(1e-9, k1 + k2)
+		-- 含量超過這種礦的刻度（例如精礦倒進原礦）：換成同一族裝得下的那種（刻度最小的）
+		if ore.metal and abs > unit(ore) + 1e-12 then
+			local fit
+			for _, o in pairs(rockmech.cfg and rockmech.cfg.ores or {}) do
+				if o.metal and o.metal.family == ore.metal.family and o.rubble and unit(o) >= abs
+						and (not fit or unit(o) < unit(fit)) then fit = o end
+			end
+			if fit then ore, b = fit, fit.rubble end
+		end
+		c = A.with(math.max(0, math.min(255, abs / unit(ore) * 255)), x)
+		c.w = p
+	else
+		c = A.with(p, x)
+		c.w = nil
+	end
 	if cnt > 2 then put_v(c, v, k1 + k2) end
-	return b or b1, c
+	return b, c
 end
 -- 體積表只剩兩種以下成分：拿掉（方塊種類＋param2 就夠了）
 function A.slim(c)
@@ -268,6 +323,7 @@ end
 -- 同一種碎石的累加器（車斗）：acc 裡已經有 lv0 級（主成分總和 q0），再放 lv 級成分 c。
 -- 有一方帶體積表時，另一方照 base＋param2 展開，加權才對
 function A.acc_put(acc, base, lv0, q0, c, lv)
+	if ore_of(base) then c = A.norm(A.copy(A.c(c)), base) end     -- 礦石碎石的體積比例 w 一起累加（沒有的當 100 %）
 	local cv, av = A.has_v(c), A.has_v(acc)
 	if cv and not av and lv0 > 0 then
 		acc = acc or {}
@@ -299,7 +355,10 @@ function A.bin_comp(v, base)
 	local c = A.new(lv > 0 and math.floor((v.q or 0) / lv + 0.5) or 0)
 	if v.a and lv > 0 then for k, x in pairs(v.a) do c[k] = x / lv end end
 	A.slim(c)
-	if A.has_v(c) then local _, p = compose(A.vol(nil, c, 1, {})); c.g = p end
+	if A.has_v(c) then
+		local _, p = compose(A.vol(nil, c, 1, {}))
+		if ore_of(base) then c.w = p else c.g = p end
+	end
 	return c
 end
 -- 拿走 k 級（平均成分不變）

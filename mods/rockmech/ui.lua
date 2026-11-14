@@ -250,7 +250,7 @@ local function rubble_lines(node, pname, give, pos)
 	if A and A.has_v(c) then                       -- 三種以上成分：列出全部的比例（要有品位判讀）
 		if see(pname, "grade", give) then lines[#lines + 1] = A.parts_text(c) end
 	elseif m and see(pname, m.ore and "grade" or "rockmass", give) then
-		lines[#lines + 1] = rockmech.mix_text(base, node.param2)
+		lines[#lines + 1] = rockmech.mix_text(base, m.ore and A.g(c) or node.param2)      -- 礦石碎石：含量在成分表（param2 是體積）
 		if m.ore then ore_line = #lines end
 	end
 	local ct = c and A.chem_text(c)

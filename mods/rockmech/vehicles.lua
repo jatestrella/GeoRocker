@@ -789,7 +789,7 @@ function V.load_assay(self, base)
 	A.slim(c)
 	if A.has_v(c) then      -- 三種以上成分：外觀的 param2 照平均後的體積表重算
 		local _, p = A.compose(A.vol(nil, c, 1, {}))
-		c.g = p
+		if A.ore_of(base) then c.w = p else c.g = p end      -- 礦石碎石的 g 是含量，外觀是體積比例 w
 	end
 	return c
 end

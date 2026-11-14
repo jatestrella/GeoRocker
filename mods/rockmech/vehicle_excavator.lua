@@ -711,7 +711,7 @@ local function excavator(kind, P)
 		for _, c in ipairs(core.find_nodes_in_area(lo, hi, rockmech.rubble_nodes)) do
 			local node = core.get_node(c)
 			local ore = rockmech.ore_of_rubble[rockmech.rubble_base[node.name]]
-			local g = ore and node.param2 / 255 or 0
+			local g = ore and rockmech.assay.get(c, node).g / 255 or 0      -- 礦的含量（param2 是體積比例）
 			local ok = not seek or (not rockmech.compacted[node.name] and not (seek.skip and seek.skip[core.hash_node_position(c)])
 				and (c.x - seek.c.x) ^ 2 + (c.z - seek.c.z) ^ 2 <= SEEK_R * SEEK_R)
 			if ok and g >= cutoff - 1e-6 and V.passable(core.get_node({x = c.x, y = c.y + 1, z = c.z}).name) then

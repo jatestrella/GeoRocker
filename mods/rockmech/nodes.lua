@@ -429,7 +429,8 @@ do
 	for key, ore in pairs(cfg.ores) do
 		if ore.metal then fam["ore:" .. key] = {family = ore.metal.family, scale = ore.metal.scale, waste = ore.waste_rubble} end
 	end
-	if next(fam) then mix_ctx.merge_family = function(parts) return rockmech.copper.merge_family(parts, fam) end end
+	-- 含銅量現在是元素（assay.lua 的 A.merge 換成絕對含量合併），體積照實際的碎石體積，不再按含銅量換算體積
+	-- if next(fam) then mix_ctx.merge_family = function(parts) return rockmech.copper.merge_family(parts, fam) end end
 end
 
 -- 兩份碎石能不能放在同一格：都可以（混合碎石，最多記兩種成分）
