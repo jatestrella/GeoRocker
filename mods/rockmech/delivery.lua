@@ -14,7 +14,7 @@ local cfg = rockmech.cfg
 local H = rockmech.hopper_lib
 local S = rockmech.S
 
-local YARD = {x1 = 10, x2 = 36, z1 = -36, z2 = -54}   -- 交車區（相對營地中心 x0；z 是絕對座標，營地中心在 z = 0）：研究帳篷、講堂（z −31..−24）南邊，看板（z −48，x0−4..x0+3）東邊
+local YARD = {x1 = 10, x2 = 36, z1 = -36, z2 = -46}   -- 交車區（相對營地中心 x0；z 是絕對座標，營地中心在 z = 0）：研究帳篷、講堂（z −31..−24）南邊，看板（z −48，x0−4..x0+3）東邊
 
 ---------------------------------------------------------------------------
 -- 障礙物偵測
@@ -95,10 +95,10 @@ local function find_slot(x0, kind)
 	local off = ((def.half * 2) % 2 == 1) and 0 or 0.5
 	local height = def.half + (def.top or def.half)
 	local why = S("The delivery yard has no free space")
-	-- 兩排：北排車頭朝北、車頭貼著交車區北緣；南排車頭朝南、貼著南緣。每台車前面都是空地，直接開得出去；
+	-- 一排：車頭朝北、貼著交車區北緣（深 11 m，放得下最長的礦用卡車 10 m）。車前面是空地，直接開得出去；
 	-- 左右跟別的車至少隔 GAP m（從西往東找）
 	local GAP = 1
-	local rows = {{yaw = 0, z0 = YARD.z1, step = -1}, {yaw = math.pi, z0 = YARD.z2, step = 1}}
+	local rows = {{yaw = 0, z0 = YARD.z1, step = -1}}
 	for _, r in ipairs(rows) do
 		for ix = x0 + YARD.x1 + 1, x0 + YARD.x2 - 1 do
 			-- 這一欄：從交車區邊緣往內，第一個整台車都在交車區裡的位置

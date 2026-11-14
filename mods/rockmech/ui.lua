@@ -229,16 +229,34 @@ rockmech.hud_lines = fmt_report_lines   -- 測試用
 local function rubble_lines(node, pname, give, pos)
 	local base = rockmech.rubble_base[node.name] or node.name
 	local lines = {}
-	if see(pname, "rockmass", give) then lines[#lines + 1] = rockmech.desc_short(base) end
 	-- 混合碎石：礦石的品位要有品位判讀；崩積土這類（土、碎石的比例）看岩體分類就看得出來
 	local m = rockmech.mix_of[base]
 	local A = rockmech.assay
 	local c = pos and A and A.get(pos, node)
+	-- 三種以上成分（有體積表）：名稱照體積最大的成分（跟貼圖一樣）。兩種成分的礦石碎石 param2 是品位、不是體積比例，名稱照原本的
+	local main = base
+	if A and A.has_v(c) then
+		local bv = -1
+		for k, v in pairs(c) do
+			local n = type(k) == "string" and k:match("^v:(.+)$")
+			if n and v > bv then main, bv = n, v end
+		end
+		if main:match("^ore:") then main = base end      -- 礦石最多：就是原本的礦石碎石
+	end
+	if see(pname, "rockmass", give) then
+		lines[#lines + 1] = main ~= base and rockmech.comp_label and rockmech.comp_label[main] or rockmech.desc_short(main)
+	end
+	local ore_line
 	if A and A.has_v(c) then                       -- 三種以上成分：列出全部的比例（要有品位判讀）
 		if see(pname, "grade", give) then lines[#lines + 1] = A.parts_text(c) end
-	elseif m and see(pname, m.ore and "grade" or "rockmass", give) then lines[#lines + 1] = rockmech.mix_text(base, node.param2) end
+	elseif m and see(pname, m.ore and "grade" or "rockmass", give) then
+		lines[#lines + 1] = rockmech.mix_text(base, node.param2)
+		if m.ore then ore_line = #lines end
+	end
 	local ct = c and A.chem_text(c)
-	if ct and see(pname, "grade", give) then lines[#lines + 1] = ct end      -- 化學成分（鐵、金、有害雜質）
+	if ct and see(pname, "grade", give) then      -- 化學成分（鐵、金、有害雜質）：跟礦的含量寫在同一行
+		if ore_line then lines[ore_line] = lines[ore_line] .. "　" .. ct else lines[#lines + 1] = ct end
+	end
 	return lines
 end
 

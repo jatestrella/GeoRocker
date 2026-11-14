@@ -789,7 +789,7 @@ Mixed rubble@nGranite rubble and ordinary rubble mixed together=
 Mixed rubble=
 @1, mixed with @2=
 @1 @2%, @3 @4%=
-@1 grade @2%=
+Copper=
 $@1/t of copper=
 @1 (compacted)=
 

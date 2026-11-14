@@ -789,7 +789,7 @@ Mixed rubble@nGranite rubble and ordinary rubble mixed together=混合碎石@n�
 Mixed rubble=混合碎石
 @1, mixed with @2=@1，混@2
 @1 @2%, @3 @4%=@1 @2%、@3 @4%
-@1 grade @2%=@1品位 @2%
+Copper=銅
 $@1/t of copper=每噸銅 $@1
 @1 (compacted)=@1（夯實）
 
@@ -1926,6 +1926,7 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+@1 grade @2%=@1品位 @2%
 Feed: dump into the hopper in front   Queue @1 t=進料：倒進前面的受料倉　排隊 @1 t
 [Gold plant] Place it on flat ground: the 3×3 m plant and the @1×@2 m receiving hopper in front need level ground and solid rock below=[提金廠] 要蓋在平地上：3×3 m 的機器和前面 @1×@2 m 的受料倉要平、底下是實心岩石
 Runs when the price is at least $@1/t=礦價 ≥ $@1/t 才運轉

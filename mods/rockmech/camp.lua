@@ -15,11 +15,11 @@ local storage = rockmech.collapse.storage
 
 -- 地坪範圍（x 相對營地中心 x0，z 是絕對座標）；line：邊上一圈黃色外框
 --   建築區：講堂、研究帳篷、貨櫃辦公室、長椅的外框再外推 2 m
---   交車區：delivery.lua 的 YARD（兩排車位，停滿了才不交車）
+--   交車區：delivery.lua 的 YARD（一排車位，停滿了才不交車）
 --   收料區：營地南邊外側、礦帶之間的平地走廊上（卡車從礦區往南開就到）。只鋪收料車加地磅那一條（7 m 寬），
 --     兩側不鋪：自己放裝車料斗（放料臂 10 m）、接輸送帶裝進收料車
 local PADS = {{x1 = 11, x2 = 32, z1 = -33, z2 = -1},
-	{x1 = 10, x2 = 36, z1 = -54, z2 = -36, line = true},
+	{x1 = 10, x2 = 36, z1 = -46, z2 = -36, line = true},
 	{x1 = -17, x2 = -11, z1 = -72, z2 = -59, line = true}}
 -- 舊版鋪過的範圍（第一版整個南半部；之後的收料區在 z −50..−34、交車區到 z −34）：在新範圍外的換回表土
 local OLD_PADS = {{x1 = -21, x2 = 33, z1 = -56, z2 = -1}, {x1 = 10, x2 = 36, z1 = -56, z2 = -34}}
@@ -168,10 +168,10 @@ local function pave(x0)
 		end
 	end
 	storage:set_string("pad:" .. x0, "1")
-	storage:set_string("pad7:" .. x0, "1")
+	storage:set_string("pad8:" .. x0, "1")
 	core.log("action", ("[rockmech] 營地 x = %d 鋪好混凝土地坪、收料區"):format(x0))
 end
-local function done(x0) return storage:get_string("pad7:" .. x0) == "1" end      -- pad7：黃線地坪整平過
+local function done(x0) return storage:get_string("pad8:" .. x0) == "1" end      -- pad8：黃線地坪整平過、交車區縮成一排
 local function pave_when_loaded(x0)
 	local a, b = {x = math.huge, y = sy() - 8, z = math.huge}, {x = -math.huge, y = sy() + 10, z = -math.huge}
 	for _, list in ipairs({PADS, OLD_PADS}) do

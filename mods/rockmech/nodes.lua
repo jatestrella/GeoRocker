@@ -463,8 +463,10 @@ function rockmech.grade_num(ore, grade)
 	local digits = m.scale >= 0.2 and 1 or m.scale < 0.02 and 3 or 2
 	return ("%." .. digits .. "f"):format(grade * m.scale * 100)
 end
+-- 跟鐵、金一樣寫含量：金屬礦寫金屬（原礦、精礦、尾礦都是「銅 x%」），其他的礦寫礦物（煤、大理岩）
 function rockmech.ore_text(ore, grade)
-	return S("@1 grade @2%", S(ore.label), rockmech.grade_num(ore, grade))
+	local label = ore.metal and ore.metal.family == "copper" and S("Copper") or S(ore.label)
+	return ("%s %s%%"):format(label, rockmech.grade_num(ore, grade))
 end
 -- 顯示用的價格：一般的礦是每噸（品位 100%），金屬礦是每噸銅
 function rockmech.price_str(ore, p)

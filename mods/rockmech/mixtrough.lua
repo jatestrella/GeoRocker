@@ -232,10 +232,18 @@ for state, color in pairs({[""] = false, an = STATES.an, wet = STATES.wet, mix =
 		end,
 		on_metadata_inventory_put = slot_changed,
 		on_metadata_inventory_take = slot_changed,
-		-- 裡面還有東西不能拆
-		can_dig = function(pos)
-			local an, fo, out, am = contents(pos)
-			return an + fo + out + am <= 0
+		-- 隨時可以拆：裡面的東西（硝酸銨、柴油、ANFO）放進拆的人的背包，放不下的掉在地上
+		after_dig_node = function(pos, oldnode, oldmeta, digger)
+			local inv = digger and digger:is_player() and digger:get_inventory()
+			for _, list in pairs(oldmeta and oldmeta.inventory or {}) do
+				for _, st in ipairs(list) do
+					st = ItemStack(st)
+					if not st:is_empty() then
+						if inv then st = inv:add_item("main", st) end
+						if not st:is_empty() then core.add_item(pos, st) end
+					end
+				end
+			end
 		end,
 	})
 end
