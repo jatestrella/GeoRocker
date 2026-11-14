@@ -639,6 +639,7 @@ function rockmech.dig_topsoil(p)
 	local k = TOPSOIL_K[core.get_node(p).name]
 	if not k then return false end
 	core.swap_node(p, {name = rockmech.rubble_with_level(SOIL, k)})
+	if cfg.fem.soil then rockmech.collapse.mark_excavated(p) end      -- 原地的土鬆掉（被鏟、被挖、應力解判破壞）：算開挖
 	return true
 end
 
@@ -700,6 +701,9 @@ local function disturb(pos)
 		loosen({x = pos.x, y = pos.y + 1, z = pos.z})
 		check_log({x = pos.x, y = pos.y + 1, z = pos.z})
 	end
+	-- 應力解開著（rockmech_fem_drive）：旁邊的表土站不站得住由應力解的土元素判定（femstress.lua、materials.lua），
+	-- 不再用自立高度 H_c 的規則（關掉應力解時才用）
+	if cfg.fem.drive and cfg.fem.soil then return end
 	local g
 	for _, d in ipairs(NB4) do
 		local p = {x = pos.x + d[1], y = pos.y, z = pos.z + d[2]}
@@ -729,6 +733,7 @@ core.register_node(TOPSOIL, {
 	on_dig = function(pos, node, digger)
 		core.swap_node(pos, {name = SOIL})
 		local ok = core.node_dig(pos, {name = SOIL}, digger)
+		if ok and cfg.fem.soil then rockmech.collapse.mark_excavated(pos) end      -- 挖土也是開挖：貼著這裡的土面要判定
 		disturb(pos)
 		return ok
 	end,
@@ -748,6 +753,7 @@ for k = 1, NLEV - 1 do
 			local loose = rockmech.rubble_with_level(SOIL, k)
 			core.swap_node(pos, {name = loose})
 			local ok = core.node_dig(pos, {name = loose}, digger)
+			if ok and cfg.fem.soil then rockmech.collapse.mark_excavated(pos) end
 			disturb(pos)
 			return ok
 		end,
@@ -822,6 +828,18 @@ core.register_abm({
 			top = y - 0.5 + tk / NLEV
 		end
 		local hc = hc_now()
+		-- 應力解開著：下雨降低的 c 在應力解裡（femstress.lua），這裡只負責對露出 1 m 以上陡壁的表土排一次求解
+		if cfg.fem.drive and cfg.fem.soil then
+			for _, d in ipairs(NB4) do
+				local q = {x = pos.x + d[1], y = pos.y, z = pos.z + d[2]}
+				local def = core.registered_nodes[core.get_node(q).name]
+				if def and def.walkable == false and top - ground_below(q.x, q.y, q.z) > 1 then
+					rockmech.fem_queue(pos, 1, false, true)
+					return
+				end
+			end
+			return
+		end
 		for _, d in ipairs(NB4) do
 			local q = {x = pos.x + d[1], y = pos.y, z = pos.z + d[2]}
 			local def = core.registered_nodes[core.get_node(q).name]

@@ -12,8 +12,7 @@
 -- 預設值照材料種類（方塊名稱）給；個別方塊要不一樣時，寫在方塊 metadata 的 rm_mat（"c=10;phi=38"），
 -- 只有跟預設不同的方塊才寫，其他方塊不佔儲存空間（跟 rm_assay 成分、param2 的 GSI 同一個做法）。
 --
--- 目前狀態（2026-11-14，統一架構第 2 步）：材料表只整理、顯示現有的值；
--- 應力解仍只把岩石當元素、表土只算重量，下一步才讓土類進應力解（見 docs/HANDOFF.md）。
+-- 用到的地方：femstress.lua（整格表土是應力解的土元素：γ、c、φ；鬆散材料的重量 γ）。
 
 local cfg = rockmech.cfg
 local S = rockmech.S
@@ -24,16 +23,17 @@ local FIELDS = {gamma = true, e_rel = true, nu = true, ucs = true, tensile = tru
 
 local function nscale() return cfg.model_scale or 1 end
 
--- 預設參數（每次呼叫都新建一份，呼叫端可以改）
-local function soil(label, c, phi)
-	return {kind = "soil", label = label, gamma = cfg.failure.gamma_other, e_rel = cfg.fem.rubble_e, nu = cfg.fem.nu,
-		c = c, phi = phi, tensile = 0}
+-- 預設參數（每次呼叫都新建一份，呼叫端可以改）。強度跟岩石一樣除以相似比 N（rockmech_model_scale）；
+-- 勁度都是岩石的 rockmech_fem_rubble_e 倍（E 在教學裡不重要，先統一一個比例）
+local function soil(label, gamma, c, phi)
+	return {kind = "soil", label = label, gamma = gamma, e_rel = cfg.fem.rubble_e, nu = cfg.fem.nu,
+		c = c / nscale(), phi = phi, tensile = 0}
 end
 local DEFAULTS = {
-	topsoil = function() return soil(S("Topsoil"), cfg.topsoil_c, cfg.slope.phi_r) end,
-	loose_soil = function() return soil(S("Loose soil"), 0, cfg.slope.phi_r) end,
-	rubble = function() return soil(S("Rubble"), 0, cfg.slope.phi_r) end,
-	compacted = function() return soil(S("Compacted rubble"), 0, cfg.compact_phi) end,
+	topsoil = function() return soil(S("Topsoil"), 18, cfg.topsoil_c, cfg.slope.phi_r) end,
+	loose_soil = function() return soil(S("Loose soil"), 17, 0, cfg.slope.phi_r) end,
+	rubble = function() return soil(S("Rubble"), 18, 0, cfg.slope.phi_r) end,
+	compacted = function() return soil(S("Compacted rubble"), 20, 0, cfg.compact_phi) end,
 }
 
 -- 方塊名稱 → 材料種類（岩性的 key、或上面的土類）；不是大地材料回傳 nil

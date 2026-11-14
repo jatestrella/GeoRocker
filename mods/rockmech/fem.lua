@@ -23,6 +23,9 @@
 -- job.soft（可選）= {[格] = true}：其中 solid 為 true 的格是碎石，job.soft_e = 勁度比例（預設 0.1）。
 --   [格] = 數字：這格是木柱（timber.lua），勁度比例就是這個數（一個網格裡只有一種木柱勁度）。
 --   碎石和木柱都沒有現地應力、不加重力，反力只來自岩壁收斂壓它（等於開挖前就在那裡）。
+-- job.soil（可選）= {[格] = true}：土（表土）。勁度跟 soft 一樣（job.soft_e），但跟岩石一樣有現地應力、受重力
+--   （job.soft 裡也要有這一格）。
+-- job.gam（可選）= {[格] = γ}：這一格的單位重（沒有就用 job.gamma）。
 -- ## 輸出
 -- {sxx, syy, szz, sxy, syz, szx（總應力，kPa）, u, iters, res（相對殘差）, ms}
 
@@ -219,14 +222,15 @@ function fem.solve(job)
 	end
 	for cz = 0, nz - 1 do for cy = 0, ny - 1 do for cx = 0, nx - 1 do
 		local c = 1 + cx + cy * nx + cz * nx * ny
-		if solid[c] and not soft[c] then
+		if solid[c] and (not soft[c] or (job.soil and job.soil[c])) then
 			local txx, tyy, tzz, txz = -job.sxx[c], -job.syy[c], -job.szz[c], -job.sxz[c]
+			local g8 = (job.gam and job.gam[c] or gam) / 8
 			for a = 1, 8 do
 				local cr = cs[a]
 				local n3 = ((cx + cr[1]) + (cy + cr[2]) * sy + (cz + cr[3]) * sz) * 3
 				local gx, gy, gz = cr[4], cr[5], cr[6]
 				f[n3 + 1] = f[n3 + 1] - (txx * gx + txz * gz)
-				f[n3 + 2] = f[n3 + 2] - (tyy * gy) - gam / 8
+				f[n3 + 2] = f[n3 + 2] - (tyy * gy) - g8
 				f[n3 + 3] = f[n3 + 3] - (txz * gx + tzz * gz)
 			end
 		end
@@ -471,11 +475,18 @@ function fem.cell_principal(job, res, x, y, z, r)
 	local solid = job.solid
 	local sum = {0, 0, 0, 0, 0, 0}
 	local n = 0
+	-- 只平均同一類的格：岩石（1）或土（2）；碎石、木柱（0）不算
+	local function cls(c)
+		if job.soil and job.soil[c] then return 2 end
+		return (job.soft and job.soft[c]) and 0 or 1
+	end
+	local k0 = cls(1 + x + y * nx + z * nx * ny)
+	if k0 == 0 then k0 = 1 end
 	for dz = -r, r do for dy = -r, r do for dx = -r, r do
 		local cx, cy, cz = x + dx, y + dy, z + dz
 		if cx >= 0 and cy >= 0 and cz >= 0 and cx < nx and cy < ny and cz < nz then
 			local c = 1 + cx + cy * nx + cz * nx * ny
-			if solid[c] and not (job.soft and job.soft[c]) then
+			if solid[c] and cls(c) == k0 then
 				n = n + 1
 				sum[1] = sum[1] + res.sxx[c]
 				sum[2] = sum[2] + res.syy[c]
@@ -516,6 +527,9 @@ function fem.point_stress(job, res, x, y, z, xi, eta, zeta)
 		gzx = gzx + gx * uz + gz * ux
 	end
 	local c = 1 + x + y * nx + z * nx * ny
+	local sf = job.soft and job.soft[c]
+	local w = not sf and 1 or type(sf) == "number" and sf or (job.soft_e or 0.1)      -- 勁度比例（土、碎石較軟）
+	lam, mu = w * lam, w * mu
 	local tr = lam * (exx + eyy + ezz)
 	return job.sxx[c] - (tr + 2 * mu * exx), job.syy[c] - (tr + 2 * mu * eyy), job.szz[c] - (tr + 2 * mu * ezz),
 		-mu * gxy, -mu * gyz, job.sxz[c] - mu * gzx

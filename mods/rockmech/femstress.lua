@@ -131,36 +131,38 @@ end
 --   側向土壓 K₀·γ·z（Jaky：K₀ = 1 − sin φ，φ = 殘餘摩擦角）：靠在岩壁上的鬆散材料，z = 那一格中心到鬆散材料表面的深度
 -- 天然表土（mapgen 鋪的，stress.natural_soil 算得出厚度）的重量也算進現地應力 σ₀，所以沒動過的地形兩邊抵銷、照樣平衡；
 -- 剝掉表土等於卸載，堆上碎石等於加載。γ 用非岩性格的單位重（rockmech_failure_gamma_other）
-local GAMMA_S = cfg.failure.gamma_other
 local K0_S = 1 - math.sin(math.rad(cfg.slope.phi_r))
--- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料厚度 (m)，從 ly 那一格開始算
+local K0_SOIL        -- 表土的 K₀（cid_tables 裡算：表土在 woodwork.lua 才註冊）
+-- 材料表（materials.lua）的單位重、整格表土的 content id（第一次用到才查：內容 id 要等全部註冊完）
+local gamma_of_cid, soil_cid, topsoil_f
+local function cid_tables()
+	if gamma_of_cid then return end
+	gamma_of_cid, topsoil_f = {}, {}
+	for name, def in pairs(core.registered_nodes) do
+		local p = rockmech.materials.defaults(name)
+		if p and p.kind == "soil" then gamma_of_cid[core.get_content_id(name)] = p.gamma end
+		if def.groups and (def.groups.rockmech_topsoil or 0) > 0 then        -- 表土 → 厚度比例
+			local k = tonumber(name:match("_(%d)$"))
+			topsoil_f[core.get_content_id(name)] = k and k / rockmech.RUBBLE_LEVELS or 1
+		end
+	end
+	soil_cid = core.get_content_id("rockmech:topsoil")
+	K0_SOIL = 1 - math.sin(math.rad(rockmech.materials.defaults("rockmech:topsoil").phi))
+end
+local function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
+-- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料：厚度 (m)、重量 Σγ·h (kPa)，從 ly 那一格開始算。
+-- 整格表土是應力解的元素（自己有重量），不算鬆散材料
 local function loose_above(g, gx, ly, gz)
-	local h = 0
+	local h, q = 0, 0
 	local sy, sz = g.nx, g.nx * g.ny
 	for y = ly, g.ny - 1 do
-		local f = g.loose_of[g.data[1 + gx + y * sy + gz * sz]]
+		local cid = g.data[1 + gx + y * sy + gz * sz]
+		local f = (cid ~= soil_cid or not fcfg.soil) and g.loose_of[cid]
 		if not f then break end
-		h = h + f
+		h, q = h + f, q + f * gamma_s(cid)
 	end
-	return h
+	return h, q
 end
--- 這一欄天然表土的厚度 (m)：礦帶地形的岩石頂用公式算（跟 mapgen 一樣），否則用目前的岩石頂
-local function natural_soil_m(wx, wz, top)
-	local S = rockmech.stress
-	local sy = math.floor(cfg.surface_y or 0)
-	local rise
-	if S.has_terrain(cfg) then rise = math.floor(S.terrain_rise(cfg, wx, wz) + 0.5) else rise = top - sy end
-	if top < sy + rise then return 0 end      -- 從頂上挖低了：表土跟岩石一起挖掉了
-	local key = S.lith_key_at(cfg, wx, sy + rise, wz)
-	local L = key and cfg.lithologies[key]
-	local ore = L and (L.ore or L.bare)
-	local function rise_at(x, z)
-		if S.has_terrain(cfg) then return math.floor(S.terrain_rise(cfg, x, z) + 0.5) end
-		return 0
-	end
-	return S.natural_soil(cfg, wx, wz, rise, rise_at, ore) / 8
-end
-
 -- 組工作：box 內的岩石格、每格的現地應力（kPa，壓為正）。
 -- 現地應力是開挖前的狀態，由座標算（挖掉的算回去，所以開挖才會放出應力）；
 -- 開挖過的位置上的岩石是回填，從沒受過上覆荷重，現地應力為 0
@@ -170,8 +172,11 @@ local function make_job(pos)
 	local b = vector.add(pos, r)
 	local g = rockmech.collapse.read_grid(a, b)      -- 往上多讀，找每一欄的岩石頂面
 	local n = 2 * r + 1
+	cid_tables()
 	local job = {nx = n, ny = n, nz = n, solid = {}, sxx = {}, syy = {}, szz = {}, sxz = {},
-		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, gamma = 25, soft = {}, soft_e = fcfg.rubble_e}
+		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, gamma = 25, soft = {}, soft_e = fcfg.rubble_e,
+		soil = {}, gam = {}}
+	local gam_soil = gamma_s(soil_cid)
 	local gsy, gsz = g.nx, g.nx * g.ny
 	local gam_sum, gam_n = 0, 0
 	local is_excavated_at = rockmech.collapse.is_excavated_at
@@ -194,7 +199,15 @@ local function make_job(pos)
 				break
 			end
 		end
-		local sv_soil = g.loose_of and GAMMA_S * natural_soil_m(a.x + x, a.z + z, top) or 0   -- 天然表土的重量 (kPa)
+		-- 開挖前的表土厚度 (m)：岩石頂上面連續的表土，挖掉的（記成開挖）算回去
+		local soil_m = 0
+		for ly = top - g.oy + 1, g.ny - 1 do
+			local f = topsoil_f[g.data[1 + gx + ly * gsy + gz * gsz]]
+			if not f and is_excavated_at(a.x + x, g.oy + ly, a.z + z) then f = 1 end
+			if not f then break end
+			soil_m = soil_m + f
+		end
+		local sv_soil = gam_soil * soil_m                                                      -- 天然表土的重量 (kPa)
 		for y = 0, n - 1 do
 			local wy = a.y + y
 			local gi = 1 + gx + (wy - g.oy) * gsy + gz * gsz
@@ -206,12 +219,20 @@ local function make_job(pos)
 			local solid = g.bonded_of[cid] and true or false
 			local soft = fcfg.rubble_e > 0 and g.rubble_of[cid] == 1
 			if post_ids[cid] then soft = post_rs[cid] or post_r elseif block_ids[cid] then soft = block_r end
+			-- 整格表土：土的元素（勁度跟碎石一樣軟，但有現地應力、受重力；materials.lua）
+			local soil = fcfg.soil and cid == soil_cid
+			if soil then soft, gamma = true, gam_soil; job.soil[c], job.gam[c] = true, gam_soil end
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			local sv = gamma * math.max(0, top + 0.5 - wy) + (wy <= top and sv_soil or 0)     -- kPa
+			if soil then sv = gam_soil * math.max(0, top + 0.5 + soil_m - wy) end           -- 土：從開挖前的土面算
 			job.solid[c] = solid or (soft and true) or false
 			job.soft[c] = soft or nil
-			if soft or (solid and is_excavated_at(a.x + x, wy, a.z + z)) then
+			if (soft and not soil) or ((solid or soil) and is_excavated_at(a.x + x, wy, a.z + z)) then
 				job.syy[c], job.sxx[c], job.szz[c], job.sxz[c] = 0, 0, 0, 0
+			elseif soil then
+				-- 土的現地應力：水平 = K₀·σv（Jaky：K₀ = 1 − sin φ），沒有岩石的構造應力
+				job.syy[c], job.sxz[c] = sv, 0
+				job.sxx[c], job.szz[c] = K0_SOIL * sv, K0_SOIL * sv
 			else
 				in_situ(job, c, sv)
 			end
@@ -229,17 +250,18 @@ local function make_job(pos)
 		local SIDES = {{1, 0, 1}, {-1, 0, 2}, {0, 1, 5}, {0, -1, 6}}
 		for z = 0, n - 1 do for y = 0, n - 1 do for x = 0, n - 1 do
 			local c = 1 + x + y * n + z * n * n
-			if job.solid[c] and not job.soft[c] then
+			if job.solid[c] and (not job.soft[c] or job.soil[c]) then
 				local gx, ly, gz = a.x + x - g.ox, a.y + y - g.oy, a.z + z - g.oz
-				local h = loose_above(g, gx, ly + 1, gz)
-				if h > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, GAMMA_S * h end
+				local h, q = loose_above(g, gx, ly + 1, gz)
+				if h > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, q end
 				for _, d in ipairs(SIDES) do
 					local nx_, nz_ = gx + d[1], gz + d[2]
 					if nx_ >= 0 and nz_ >= 0 and nx_ < g.nx and nz_ < g.nz then
-						local f = g.loose_of[g.data[1 + nx_ + ly * gsy + nz_ * gsz]]
+						local cid = g.data[1 + nx_ + ly * gsy + nz_ * gsz]
+						local f = (cid ~= soil_cid or not fcfg.soil) and g.loose_of[cid]
 						if f then
-							local zc = loose_above(g, nx_, ly + 1, nz_) + f / 2
-							press[#press + 1], press[#press + 2], press[#press + 3] = c, d[3], K0_S * GAMMA_S * zc
+							local _, q = loose_above(g, nx_, ly + 1, nz_)
+							press[#press + 1], press[#press + 2], press[#press + 3] = c, d[3], K0_S * (q + gamma_s(cid) * f / 2)
 						end
 					end
 				end
@@ -247,7 +269,13 @@ local function make_job(pos)
 		end end end
 	end
 	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石算空：貼著它的岩面要判定，反力在 face_fs）
-	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}, dmg = {}}
+	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}, dmg = {}, soil = {}}
+	-- 土的強度（Mohr-Coulomb，materials.lua）：c 換成 MPa；下雨時 c 降低（weather.lua，跟原本表土的規則同一個參數）
+	local sp = rockmech.materials.defaults("rockmech:topsoil")
+	local rain = rockmech.rain_level and rockmech.rain_level() or 0
+	local wet = math.max(0, 1 - (cfg.slope.rain_c_loss or 0) * rain)
+	local soil_str = {c = sp.c / 1000 * wet, phi = math.rad(sp.phi), t = (sp.tensile or 0) / 1000 * wet}
+	for c in pairs(job.soil) do meta.soil[c] = soil_str end
 	local damage_at = rockmech.collapse.damage_at_xyz
 	local press = job.press or {}
 	for i = 1, #press, 3 do
@@ -274,6 +302,15 @@ local function mode_text(m) return m == "拉" and S("tension") or S("shear") end
 local function strength_fs(job, meta, x, y, z, s1, s3)
 	local n = job.nx
 	local c = 1 + x + y * n + z * n * n
+	local sm = meta.soil[c]
+	if sm then
+		-- 土：Mohr-Coulomb 加張力截斷 σt（材料表的 tensile）。q_f = 2c·cosφ/(1 − sinφ) + σ3·(Nφ − 1)，Nφ = (1 + sinφ)/(1 − sinφ)
+		if s3 < 0 and -s3 >= sm.t then return sm.t > 0 and sm.t / -s3 or 0, "拉" end
+		local sn = math.sin(sm.phi)
+		local qf = 2 * sm.c * math.cos(sm.phi) / (1 - sn) + s3 * ((1 + sn) / (1 - sn) - 1)
+		local q = s1 - s3
+		return q > 0 and qf / q or math.huge, "剪"
+	end
 	local rm = rockmech.collapse.rock.at(meta.lith[c], meta.a.y + y, meta.p2[c], meta.dmg[c])
 	local q = s1 - s3
 	local fs, mode = q > 0 and rockmech.collapse.rock.q_fail(rm, math.max(0, s3)) / q or math.huge, "剪"
@@ -287,18 +324,24 @@ local FACES = {
 	{0, 1, 0, 1, 0, 0, 0, 0, 1}, {0, -1, 0, 1, 0, 0, 0, 0, 1},
 	{0, 0, 1, 1, 0, 0, 0, 1, 0}, {0, 0, -1, 1, 0, 0, 0, 1, 0},
 }
+-- 格的類別：岩石 1、土 2、碎石和木柱 0（面上的應力只跟同一類的格平均）
+local function cls_of(job, c)
+	if job.soil[c] then return 2 end
+	return job.soft[c] and 0 or 1
+end
 -- 格 (x, y, z) 往 f 的面：與同一面相鄰（±1 格、同樣對著空的）的面上應力平均 → FS, 破壞型式, σ1, σ3（MPa）
 local function face_fs(job, res, meta, x, y, z, f)
 	local n = job.nx
 	local dx, dy, dz = f[1], f[2], f[3]
 	local sum, m = {0, 0, 0, 0, 0, 0}, 0
+	local k0 = cls_of(job, 1 + x + y * n + z * n * n)
 	local xi = dx ~= 0 and (dx > 0 and 1 or 0) or 0.5
 	local eta = dy ~= 0 and (dy > 0 and 1 or 0) or 0.5
 	local zeta = dz ~= 0 and (dz > 0 and 1 or 0) or 0.5
 	for a = -1, 1 do for b = -1, 1 do
 		local cx, cy, cz = x + a * f[4] + b * f[7], y + a * f[5] + b * f[8], z + a * f[6] + b * f[9]
 		if cx >= 1 and cy >= 1 and cz >= 1 and cx < n - 1 and cy < n - 1 and cz < n - 1
-				and job.solid[1 + cx + cy * n + cz * n * n] and not job.soft[1 + cx + cy * n + cz * n * n]
+				and job.solid[1 + cx + cy * n + cz * n * n] and cls_of(job, 1 + cx + cy * n + cz * n * n) == k0
 				and meta.open[1 + (cx + dx) + (cy + dy) * n + (cz + dz) * n * n] then
 			local t = {fem.point_stress(job, res, cx, cy, cz, xi, eta, zeta)}
 			for i = 1, 6 do sum[i] = sum[i] + t[i] end
@@ -324,7 +367,7 @@ end
 -- 顯示用的 FS：有臨空面取最危險的面（與崩落判定同一個數），內部的格取周圍 1 格平均。回傳 FS, σ1, σ3, 破壞型式
 local function cell_fs(job, res, meta, x, y, z)
 	local n = job.nx
-	if not meta.lith[1 + x + y * n + z * n * n] then return nil end
+	if not (meta.lith[1 + x + y * n + z * n * n] or meta.soil[1 + x + y * n + z * n * n]) then return nil end
 	if x >= 1 and y >= 1 and z >= 1 and x < n - 1 and y < n - 1 and z < n - 1 then
 		local best, b1, b3, bm
 		for _, f in ipairs(FACES) do
@@ -350,7 +393,7 @@ local function find_failed(job, res, meta, center)
 	local a = meta.a
 	local failed, faces, warned = {}, 0, {}
 	for z = 2, n - 3 do for y = 2, n - 3 do for x = 2, n - 3 do
-		if job.solid[1 + x + y * n + z * n * n] and meta.lith[1 + x + y * n + z * n * n] then
+		if job.solid[1 + x + y * n + z * n * n] and (meta.lith[1 + x + y * n + z * n * n] or meta.soil[1 + x + y * n + z * n * n]) then
 			local low, lmode = math.huge, nil
 			for _, f in ipairs(FACES) do
 				local ax, ay, az = x + f[1], y + f[2], z + f[3]
@@ -414,10 +457,10 @@ local function report(pos, job, res, meta)
 	local solid = job.solid
 	local function at(x, y, z)
 		local c = 1 + x + y * n + z * n * n
-		return x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n and solid[c] and not job.soft[c]
+		return x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n and solid[c] and (not job.soft[c] or job.soil[c])
 	end
 	for z = 1, n - 2 do for y = 1, n - 2 do for x = 1, n - 2 do
-		if at(x, y, z) and meta.lith[1 + x + y * n + z * n * n] and
+		if at(x, y, z) and (meta.lith[1 + x + y * n + z * n * n] or meta.soil[1 + x + y * n + z * n * n]) and
 				(not at(x + 1, y, z) or not at(x - 1, y, z) or not at(x, y + 1, z) or not at(x, y - 1, z)
 				or not at(x, y, z + 1) or not at(x, y, z - 1)) then
 			local f, a1, a3, m = cell_fs(job, res, meta, x, y, z)
@@ -470,7 +513,7 @@ function rockmech.fem_cell(pos)
 	local x, y, z = pos.x - last_meta.a.x, pos.y - last_meta.a.y, pos.z - last_meta.a.z
 	if x < 0 or y < 0 or z < 0 or x >= n or y >= n or z >= n then return nil end
 	local c = 1 + x + y * n + z * n * n
-	if not last_job.solid[c] or last_job.soft[c] then return nil end
+	if not last_job.solid[c] or (last_job.soft[c] and not last_job.soil[c]) then return nil end
 	local fs, s1, s3 = cell_fs(last_job, last_res, last_meta, x, y, z)
 	return fs and {fs = fs, s1 = s1, s3 = s3}
 end
@@ -528,7 +571,7 @@ local function squeeze_rubble(job, res, meta)
 		local k = c - 1
 		local x, y, z = k % n, math.floor(k / n) % n, math.floor(k / (n * n))
 		local above = c + n
-		if type(s) ~= "number"          -- 木柱不是碎石
+		if type(s) ~= "number" and not job.soil[c]          -- 木柱、土不是碎石
 				and x >= 2 and y >= 2 and z >= 2 and x < n - 2 and y < n - 2 and z < n - 2
 				and job.solid[above] and not job.soft[above] and res.syy[c] > 0 then
 			for _, o in ipairs({1, -1, n * n, -n * n}) do

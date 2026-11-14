@@ -983,6 +983,9 @@ function collapse.apply_failure(failed, round)
             core.swap_node(p, {name = rn, param2 = A.p2(c)})
             A.set(p, rn, c)
             debris(p, rockmech.rubble_for(name), 10)
+        elseif rockmech.dig_topsoil and rockmech.dig_topsoil(p) then
+            -- 土（應力解的土元素）破壞：變成同樣厚度的鬆土，接著照殘餘摩擦角流
+            debris(p, rockmech.RUBBLE_SOIL, 6)
         end
     end
     -- 由上往下（failed 已排序）判定掉落／滑動
