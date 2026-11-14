@@ -713,6 +713,13 @@ No news today=
 Notice board=
 Broadcast radio@nKeep it on you to see prices and news at the top right=
 
+### materials.lua
+Topsoil=
+Loose soil=
+Compacted rubble=
+γ @1 kN/m³  σci @2 MPa  mi @3  σt @4 MPa=
+@1: γ @2 kN/m³  c @3 kPa  φ @4°=
+
 ### mentor.lua
 See that black streak on the hill? Knock a piece off and show me.=
 The black one. If it won't break, you're hitting the wrong rock.=
@@ -770,7 +777,6 @@ Backpack=
 ### nodes.lua
 @1=
 Granite rubble=
-Loose soil=
 @1 rubble=
 @1 rubble, mixed with @2=
 Colluvium@nRubble and soil mixed together=
@@ -784,7 +790,6 @@ Mixed rubble=
 @1 grade @2%=
 $@1/t of copper=
 @1 (compacted)=
-Compacted rubble=
 
 ### notify.lua
 … press F10 for the rest=
@@ -1896,7 +1901,6 @@ Come closer=
 Workbench@nRight-click: make wall panels, stairs, doors, fences, ladders… from planks=
 Saw bench@nRight-click: saw a log into posts, planks or slabs=
 [Site work] Soil removed @1 m³, filled @2 m³: $@3=
-Topsoil=
 Topsoil (@1/8 m)=
 
 ### worklight.lua

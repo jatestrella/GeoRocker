@@ -713,6 +713,13 @@ No news today=今天沒有新聞
 Notice board=告示板
 Broadcast radio@nKeep it on you to see prices and news at the top right=廣播收音機@n帶在身上，右上角就會顯示價格和新聞
 
+### materials.lua
+Topsoil=表土
+Loose soil=鬆土
+Compacted rubble=夯實碎石
+γ @1 kN/m³  σci @2 MPa  mi @3  σt @4 MPa=γ @1 kN/m³  σci @2 MPa  mi @3  σt @4 MPa
+@1: γ @2 kN/m³  c @3 kPa  φ @4°=@1：γ @2 kN/m³  c @3 kPa  φ @4°
+
 ### mentor.lua
 See that black streak on the hill? Knock a piece off and show me.=山頭那條黑黑的，看到沒？去敲一塊來給我看看。
 The black one. If it won't break, you're hitting the wrong rock.=黑黑那條啦。敲不動，就是敲錯石頭了。
@@ -770,7 +777,6 @@ Backpack=背包
 ### nodes.lua
 @1=@1
 Granite rubble=花崗岩碎石
-Loose soil=鬆土
 @1 rubble=@1碎石
 @1 rubble, mixed with @2=@1碎石，混@2
 Colluvium@nRubble and soil mixed together=崩積土@n碎石和土混在一起
@@ -784,7 +790,6 @@ Mixed rubble=混合碎石
 @1 grade @2%=@1品位 @2%
 $@1/t of copper=每噸銅 $@1
 @1 (compacted)=@1（夯實）
-Compacted rubble=夯實碎石
 
 ### notify.lua
 … press F10 for the rest=… 按 F10 看全部
@@ -1896,7 +1901,6 @@ Come closer=走近一點
 Workbench@nRight-click: make wall panels, stairs, doors, fences, ladders… from planks=木工桌@n右鍵：用木板做木牆板、樓梯、門、柵欄、梯子…
 Saw bench@nRight-click: saw a log into posts, planks or slabs=鋸木台@n右鍵：把原木鋸成木柱、木板或木板半格
 [Site work] Soil removed @1 m³, filled @2 m³: $@3=[整地] 清土 @1 m³、回填 @2 m³：$@3
-Topsoil=表土
 Topsoil (@1/8 m)=表土（@1/8 m）
 
 ### worklight.lua

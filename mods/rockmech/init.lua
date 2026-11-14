@@ -207,6 +207,7 @@ dofile(modpath .. "/oreshaft.lua")       -- 豎井：井口倒礦，井底的破
 dofile(modpath .. "/shaftroad.lua")      -- 豎井道路：營地到每口豎井的壓碎大理岩路
 dofile(modpath .. "/mentor.lua")         -- 老礦工：單機經營模式一開始在附近晃、聊天式的小任務
 dofile(modpath .. "/mohr.lua")         -- Mohr 圓的畫圖
+dofile(modpath .. "/materials.lua")    -- 材料表：每種大地材料同一組參數（預設照種類，個別方塊寫 metadata rm_mat）
 dofile(modpath .. "/tablet.lua")       -- 數值分析平板：手上的螢幕畫指著那一格的 Mohr 圓
 dofile(modpath .. "/stressmeter.lua")   -- 量應力：平板千斤頂、孔內應力計
 dofile(modpath .. "/worldtools.lua")

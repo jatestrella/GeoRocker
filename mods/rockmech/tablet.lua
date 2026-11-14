@@ -44,6 +44,7 @@ local function detail_lines(st)
 	local f_int = M.s1_fail(rm.sigci, st.lith.mi or 10, 1, 0.5, st.s3)
 	return {
 		{nil, S("@1, GSI @2", S(st.lith.description), tostring(rm.gsi))},
+		{nil, rockmech.materials.text(rockmech.materials.at(st.pos))},
 		{M.COLOR.circle, numbers(st)},
 		{M.COLOR.mass, S("Rock mass: σ1 at failure @1 MPa, strength / stress @2", ("%.2f"):format(f_mass), ("%.2f"):format(f_mass / math.max(st.s1, 1e-6)))},
 		{M.COLOR.intact, S("Intact rock: σ1 at failure @1 MPa", ("%.2f"):format(f_int))},
@@ -102,8 +103,8 @@ local function show_hand(player, w)
 	if w.hand_was then player:hud_set_flags({wielditem = true}) end
 	w.hand_was = nil
 end
-local function big_show(player, w, st, key)
-	if not st then big_remove(player, w); return end
+local function big_show(player, w, st, key, plain)
+	if not (st or plain) then big_remove(player, w); return end
 	local name = player:get_player_name()
 	local function add(def)
 		def.position = def.position or {x = 0.5, y = 0.5}
@@ -116,7 +117,7 @@ local function big_show(player, w, st, key)
 		big_remove(player, w)
 		w.big_sig = keep
 		w.big_huds, w.big_key = {}, key
-		local lines = detail_lines(st)
+		local lines = plain or detail_lines(st)
 		local panel_h = (fname and BH + 40 or 0) + 30 + #lines * 24 + 20
 		local top = -panel_h / 2
 		add({type = "image", alignment = {x = 0, y = 1}, offset = {x = 0, y = top - 16}, scale = {x = BW + 40, y = panel_h + 32},
@@ -145,7 +146,9 @@ local function big_show(player, w, st, key)
 				text = S("Learn \"Mohr circle analysis\" from the professor to see the Mohr circle")})
 		end
 	end
-	if st and can_mohr(name) then
+	if plain then
+		place(nil)
+	elseif st and can_mohr(name) then
 		w.big_busy = true
 		local png, ax = mohr_png(st, BW, BH, string.char(244, 246, 248, 255))
 		send(name, png, name, function(fname)
@@ -178,16 +181,23 @@ core.register_globalstep(function(dtime)
 			local pos = rockmech.pointed_node_pos and rockmech.pointed_node_pos(player, 8)
 			local node = pos and core.get_node(pos)
 			local rock = node and rockmech.lith_of_node[node.name]
-			local key = rock and core.pos_to_string(pos) or ""
+			-- 土、碎石：還沒進應力解，只顯示材料參數（materials.lua）
+			local mat = not rock and node and rockmech.materials.at(pos, node)
+			local mat_line = mat and rockmech.materials.text(mat)
+			local key = (rock or mat) and core.pos_to_string(pos) or ""
 			local fresh = w.key ~= key or w.t > REFRESH
 			local st
 			-- 手上的螢幕
 			if fresh and not w.busy then
 				w.key, w.t = key, 0
 				st = rock and state_at(pos) or nil
-				local sg = sig_of(key, st)
+				local sg = mat_line and (key .. "|" .. mat_line) or sig_of(key, st)
 				if sg == w.sig then
 					-- 跟上次一樣：不動
+				elseif mat_line then
+					w.sig = sg
+					rockmech.info_bubble(player, {mat_line}, pos)
+					set_screen(player, nil)
 				elseif not st then w.sig = sg; set_screen(player, nil)
 				else
 					w.sig = sg
@@ -207,17 +217,17 @@ core.register_globalstep(function(dtime)
 			end
 			-- 按住右鍵（對著岩石）：正面看；放開或移開就收起來
 			local hold = player:get_player_control().place
-			if hold and rock and not player:get_attach() then     -- 沒對著岩石：什麼都不顯示
+			if hold and (rock or mat) and not player:get_attach() then     -- 沒對著大地材料：什麼都不顯示
 				w.big_on = true
 				hide_hand(player, w)
 				w.big_t = (w.big_t or 0) + dt
 				if (w.big_key ~= key or w.big_t > REFRESH) and not w.big_busy then
 					w.big_t = 0
 					if st == nil and rock then st = state_at(pos) or nil end
-					local sg = sig_of(key, st)
+					local sg = mat_line and (key .. "|" .. mat_line) or sig_of(key, st)
 					if sg ~= w.big_sig then
 						w.big_sig = sg
-						big_show(player, w, st, key)
+						big_show(player, w, st, key, mat_line and {{nil, mat_line}} or nil)
 					end
 				end
 			elseif w.big_on then
