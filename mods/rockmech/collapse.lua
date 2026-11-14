@@ -988,6 +988,8 @@ function collapse.apply_failure(failed, round)
             debris(p, rockmech.RUBBLE_SOIL, 6)
         end
     end
+    -- 設施的地基格破壞了：扣設施的血（facilitydamage.lua）
+    if rockmech.facility_ground_failed then rockmech.facility_ground_failed(failed) end
     -- 由上往下（failed 已排序）判定掉落／滑動
     for _, f in ipairs(failed) do
         check_stability_and_move({x = f.x, y = f.y, z = f.z})

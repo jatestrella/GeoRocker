@@ -447,6 +447,7 @@ Build it on flat ground: @1×@1 m of level ground=要蓋在平地上：@1×@1 m 
 There is @1 in the construction area: move it first=施工範圍裡有@1：先移開
 
 ### facilitydamage.lua
+@1 collapsed: its foundation gave way=@1的地基破壞，倒塌了
 @1 was destroyed by the blast=@1被炸毀了
 @1  durability @2%=@1  耐久度 @2%
 

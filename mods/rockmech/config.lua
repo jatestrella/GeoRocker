@@ -407,6 +407,7 @@ config.fem_defaults = {
 	nu = 0.25,                -- 帕松比
 	rubble_e = 0.1,           -- 滿格碎石的勁度 / 岩石的勁度（0 = 碎石沒有勁度）
 	soil_e = 0.002,           -- 表土的勁度 / 岩石的勁度（materials.lua）
+	facility_load = false,    -- 設施是地基上的荷重、應力解判地基承載（彈性解逐格判定對土太保守：c 10 kPa 的表土撐不住 160 kPa 的破碎站），先關
 	soil = true,              -- 整格表土當應力解的土元素（materials.lua 的 γ、c、φ，取代自立高度 H_c 規則）
 	active_range = 64,        -- 離所有玩家超過此距離 (m) 的應力解與連鎖崩落先暫停，玩家回來才接著算（0 = 不限）
 	tol = 0.001,              -- 共軛梯度法的相對殘差

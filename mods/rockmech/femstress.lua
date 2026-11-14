@@ -286,7 +286,22 @@ local function make_job(pos)
 		end end end
 	end
 	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石算空：貼著它的岩面要判定，反力在 face_fs）
-	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}, dmg = {}, soil = {}, open_nat = nat and {}}
+	-- 設施的荷重（facilitydamage.lua 的 rockmech.facility_footing）：地基格頂面的均布壓力 q；天然地形沒有這些荷重
+	local fac_top = {}
+	if fcfg.facility_load and rockmech.facility_footing and rockmech.facility_controls then
+		for _, cp in ipairs(core.find_nodes_in_area(vector.offset(a, -4, 0, -4), vector.offset(b, 4, 1, 4), rockmech.facility_controls)) do
+			local cells, q = rockmech.facility_footing(cp)
+			for _, gc in ipairs(cells or {}) do
+				local x, y, z = gc.x - a.x, gc.y - a.y, gc.z - a.z
+				if x >= 0 and y >= 0 and z >= 0 and x < n and y < n - 1 and z < n then
+					local c = 1 + x + y * n + z * n * n
+					fac_top[c] = (fac_top[c] or 0) + q
+				end
+			end
+		end
+	end
+	local meta = {a = a, r = r, lith = {}, p2 = {}, open = {}, press = {}, dmg = {}, soil = {}, open_nat = nat and {},
+		press_nat = {}, fac = {}}
 	-- 土的強度（Mohr-Coulomb，materials.lua）：c 換成 MPa；下雨時 c 降低（weather.lua，跟原本表土的規則同一個參數）
 	local sp = rockmech.materials.defaults("rockmech:topsoil")
 	local rain = rockmech.rain_level and rockmech.rain_level() or 0
@@ -298,7 +313,16 @@ local function make_job(pos)
 	for i = 1, #press, 3 do
 		local key = press[i] * 8 + press[i + 1]
 		meta.press[key] = (meta.press[key] or 0) + press[i + 2]
+		meta.press_nat[key] = meta.press[key]
 	end
+	for c, q in pairs(fac_top) do
+		if job.solid[c] then
+			press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, q
+			meta.press[c * 8 + 3] = (meta.press[c * 8 + 3] or 0) + q
+			meta.fac[c + n] = true            -- 設施那一格：對著它的地基頂面要判定（承載）
+		end
+	end
+	job.press = press
 	for c = 1, n * n * n do
 		local k = c - 1
 		local x, y, z = k % n, math.floor(k / n) % n, math.floor(k / (n * n))
@@ -306,7 +330,7 @@ local function make_job(pos)
 		meta.lith[c] = g.lith_of[g.data[gi]]
 		meta.p2[c] = g.p2[gi]
 		meta.dmg[c] = damage_at(a.x + x, a.y + y, a.z + z)       -- 爆破擾動帶的 D（沒有是 nil）
-		meta.open[c] = not g.solid_of[g.data[gi]] or g.rubble_of[g.data[gi]] ~= nil
+		meta.open[c] = not g.solid_of[g.data[gi]] or g.rubble_of[g.data[gi]] ~= nil or meta.fac[c] or false
 		if nat then meta.open_nat[c] = meta.open[c] and not is_excavated_at(a.x + x, a.y + y, a.z + z) end
 	end
 	return job, meta
@@ -406,7 +430,7 @@ end
 -- 天然地形（res.nat，開挖過的填回去）時這一格的 FS：天然的臨空面裡最小的；當時不是臨空面（在土裡、岩體裡）回傳 ∞
 local function natural_fs(job, res, meta, x, y, z)
 	local nj = fem.natural_job(job)
-	local nm = setmetatable({open = meta.open_nat}, {__index = meta})
+	local nm = setmetatable({open = meta.open_nat, press = meta.press_nat}, {__index = meta})
 	local n = job.nx
 	local best = math.huge
 	for _, f in ipairs(FACES) do
@@ -433,6 +457,7 @@ local function find_failed(job, res, meta, center)
 				local wx, wy, wz = a.x + ax, a.y + ay, a.z + az
 				if meta.open[1 + ax + ay * n + az * n * n]
 						and ((center and math.max(math.abs(wx - center.x), math.abs(wy - center.y), math.abs(wz - center.z)) <= NEAR)
+							or meta.fac[1 + ax + ay * n + az * n * n]
 							or rockmech.collapse.is_excavated({x = wx, y = wy, z = wz})) then
 					faces = faces + 1
 					local fs, mode = face_fs(job, res, meta, x, y, z, f)
@@ -552,36 +577,45 @@ function rockmech.fem_run(pos, callback)
 		if ckey == last_ckey then cj.u0 = last_cu end
 		job.coarse = cj
 	end
-	-- 天然地形：快取有、天然地形也沒變 → 不送去解（handle_async 呼叫時就複製好 job，之後再把 nat 放回來）
+	-- 天然地形：快取有、天然地形也沒變 → 不解；否則另外送一個背景工作（跟現況的解同時算，兩條執行緒）
 	local nat, nat_sig, nat_hit = job.nat, nil, nil
 	if nat then
 		nat_sig = nat_signature(nat)
 		local e = nat_lookup(key)
 		if e and e.sig == nat_sig then nat_hit = e.res
 		elseif e then nat.u0 = e.res.u end
-		if nat_hit then job.nat = nil end
 	end
 	local t_build = (core.get_us_time() - t0) / 1000
-	core.handle_async(function(j)
-		return core.rockmech_fem.solve_nested(j)
-	end, function(res)
+	local res_main, res_nat = nil, nat_hit
+	local function finish()
+		if not res_main or (nat and not res_nat) then return end
+		local res = res_main
 		if nat then
 			job.nat = nat
 			nat.u0 = nil
-			if nat_hit then res.nat = nat_hit
-			elseif res.nat then
+			res.nat = res_nat
+			if not nat_hit then
 				local _, i = nat_lookup(key)
 				if i then table.remove(nat_cache, i) end
-				nat_cache[#nat_cache + 1] = {key = key, sig = nat_sig, res = res.nat}
+				nat_cache[#nat_cache + 1] = {key = key, sig = nat_sig, res = res_nat}
 				if #nat_cache > NAT_KEEP then table.remove(nat_cache, 1) end
+				res.ms = res.ms + res_nat.ms
 			end
 		end
 		last_key, last_u, last_ckey, last_cu = key, res.u, ckey, res.cu
 		last_job, last_res, last_meta = job, res, meta
 		if rockmech.monitor_update then rockmech.monitor_update(job, res, meta) end     -- 監測稜鏡（monitor.lua）
 		callback(job, res, meta, (core.get_us_time() - t0) / 1000, t_build)
-	end, job)
-	if nat_hit then job.nat = nat end
+	end
+	if nat and not nat_hit then
+		core.handle_async(function(j) return core.rockmech_fem.solve(j) end,
+			function(r) res_nat = r; finish() end, fem.natural_job(job))
+	end
+	job.nat = nil                -- 現況的解不帶天然地形（handle_async 呼叫時就複製好 job，回來再放回去）
+	core.handle_async(function(j)
+		return core.rockmech_fem.solve_nested(j)
+	end, function(r) res_main = r; finish() end, job)
+	job.nat = nat
 end
 
 -- 最後一次解涵蓋 pos 時回傳 {s1, s3, fs}（MPa），給 HUD

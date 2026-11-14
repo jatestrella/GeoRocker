@@ -497,6 +497,10 @@ rockmech_fem_soil (Stress solution: topsoil as soil elements) bool true
 # the strain of the rock below and fails everywhere.
 rockmech_fem_soil_e (Stress solution: topsoil stiffness ratio) float 0.002 0.0001 1
 
+# Facilities are loads on their foundation in the stress solution, and the bearing of the ground below them is checked.
+# Off for now: an elastic solution checked cell by cell is far too conservative for soil bearing.
+rockmech_fem_facility_load (Stress solution: facility loads) bool false
+
 # Stress solves and collapse cascades farther than this (m) from every player pause, and resume from the same round when a player returns. 0 = no limit.
 rockmech_fem_active_range (Solver active range) float 64 0 1000
 

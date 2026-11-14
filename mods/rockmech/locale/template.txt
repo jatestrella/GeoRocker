@@ -447,6 +447,7 @@ Build it on flat ground: @1×@1 m of level ground=
 There is @1 in the construction area: move it first=
 
 ### facilitydamage.lua
+@1 collapsed: its foundation gave way=
 @1 was destroyed by the blast=
 @1  durability @2%=
 
