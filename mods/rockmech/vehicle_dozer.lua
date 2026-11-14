@@ -119,13 +119,18 @@ local function cut_cell(c, node, k, keep, got, grade)
 	local take = k - keep
 	if take <= 0 then return end
 	local p2 = road and 0 or node.param2
-	grade[base] = rockmech.mix_grade(got[base] or 0, grade[base] or 0, take, p2)
+	local A = rockmech.assay
+	local ca = road and A.new(0) or A.get(c, node)          -- 成分（assay.lua）：grade[base] 是這種碎石的料倉
+	grade[base] = A.bin_put(grade[base] or {lv = 0, q = 0}, base, take, ca)
 	got[base] = (got[base] or 0) + take
 	if keep > 0 then
-		core.swap_node(c, {name = road and (rockmech.modname .. ":road_l" .. keep) or rockmech.rubble_with_level(base, keep, p2), param2 = p2})
+		local nn = road and (rockmech.modname .. ":road_l" .. keep) or rockmech.rubble_with_level(base, keep, p2)
+		core.swap_node(c, {name = nn, param2 = p2})
+		A.set(c, nn, ca)
 		return
 	end
 	core.swap_node(c, {name = "air"})
+	A.set(c, "air", ca)          -- swap_node 留下的 metadata 清掉
 	collapse.mark_excavated(c)
 	collapse.queue_stability_check(c, n)
 	rockmech.shotcrete_uncover(c)
@@ -163,7 +168,7 @@ local function grade_cut(self, pos, s, lat, y0, got, grade)
 			if need <= 0 then break end
 			local put = math.min(need, lv)
 			self.pile = self.pile or {}
-			local left = deposit_column(f.x, f.z, cy, base, put, 2, self.pile, grade[base])
+			local left = deposit_column(f.x, f.z, cy, base, put, 2, self.pile, rockmech.assay.bin_comp(grade[base], base))
 			got[base] = lv - (put - left)
 			if got[base] <= 0 then got[base] = nil end
 			need = need - (put - left)
@@ -219,7 +224,7 @@ local function push(self, pos, s)
 					y = y - 1
 				end
 				self.pile = self.pile or {}
-				left = left + deposit_column(c.x, c.z, ycap, base, share, ycap - y + 1, self.pile, grade[base])
+				left = left + deposit_column(c.x, c.z, ycap, base, share, ycap - y + 1, self.pile, rockmech.assay.bin_comp(grade[base], base))
 			end
 			rest = left
 		end
@@ -228,7 +233,7 @@ local function push(self, pos, s)
 			blocked = true
 			for _, c in ipairs(src) do
 				if rest <= 0 then break end
-				rest = deposit_column(c.x, c.z, c.y, base, rest, 2, nil, grade[base])
+				rest = deposit_column(c.x, c.z, c.y, base, rest, 2, nil, rockmech.assay.bin_comp(grade[base], base))
 			end
 		end
 	end

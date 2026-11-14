@@ -215,6 +215,55 @@ describe("斑岩銅礦（rockmech_copper）", function()
 		assert.are.equal(0, (stress.terrain_rise(cfg, 0, 0)))           -- 斑岩體外：平地
 		assert.are.equal("gossan", (stress.strata_at(cfg.strata, 100, math.floor(top) - 1, 0)))      -- 山丘是鐵帽
 	end)
+	it("褐鐵礦的化學成分在範圍內；中心、底部的金比邊緣、山頂富", function()
+		local s2 = {}
+		for k, v in pairs(set) do s2[k] = v end
+		s2.rockmech_copper = "100,0,40,20,10,5,3,100,200,12"
+		local cfg = config.load(getter(s2))
+		local B = cfg.strata.body
+		local top = math.floor(stress.terrain_rise(cfg, 100, 0) + cfg.surface_y)
+		local sum = {c = 0, e = 0, lo = 0, hi = 0}
+		local n = 0
+		for x = -6, 6 do for z = -6, 6 do
+			for _, d in ipairs({{0, "c"}, {28, "e"}}) do
+				local fe, au, hm = stress.gossan_chem(B, 100 + d[1] + x, top - 2, z)
+				assert.is_true(fe >= 0.35 and fe <= 0.50)
+				assert.is_true(au >= 0.3e-6 and au <= 3e-6)
+				assert.is_true(hm >= 0.01 and hm <= 0.06)
+				sum[d[2]] = sum[d[2]] + au
+			end
+			n = n + 1
+		end end
+		assert.is_true(sum.c > sum.e)                                   -- 斑岩體中心比邊緣富
+		B._col = nil
+		stress.copper_at(B, 100, top, 0)
+		local bot = math.ceil(B._col.wt + B._col.ox)
+		for x = -6, 6 do for z = -6, 6 do
+			local _, a1 = stress.gossan_chem(B, 100 + x, bot + 1, z)
+			local _, a2 = stress.gossan_chem(B, 100 + x, top - 1, z)
+			sum.lo, sum.hi = sum.lo + a1, sum.hi + a2
+		end end
+		assert.is_true(sum.lo > sum.hi)                                 -- 鐵帽底部比山頂富
+	end)
+end)
+
+describe("化學成分計價（config.element_value）", function()
+	local E = config.elements
+	it("鐵 45%、金 1 g/t、有害雜質 2%：鐵和金照價、雜質超過 1% 的部分罰款", function()
+		local fe, au, fee = config.element_value(10, {fe = 0.45, au = 1e-6, harm = 0.02})
+		assert.near(10 * 0.45 / E.fe.basis * E.fe.price, fe, 1e-9)
+		assert.near(10 * 1 * E.au.recovery * E.au.price, au, 1e-9)
+		assert.near(10 * 0.01 * E.harm.fee, fee, 1e-9)
+	end)
+	it("有害雜質 5%：罰款比鐵加金還多（賣了虧錢）", function()
+		local fe, au, fee = config.element_value(1, {fe = 0.45, au = 1e-6, harm = 0.05})
+		assert.is_true(fee > fe + au)
+	end)
+	it("混了一半廢石：鐵低於 30% 不收，只剩金", function()
+		local fe, au = config.element_value(1, {fe = 0.22, au = 0.5e-6, harm = 0.01})
+		assert.are.equal(0, fe)
+		assert.is_true(au > 0)
+	end)
 end)
 
 describe("多個地質區（斷層隔開）", function()

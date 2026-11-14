@@ -1786,7 +1786,7 @@ do
             local lith = rockmech.lith_of_node[name]
             local h_ref = lith and lith.break_height or fb.break_height
             if math.random() < rockmech.rockfall.break_probability(h, h_ref) then
-                local c = A.from_metatable(self.meta, self.node)
+                local c = A.from_metatable(self.meta, self.node, {x = math.floor(pos.x + 0.5), y = self.rm_start_y, z = math.floor(pos.z + 0.5)})
                 local rn = rockmech.rubble_with_level(rockmech.rubble_for(name), NLEV, A.p2(c))
                 self.node = {name = rn, param2 = A.p2(c)}
                 -- 原版落地時會把 self.meta 寫回方塊：成分放在這裡跟著落地
@@ -1892,7 +1892,7 @@ local function register_physics_events(name, intact)
         -- 碎石下方懸空就落下、超過安息角就滑動；軸差破壞要等碎石被清走、
         -- 真正出現開口時才會觸發。
         overrides.after_dig_node = function(pos, oldnode, oldmeta)
-            local c = A.from_metatable(oldmeta, oldnode)
+            local c = A.from_metatable(oldmeta, oldnode, pos)
             local rn = rockmech.rubble_with_level(rockmech.rubble_for(oldnode.name), NLEV, A.p2(c))
             core.set_node(pos, {name = rn, param2 = A.p2(c)})
             A.set(pos, rn, c)

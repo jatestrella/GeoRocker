@@ -36,6 +36,12 @@ function A.has_v(c)
 	for k in pairs(c) do if is_v(k) then return true end end
 	return false
 end
+-- 除了主成分 g 還有別的（體積表或化學成分）：一般碎石也要記 metadata
+function A.rich(c)
+	if type(c) ~= "table" then return false end
+	for k in pairs(c) do if k ~= "g" then return true end end
+	return false
+end
 -- 呼叫端傳的「品位」可以是數字（param2）或成分表：統一成表／取主成分的數字
 function A.c(x)
 	if type(x) == "table" then return x end
@@ -89,7 +95,19 @@ local function ore_rock(name)
 	local lith = rockmech.lith_of_node[name]
 	return lith ~= nil and lith.ore ~= nil
 end
-function A.carries(name) return A.tracked(name) or ore_rock(name) end
+-- 有化學成分的岩性（褐鐵礦）：原地的成分照地質公式算（stress.gossan_chem），挖下來寫進碎石的 metadata
+local function chem_lith(name)
+	local lith = rockmech.lith_of_node[name]
+	return lith and lith.chem and lith or nil
+end
+function A.chem_at(lith, pos)
+	local B = rockmech.cfg.strata and rockmech.cfg.strata.body
+	if lith.name == "gossan" and B and rockmech.stress.gossan_chem then
+		local fe, au, harm = rockmech.stress.gossan_chem(B, pos.x, pos.y, pos.z)
+		return {fe = fe, au = au, harm = harm}
+	end
+end
+function A.carries(name) return A.tracked(name) or ore_rock(name) or chem_lith(name) ~= nil end
 
 -- 某格的成分。node 可省（自己讀）
 function A.get(pos, node)
@@ -106,6 +124,14 @@ function A.get(pos, node)
 		local c = A.decode(core.get_meta(pos):get_string(KEY))
 		if c then return c end
 	end
+	local cl = chem_lith(node.name)
+	if cl then                                           -- 褐鐵礦：搬動過的有 metadata，原地的照地質公式
+		local c = A.decode(core.get_meta(pos):get_string(KEY))
+		if c then return c end
+		c = A.chem_at(cl, pos) or {}
+		c.g = rockmech.rubble_p2(node)
+		return c
+	end
 	return A.new(rockmech.rubble_p2(node))              -- 岩石破碎：礦石的品位（其他岩石是 0）
 end
 
@@ -113,7 +139,7 @@ end
 -- 原地的礦石不寫（成分看 param2）；被搬動過的礦石岩塊才寫
 function A.set(pos, name, c)
 	local meta = core.get_meta(pos)
-	if A.carries(name) or A.has_v(c) then
+	if A.carries(name) or (rockmech.rubble_level[name] and A.rich(c)) then
 		meta:set_string(KEY, A.encode(c))
 		meta:mark_as_private(KEY)
 	elseif meta:get_string(KEY) ~= "" then
@@ -141,9 +167,16 @@ function A.break_rock(pos, node)
 	return rockmech.rubble_with_level(rockmech.rubble_for(node.name), rockmech.RUBBLE_LEVELS, A.p2(c)), c
 end
 -- 從 metadata 的表（after_dig_node 的 oldmetadata、掉落方塊的 self.meta）和 node 取成分
-function A.from_metatable(mt, node)
+-- pos（可省）：原來的位置，原地的褐鐵礦照地質公式算化學成分
+function A.from_metatable(mt, node, pos)
 	local c = A.decode(mt and mt.fields and mt.fields[KEY])
 	if c then return c end
+	local cl = pos and chem_lith(node.name)
+	if cl then
+		c = A.chem_at(cl, pos) or {}
+		c.g = rockmech.rubble_p2(node)
+		return c
+	end
 	if A.tracked(node.name) then return A.new(node.param2) end
 	if rockmech.rubble_level[node.name] then return A.new(0) end
 	return A.new(rockmech.rubble_p2(node))
@@ -252,6 +285,33 @@ function A.acc_put(acc, base, lv0, q0, c, lv)
 	return acc
 end
 
+-- 料倉（排矸站、裝車站、推土機鏟刀前）同一種碎石的一份：v = {lv = 級數, q = Σ 級數 × 主成分, a = 其他成分的累加器}
+function A.bin_put(v, base, t, c)
+	local lv0, q0 = v.lv or 0, v.q or 0
+	v.lv = lv0 + t
+	v.q = q0 + t * (rockmech.mix_of[base] and A.g(c) or 0)
+	v.a = A.acc_put(v.a, base, lv0, q0, c, t)
+	return v
+end
+-- 平均成分（主成分照舊四捨五入成 param2 的刻度）
+function A.bin_comp(v, base)
+	local lv = v.lv or 0
+	local c = A.new(lv > 0 and math.floor((v.q or 0) / lv + 0.5) or 0)
+	if v.a and lv > 0 then for k, x in pairs(v.a) do c[k] = x / lv end end
+	A.slim(c)
+	if A.has_v(c) then local _, p = compose(A.vol(nil, c, 1, {})); c.g = p end
+	return c
+end
+-- 拿走 k 級（平均成分不變）
+function A.bin_take(v, k)
+	local lv = v.lv or 0
+	if lv <= 0 then return v end
+	local f = math.max(0, (lv - k) / lv)
+	v.lv, v.q = lv - k, (v.q or 0) * f
+	if v.a then v.a = f > 0 and A.acc_scale(v.a, f) or nil end
+	return v
+end
+
 -- 累加器（車斗、輸送帶、料倉）：acc = Σ 量 × 成分
 function A.acc_add(acc, c, w)
 	acc = acc or {}
@@ -272,6 +332,36 @@ function A.acc_scale(acc, f)
 	if f <= 0 then return nil end
 	for k, v in pairs(acc) do acc[k] = v * f end
 	return acc
+end
+
+-- 顯示用：三種以上成分的比例（大的在前）。礦石成分顯示品位
+function A.parts_text(c)
+	local list = {}
+	for k, v in pairs(c) do if is_v(k) and v > 0.005 then list[#list + 1] = {k:sub(3), v} end end
+	table.sort(list, function(a, b) return a[2] > b[2] end)
+	local out = {}
+	for _, it in ipairs(list) do
+		local ore = it[1]:match("^ore:(.+)$")
+		ore = ore and rockmech.cfg.ores[ore]
+		if ore then out[#out + 1] = rockmech.ore_text(ore, it[2])
+		else out[#out + 1] = ("%s %.0f%%"):format(rockmech.comp_label[it[1]] or it[1], it[2] * 100) end
+	end
+	return table.concat(out, "　")
+end
+-- 顯示用：化學成分（鐵 %、金 g/t、有害雜質 %）；沒有回傳 nil
+function A.chem_text(c)
+	local E = rockmech.cfg.elements
+	if not (E and type(c) == "table") then return nil end
+	local out = {}
+	for _, k in ipairs(rockmech.cfg.element_order) do
+		local v = c[k]
+		if v and v > 0 then
+			local label = rockmech.S(E[k].label)
+			if k == "au" then out[#out + 1] = ("%s %.2f g/t"):format(label, v * 1e6)
+			else out[#out + 1] = ("%s %.1f%%"):format(label, v * 100) end
+		end
+	end
+	return #out > 0 and table.concat(out, "　") or nil
 end
 
 -- 檢查：範圍內要記成分的碎石，metadata 不見或跟 param2 對不上的格數

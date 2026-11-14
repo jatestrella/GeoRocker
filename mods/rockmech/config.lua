@@ -249,6 +249,29 @@ config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, anfotr
 	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500,
 	aerial = 150, crane = 250, heavyhaul = 500}
 
+-- 化學成分（碎石的 metadata：assay.lua，質量比例 0..1）。有 chem 的岩性（褐鐵礦）挖下來就帶著這些成分，
+-- 混到廢石照體積稀釋。破碎站照成分計價（config.element_value）：
+--   fe    鐵：含量到 pay_min 以上才收，以鐵礦砂 basis（62%）每噸 price 為準照含量折算
+--   au    金：每克 price，外包提金回收率 recovery
+--   harm  有害雜質（P、S、As）：超過 free 的部分，每噸礦石罰 fee × 超過的比例（fee 4000 → 每多 1% 罰 $40/t）
+config.elements = {
+	fe = {label = TR("Iron"), pay_min = 0.30, basis = 0.62, price = 100},
+	au = {label = TR("Gold"), price = 80, recovery = 0.6},
+	harm = {label = TR("Harmful impurities"), free = 0.01, fee = 4000},
+}
+config.element_order = {"fe", "au", "harm"}
+config.lithologies.gossan.chem = true
+-- 一份料（tons 噸、成分表 c）的鐵貨款, 金貨款, 有害雜質罰款。ratio：收購比例
+function config.element_value(tons, c, ratio)
+	local E = config.elements
+	ratio = ratio or 1
+	local fe, au, hm = c.fe or 0, c.au or 0, c.harm or 0
+	local vfe = fe >= E.fe.pay_min and tons * fe / E.fe.basis * E.fe.price * ratio or 0
+	local vau = tons * au * 1e6 * E.au.recovery * E.au.price * ratio
+	local fee = tons * math.max(0, hm - E.harm.free) * E.harm.fee
+	return vfe, vau, fee
+end
+
 -- 收煤站的收入：照品位拆成煤和廢石，煤 × 回收率 × 價格 × 收購比例 − 廢石 × 廢石處理費。ore = nil 是廢石（品位當 0）
 function config.crush_income(tons, grade, ore, fee, ratio)
 	if not ore then grade = 0 end
@@ -693,6 +716,7 @@ function config.load(get, opts)
 		layers = copy(config.layers),
 		ores = copy(config.ores),
 		joint_sets = copy(config.joint_sets),
+		elements = config.elements, element_order = config.element_order, element_value = config.element_value,
 	}
 
 	cfg.surface_y = tonumber(get("rockmech_surface_y")) or config.defaults.surface_y

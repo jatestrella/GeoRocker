@@ -99,7 +99,17 @@ end
 -- 一份料（tons 噸、碎石 base、param2）賣給收 ore 的破碎站 → 礦的噸數（剝採比用）, 貨款, 廢料處理費, 廢料噸數, 含銅噸數。
 --   一般的礦（config.crush_income）：品位 × 回收率 × 價格 × 收購比例；廢料（矸石、片岩）照 (1 − 品位) 收處理費。
 --   金屬礦（copper.lua）：精礦照含銅量計價、扣冶煉費；原礦是外包選礦，尾礦每噸收處理費；別的碎石整車變尾礦
-function rockmech.sale_value(tons, base, p2, ore, owner)
+-- c（可省）：成分表（assay.lua）；有化學成分（鐵、金、有害雜質）的照 config.element_value 另外計價、罰款，
+-- 算進貨款和處理費，另外回傳 鐵貨款, 金貨款, 有害雜質罰款（結算單分列）
+function rockmech.sale_value(tons, base, p2, ore, owner, c)
+	local q, gross, fee, w, cu = rockmech.sale_value_main(tons, base, p2, ore, owner)
+	local vfe, vau, hfee = 0, 0, 0
+	if type(c) == "table" and (c.fe or c.au or c.harm) then
+		vfe, vau, hfee = cfg.element_value(tons, c, rockmech.yard_ratio())
+	end
+	return q, gross + vfe + vau, fee + hfee, w, cu, vfe, vau, hfee
+end
+function rockmech.sale_value_main(tons, base, p2, ore, owner)
 	local m = ore and ore.metal
 	if not m then
 		local g = rockmech.grade_for(base, p2, ore)
@@ -492,10 +502,10 @@ eat_body = function(pos, dtime, rate, limit, take)
 		if want <= 0 then break end
 		local p = top_rubble(cells[(start + i - 1) % #cells + 1])
 		if p then
-			local t, base, p2 = V.take_rubble(p, want)
+			local t, base, p2, ca = V.take_rubble(p, want)
 			want = want - t
 			eaten = eaten + t
-			take(t, base, p2)
+			take(t, base, p2, ca)
 			meta:set_int("next", (start + i) % #cells)
 		end
 	end
@@ -524,6 +534,9 @@ local function report(meta, owner, dump, day)
 		local ore = ore_of(meta)
 		local rows = {}
 		local bw = meta:get_float("batch_w")
+		-- 化學成分（褐鐵礦的鐵、金、有害雜質）另外列：主礦那一列只算主礦的貨款
+		local bfe, bau, bh = meta:get_float("batch_fe"), meta:get_float("batch_au"), meta:get_float("batch_h")
+		bg, bf = bg - bfe - bau, bf - bh
 		if ore and ore.metal then
 			-- 金屬礦：平均含銅量、貨款（精礦照含銅量、原礦外包選礦）
 			local bc = meta:get_float("batch_cu")
@@ -536,7 +549,12 @@ local function report(meta, owner, dump, day)
 				money_text(bg), GREEN}
 			if bw <= 0 then bw = bt - bq end          -- 舊存檔沒記廢料噸數
 		end
+		local E = cfg.elements
+		if bfe > 0 then rows[#rows + 1] = {S(E.fe.label), "", ("$%g/t @ %.0f%%"):format(E.fe.price, E.fe.basis * 100), money_text(bfe), GREEN} end
+		if bau > 0 then rows[#rows + 1] = {S(E.au.label), ("%.1f g"):format(bau / E.au.price / E.au.recovery), ("$%g/g × %.0f%%"):format(E.au.price, E.au.recovery * 100), money_text(bau), GREEN} end
 		rows[#rows + 1] = {S("Waste disposal (@1)", rockmech.gangue_label(ore)), ("%.1f t"):format(bw), ("$%g"):format(rockmech.gangue_fee(ore)), money_text(-bf), RED}
+		if bh > 0 then rows[#rows + 1] = {S(E.harm.label), "", ("$%g/t per 1%%"):format(E.harm.fee / 100), money_text(-bh), RED} end
+		bg, bf = bg + bfe + bau, bf + bh
 		-- 人事費（wages.lua：雇員薪水在組員在線時已經陸續扣了，這裡列出來、算進淨收入）
 		local wage = 0
 		local wamt, wsec = (rockmech.wage_take or function() end)(rockmech.account_of(owner), day)
@@ -564,7 +582,7 @@ local function report(meta, owner, dump, day)
 			end
 		end)
 	end
-	for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m", "batch_w", "batch_cu"}) do meta:set_float(k, 0) end
+	for _, k in ipairs({"batch_t", "batch_q", "batch_g", "batch_f", "batch_m", "batch_w", "batch_cu", "batch_fe", "batch_au", "batch_h"}) do meta:set_float(k, 0) end
 end
 
 rockmech.show_bill, rockmech.money_text = show_bill, money_text     -- wages.lua 的人事費單子
@@ -609,13 +627,16 @@ local function crush(pos, dtime)
 	-- 這一步的帳：煤的噸數、煤的貨款（煤噸 × 價格 × 回收率 × 收購比例）、廢石處理費（廢石噸 × 每噸；廢石場是全部噸數 × 棄置費）
 	-- 只收這座選的礦：別種礦和廢石一樣算廢石、照這種礦的廢石處理費扣
 	local ore = ore_of(meta)
-	local ore_t, gross, fee, waste, cu = 0, 0, 0, 0, 0
-	local eaten = eat(pos, dtime, rate_of(pos), nil, function(t, base, p2)
+	local ore_t, gross, fee, waste, cu, xfe, xau, xh = 0, 0, 0, 0, 0, 0, 0, 0
+	local eaten = eat(pos, dtime, rate_of(pos), nil, function(t, base, p2, ca)
 		local tons = tons_of(t)
-		local q, g, f, w, c = rockmech.sale_value(tons, base, p2, ore, meta:get_string("owner"))
+		local q, g, f, w, c, vfe, vau, hfee = rockmech.sale_value(tons, base, p2, ore, meta:get_string("owner"), ca)
 		ore_t, cu = ore_t + q, cu + c
 		if dump then fee = fee + tons * cfg.dump_fee
-		else gross, fee, waste = gross + g, fee + f, waste + w end
+		else
+			gross, fee, waste = gross + g, fee + f, waste + w
+			xfe, xau, xh = xfe + vfe, xau + vau, xh + hfee
+		end
 	end)
 	local income = gross - fee
 	local owner = meta:get_string("owner")
@@ -634,6 +655,7 @@ local function crush(pos, dtime)
 	storage:set_float("strip_o:" .. acc, storage:get_float("strip_o:" .. acc) + ore_t)
 	storage:set_float("strip_w:" .. acc, storage:get_float("strip_w:" .. acc) + math.max(0, t - ore_t))
 	for key, v in pairs({batch_t = t, batch_q = ore_t, batch_g = gross, batch_f = fee, batch_m = income, batch_w = waste, batch_cu = cu,
+			batch_fe = xfe, batch_au = xau, batch_h = xh,
 			total_t = t, total_q = ore_t, total_g = gross, total_f = fee, total_m = income, total_cu = cu}) do
 		meta:set_float(key, meta:get_float(key) + v)
 	end

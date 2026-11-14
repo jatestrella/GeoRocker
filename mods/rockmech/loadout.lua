@@ -119,11 +119,9 @@ local function step(pos, dtime)
 				if room < 1 then break end
 				local p = {x = x, y = y, z = z}
 				if rockmech.rubble_level[core.get_node(p).name] then
-					local t, base, p2 = V.take_rubble(p, math.floor(room))
+					local t, base, p2, ca = V.take_rubble(p, math.floor(room))
 					if t > 0 then
-						local v = bin[base] or {lv = 0, q = 0}
-						v.lv, v.q = v.lv + t, v.q + t * (rockmech.mix_of[base] and p2 or 0)
-						bin[base] = v
+						bin[base] = rockmech.assay.bin_put(bin[base] or {lv = 0, q = 0}, base, t, ca)      -- 成分跟著走（assay.lua）
 						room, inflow = room - t, inflow + t
 					end
 				end
@@ -147,10 +145,9 @@ local function step(pos, dtime)
 			local per = math.max(1, math.floor(LOAD_RATE * NLEV * dtime))
 			local k = math.min(math.floor(v.lv), per, V.TYPES[e.vkind].cap - V.load_total(e))
 			if k > 0 then
-				local g = v.q / v.lv
-				V.load_put(e, best, k, math.floor(g + 0.5))
+				V.load_put(e, best, k, rockmech.assay.bin_comp(v, best))
 				if V.update_hud then V.update_hud(e) end
-				v.lv, v.q = v.lv - k, v.q - k * g
+				rockmech.assay.bin_take(v, k)
 				if v.lv < 1e-6 then bin[best] = nil end
 				rockmech.collapse.rubble_sound(tip, k)
 				core.add_particlespawner({amount = 12, time = math.max(0.2, dtime), glow = 3,

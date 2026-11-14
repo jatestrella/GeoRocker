@@ -108,11 +108,9 @@ local function step(pos)
 			if room < 1 then break end
 			local p = {x = c.x, y = y, z = c.z}
 			if rockmech.rubble_level[core.get_node(p).name] then
-				local t, base, p2 = V.take_rubble(p, math.floor(room))
+				local t, base, p2, ca = V.take_rubble(p, math.floor(room))
 				if t > 0 then
-					local v = bin[base] or {lv = 0, q = 0}
-					v.lv, v.q = v.lv + t, v.q + t * (rockmech.mix_of[base] and p2 or 0)
-					bin[base] = v
+					bin[base] = rockmech.assay.bin_put(bin[base] or {lv = 0, q = 0}, base, t, ca)      -- 成分跟著走（assay.lua）
 					room, inflow = room - t, inflow + t
 				end
 			end
@@ -126,11 +124,10 @@ local function step(pos)
 		for base, v in pairs(bin) do if v.lv >= 1 and (not bl or v.lv > bl) then best, bl = base, v.lv end end
 		if best then
 			local v = bin[best]
-			local g = v.q / v.lv
 			local k = math.min(math.floor(v.lv), math.max(1, math.floor(K.out * NLEV * STEP)))
-			local put = rockmech.belt_put(out, best, k, math.floor(g + 0.5))
+			local put = rockmech.belt_put(out, best, k, rockmech.assay.bin_comp(v, best))
 			if put > 0 then
-				v.lv, v.q = v.lv - put, v.q - put * g
+				rockmech.assay.bin_take(v, put)
 				if v.lv < 1e-6 then bin[best] = nil end
 			end
 		end
@@ -171,10 +168,7 @@ function rockmech.dump_hopper_accept(pos, e)
 		if room < 1 then break end
 		if rockmech.rubble_level and base ~= "default:tree" then
 			local k = math.min(lv, room)
-			local g = V.load_grade(e, base) or 0
-			local v = bin[base] or {lv = 0, q = 0}
-			v.lv, v.q = v.lv + k, v.q + k * (rockmech.mix_of[base] and g or 0)
-			bin[base] = v
+			bin[base] = rockmech.assay.bin_put(bin[base] or {lv = 0, q = 0}, base, k, V.load_assay(e, base))
 			V.load_keep(e, base, lv - k)
 			room, took = room - k, took + k
 		end

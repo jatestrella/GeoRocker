@@ -128,10 +128,10 @@ local function collar(d)
 end
 
 local sums = {}      -- 井 → {t, money, last}
-local function pay(i, d, levels, base, p2)
+local function pay(i, d, levels, base, p2, ca)
 	local t = tons_of(levels)
 	local ore = cfg.main_ore
-	local _, gross, fee = rockmech.sale_value(t, base, p2, ore, d.owner)      -- 跟破碎站同一條（crusher.lua）
+	local _, gross, fee = rockmech.sale_value(t, base, p2, ore, d.owner, ca)      -- 跟破碎站同一條（crusher.lua）
 	rockmech.add_money(d.owner, gross - fee)
 	local s = sums[i] or {t = 0, money = 0}
 	s.t, s.money, s.last = s.t + t, s.money + gross - fee, core.get_us_time() / 1e6
@@ -161,7 +161,7 @@ function V.dump_to_ground(self, cells, ytop)
 			local took = 0
 			for base, lv in pairs(self.load) do
 				if base ~= "default:tree" and rockmech.rubble_level and lv > 0 then
-					pay(i, d, lv, base, V.load_grade(self, base))
+					pay(i, d, lv, base, V.load_grade(self, base), V.load_assay(self, base))
 					V.load_keep(self, base, 0)
 					took = took + lv
 				end
@@ -205,8 +205,8 @@ core.register_globalstep(function(dtime)
 							local p = {x = x, y = y, z = z}
 							local k = inside(x - d.x, z - d.z) and rockmech.rubble_level[core.get_node(p).name]
 							if k then
-								local lv, base, p2 = V.take_rubble(p, k)
-								if lv > 0 then pay(i, d, lv, base, p2) end
+								local lv, base, p2, ca = V.take_rubble(p, k)
+								if lv > 0 then pay(i, d, lv, base, p2, ca) end
 							end
 						end end
 					end

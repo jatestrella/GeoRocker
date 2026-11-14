@@ -349,6 +349,26 @@ function stress.copper_at(B, x, y, z)
 	return "cu_primary", clamp_p2(prim)
 end
 
+-- 褐鐵礦（鐵帽）的化學成分（質量比例 0..1）：鐵、金、有害雜質（P、S、As）。
+--   鐵 35–50%：銅被淋走後留下的氧化鐵，變化不大。
+--   金 0.3–3 g/t：金不溶於地下水，留在鐵帽裡（殘留富集）；斑岩體中心高、往外降，鐵帽底部（靠氧化帶）比山頂富。
+--   有害雜質 1–6%：一塊一塊的（有的地方雜質高到賣了反而虧錢）
+local function stretch(v) return math.max(0, math.min(1, (v - 0.25) / 0.5)) end
+function stress.gossan_chem(B, x, y, z)
+	stress.copper_at(B, x, y, z)                 -- 算好這一欄的古地下水位（B._col）
+	local c = B._col
+	local C = B.cfg
+	local top = (C and C.surface_y or 0) + (C and stress.has_terrain(C) and stress.terrain_rise(C, x, z) or 0)
+	local bot = (c and c.x == x and c.z == z) and (c.wt + c.ox) or (top - 10)
+	local f = math.max(0, math.min(1, (y - bot) / math.max(1, top - bot)))      -- 0 = 鐵帽底，1 = 地表
+	local dx, dz = x - B.x0, z - B.z0
+	local u2 = math.min(1, (dx * dx + dz * dz) / (B.R * B.R))
+	local fe = 0.35 + 0.15 * stretch(fbm(x / 19 + y / 31, z / 19 - y / 29, 233))
+	local au = 0.3 + 2.7 * (1 - 0.6 * u2) * (1 - 0.5 * f) * stretch(fbm(x / 26 + y / 43, z / 26 + y / 37, 239))
+	local harm = 0.01 + 0.05 * stretch(fbm(x / 15 - y / 23, z / 15 + y / 27, 241))
+	return fe, au * 1e-6, harm
+end
+
 -- 自由地形（cfg.terrain，非礦帶世界）：(x, z) 這一欄比 surface_y 高出幾公尺（≥ 0），第二個值同第一個（礦區山丘：表土鋪薄，看得到岩層）
 --   hills：雜訊起伏的丘陵，約一半是平地；cuesta：單面山。沿傾向鋸齒狀：順著層面的緩坡（坡度＝岩層傾角）＋朝上傾方向的陡崖，
 --   陡崖沿走向蜿蜒；傾角大就成了豬背嶺。每一座的順向坡比前一座年輕（地層往傾向一直往下）

@@ -195,6 +195,10 @@ local function fmt_report_lines(r, pname, give)
 	end
 	local ore = cfg.ores[r.lith.ore]
 	if ore and r.is_rock and see(pname, "grade", give) then lines[#lines + 1] = rockmech.ore_text(ore, r.p2 / 255) end
+	if r.lith.chem and r.is_rock and r.pos and see(pname, "grade", give) then           -- 褐鐵礦：鐵、金、有害雜質
+		local ct = rockmech.assay.chem_text(rockmech.assay.get(r.pos))
+		if ct then lines[#lines + 1] = ct end
+	end
 	if not s or not see(pname, "mechanics", give) then return lines end
 	-- 應力解決定崩落時，應力與 FS 看應力解（這一格還沒解過就先用現有估算）
 	local fc = rockmech.fem_cell and rockmech.fem_cell(r.pos)
@@ -222,13 +226,19 @@ end
 rockmech.hud_lines = fmt_report_lines   -- 測試用
 
 -- 指著碎石時的 HUD：種類（岩體分類），礦石碎石再加品位（品位判讀）
-local function rubble_lines(node, pname, give)
+local function rubble_lines(node, pname, give, pos)
 	local base = rockmech.rubble_base[node.name] or node.name
 	local lines = {}
 	if see(pname, "rockmass", give) then lines[#lines + 1] = rockmech.desc_short(base) end
 	-- 混合碎石：礦石的品位要有品位判讀；崩積土這類（土、碎石的比例）看岩體分類就看得出來
 	local m = rockmech.mix_of[base]
-	if m and see(pname, m.ore and "grade" or "rockmass", give) then lines[#lines + 1] = rockmech.mix_text(base, node.param2) end
+	local A = rockmech.assay
+	local c = pos and A and A.get(pos, node)
+	if A and A.has_v(c) then                       -- 三種以上成分：列出全部的比例（要有品位判讀）
+		if see(pname, "grade", give) then lines[#lines + 1] = A.parts_text(c) end
+	elseif m and see(pname, m.ore and "grade" or "rockmass", give) then lines[#lines + 1] = rockmech.mix_text(base, node.param2) end
+	local ct = c and A.chem_text(c)
+	if ct and see(pname, "grade", give) then lines[#lines + 1] = ct end      -- 化學成分（鐵、金、有害雜質）
 	return lines
 end
 
@@ -308,7 +318,7 @@ end
 function rockmech.instrument_lines(player, pos, give)
 	local name = player:get_player_name()
 	local node = core.get_node(pos)
-	if rockmech.is_rubble(node.name) or rockmech.road_level[node.name] then return rubble_lines(node, name, give) end
+	if rockmech.is_rubble(node.name) or rockmech.road_level[node.name] then return rubble_lines(node, name, give, pos) end
 	if rockmech.lith_of_node[node.name] then
 		local lines = fmt_report_lines(rockmech.stress_report(pos), name, give)
 		if #lines == 0 and give.grade then lines[1] = S("No ore") end      -- XRF 對著不含礦的岩石
@@ -354,7 +364,7 @@ core.register_globalstep(function(dtime)
 				if not l or l.key ~= key or l.t > 2 then
 					last[name] = {key = key, t = 0}
 					local rep = not rubble and rockmech.stress_report(pos)
-					local lines = rubble and rubble_lines(node, name) or fmt_report_lines(rep, name)
+					local lines = rubble and rubble_lines(node, name, nil, pos) or fmt_report_lines(rep, name)
 					local text = #lines > 0 and table.concat(lines, "\n") or nil
 					if text then
 						hud_set(player, text)
