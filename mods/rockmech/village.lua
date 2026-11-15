@@ -34,19 +34,33 @@ local function hash(a, b, seed)
 	return v - math.floor(v)
 end
 
--- ground(x, z)：地面高度（公式地形）
-local function grow_road(ground, x, z, ang, steps, seed, id)
+-- ground(x, z)：地面高度（公式地形）。村莊核心（離中心 CORE m 內）的路只走正東西南北（建築不能轉，路要跟建築對齊），
+-- 轉彎是 90°、至少直走 3 步才轉；出了核心才緩慢彎曲
+local CORE = 90
+local HALF = math.pi / 2
+local function grow_road(ground, x, z, ang, steps, seed, id, cx, cz)
 	local pts = {{x, z}}
+	local straight = 0
 	for i = 1, steps do
-		ang = ang + (hash(i, id, seed) - 0.5) * 0.35          -- 緩慢彎曲
+		local core_zone = (x - (cx or 0)) ^ 2 + (z - (cz or 0)) ^ 2 < CORE * CORE
+		local choices
+		if core_zone then
+			ang = math.floor(ang / HALF + 0.5) * HALF
+			straight = straight + 1
+			choices = straight >= 3 and {0, HALF, -HALF} or {0}
+		else
+			ang = ang + (hash(i, id, seed) - 0.5) * 0.35          -- 緩慢彎曲
+			choices = {0, 0.35, -0.35, 0.7, -0.7}
+		end
 		local best, bscore
-		for _, da in ipairs({0, 0.35, -0.35, 0.7, -0.7}) do
+		for _, da in ipairs(choices) do
 			local a = ang + da
 			local nx, nz = x + STEP * math.sin(a), z + STEP * math.cos(a)
 			local grade = math.abs(ground(nx, nz) - ground(x, z)) / STEP
-			local score = grade + 0.15 * math.abs(da)
+			local score = grade + (core_zone and 0.25 or 0.15) * math.abs(da)
 			if not bscore or score < bscore then best, bscore = a, score end
 		end
+		if core_zone and best ~= ang then straight = 0 end
 		ang = best
 		x, z = x + STEP * math.sin(ang), z + STEP * math.cos(ang)
 		pts[#pts + 1] = {math.floor(x + 0.5), math.floor(z + 0.5)}
@@ -84,9 +98,9 @@ function V.plan(ground, seed, cx, cz)
 	cx, cz = cx or 0, cz or 0
 	seed = (seed or 0) % 997
 	local roads = {}
-	local a0 = 2 * math.pi * hash(1, 2, seed)
-	local p1 = grow_road(ground, cx, cz, a0, 30, seed, 1)
-	local p2 = grow_road(ground, cx, cz, a0 + math.pi, 30, seed, 2)
+	local a0 = HALF * math.floor(4 * hash(1, 2, seed))         -- 主路從正東西南北其中一個方向出發
+	local p1 = grow_road(ground, cx, cz, a0, 30, seed, 1, cx, cz)
+	local p2 = grow_road(ground, cx, cz, a0 + math.pi, 30, seed, 2, cx, cz)
 	-- 主路：p2 反過來接 p1
 	local main = {}
 	for i = #p2, 2, -1 do main[#main + 1] = p2[i] end
@@ -98,7 +112,7 @@ function V.plan(ground, seed, cx, cz)
 		local i = math.floor(#main * (0.2 + 0.6 * hash(b, 5, seed))) + 1
 		local p, q = main[i], main[math.min(#main, i + 1)]
 		local ang = math.atan2(q[1] - p[1], q[2] - p[2]) + (hash(b, 6, seed) < 0.5 and 1 or -1) * math.pi / 2
-		local pts = grow_road(ground, p[1], p[2], ang, 10 + math.floor(hash(b, 7, seed) * 10), seed, 10 + b)
+		local pts = grow_road(ground, p[1], p[2], ang, 10 + math.floor(hash(b, 7, seed) * 10), seed, 10 + b, cx, cz)
 		roads[#roads + 1] = {points = pts}
 	end
 	-- 地塊
@@ -129,7 +143,10 @@ function V.plan(ground, seed, cx, cz)
 		for i = 2, #r.points - 1 do
 			local p, q = r.points[i], r.points[i + 1]
 			local ang = math.atan2(q[1] - p[1], q[2] - p[2])
-			for _, side in ipairs({1, -1}) do cand[#cand + 1] = {x = p[1], z = p[2], ang = ang, side = side, ri = ri, i = i} end
+			-- 只沿著正方向的路段放店（建築不能轉，要跟路對齊）
+			if math.abs(ang / HALF - math.floor(ang / HALF + 0.5)) < 0.05 then
+				for _, side in ipairs({1, -1}) do cand[#cand + 1] = {x = p[1], z = p[2], ang = ang, side = side, ri = ri, i = i} end
+			end
 		end
 	end
 	-- 離中心近的先試（店家集中在村子中間）
@@ -180,9 +197,9 @@ function V.build_ground(plan, done, progress)
 	local cells = road_cells(plan.roads)
 	for k in pairs(cells) do
 		local x, z = k:match("^(%-?%d+),(%-?%d+)$")
-		grow(tonumber(x) - 3, tonumber(z) - 3); grow(tonumber(x) + 3, tonumber(z) + 3)
+		grow(tonumber(x) - 10, tonumber(z) - 10); grow(tonumber(x) + 10, tonumber(z) + 10)
 	end
-	for _, L in ipairs(plan.lots) do local a, b, c, d = lot_rect(L); grow(a - 5, b - 5); grow(c + 5, d + 5) end
+	for _, L in ipairs(plan.lots) do local a, b, c, d = lot_rect(L); grow(a - 10, b - 10); grow(c + 10, d + 10) end
 	local sy = math.floor(rockmech.cfg.surface_y or 0)
 	-- 高度範圍：地塊高度和地形起伏以內（不要整根 180 m 都生成，進遊戲比較快）
 	local ylo, yhi = sy, sy
@@ -241,6 +258,32 @@ function V.build_ground(plan, done, progress)
 		for k in pairs(margin) do
 			local x, z = k:match("^(%-?%d+),(%-?%d+)$")
 			top_at(tonumber(x), tonumber(z))
+		end
+		-- 村莊範圍（道路、地塊外推 8 m）的地表：裸露的岩石表面一層換成表土（郊外照舊有露頭）
+		local bonded = {}
+		for name in pairs(core.registered_nodes) do
+			if rockmech.lith_of_node and rockmech.lith_of_node[name] then bonded[core.get_content_id(name)] = true end
+		end
+		local wide = {}
+		for k in pairs(cells) do
+			local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+			x, z = tonumber(x), tonumber(z)
+			for dx = -8, 8, 1 do for dz = -8, 8, 1 do wide[(x + dx) .. "," .. (z + dz)] = true end end
+		end
+		for _, L in ipairs(plan.lots) do
+			local a, b, c, d = lot_rect(L)
+			for x = math.floor(a) - 8, math.ceil(c) + 8 do for z = math.floor(b) - 8, math.ceil(d) + 8 do wide[x .. "," .. z] = true end end
+		end
+		for k in pairs(wide) do
+			local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+			x, z = tonumber(x), tonumber(z)
+			if area:contains(x, pmin.y, z) then
+				local t = top_at(x, z)
+				if t then
+					local i = area:index(x, t, z)
+					if bonded[data[i]] then data[i] = c_soil end
+				end
+			end
 		end
 		local function clear_above(x, y, z, h)
 			for yy = y + 1, math.min(pmax.y, y + h) do data[area:index(x, yy, z)] = c_air end
