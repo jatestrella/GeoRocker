@@ -120,19 +120,20 @@ config.lithologies.cu_primary = {
 	texture = "default_stone.png^[colorize:#e0e0e0:200^default_mineral_copper.png",
 	rn = 0.40, rt = 0.85, mu_roll = 0.40, break_height = 6.0,
 }
--- 斑岩體外圍的熱液蝕變帶（stress.copper_point，由內往外）：斑岩核心（鉀化帶，就是上面的原生帶）→ 絹英岩化帶 → 青盤岩化帶 → 圍岩。
+-- 斑岩體外圍的熱液蝕變帶（stress.copper_point，由內往外）：斑岩核心（鉀化帶，就是上面的原生帶）→ 絹英岩化帶（岩石：絹英岩）→
+-- 青盤岩化帶（岩石：青盤岩）→ 圍岩。方塊是岩石，名稱用岩石名
 --   絹英岩化帶（石英－絹雲母－黃鐵礦，半徑 R … 1.5R）：低品位銅，漂白、軟（絹雲母讓節理面變滑），UCS 約 60
 --   青盤岩化帶（綠泥石－綠簾石，1.5R … 3R）：沒有銅，綠色，比圍岩稍弱
 -- 表生分帶（鐵帽、氧化帶、富集帶）照深度疊在核心和絹英岩化帶上面
 config.lithologies.phyllic = {
-	name = "phyllic", description = TR("Phyllic alteration"), ore = "copper", pure = "#b0a888",
+	name = "phyllic", description = TR("Quartz-sericite rock"), ore = "copper", pure = "#b0a888",
 	gamma = 26.0, ucs = 60.0, tensile = 4.0, mi = 12,
 	color = "#b4ae9c", cracky = 2,
 	texture = "default_stone.png^[colorize:#f0ece0:210^default_mineral_iron.png",
 	rn = 0.35, rt = 0.80, mu_roll = 0.45, break_height = 4.0,
 }
 config.lithologies.propylitic = {
-	name = "propylitic", description = TR("Propylitic alteration"),
+	name = "propylitic", description = TR("Propylite"),
 	gamma = 26.0, ucs = 80.0, tensile = 5.5, mi = 18,
 	color = "#5f7a5c", cracky = 2,
 	rn = 0.38, rt = 0.82, mu_roll = 0.42, break_height = 5.0,
