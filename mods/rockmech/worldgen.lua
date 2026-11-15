@@ -401,6 +401,7 @@ function M.generate(world_conf)
 	set("weakness_c", 0)
 	set("weakness_max_spacing", 1.5)
 	set("career", "true")
+	set("design_slope", "true")    -- 地形退化到穩定坡角（config.lua 的 rockmech_design_slope）
 	set("solo", "true")            -- 個人遊戲
 	set("teacher", "false")        -- 不是教學地圖：沒有老師示範區、分組、防爆、名牌（config.lua 的 cfg.teacher）
 	world_conf:write()

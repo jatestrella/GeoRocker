@@ -421,7 +421,7 @@ function stress.body_hill(cfg, x, z)
 end
 -- 有沒有公式地形（礦帶、自由地形或鐵帽山丘）；有的話 (x, z) 比 surface_y 高幾公尺
 function stress.has_terrain(cfg) return cfg.lane_terrain ~= nil or cfg.terrain ~= nil or cfg.body_hills ~= nil end
-function stress.terrain_rise(cfg, x, z)
+local function terrain_raw(cfg, x, z)
 	if cfg.lane_terrain then return stress.lane_terrain(cfg, x, z) end
 	local t, hill = 0, 0
 	if cfg.terrain then t, hill = stress.free_terrain(cfg, x, z) end
@@ -430,6 +430,68 @@ function stress.terrain_rise(cfg, x, z)
 		if b > 0 then t, hill = t + b, (hill or 0) + b end
 	end
 	return t, hill
+end
+stress.terrain_raw = terrain_raw
+
+-- 設計坡度（cfg.design_slope，度）：公式地形「退化到穩定坡角」= 原本地形的 Lipschitz 下包絡線
+--   h'(p) = min over q [ h(q) + tanβ·|p − q| ]：比 β 陡的地方削掉，緩的地方不動。
+-- 分塊算（TILE × TILE，外圍多讀 margin = 最高山 ÷ tanβ），8 鄰格兩趟掃描（距離最多高估 8%，tanβ 先除掉）。
+-- 每個環境（主環境、mapgen 執行緒）各自快取，算法固定，結果一樣
+local TILE, HMAX = 64, 60
+local tiles, ntiles = {}, 0
+local function tile_of(cfg, tx, tz)
+	local key = tx .. "," .. tz
+	local t = tiles[key]
+	if t then return t end
+	local tan = math.tan(math.rad(cfg.design_slope)) / 1.0824
+	local M = math.ceil(math.max(HMAX, (cfg.terrain and cfg.terrain.h or 0) * 1.3 + 10) / tan)
+	local N = TILE + 2 * M
+	local x0, z0 = tx * TILE - M, tz * TILE - M
+	local h, hill = {}, {}
+	for j = 0, N - 1 do for i = 0, N - 1 do
+		local a, b = terrain_raw(cfg, x0 + i, z0 + j)
+		h[j * N + i + 1], hill[j * N + i + 1] = a, b or 0
+	end end
+	local d1, d2 = tan, tan * math.sqrt(2)
+	for j = 0, N - 1 do for i = 0, N - 1 do
+		local c = j * N + i + 1
+		local v = h[c]
+		if i > 0 then v = math.min(v, h[c - 1] + d1) end
+		if j > 0 then
+			v = math.min(v, h[c - N] + d1)
+			if i > 0 then v = math.min(v, h[c - N - 1] + d2) end
+			if i < N - 1 then v = math.min(v, h[c - N + 1] + d2) end
+		end
+		h[c] = v
+	end end
+	for j = N - 1, 0, -1 do for i = N - 1, 0, -1 do
+		local c = j * N + i + 1
+		local v = h[c]
+		if i < N - 1 then v = math.min(v, h[c + 1] + d1) end
+		if j < N - 1 then
+			v = math.min(v, h[c + N] + d1)
+			if i < N - 1 then v = math.min(v, h[c + N + 1] + d2) end
+			if i > 0 then v = math.min(v, h[c + N - 1] + d2) end
+		end
+		h[c] = v
+	end end
+	local out = {h = {}, hill = {}}
+	for j = 0, TILE - 1 do for i = 0, TILE - 1 do
+		local c = (j + M) * N + i + M + 1
+		out.h[j * TILE + i + 1] = h[c]
+		out.hill[j * TILE + i + 1] = math.min(hill[c], h[c])
+	end end
+	if ntiles >= 48 then tiles, ntiles = {}, 0 end
+	tiles[key], ntiles = out, ntiles + 1
+	return out
+end
+function stress.terrain_rise(cfg, x, z)
+	if not cfg.design_slope then return terrain_raw(cfg, x, z) end
+	x, z = math.floor(x + 0.5), math.floor(z + 0.5)
+	local tx, tz = math.floor(x / TILE), math.floor(z / TILE)
+	local t = tile_of(cfg, tx, tz)
+	local c = (z - tz * TILE) * TILE + (x - tx * TILE) + 1
+	return t.h[c], t.hill[c]
 end
 
 -- 煤的品位（param2 1..255，煤佔的比例）：煤層中央最好，靠頂底板變差（夾雜質），再加緩慢的橫向變化

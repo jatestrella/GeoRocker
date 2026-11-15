@@ -713,6 +713,17 @@ end
 -- get(key) 回傳字串或 nil（引擎內為 core.settings:get）。
 -- opts.read_file(name)：讀世界資料夾裡的檔案（高程網格用），回傳內容或 nil
 -- 回傳 cfg, warnings
+-- Hoek-Brown 在 σ3 = 0 的瞬時摩擦角（度）：dσ1/dσ3 = 1 + a·mb·s^(a−1)，sin φ = (k − 1)/(k + 1)。用地表的 GSI、D = 0
+function config.phi0(lith)
+	if not lith or not lith.mi then return nil end
+	local g = lith.gsi and lith.gsi.top or 100
+	local mb = lith.mi * math.exp((g - 100) / 28)
+	local s = math.exp((g - 100) / 9)
+	local a = 0.5 + (math.exp(-g / 15) - math.exp(-20 / 3)) / 6
+	local k = 1 + a * mb * s ^ (a - 1)
+	return math.deg(math.asin((k - 1) / (k + 1)))
+end
+
 function config.load(get, opts)
 	get = get or function() return nil end
 	opts = opts or {}
@@ -1341,6 +1352,30 @@ function config.load(get, opts)
 	-- 營地（出生點）的地面高度：一般就是 surface_y；真實地形的地圖是 surface_y + 出生點的網格高度（作業平台）
 	cfg.camp_y = math.floor(cfg.surface_y or 0)
 	if cfg.terrain and cfg.terrain.height then cfg.camp_y = cfg.camp_y + math.floor(cfg.terrain.height(0, 0) + 0.5) end
+
+	-- 設計坡度（rockmech_design_slope = true 或角度）：公式地形退化到穩定坡角（stress.terrain_rise）。
+	-- true：β = 地表會出現的岩性裡，Hoek-Brown 在 σ3 = 0 的瞬時摩擦角最小的那個（無凝聚力無限邊坡 β = φ；
+	-- 只跟 mi、地表的 GSI 有關）。真實地形（DEM）不套用。沒寫（舊世界）：不限制
+	local ds = get("rockmech_design_slope")
+	if ds and ds ~= "" and ds ~= "false" and not (cfg.terrain and cfg.terrain.height) then
+		local deg = tonumber(ds)
+		if not deg then
+			local keys = {}
+			if cfg.strata then
+				for _, S in ipairs(cfg.strata.domains or {cfg.strata}) do for _, b in ipairs(S.beds) do keys[b.lith] = true end end
+				if cfg.strata.faults then keys[cfg.strata.faults.lith] = true end
+			else
+				for _, k in ipairs(cfg.zone_order or {}) do keys[k] = true end
+				for _, l in ipairs(cfg.layers or {}) do keys[l.lith] = true end
+				if cfg.coal_seam then keys.coal = true end
+			end
+			for k in pairs(keys) do
+				local phi = config.phi0(cfg.lithologies[k])
+				if phi and (not deg or phi < deg) then deg = phi end
+			end
+		end
+		if deg and deg > 5 and deg < 89 then cfg.design_slope = deg end
+	end
 	return cfg, warnings
 end
 
