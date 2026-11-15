@@ -341,7 +341,11 @@ function fem.solve(job)
 		until rel < tol or iters >= max_iter
 	end
 
-	-- 每格中心的總應力（壓為正）
+	-- 每格中心的總應力（壓為正）。job.lean：只回傳位移 u（背景執行緒用：少傳 6 個陣列回主執行緒，
+	-- 主執行緒用到哪一格再算，見 fem.lazy_stress）
+	if job.lean then
+		return {u = u, iters = iters, res = rel, ms = (os.clock() - t_start) * 1000}
+	end
 	local out = {sxx = {}, syy = {}, szz = {}, sxy = {}, syz = {}, szx = {}, u = u, iters = iters, res = rel}
 	local ncell = nx * ny * nz
 	for c = 1, ncell do
@@ -394,6 +398,7 @@ end
 -- job.nat 有給：另外解一次天然地形（外緣跟現況一樣用粗網格的解），放在 res.nat。用來分辨「開挖造成的破壞」和天然就有的應力集中
 local solve_nested_inner
 function fem.solve_nested(job)
+	fem.unpack_s0(job)
 	local nj = fem.natural_job(job)
 	local nres = nj and solve_nested_inner(nj)
 	local res = solve_nested_inner(job)
@@ -468,7 +473,7 @@ solve_nested_inner = function(job)
 	res.ms = res.ms + cres.ms
 	return res
 end
-fem.solve_sub = function(job) return solve_nested_inner(job) end      -- 只解這一個（有粗網格就先解粗網格）
+fem.solve_sub = function(job) return solve_nested_inner(fem.unpack_s0(job)) end      -- 只解這一個（有粗網格就先解粗網格）
 
 -- 對稱 3×3 應力張量的主應力（壓為正）：回傳 σ1 ≥ σ2 ≥ σ3
 -- 臨空面的邊界條件：法向應力 = 支護壓力 p、面上的剪應力 = 0（一階元素外插到面上不滿足，
@@ -562,6 +567,70 @@ function fem.point_stress(job, res, x, y, z, xi, eta, zeta)
 	local tr = lam * (exx + eyy + ezz)
 	return job.sxx[c] - (tr + 2 * mu * exx), job.syy[c] - (tr + 2 * mu * eyy), job.szz[c] - (tr + 2 * mu * ezz),
 		-mu * gxy, -mu * gyz, job.sxz[c] - mu * gzx
+end
+
+-- 傳到背景執行緒的工作只帶 σyy（= σv），σxx、σzz、σxz 在背景照同一個公式算回來（少傳 3 個陣列）。
+-- job.s0p = {KH, Kh, sH0, sh0（MPa）, az（σH 方位，度）, k0s（土的 K0）}：
+--   job.soil 的格：σxx = σzz = K0·σv、σxz = 0；其他格：femstress.lua 的 in_situ（σv ≤ 0 → 全部 0，開挖過的格、碎石本來就是 0）
+function fem.pack_s0(job, p)
+	local t = {}
+	for k, v in pairs(job) do t[k] = v end
+	t.sxx, t.szz, t.sxz, t.s0p = nil, nil, nil, p
+	return t
+end
+function fem.unpack_s0(job)
+	if not job or not job.s0p or job.sxx then return job end
+	local p = job.s0p
+	local th = math.rad(p.az or 0)
+	local s2, c2, sc = math.sin(th) ^ 2, math.cos(th) ^ 2, math.sin(th) * math.cos(th)
+	local syy, soil = job.syy, job.soil or {}
+	local sxx, szz, sxz = {}, {}, {}
+	for c = 1, job.nx * job.ny * job.nz do
+		local sv = syy[c] or 0
+		if soil[c] then
+			sxx[c], szz[c], sxz[c] = p.k0s * sv, p.k0s * sv, 0
+		elseif sv <= 0 then
+			sxx[c], szz[c], sxz[c] = 0, 0, 0
+		else
+			local svm = sv / 1000
+			local sH, sh = (p.KH * svm + p.sH0) * 1000, (p.Kh * svm + p.sh0) * 1000
+			sxx[c] = s2 * sH + c2 * sh
+			szz[c] = c2 * sH + s2 * sh
+			sxz[c] = (sH - sh) * sc
+		end
+	end
+	job.sxx, job.szz, job.sxz = sxx, szz, sxz
+	if job.coarse then fem.unpack_s0(job.coarse) end
+	return job
+end
+
+-- 只有位移的結果（job.lean）：補上 sxx … szx 六個表，用到哪一格才從 u 算那一格的格中心應力（跟 fem.solve 一樣），算過的記住。
+-- 不是岩石（job.solid）的格是 0
+local SKEYS = {"sxx", "syy", "szz", "sxy", "syz", "szx"}
+function fem.lazy_stress(job, res)
+	if not res or res.sxx then return res end
+	local nx, ny = job.nx, job.ny
+	local tabs = {}
+	local function fill(c)
+		local v1, v2, v3, v4, v5, v6 = 0, 0, 0, 0, 0, 0
+		if job.solid[c] then
+			local k = c - 1
+			local x, y, z = k % nx, math.floor(k / nx) % ny, math.floor(k / (nx * ny))
+			v1, v2, v3, v4, v5, v6 = fem.point_stress(job, res, x, y, z, 0.5, 0.5, 0.5)
+		end
+		rawset(tabs[1], c, v1); rawset(tabs[2], c, v2); rawset(tabs[3], c, v3)
+		rawset(tabs[4], c, v4); rawset(tabs[5], c, v5); rawset(tabs[6], c, v6)
+	end
+	for i, key in ipairs(SKEYS) do
+		local t = setmetatable({}, {__index = function(t, c)
+			if type(c) ~= "number" then return nil end
+			fill(c)
+			return rawget(t, c)
+		end})
+		tabs[i] = t
+		res[key] = t
+	end
+	return res
 end
 
 -- 背景執行緒（core.register_async_dofile）裡用 core.rockmech_fem 取得

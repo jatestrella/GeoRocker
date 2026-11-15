@@ -581,55 +581,71 @@ local last_job, last_res, last_meta      -- 最後一次的解（HUD 用）
 function rockmech.fem_run(pos, callback)
 	local t0 = core.get_us_time()
 	local job, meta = make_job(pos)
+	local tj = core.get_us_time()
 	local key = core.pos_to_string(meta.a)
 	if key == last_key then job.u0 = last_u end
-	local ckey
-	if fcfg.coarse > 1 then
-		local cj = make_coarse(pos)
-		cj.ox, cj.oy, cj.oz = cj.a.x - meta.a.x, cj.a.y - meta.a.y, cj.a.z - meta.a.z
-		ckey = core.pos_to_string(cj.a)
-		if ckey == last_ckey then cj.u0 = last_cu end
-		job.coarse = cj
-	end
-	-- 天然地形：快取有、天然地形也沒變 → 不解；否則另外送一個背景工作（跟現況的解同時算，兩條執行緒）
-	local nat, nat_sig, nat_hit = job.nat, nil, nil
-	if nat then
-		nat_sig = nat_signature(nat)
-		local e = nat_lookup(key)
-		if e and e.sig == nat_sig then nat_hit = e.res
-		elseif e then nat.u0 = e.res.u end
-	end
-	local t_build = (core.get_us_time() - t0) / 1000
-	local res_main, res_nat = nil, nat_hit
-	local function finish()
-		if not res_main or (nat and not res_nat) then return end
-		local res = res_main
-		if nat then
-			job.nat = nat
-			nat.u0 = nil
-			res.nat = res_nat
-			if not nat_hit then
-				local _, i = nat_lookup(key)
-				if i then table.remove(nat_cache, i) end
-				nat_cache[#nat_cache + 1] = {key = key, sig = nat_sig, res = res_nat}
-				if #nat_cache > NAT_KEEP then table.remove(nat_cache, 1) end
-				res.ms = res.ms + res_nat.ms
-			end
+	-- 分兩個伺服器步：這一步組細網格，下一步組粗網格、送背景（每一步卡主執行緒的時間減半；粗網格只管遠場，晚一步讀地圖沒關係）
+	core.after(0, function()
+		local t1 = core.get_us_time()
+		local ckey
+		if fcfg.coarse > 1 then
+			local cj = make_coarse(pos)
+			cj.ox, cj.oy, cj.oz = cj.a.x - meta.a.x, cj.a.y - meta.a.y, cj.a.z - meta.a.z
+			ckey = core.pos_to_string(cj.a)
+			if ckey == last_ckey then cj.u0 = last_cu end
+			job.coarse = cj
 		end
-		last_key, last_u, last_ckey, last_cu = key, res.u, ckey, res.cu
-		last_job, last_res, last_meta = job, res, meta
-		if rockmech.monitor_update then rockmech.monitor_update(job, res, meta) end     -- 監測稜鏡（monitor.lua）
-		callback(job, res, meta, (core.get_us_time() - t0) / 1000, t_build)
-	end
-	if nat and not nat_hit then
-		core.handle_async(function(j) return core.rockmech_fem.solve_sub(j) end,
-			function(r) res_nat = r; finish() end, fem.natural_job(job))
-	end
-	job.nat = nil                -- 現況的解不帶天然地形（handle_async 呼叫時就複製好 job，回來再放回去）
-	core.handle_async(function(j)
-		return core.rockmech_fem.solve_nested(j)
-	end, function(r) res_main = r; finish() end, job)
-	job.nat = nat
+		-- 天然地形：快取有、天然地形也沒變 → 不解；否則另外送一個背景工作（跟現況的解同時算，兩條執行緒）
+		local nat, nat_sig, nat_hit = job.nat, nil, nil
+		if nat then
+			nat_sig = nat_signature(nat)
+			local e = nat_lookup(key)
+			if e and e.sig == nat_sig then nat_hit = e.res
+			elseif e then nat.u0 = e.res.u end
+		end
+		local t_build = (tj - t0 + core.get_us_time() - t1) / 1000      -- 兩步各自組工作的時間（不含中間等的那一步）
+		local res_main, res_nat = nil, nat_hit
+		local function finish()
+			if not res_main or (nat and not res_nat) then return end
+			local res = res_main
+			fem.lazy_stress(job, res)
+			if nat then
+				job.nat = nat
+				nat.u0 = nil
+				res.nat = fem.lazy_stress(fem.natural_job(job), res_nat)
+				if not nat_hit then
+					local _, i = nat_lookup(key)
+					if i then table.remove(nat_cache, i) end
+					nat_cache[#nat_cache + 1] = {key = key, sig = nat_sig, res = res_nat}
+					if #nat_cache > NAT_KEEP then table.remove(nat_cache, 1) end
+					res.ms = res.ms + res_nat.ms
+				end
+			end
+			last_key, last_u, last_ckey, last_cu = key, res.u, ckey, res.cu
+			last_job, last_res, last_meta = job, res, meta
+			if rockmech.monitor_update then rockmech.monitor_update(job, res, meta) end     -- 監測稜鏡（monitor.lua）
+			callback(job, res, meta, (core.get_us_time() - t0) / 1000, t_build)
+		end
+		-- 背景只傳回位移（job.lean），應力回主執行緒用到才算（fem.lazy_stress）
+		job.lean = true
+		if job.coarse then job.coarse.lean = true end
+		-- 送背景的複本只帶 σyy（fem.pack_s0）；主執行緒的 job 保留完整的 σ0（判定要用）
+		local s0p = {KH = cfg.KH or cfg.k0, Kh = cfg.Kh or cfg.k0, sH0 = cfg.sH0 or 0, sh0 = cfg.sh0 or 0, az = cfg.sH_azimuth or 0, k0s = K0_SOIL}
+		local function pack(j)
+			local t = fem.pack_s0(j, s0p)
+			if j.coarse then t.coarse = fem.pack_s0(j.coarse, s0p) end
+			return t
+		end
+		if nat and not nat_hit then
+			core.handle_async(function(j) return core.rockmech_fem.solve_sub(j) end,
+				function(r) res_nat = r; finish() end, pack(fem.natural_job(job)))
+		end
+		job.nat = nil                -- 現況的解不帶天然地形（handle_async 呼叫時就複製好 job，回來再放回去）
+		core.handle_async(function(j)
+			return core.rockmech_fem.solve_nested(j)
+		end, function(r) res_main = r; finish() end, pack(job))
+		job.nat = nat
+	end)
 end
 
 -- 最後一次解涵蓋 pos 時回傳 {s1, s3, fs}（MPa），給 HUD
