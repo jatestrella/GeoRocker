@@ -93,7 +93,8 @@ local DIP = {coal = function(v) return math.max(3, math.floor(40 * v / 100 + 0.5
 	copper = function(v) return math.floor(5 + 20 * v / 100 + 0.5) end}
 local GEN_TERRAIN = {{"hills", "丘陵"}, {"cuesta", "單面山"}}
 local GEN_SLIDERS = {
-	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end},
+	-- basic = true：一直顯示；其他的收在「更多地質選項」裡（state.gen_more 展開）
+	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end, basic = true},
 	{"seams", "礦層數（互層）", function(v) return ("%d 層"):format(1 + math.floor(4 * v / 100 + 0.5)) end},
 	{"outcrop", "主礦層露頭距離", function(v) return ("營地外 %d m"):format(math.floor(20 + 35 * v / 100 + 0.5)) end},
 	{"dip", "地層傾角", function(v)
@@ -105,8 +106,8 @@ local GEN_SLIDERS = {
 	{"fold", "褶皺", function(v) return ("振幅 %d m"):format(math.floor(25 * v / 100 + 0.5)) end},
 	{"wtdepth", "銅礦古地下水位", function(v) return ("地表下 %d m"):format(math.floor(10 + 30 * v / 100 + 0.5)) end},
 	-- 礦體規模 0.5–3（2 = 真實規模；worldgen.lua 寫成 rockmech_ore_scale）、煤層連續性（有煤的面積比例）
-	{"orescale", "礦體規模", function(v) return ("真實的 %d%%"):format(math.floor((0.5 + 2.5 * v / 100) / 2 * 100 + 0.5)) end},
-	{"coalcont", "煤層連續性", function(v) return ("%d%% 面積有煤"):format(math.max(5, math.floor(v + 0.5))) end},
+	{"orescale", "礦體規模", function(v) return ("真實的 %d%%"):format(math.floor((0.5 + 2.5 * v / 100) / 2 * 100 + 0.5)) end, basic = true},
+	{"coalcont", "煤層連續性", function(v) return ("%d%% 面積有煤"):format(math.max(5, math.floor(v + 0.5))) end, basic = true},
 }
 local function gen_randomize()
 	math.randomseed(os.time())
@@ -411,7 +412,10 @@ local function formspec()
 		return table.concat(fs)
 	end
 	local cm = state.page == "new_custom"
-	local PH = cm and 19.4 or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
+	-- 自訂頁面的高度：滑桿以外 12.65，每列滑桿 0.75，展開按鈕 0.8（收起時只算常用的滑桿）
+	local n_show = 0
+	for _, sl in ipairs(GEN_SLIDERS) do if sl.basic or state.gen_more then n_show = n_show + 1 end end
+	local PH = cm and (12.65 + 0.75 * n_show + 0.8) or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
 	local PW = state.page:sub(1, 4) == "new_" and 22 or 14     -- 開新遊戲的頁面比較寬（選項多）
 	local fs = {("formspec_version[6]size[%g,%g]bgcolor[#00000000;true]"):format(PW, PH), ("box[0,0;%g,%g;#000000b0]"):format(PW, PH)}
 	header(fs, PW)
@@ -513,11 +517,18 @@ local function formspec()
 				dd(8.0, "g_terrain", "地形", GEN_TERRAIN, gen.terrain)
 				y = y + 0.9
 				fs[#fs + 1] = "scrollbaroptions[min=0;max=100;smallstep=1;largestep=10]"
-				for _, sl in ipairs(GEN_SLIDERS) do
+				local function slider(sl)
 					fs[#fs + 1] = ("label[0.5,%g;%s]"):format(y, F(sl[2]))
 					fs[#fs + 1] = ("scrollbar[5.0,%g;10.5,0.45;horizontal;g_%s;%d]"):format(y - 0.22, sl[1], gen[sl[1]])
 					fs[#fs + 1] = ("label[15.9,%g;%s]"):format(y, F(("%d　%s"):format(gen[sl[1]], sl[3](gen[sl[1]]))))
 					y = y + 0.75
+				end
+				for _, sl in ipairs(GEN_SLIDERS) do if sl.basic then slider(sl) end end
+				-- 其他滑桿收起來，按這個展開／收起
+				fs[#fs + 1] = ("button[0.5,%g;6,0.6;g_more;%s]"):format(y - 0.3, F(state.gen_more and "▾ 收起地質選項" or "▸ 更多地質選項"))
+				y = y + 0.8
+				if state.gen_more then
+					for _, sl in ipairs(GEN_SLIDERS) do if not sl.basic then slider(sl) end end
 				end
 				fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子"), F(gen.seed))
 				fs[#fs + 1] = "field_close_on_enter[g_seed;false]"
@@ -582,6 +593,7 @@ core.button_handler = function(fields)
 		end
 	end
 	if fields.g_random then gen_randomize() end
+	if fields.g_more then state.gen_more = not state.gen_more end
 	if fields.tpls then
 		local e = core.explode_textlist_event(fields.tpls)
 		if (e.type == "CHG" or e.type == "DCL") and templates()[e.index] then
