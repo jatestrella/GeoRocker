@@ -300,6 +300,25 @@ function V.build_ground(plan, done, progress)
 		local function clear_above(x, y, z, h)
 			for yy = y + 1, math.min(pmax.y, y + h) do data[area:index(x, yy, z)] = c_air end
 		end
+		-- 單格凸塊：種樹那一欄的表土是整格、旁邊是薄的，薄的拿掉、樹清掉以後那一欄比四周高一格。
+		-- 比四個鄰格都高的欄，最上面那格拿掉（做兩輪）
+		for _ = 1, 2 do
+			local tops = {}
+			for k in pairs(wide) do
+				local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+				tops[k] = top_at(tonumber(x), tonumber(z))
+			end
+			for k, t in pairs(tops) do
+				local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+				x, z = tonumber(x), tonumber(z)
+				local hi, n = -math.huge, 0
+				for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
+					local u = tops[(x + d[1]) .. "," .. (z + d[2])]
+					if u then hi = math.max(hi, u); n = n + 1 end
+				end
+				if t and n == 4 and t > hi then data[area:index(x, t, z)] = c_air end
+			end
+		end
 		-- 地塊
 		local lotted = {}
 		for _, L in ipairs(plan.lots) do
@@ -328,6 +347,8 @@ function V.build_ground(plan, done, progress)
 		end
 		vm:set_data(data)
 		vm:write_to_map(true)
+		-- VoxelManip 寫入不會通知節理跡線：整個範圍標記重畫（岩石表面換成表土的地方，跡線才會消失）
+		if rockmech.jointmesh and rockmech.jointmesh.dirty_box then rockmech.jointmesh.dirty_box(pmin, pmax) end
 		if done then done() end
 	end)
 end
