@@ -14,19 +14,20 @@ local V = {}
 local STEP = 4
 local MAX_RELIEF = 3
 -- 店家（kind、沿路寬 w、深 d）。順序 = 找位置的順序（大的先找）
+-- 小店：地塊 10 × 11 → 店面外牆 8 × 7、室內 7 × 5（使用者 2026-11-16：室內深 3 格太小）
 V.LOTS = {
-	{kind = "vehicle_dealer", w = 28, d = 22},     -- 重型機械車輛商：展示間＋交車展示場
-	{kind = "receiving", w = 10, d = 20},          -- 收料場：收料車、地磅
+	{kind = "vehicle_dealer", w = 26, d = 14},     -- 重型機械車輛商：左邊店面（10 m）、右邊交車區（16 m，兩台車）
 	{kind = "crusher", w = 12, d = 12},            -- 破碎站
+	{kind = "receiving", w = 8, d = 14},           -- 收料場：收料車、地磅
 	{kind = "garage", w = 14, d = 12},             -- 修車廠：工房＋待修空地
 	{kind = "lecture_hall", w = 13, d = 10},       -- 大學講堂
 	{kind = "research", w = 11, d = 9},            -- 研究所
-	{kind = "consulting", w = 10, d = 8},          -- 工程顧問公司（採礦設備）
-	{kind = "tech_office", w = 10, d = 8},         -- 技師事務所（最多三位技師）
-	{kind = "tech_office", w = 10, d = 8},
-	{kind = "blasting", w = 9, d = 8},             -- 爆破器材行
-	{kind = "hardware", w = 10, d = 8},            -- 五金工具行
-	{kind = "staffing", w = 9, d = 8},             -- 人力派遣（操作員休息）
+	{kind = "consulting", w = 10, d = 11},         -- 工程顧問公司（採礦設備）
+	{kind = "tech_office", w = 10, d = 11},        -- 技師事務所（最多三位技師）
+	{kind = "tech_office", w = 10, d = 11},
+	{kind = "blasting", w = 10, d = 11},           -- 爆破器材行
+	{kind = "hardware", w = 10, d = 11},           -- 五金工具行
+	{kind = "staffing", w = 10, d = 11},           -- 人力派遣：操作員宿舍（長椅在屋裡）
 }
 
 local function hash(a, b, seed)
@@ -92,6 +93,24 @@ local function lot_rect(L)
 	return L.x - w / 2, L.z - d / 2, L.x + w / 2, L.z + d / 2
 end
 V.lot_rect = lot_rect
+-- 地塊本地座標（dx 往右、dz 朝正面；跟 career_placer 一樣）的矩形 → 世界座標的 x1, z1, x2, z2（沿座標軸）
+function V.local_rect(L, dx1, dx2, dz1, dz2)
+	local r = L.rot % 4
+	local fx, fz = ({0, 1, 0, -1})[r + 1], ({1, 0, -1, 0})[r + 1]
+	local rx, rz = fz, -fx
+	local xs, zs = {}, {}
+	for _, dx in ipairs({dx1, dx2}) do for _, dz in ipairs({dz1, dz2}) do
+		xs[#xs + 1] = L.x + dx * rx + dz * fx
+		zs[#zs + 1] = L.z + dx * rz + dz * fz
+	end end
+	local up = unpack or table.unpack
+	return math.min(up(xs)), math.min(up(zs)), math.max(up(xs)), math.max(up(zs))
+end
+-- 車輛商的交車區（本地座標）：右邊 16 m
+function V.dealer_yard(L)
+	local hw, hd = math.floor(L.w / 2), math.floor(L.d / 2)
+	return V.local_rect(L, hw - 16, hw - 1, -hd + 1, hd - 1)
+end
 
 function V.plan(ground, seed, cx, cz)
 	cx, cz = cx or 0, cz or 0
@@ -118,10 +137,14 @@ function V.plan(ground, seed, cx, cz)
 	local cells = road_cells(roads)
 	local taken = {}
 	local lots = {}
+	-- 不壓到路（留 1 m）、跟別的地塊留 2 m（村莊集中一點）
 	local function free(L)
 		local x1, z1, x2, z2 = lot_rect(L)
-		for x = math.floor(x1) - 3, math.ceil(x2) + 3 do for z = math.floor(z1) - 3, math.ceil(z2) + 3 do
-			if cells[x .. "," .. z] or taken[x .. "," .. z] then return false end
+		for x = math.floor(x1) - 2, math.ceil(x2) + 2 do for z = math.floor(z1) - 2, math.ceil(z2) + 2 do
+			if taken[x .. "," .. z] then return false end
+		end end
+		for x = math.floor(x1) - 1, math.ceil(x2) + 1 do for z = math.floor(z1) - 1, math.ceil(z2) + 1 do
+			if cells[x .. "," .. z] then return false end
 		end end
 		return true
 	end
@@ -154,7 +177,7 @@ function V.plan(ground, seed, cx, cz)
 	for _, spec in ipairs(V.LOTS) do
 		local placed
 		for pass = 1, 3 do
-			local lim, off = MAX_RELIEF + (pass - 1) * 2, 2 + (pass - 1) * 3
+			local lim, off = MAX_RELIEF + (pass - 1) * 2, 0.5 + (pass - 1) * 3
 			for _, c in ipairs(cand) do
 				-- 面向道路：門朝向路，rot 照路的垂直方向取最近的 90°
 				local nx, nz = c.side * math.cos(c.ang), -c.side * math.sin(c.ang)       -- 路的法線（往地塊那一側）

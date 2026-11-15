@@ -1091,12 +1091,17 @@ if cfg.village then
 	for _, it in ipairs(cfg.shop or {}) do if BLAST_VEHICLES[it.key] then it.shop = "vehicle" end end
 end
 -- vendors：{{kind, sit}, …}；props：店裡多的擺設 {{dx, dz（離後牆）, 高度層, 名稱}, …}
-local function build_shop(kind, n, vendors, props, opts)
+-- 單層貨櫃屋外殼（地塊裡、門朝道路）：回傳 set, at, yaw, hw（半寬）, zf（正面牆）, zb（後牆）, L
+local function build_shell(kind, n, opts)
 	local L = rockmech.village_lot and rockmech.village_lot(kind, n)
 	if not L then return end
 	opts = opts or {}
-	local set, at, yaw = rockmech.career_placer(L.x, L.z, L.y, L.rot)
-	local hw = math.floor((L.w - 2) / 2)               -- 店面半寬（沿路）
+	local set0, at0, yaw = rockmech.career_placer(L.x, L.z, L.y, L.rot)
+	-- opts.cx、opts.hw：店面只佔地塊的一部分（車輛商：左邊店面、右邊交車區）
+	local cx = opts.cx or 0
+	local function set(dx, h, dz, n, p2) set0(dx + cx, h, dz, n, p2) end
+	local function at(dx, h, dz) return at0(dx + cx, h, dz) end
+	local hw = opts.hw or math.floor((L.w - 2) / 2)    -- 店面半寬（沿路）
 	local zf = math.floor(L.d / 2) - 2                  -- 正面牆（門）
 	local zb = zf - (L.d - 3) + 1                       -- 後牆（室內至少三排：攤主、櫃台、客人）
 	for dx = -hw, hw do
@@ -1119,6 +1124,11 @@ local function build_shop(kind, n, vendors, props, opts)
 	local zm = math.floor((zb + zf) / 2)
 	set(-hw, 2, zm, "default:glass"); set(hw, 2, zm, "default:glass")
 	set(0, 3, zm, "rockmech:camp_lamp")
+	return set, at, yaw, hw, zf, zb, L
+end
+local function build_shop(kind, n, vendors, props, opts)
+	local set, at, yaw, hw, zf, zb, L = build_shell(kind, n, opts)
+	if not set then return end
 	-- 櫃台：後牆前面一排桌子，攤主站（坐）在桌子後面面向門
 	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
 	local nv = #vendors
@@ -1136,22 +1146,13 @@ local function build_shop(kind, n, vendors, props, opts)
 	storage:set_string(VENDOR_SPOTS, core.serialize(list))
 	return set, at, hw, zf
 end
--- 車輛商：交車區（地塊）正面左邊角落的接待處：桌子、椅子、課長，旁邊三角錐
-local function build_dealer_kiosk()
-	local L = rockmech.village_lot and rockmech.village_lot("vehicle_dealer")
-	if not L then return end
-	local set, at, yaw = rockmech.career_placer(L.x, L.z, L.y, L.rot)
-	local hx, hz = math.floor(L.w / 2) - 2, math.floor(L.d / 2) - 2
-	set(-hx, 1, hz - 1, "rockmech:camp_table"); set(-hx + 1, 1, hz - 1, "rockmech:camp_table")
-	set(-hx, 1, hz - 2, "rockmech:camp_chair")
-	set(-hx + 2, 1, hz, "rockmech:camp_cone")
-	local p = at(-hx, 0, hz - 2)
-	local list = core.deserialize(storage:get_string(VENDOR_SPOTS)) or {}
-	list[#list + 1] = {kind = "vehicle", pos = {x = p.x, y = L.y + 1.05, z = p.z}, yaw = yaw}
-	storage:set_string(VENDOR_SPOTS, core.serialize(list))
-end
 local function build_village_shops()
-	build_dealer_kiosk()
+	-- 車輛商：地塊左邊 10 m 的店面（課長坐在櫃台後），右邊是交車區（camp.yard_rect）
+	local dl = rockmech.village_lot and rockmech.village_lot("vehicle_dealer")
+	if dl then
+		build_shop("vehicle_dealer", 1, {{"vehicle", true}}, {{-3, 1, 1, "tires"}, {3, 1, 1, "shelf"}, {3, 2, 1, "helmets"}},
+			{cx = -math.floor(dl.w / 2) + 5, hw = 4})
+	end
 	build_shop("blasting", 1, {{"blast", false}}, {{-2, 1, 1, "explosives"}, {2, 1, 1, "crate"}, {3, 1, 1, "barrel"}})
 	build_shop("hardware", 1, {{"tools", true}}, {{-3, 1, 1, "shelf"}, {-3, 1, 2, "shelf"}, {3, 1, 1, "shelf"}, {2, 1, 1, "crate"}})
 	local set, at, hw, zf = build_shop("consulting", 1, {{"civil", true}}, {{-3, 1, 1, "blackboard"}, {-3, 1, 2, "blackboard"}, {3, 1, 1, "shelf"}})
@@ -1160,6 +1161,8 @@ local function build_village_shops()
 	build_shop("tech_office", 2, {{"geotech", true}}, {{-3, 1, 1, "shelf"}, {3, 1, 1, "blackboard"}, {3, 1, 2, "blackboard"}})
 	build_shop("garage", 1, {{"mechanic", false}}, {{-4, 1, 1, "toolbox"}, {-4, 1, 2, "tires"}, {4, 1, 1, "barrel"}, {4, 1, 2, "crate"}},
 		{wide_door = true})
+	-- 操作員宿舍（人力派遣）：只蓋屋子，長椅由 operator.lua 擺在屋裡（地塊中心那一排）。以後聘用操作員要有住處
+	build_shell("staffing", 1)
 end
 
 local function build_camp_now(owner, x0)

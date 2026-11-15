@@ -200,7 +200,7 @@ local function vlot(kind) return village() and rockmech.village_lot and rockmech
 local function yard_rect(x0)
 	local L = vlot("vehicle_dealer")
 	if not L then return nil end
-	local a, b, c, d = rockmech.village.lot_rect(L)
+	local a, b, c, d = rockmech.village.dealer_yard(L)          -- 車輛商地塊右邊那一塊（左邊是店面）
 	return {x1 = math.ceil(a), x2 = math.floor(c), z1 = math.floor(d), z2 = math.ceil(b)}
 end
 local function bay(x0)
@@ -218,6 +218,7 @@ local function village_pave(x0)
 		local L = vlot(kind)
 		if L then
 			local a, b, c, d = rockmech.village.lot_rect(L)
+			if kind == "vehicle_dealer" then a, b, c, d = rockmech.village.dealer_yard(L) end
 			local x1, x2, z1, z2 = math.ceil(a), math.floor(c), math.ceil(b), math.floor(d)
 			for x = x1, x2 do for z = z1, z2 do
 				local want = kind == "receiving" and on_scale(x0, x, z) and SCALE_NODE
