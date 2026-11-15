@@ -171,4 +171,76 @@ function V.plan(ground, seed, cx, cz)
 	return {roads = roads, lots = lots, cx = cx, cz = cz}
 end
 
+-- 鋪路、整地（VoxelManip：不算開挖，天然邊坡照舊）。plan：V.plan 的結果；done()：做完呼叫
+--   路：3 m 寬，路面是壓實碎石，高度照當地地面（順著地形），路上 4 m 內的樹、草清掉
+--   地塊（外推 1 m）：整平到 L.y，高的削掉（12 m 內）、低的用表土填，表面是表土
+function V.build_ground(plan, done)
+	local x1, z1, x2, z2 = math.huge, math.huge, -math.huge, -math.huge
+	local function grow(x, z) x1, z1, x2, z2 = math.min(x1, x), math.min(z1, z), math.max(x2, x), math.max(z2, z) end
+	local cells = road_cells(plan.roads)
+	for k in pairs(cells) do local x, z = k:match("^(%-?%d+),(%-?%d+)$"); grow(tonumber(x), tonumber(z)) end
+	for _, L in ipairs(plan.lots) do local a, b, c, d = lot_rect(L); grow(a - 2, b - 2); grow(c + 2, d + 2) end
+	local sy = math.floor(rockmech.cfg.surface_y or 0)
+	local pmin = {x = math.floor(x1), y = sy - 40, z = math.floor(z1)}
+	local pmax = {x = math.ceil(x2), y = sy + 140, z = math.ceil(z2)}
+	core.emerge_area(pmin, pmax, function(_, _, left)
+		if left > 0 then return end
+		local vm = core.get_voxel_manip()
+		local e1, e2 = vm:read_from_map(pmin, pmax)
+		local area = VoxelArea:new({MinEdge = e1, MaxEdge = e2})
+		local data = vm:get_data()
+		local c_air = core.get_content_id("air")
+		local c_soil = core.get_content_id("rockmech:topsoil")
+		local road_name = rockmech.compact_of and rockmech.compact_of[rockmech.rubble_with_level(rockmech.RUBBLE, rockmech.RUBBLE_LEVELS)]
+		local c_road = core.get_content_id(road_name or "rockmech:topsoil")
+		-- 地面：從上往下第一個走得上去、不是樹（樹幹、樹葉、蘋果）的方塊
+		local skip = {}
+		for _, n in ipairs({"default:tree", "default:leaves", "default:apple", "rockmech:grass"}) do
+			if core.registered_nodes[n] then skip[core.get_content_id(n)] = true end
+		end
+		local function solid(c)
+			if c == c_air or skip[c] then return false end
+			local d = core.registered_nodes[core.get_name_from_content_id(c)]
+			return d and d.walkable ~= false
+		end
+		local function top_at(x, z)
+			for y = pmax.y, pmin.y, -1 do
+				if solid(data[area:index(x, y, z)]) then return y end
+			end
+		end
+		local function clear_above(x, y, z, h)
+			for yy = y + 1, math.min(pmax.y, y + h) do data[area:index(x, yy, z)] = c_air end
+		end
+		-- 地塊
+		local lotted = {}
+		for _, L in ipairs(plan.lots) do
+			local a, b, c, d = lot_rect(L)
+			for x = math.floor(a) - 1, math.ceil(c) + 1 do for z = math.floor(b) - 1, math.ceil(d) + 1 do
+				local t = top_at(x, z) or L.y
+				for y = math.min(t, L.y) - 0, L.y do
+					local i = area:index(x, y, z)
+					if y > t or y == L.y then data[i] = c_soil end
+				end
+				clear_above(x, L.y, z, 12)
+				lotted[x .. "," .. z] = true
+			end end
+		end
+		-- 路
+		for k in pairs(cells) do
+			if not lotted[k] then
+				local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+				x, z = tonumber(x), tonumber(z)
+				local t = top_at(x, z)
+				if t then
+					data[area:index(x, t, z)] = c_road
+					clear_above(x, t, z, 4)
+				end
+			end
+		end
+		vm:set_data(data)
+		vm:write_to_map(true)
+		if done then done() end
+	end)
+end
+
 return V
