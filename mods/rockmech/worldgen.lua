@@ -402,6 +402,8 @@ function M.generate(world_conf)
 	set("weakness_max_spacing", 1.5)
 	set("career", "true")
 	set("design_slope", "true")    -- 地形退化到穩定坡角（config.lua 的 rockmech_design_slope）
+	set("ore_scale", 1)            -- 礦體規模：真實的一半（2 = 真實）
+	set("coal_continuity", 0.5)    -- 煤層連續性：一半面積有煤（透鏡）
 	set("solo", "true")            -- 個人遊戲
 	set("teacher", "false")        -- 不是教學地圖：沒有老師示範區、分組、防爆、名牌（config.lua 的 cfg.teacher）
 	world_conf:write()

@@ -787,7 +787,12 @@ function config.load(get, opts)
 		if not (st and st ~= "") then return nil end
 		local beds = {}
 		for lith, t, lens in tostring(st):gmatch("([%a_]+)%s*:%s*([%d.]+)%s*:?%s*([%d.]*)") do
-			if cfg.lithologies[lith] then beds[#beds + 1] = {lith = lith, t = tonumber(t), lens = tonumber(lens)}
+			if cfg.lithologies[lith] then
+				beds[#beds + 1] = {lith = lith, t = tonumber(t), lens = tonumber(lens)}
+				-- 煤層連續性：柱狀圖裡的煤也變成透鏡（門檻 lens_c 在 stress 載入後換算）
+				if lith == "coal" and cfg.coal_continuity < 1 and not beds[#beds].lens then
+					beds[#beds].lens, beds[#beds].lens_c = cfg.coal_lens_L, cfg.coal_continuity
+				end
 			else warnings[#warnings + 1] = "rockmech_strata" .. sfx .. ": 沒有岩性 " .. lith .. "（忽略）" end
 		end
 		local att = numbers("rockmech_strata_attitude" .. sfx, 3)
@@ -806,15 +811,29 @@ function config.load(get, opts)
 		-- 這一區有一根斑岩銅礦（stress.copper_at）。後兩個可省（舊世界：品位不隨深度變、沒有山丘）
 		local b = numbers("rockmech_copper" .. sfx, 8)
 		if b and b[3] > 0 then
-			S.body = {x0 = b[1], z0 = b[2], R = b[3], D = b[4], E = math.max(0, b[5]), ox = math.max(0, b[6]),
+			-- 礦體規模（cfg.ore_f）：半徑、富集帶厚、氧化帶厚、品位遞減深度、鐵帽山丘高（地下水位深不是礦體大小，不縮）
+			local f = cfg.ore_f
+			S.body = {x0 = b[1], z0 = b[2], R = b[3] * f, D = b[4], E = math.max(0, b[5]) * f, ox = math.max(0, b[6]) * f,
 				fac = math.max(1, b[7]), g0 = math.max(1, math.min(250, b[8])), cfg = cfg,
-				dd = b[9] and b[9] > 0 and b[9] or nil, hg = b[10] and b[10] > 0 and b[10] or nil}
+				dd = b[9] and b[9] > 0 and b[9] * f or nil, hg = b[10] and b[10] > 0 and b[10] * f or nil}
 			if S.body.hg then
 				cfg.body_hills = cfg.body_hills or {}
 				table.insert(cfg.body_hills, S.body)
 			end
 		end
 		return S
+	end
+	-- 礦體規模 rockmech_ore_scale（2 = 真實規模，0.5–3；新世界預設 1）：斑岩銅礦的半徑、富集帶、氧化帶、品位遞減深度、
+	-- 鐵帽山丘，煤層透鏡的大小都乘 ore_scale / 2。沒寫（舊世界）= 2（不縮）
+	local osc = tonumber(get("rockmech_ore_scale") or "")
+	cfg.ore_f = osc and math.max(0.25, math.min(1.5, osc / 2)) or 1
+	-- 煤層連續性 rockmech_coal_continuity（有煤的面積比例 0..1；1 = 整片連續）：煤層變成一塊塊透鏡（真實尺度約 200 m × 礦體規模），
+	-- 透鏡之間沒有煤，要靠鑽探找。沒寫（舊世界）= 1
+	local cc = tonumber(get("rockmech_coal_continuity") or "")
+	cfg.coal_continuity = cc and math.max(0.05, math.min(1, cc)) or 1
+	cfg.coal_lens_L = 200 * cfg.ore_f
+	if cfg.coal_seam and cfg.coal_continuity < 1 then
+		cfg.coal_seam.lens = {L = cfg.coal_lens_L, c = cfg.coal_continuity}      -- 門檻 thr 在 stress 載入後補上（stress.seam_t）
 	end
 	cfg.strata = parse_strata("")
 	local fl = get("rockmech_faults")

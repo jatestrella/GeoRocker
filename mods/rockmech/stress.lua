@@ -134,11 +134,19 @@ function stress.seam_lane(s, x)
 	if s.lane_margin and lx < -W / 2 + s.lane_margin then return nil end
 	return k, lx
 end
+-- 煤層透鏡（s.lens = {L = 尺度 m, thr = 門檻}，config 的 rockmech_coal_continuity）：
+-- 厚度乘上雜訊鐘形，一塊塊鼓起來、邊緣變薄到尖滅；沒有 lens 是整片連續的。lx：礦帶內座標（各帶一樣）
+function stress.seam_t(s, lx, z)
+	local L = s.lens
+	if not L then return s.t end
+	if not L.thr then L.thr = stress.lens_threshold(L.c) end
+	return s.t * stress.lens_factor(lx, z, L.L, L.thr, 401)
+end
 function stress.in_seam(s, x, y, z)
 	if s.z_min and z < s.z_min then return false end      -- 礦帶地形：南邊的走廊沒有煤
 	local k, lx = stress.seam_lane(s, x)
 	if not k then return false end
-	return math.abs(stress.seam_offset(s, lx, y, z)) <= s.t / 2
+	return math.abs(stress.seam_offset(s, lx, y, z)) <= stress.seam_t(s, lx, z) / 2
 end
 
 ---------------------------------------------------------------------------
@@ -165,6 +173,23 @@ local function fbm(x, z, seed)      -- 兩層：大起伏 + 一半大小的細�
 	return (vnoise(x, z, seed) * 2 + vnoise(x * 2.1, z * 2.1, seed + 17)) / 3
 end
 stress.terrain_noise = fbm
+-- 透鏡：雜訊超過門檻的地方鼓起來（0..1，鐘形邊緣寬 0.15）
+local LENS_W = 0.15
+function stress.lens_factor(x, z, L, thr, seed)
+	return smooth((fbm(x / L, z / L, seed) - thr) / LENS_W)
+end
+-- 連續性 c（有礦的面積比例，0..1）→ 門檻：雜訊的 (1 − c) 分位數（取樣算一次），扣半個邊緣寬（厚度一半的地方算有礦）
+local lens_thr_cache = {}
+function stress.lens_threshold(c)
+	local key = math.floor(c * 1000 + 0.5)
+	if lens_thr_cache[key] then return lens_thr_cache[key] end
+	local v = {}
+	for i = 0, 99 do for j = 0, 99 do v[#v + 1] = fbm(i * 1.37 + 0.11, j * 1.53 + 0.23, 401) end end
+	table.sort(v)
+	local q = v[math.max(1, math.min(#v, math.floor((1 - c) * #v + 0.5)))]
+	lens_thr_cache[key] = q - LENS_W / 2
+	return lens_thr_cache[key]
+end
 local HILL_PERIOD = 320     -- 礦區山丘段＋平地段一個循環的長度 (m)
 local HILL_PHASE = -60      -- 山丘段從這個 z 開始：營地（z ≈ 0）旁邊是山丘，平地段在北邊遠一點的地方
 
@@ -271,7 +296,7 @@ function stress.strata_column(S, x, z, dmax)
 	for i, b in ipairs(S.beds) do
 		local m = 1
 		if v then m = math.max(0, 1 + v.f * (2 * fbm(x / v.scale + i * 3.7, z / v.scale, 50 + i) - 1)) end
-		if b.lens then m = m * smooth((fbm(x / b.lens + i * 7.3, z / b.lens - i * 3.1, 300 + i) - 0.45) / 0.15) end
+		if b.lens then m = m * smooth((fbm(x / b.lens + i * 7.3, z / b.lens - i * 3.1, 300 + i) - (b.lens_c and stress.lens_threshold(b.lens_c) or 0.45)) / 0.15) end
 		d = d + b.t * m
 		out[i] = d
 		if dmax and d > dmax then past = past + 1; if past > 2 then break end end
@@ -498,7 +523,7 @@ end
 function stress.seam_grade(s, x, y, z)
 	local _, lx = stress.seam_lane(s, x)
 	x = lx or x      -- 礦帶：各帶的品位分布一樣
-	local d = 2 * stress.seam_offset(s, x, y, z) / s.t
+	local d = 2 * stress.seam_offset(s, x, y, z) / math.max(0.5, stress.seam_t(s, x, z))
 	local g = 228 - 75 * d * d + 7 * math.sin(x / 37) + 7 * math.sin(z / 29)
 	return math.max(1, math.min(255, math.floor(g + 0.5)))
 end
