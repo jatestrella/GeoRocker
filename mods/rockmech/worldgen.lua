@@ -224,11 +224,10 @@ function M.generate(world_conf)
 		if M.RECIPES[k] and not seen[k] then ores[#ores + 1] = k; seen[k] = true end
 	end
 	if #ores == 0 then ores[1] = "coal" end
-	-- 斑岩銅礦是岩漿侵入，可以侵入任何岩層：有勾別的礦時銅礦不是一種地質區，而是散在各斷塊裡的礦區（copper_districts）；
-	-- 只勾銅礦時，圍岩是安山岩（銅礦的柱狀圖）
+	-- 地質區（rockmech_provinces）：每種礦一種地質事件——煤 = 沉積盆地、大理岩 = 變質褶皺帶、銅礦 = 火成岩侵入帶（安山岩，
+	-- 斑岩礦區主要在這裡，也會侵入隔壁的地質區）。營地在前三種的交界
 	local types = {}
-	for _, o in ipairs(ores) do if ore_key(o) ~= "copper" then types[#types + 1] = o end end
-	if #types == 0 then types[1] = ores[1] end
+	for _, o in ipairs(ores) do types[#types + 1] = o end
 	local mode = choice("strata", {"single", "inter"})
 	local terrain = choice("terrain", {"hills", "cuesta"})
 	-- 每種礦自己的滑桿：rockmech_gen_<礦>_scale（礦體規模）、gen_<礦>_outcrop（離營地的距離）、大理岩 gen_marble_schist（片岩夾層）。
@@ -305,6 +304,9 @@ function M.generate(world_conf)
 		local cosd, tand = math.cos(math.rad(dip)), math.tan(math.rad(dip))
 		local sdd, cdd = math.sin(math.rad(dipdir)), math.cos(math.rad(dipdir))
 		local foldL, foldAz = r:next(150, 300), (dipdir + 90 + r:next(-20, 20)) % 360
+		-- 變質褶皺帶：造山擠壓的緊密褶皺（振幅 30–60 m、波長 120–250 m），大理岩一再露出地表
+		local foldA = foldA
+		if ore_key(ore) == "marble" then foldA, foldL = round(range(r, 30, 60)), r:next(120, 250) end
 		local bvar = var > 0 and not R.no_var
 		local St = {beds = {}, var = bvar and {f = math.min(0.95, var), scale = varScale} or nil}
 		for i, b in ipairs(beds) do St.beds[i] = {lith = b[1], t = b[2], lens = b[3]} end
@@ -343,6 +345,7 @@ function M.generate(world_conf)
 		for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) .. (b[3] and (":" .. b[3]) or "") end
 		local sfx = k == 1 and "" or ("_" .. k)
 		set("strata_main" .. (k == 1 and "" or ("_" .. k)), main_i)
+		set("strata_kind" .. (k == 1 and "" or ("_" .. k)), okey)
 		set("strata_dist" .. (k == 1 and "" or ("_" .. k)), dist)
 		if false and R.body then      -- 舊的單一斑岩體（新世界改用礦區 copper_districts）
 			-- 斑岩體：x0,z0,半徑,地下水位深,富集帶厚,氧化帶厚,富集倍率,中心品位
@@ -397,6 +400,7 @@ function M.generate(world_conf)
 	set("lith_mode", "zones")
 	set("zone_width", 100000)
 	set("fault_blocks", ("%d,200,400,%d"):format(faz, fault_w))
+	set("provinces", "3000,400,12")      -- 地質區約 3 km、邊界扭曲 ±400 m、區界斷層帶 12 m
 	set("gsi_breccia", round(range(r, 10, 25)))
 	set("geo_seed", seed % 1000000)
 	if seen.copper then

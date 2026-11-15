@@ -300,14 +300,15 @@ end
 local strata_column_raw
 -- 第 k 塊的柱狀圖：第 (k mod 種類數) + 1 種，傾角 ±5°、傾向 ±10°、厚度 ×0.85–1.15，各自錯動：主礦層頂在塊裡
 -- 離斷層 dist m 的地方露頭（沿走向隨機 ±200 m）。第 0 塊就是原本那一套（營地的露頭照地圖產生器算的）
-function stress.block_strata(S, k)
+function stress.block_strata(S, k, t)
 	local cache = S._bk
 	if not cache then cache = {}; S._bk = cache end
-	local B = cache[k]
+	local key = t and (k * 16 + t) or k
+	local B = cache[key]
 	if B then return B end
 	local Bk, n = S.blocks, #S.domains
-	local D = S.domains[k % n + 1]
-	if k == 0 then cache[k] = D; return D end
+	local D = S.domains[t or (k % n + 1)]
+	if k == 0 then cache[key] = D; return D end
 	local sd = hseed(Bk)
 	local dip = math.max(2, math.min(80, D.dip_deg + (hash(k, 11, sd) - 0.5) * 10))
 	local dd = D.dipdir_deg + (hash(k, 13, sd) - 0.5) * 20
@@ -326,16 +327,57 @@ function stress.block_strata(S, k)
 	local f = B.fold
 	local fold = f and f.A * math.sin(2 * math.pi * (px * f.cx + pz * f.cz) / f.L) or 0
 	B.y0 = top / B.cos_dip + B.tan_dip * (px * B.sin_dd + pz * B.cos_dd) - fold + (Bk.sy or 0)
-	cache[k] = B
+	cache[key] = B
 	return B
 end
+
+-- 地質區（S.prov，新世界）：照地質事件分區（沉積盆地、變質褶皺帶、火成岩侵入帶 = S.domains 的種類），扭曲過的 Voronoi，
+-- 每區約 cell 大小；區界是大斷層（縫合帶，寬 bw 的斷層角礫岩）。營地在三區交界：營地周圍三格的區心各隔 120°，
+-- 類型是第 1、2、3 種；其他格隨機。回傳 第幾種（S.domains 的索引）；在區界斷層帶裡回傳 nil
+local function prov_point(P, i, j)
+	local n, C, sd = #P.types, P.cell, (P.seed or 0) % 983
+	local T = P.types
+	if i == 0 and j == 0 then return 0.35 * C, 0.35 * C, T[1] end
+	if i == -1 and j == 0 then return -0.35 * C, 0.35 * C, T[math.min(2, n)] end
+	if i == 0 and j == -1 then return 0.02 * C, -0.5 * C, T[math.min(3, n)] end
+	local px = (i + 0.1 + 0.8 * hash(i, j, sd + 31)) * C
+	local pz = (j + 0.1 + 0.8 * hash(i, j, sd + 37)) * C
+	if i == -1 and j == -1 then px, pz = (i + 0.1) * C, (j + 0.1) * C end
+	return px, pz, T[math.floor(hash(i, j, sd + 41) * n) + 1]
+end
+function stress.province(S, x, z)
+	local P = S.prov
+	if not P then return nil end
+	local c = P._c
+	if c and c.x == x and c.z == z then return c.t end
+	local C = P.cell
+	local wx = x + P.warp * 2 * (fbm(x / 1500, z / 1500, 271) - 0.5)
+	local wz = z + P.warp * 2 * (fbm(x / 1500 + 7.7, z / 1500 - 3.3, 277) - 0.5)
+	local ci, cj = math.floor(wx / C), math.floor(wz / C)
+	local d1, d2, t1, t2 = math.huge, math.huge, nil, nil
+	for i = ci - 1, ci + 1 do for j = cj - 1, cj + 1 do
+		local px, pz, t = prov_point(P, i, j)
+		local d = (wx - px) ^ 2 + (wz - pz) ^ 2
+		if d < d1 then d2, t2 = d1, t1; d1, t1 = d, t
+		elseif d < d2 then d2, t2 = d, t end
+	end end
+	local t = t1
+	if t2 and t2 ~= t1 and (math.sqrt(d2) - math.sqrt(d1)) < P.bw then t = nil end      -- 區界斷層帶
+	P._c = {x = x, z = z, t = t}
+	return t
+end
 block_of = function(S, x, z)
+	local t
+	if S.prov then
+		t = stress.province(S, x, z)
+		if not t then return nil end
+	end
 	local Bk = S.blocks
 	local s = x * Bk.nx + z * Bk.nz
 	local k = block_index(Bk, s)
 	local hw = Bk.fw / 2
 	if s - bnd(Bk, k) < hw or bnd(Bk, k + 1) - s < hw then return nil end
-	return stress.block_strata(S, k)
+	return stress.block_strata(S, k, t)
 end
 
 -- 柱狀圖頂面在 (x, z) 的高程（S 是單一一區的柱狀圖）
@@ -493,6 +535,14 @@ local function district(cu, i, j)
 		cz = (j + 0.7 * (hash(i, j, sd + 7) - 0.5)) * C
 	end
 	d = {}
+	-- 地質區：斑岩礦區主要在火成岩侵入帶（每格都有），沉積盆地 2 成、變質褶皺帶 3 成（侵入到隔壁的地質區）
+	local St = cu.cfg and cu.cfg.strata
+	if St and St.prov and not (i == 0 and j == 0) then
+		local t = stress.province(St, cx, cz)
+		local kind = t and St.domains[t] and St.domains[t].kind
+		local p = kind == "copper" and 1 or kind == "marble" and 0.3 or 0.2
+		if hash(i, j, sd + 13) >= p then cache[key] = d; return d end
+	end
 	local main = cu_body(cu, sd, i, j, 0, cx, cz, false)
 	if i == 0 and j == 0 then main.R = (30 + 45 * hash(0, 1, sd)) * cu.f end
 	d[1] = main

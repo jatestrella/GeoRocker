@@ -900,6 +900,7 @@ function config.load(get, opts)
 		end
 		for k, D in ipairs(domains) do
 			D._type = k
+			D.kind = get("rockmech_strata_kind" .. (k == 1 and "" or ("_" .. k)))
 			D.main_i = tonumber(get("rockmech_strata_main" .. (k == 1 and "" or ("_" .. k))) or "") or 1
 			D.dist = tonumber(get("rockmech_strata_dist" .. (k == 1 and "" or ("_" .. k))) or "") or 40
 		end
@@ -908,6 +909,14 @@ function config.load(get, opts)
 			wmax = math.max(fb[2], fb[3]), fw = math.max(0, fb[4]), lith = cfg.lithologies.breccia and "breccia" or domains[1].beds[1].lith,
 			seed = tonumber(get("rockmech_geo_seed") or "") or 0, sy = cfg.surface_y or 0}
 		cfg.strata.domains = domains
+		-- 地質區（rockmech_provinces = 區大小,扭曲,區界斷層寬）：照地質事件分區，種類就是上面的柱狀圖（stress.province）
+		local pv = numbers("rockmech_provinces", 3)
+		if pv then
+			local T = {}
+			for k = 1, #domains do T[k] = k end
+			cfg.strata.prov = {cell = math.max(500, pv[1]), warp = math.max(0, pv[2]), bw = math.max(0, pv[3]), types = T,
+				seed = tonumber(get("rockmech_geo_seed") or "") or 0}
+		end
 	end
 	-- 斑岩銅礦的礦區（新世界）：rockmech_copper_districts = 格子大小,衛星礦體數,地下水位深,營地礦體距離（m）。
 	-- 世界切成格子，每格一個礦區（主礦體＋衛星礦體），尺寸照銅礦規模 cfg.ore_f_of("copper")；斑岩體侵入任何岩層（stress.copper_point）
