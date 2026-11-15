@@ -345,11 +345,8 @@ local function prov_point(P, i, j)
 	if i == -1 and j == -1 then px, pz = (i + 0.1) * C, (j + 0.1) * C end
 	return px, pz, T[math.floor(hash(i, j, sd + 41) * n) + 1]
 end
-function stress.province(S, x, z)
-	local P = S.prov
-	if not P then return nil end
-	local c = P._c
-	if c and c.x == x and c.z == z then return c.t end
+-- 最近、第二近的區心：種類 t1, t2 和距離 d1, d2（座標先扭曲）
+local function prov_nearest(P, x, z)
 	local C = P.cell
 	local wx = x + P.warp * 2 * (fbm(x / 1500, z / 1500, 271) - 0.5)
 	local wz = z + P.warp * 2 * (fbm(x / 1500 + 7.7, z / 1500 - 3.3, 277) - 0.5)
@@ -361,8 +358,16 @@ function stress.province(S, x, z)
 		if d < d1 then d2, t2 = d1, t1; d1, t1 = d, t
 		elseif d < d2 then d2, t2 = d, t end
 	end end
+	return t1, t2, math.sqrt(d1), math.sqrt(d2)
+end
+function stress.province(S, x, z)
+	local P = S.prov
+	if not P then return nil end
+	local c = P._c
+	if c and c.x == x and c.z == z then return c.t end
+	local t1, t2, d1, d2 = prov_nearest(P, x, z)
 	local t = t1
-	if t2 and t2 ~= t1 and (math.sqrt(d2) - math.sqrt(d1)) < P.bw then t = nil end      -- 區界斷層帶
+	if t2 and t2 ~= t1 and (d2 - d1) < P.bw then t = nil end      -- 區界斷層帶
 	P._c = {x = x, z = z, t = t}
 	return t
 end
@@ -662,10 +667,61 @@ end
 --   hills：雜訊起伏的丘陵，約一半是平地；cuesta：單面山。沿傾向鋸齒狀：順著層面的緩坡（坡度＝岩層傾角）＋朝上傾方向的陡崖，
 --   陡崖沿走向蜿蜒；傾角大就成了豬背嶺。每一座的順向坡比前一座年輕（地層往傾向一直往下）
 local CUESTA_SCARP = math.tan(math.rad(55))
+-- 依地質的地形（cfg.terrain.mode = "geo"，參考 Minecraft 的做法）：多層碎形雜訊（6 層，頻率 ×2、振幅 ×½）、
+-- 脊狀雜訊（1 − |雜訊|，尖的山脊和 V 形谷）、座標扭曲（形狀不沿格線）。地形種類照地質區：
+--   沉積盆地 → 平原和緩丘（0.06–0.36 H）；火成岩侵入帶 → 丘陵（0.15–0.7 H）；
+--   變質褶皺帶 → 山地，山脊順著褶皺軸排列（0.2–1 H）。區界 300 m 內平順過渡。營地附近起伏小一點（邊界不規則）
+local function fbm6(x, z, seed)
+	local s, a, f, n = 0, 1, 1, 0
+	for o = 1, 6 do s = s + a * vnoise(x * f, z * f, seed + o * 13); n = n + a; a = a * 0.5; f = f * 2.03 end
+	return s / n
+end
+local function ridged(x, z, seed)
+	local s, a, f, n = 0, 1, 1, 0
+	for o = 1, 5 do
+		local v = 1 - math.abs(2 * vnoise(x * f, z * f, seed + o * 7) - 1)
+		s = s + a * v * v; n = n + a; a = a * 0.5; f = f * 2.1
+	end
+	return s / n
+end
+local function geo_style(D, x, z, H)
+	local kind = D and D.kind
+	if kind == "coal" then
+		local n = fbm6(x / 500, z / 500, 311)
+		return H * (0.06 + 0.3 * n * n)
+	elseif kind == "copper" then
+		return H * (0.15 + 0.55 * fbm6(x / 260, z / 260, 331))
+	end
+	-- 變質褶皺帶：沿褶皺軸拉長的脊狀雜訊
+	local f = D and D.fold
+	local cx, cz = 1, 0
+	if f then cx, cz = f.cx, f.cz end
+	local across, along = x * cx + z * cz, -x * cz + z * cx
+	local r = ridged(along / 700, across / 160, 351)
+	local m = 0.5 + 0.5 * fbm6(x / 900, z / 900, 361)
+	return H * (0.2 + 0.8 * r * m)
+end
+local function geo_terrain(cfg, x, z, H)
+	local S = cfg.strata
+	local wx = x + 160 * (fbm(x / 300, z / 300, 381) - 0.5)
+	local wz = z + 160 * (fbm(x / 300 + 5.1, z / 300 - 2.7, 383) - 0.5)
+	local t1, t2, d1, d2 = prov_nearest(S.prov, wx, wz)
+	local a = 0.5 + 0.5 * smooth((d2 - d1) / 300)
+	local h = geo_style(S.domains[t1], wx, wz, H)
+	if t2 and a < 1 then h = a * h + (1 - a) * geo_style(S.domains[t2], wx, wz, H) end
+	local r = math.sqrt(x * x + z * z)
+	local edge = 50 + 40 * fbm(x / 40, z / 40, 371)
+	return h * (0.25 + 0.75 * smooth((r - edge) / 120))
+end
+
 function stress.free_terrain(cfg, x, z)
 	local T = cfg.terrain
 	if T.height then local h = T.height(x, z); return h, h end      -- 真實地形（高程網格）
 	local H = T.h
+	if T.mode == "geo" and cfg.strata and cfg.strata.prov then
+		local h = math.max(0, geo_terrain(cfg, x, z, H))
+		return h, h
+	end
 	local h
 	if T.mode == "cuesta" and cfg.strata then
 		local S = domain_of(cfg.strata, x, z) or cfg.strata      -- 每個地質區照自己的傾角（跨過斷層地形就變了）

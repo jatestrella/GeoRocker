@@ -71,7 +71,7 @@ local state = {page = "title", map = nil, msg = nil, confirm = false}
 -- 勾兩種以上：每種礦一個地質區，隔著斷層（worldgen.lua 的 rockmech_gen_ores）。加一種礦：這裡加一列、worldgen.lua 加它的地質
 -- 銅礦：斑岩銅礦（安山岩裡一根直立斑岩體，鐵帽、氧化帶、次生富集帶、原生帶）
 local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}, {"copper", "銅礦", "銅"}}
-local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
+local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 25, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
 	coal_scale = 20, coal_outcrop = 40, coalcont = 50, marble_scale = 20, marble_outcrop = 40, marble_schist = 30,
 	copper_scale = 20, copper_outcrop = 40, copper_sat = 50, seed = ""}
 local function chosen()
@@ -92,7 +92,7 @@ local function strata_col() return #chosen() > 1 and 4 or only("marble") and 3 o
 local DIP = {coal = function(v) return math.max(3, math.floor(40 * v / 100 + 0.5)) end,
 	marble = function(v) return math.floor(20 + 25 * v / 100 + 0.5) end,
 	copper = function(v) return math.floor(5 + 20 * v / 100 + 0.5) end}
-local GEN_TERRAIN = {{"hills", "丘陵"}, {"cuesta", "單面山"}}
+local GEN_TERRAIN = {{"geo", "依地質"}, {"hills", "丘陵"}, {"cuesta", "單面山"}}
 -- 礦體規模參數 0.5–3（預設 1）；real：多少算真實規模（銅礦 3、煤和大理岩 2，跟 mods/rockmech/config.lua 的 ORE_REAL 一樣）
 local function scale_text_for(real)
 	return function(v) return ("%.2g（真實 = %d）"):format(math.floor((0.5 + 2.5 * v / 100) * 20 + 0.5) / 20, real) end
@@ -100,7 +100,7 @@ end
 local scale_text = scale_text_for(2)
 local GEN_SLIDERS = {
 	-- cat：屬於哪個大類（GEN_CATS）
-	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end, cat = "terrain"},
+	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(120 * v / 100 + 0.5)) end, cat = "terrain"},
 	{"seams", "礦層數（互層）", function(v) return ("%d 層"):format(1 + math.floor(4 * v / 100 + 0.5)) end, cat = "strata"},
 	{"dip", "地層傾角", function(v)
 		local c, t = chosen(), {}
@@ -143,7 +143,7 @@ local function cat_shown(c)
 end
 local function gen_randomize()
 	math.randomseed(os.time())
-	gen.strata, gen.terrain = math.random(1, 2), math.random(1, 2)
+	gen.strata, gen.terrain = math.random(1, 2), math.random(1, #GEN_TERRAIN)
 	for _, sl in ipairs(GEN_SLIDERS) do gen[sl[1]] = math.random(0, 100) end
 end
 

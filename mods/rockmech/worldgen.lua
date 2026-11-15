@@ -206,6 +206,7 @@ function M.generate(world_conf)
 	local seed = (tonumber(seed_str) or os.time()) % 2147483647
 	local r = PcgRandom(math.floor(seed))
 	-- 滑桿 0..1；沒設定就隨機
+	local function gen_num_early(k) return tonumber(world_conf:get("rockmech_gen_" .. k) or "") end
 	local function frac(k)
 		local v = tonumber(world_conf:get("rockmech_gen_" .. k) or "")
 		if v then return math.max(0, math.min(100, v)) / 100 end
@@ -229,7 +230,9 @@ function M.generate(world_conf)
 	local types = {}
 	for _, o in ipairs(ores) do types[#types + 1] = o end
 	local mode = choice("strata", {"single", "inter"})
-	local terrain = choice("terrain", {"hills", "cuesta"})
+	-- 地形：依地質（geo，沉積盆地平原、火成岩丘陵、褶皺帶山地）、丘陵、單面山；沒選（隨機地圖）用依地質
+	local terrain = world_conf:get("rockmech_gen_terrain")
+	if terrain ~= "hills" and terrain ~= "cuesta" then terrain = "geo" end
 	-- 每種礦自己的滑桿：rockmech_gen_<礦>_scale（礦體規模）、gen_<礦>_outcrop（離營地的距離）、大理岩 gen_marble_schist（片岩夾層）。
 	-- 沒有就用舊的共用滑桿（gen_orescale、gen_outcrop），再沒有：規模 1（真實的一半）、距離隨機
 	local function gen_num(k) return tonumber(world_conf:get("rockmech_gen_" .. k) or "") end
@@ -246,7 +249,9 @@ function M.generate(world_conf)
 	end
 	local var = round(0.6 * frac("thickvar"), 0.01)
 	local foldA = round(25 * frac("fold"))
-	local relief = round(40 * frac("relief"))
+	-- 地形起伏 H：滑桿 0–100 → 0–120 m；沒有滑桿（隨機地圖）20–40 m
+	local relief = gen_num_early("relief")
+	relief = relief and round(120 * math.max(0, math.min(100, relief)) / 100) or r:next(20, 40)
 	local nseam = mode == "single" and 1 or (1 + math.floor(4 * frac("seams") + 0.5))
 	local varScale = r:next(60, 140)
 	-- 斷層：法線方位隨機；第 1 條離出生點 90–140 m（營地、第 1 區的露頭都在這之內），之後每條再往外 150–250 m
