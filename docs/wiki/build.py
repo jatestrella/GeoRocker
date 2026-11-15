@@ -547,7 +547,7 @@ FORMULAS = {
 </ul>""",
 "m-rockmass": """
 <ul>
-<li>岩體單軸強度 σc,mass = σci·s<sup>a</sup>；岩體張力強度 σt,mass = σt·s·mi/mb。</li>
+<li>岩體單軸強度 σc,mass = σci·s<sup>a</sup>；岩體張力強度 σt,mass = σt·s<sup>a</sup>（跟單軸強度同一個折減，岩體的抗張／抗壓比等於完整岩石）。</li>
 <li>現地應力：σv = Σγ·h ÷ 1000；σH = K<sub>H</sub>·σv + σH₀，σh = K<sub>h</sub>·σv + σh₀（預設 K = 0.5；隨機地圖 K<sub>H</sub> 1.0–2.0、K<sub>h</sub> 0.6–1.0）。</li>
 <li>σH 方位 θ（由北順時針）：σxx = σH sin²θ + σh cos²θ，σzz = σH cos²θ + σh sin²θ，σxz = (σH − σh) sinθ cosθ。</li>
 <li>變形模數（Hoek &amp; Diederichs）：E<sub>rm</sub> = E<sub>i</sub>·(0.02 + (1 − D/2) ÷ (1 + e<sup>(60 + 15D − GSI)/11</sup>))，E<sub>i</sub> = MR·σci。</li>

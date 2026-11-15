@@ -1428,7 +1428,7 @@ Deep σc,m / σt,m=
 L_max for 1 / 4 m thickness (surface)=
 Breakage h_ref (m)=
 σci and σt are intact rock (laboratory) values; rock mass strength follows Hoek-Brown (GSI, mi, D) and is divided by the scale factor N@=@1.=
-σc,m @= σci·s^a (unconfined, at a free face); σt,m @= σt·s·mi/mb; L_max @= √(σt,m·t / (3γ)); the roof span is about twice that.=
+σc,m @= σci·s^a (unconfined, at a free face); σt,m @= σt·s^a; L_max @= √(σt,m·t / (3γ)); the roof span is about twice that.=
 Joint set=
 Input dip / dip direction=
 Aligned dip / dip direction=

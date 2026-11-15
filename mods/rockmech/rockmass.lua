@@ -8,7 +8,8 @@
 --   a  = 1/2 + (e^(−GSI/15) − e^(−20/3))/6
 --   破壞：σ1 = σ3 + σci·(mb·σ3/σci + s)^a
 --   單軸（臨空面 σ3 = 0）：σc,mass = σci·s^a
---   張力：σt,mass = σt·s·mi/mb（= Hoek-Brown 的 s·σci/mb 依實驗室 σt 校正，GSI 100 時等於 σt）
+--   張力：σt,mass = σt·s^a（跟單軸強度同一個折減：岩體的抗張／抗壓比 = 完整岩石的 σt/σci，GSI 100 時等於 σt）。
+--   不用 Hoek-Brown 包絡線的抗張端 s·σci/mb（折減 s·mi/mb，GSI 低時抗張掉得比抗壓快很多：頁岩 GSI 50 只剩 2.6 %）
 -- GSI 只代表格子內看不到的裂隙（< 1 m）與尺寸效應；明確建模的節理組由節理滑動處理，
 -- 不要把它們再算進 GSI。
 --
@@ -54,7 +55,7 @@ function rockmass.params(lith, gsi, opts)
 	local sigci = lith.ucs * (opts.ucs_scale or 1) / N
 	local r = {gsi = gsi, sigci = sigci, mb = mb, s = s, a = a}
 	r.ucs_m = sigci * s ^ a
-	r.sigt = lith.tensile * (opts.tensile_scale or 1) / N * s * mi / mb
+	r.sigt = lith.tensile * (opts.tensile_scale or 1) / N * s ^ a
 	-- 整體岩體強度 σcm（Hoek 2002），只供顯示
 	r.sigcm = sigci * (mb + 4 * s - a * (mb - 8 * s)) * (mb / 4 + s) ^ (a - 1)
 		/ (2 * (1 + a) * (2 + a))

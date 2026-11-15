@@ -499,7 +499,7 @@ local function tab_lith()
 	return table_el(0.3, 0.9, 16.4, 4, "rm_t2", c, rows) ..
 		("label[0.3,5.4;%s]"):format(F(S("σci and σt are intact rock (laboratory) values; rock mass strength follows Hoek-Brown (GSI, mi, D) and is divided by the scale factor N=@1.",
 			("%g"):format(cfg.model_scale)))) ..
-		("label[0.3,5.9;%s]"):format(F(S("σc,m = σci·s^a (unconfined, at a free face); σt,m = σt·s·mi/mb; L_max = √(σt,m·t / (3γ)); the roof span is about twice that.")))
+		("label[0.3,5.9;%s]"):format(F(S("σc,m = σci·s^a (unconfined, at a free face); σt,m = σt·s^a; L_max = √(σt,m·t / (3γ)); the roof span is about twice that.")))
 end
 
 local function tab_joints()

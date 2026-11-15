@@ -40,7 +40,14 @@ describe("rockmass 強度", function()
 		local r = rockmass.params(SHALE, 50)
 		assert.near(1.81, r.ucs_m, 0.01)
 		assert.near(4.12, r.sigcm, 0.02)
-		assert.near(2 * r.s * 6 / r.mb, r.sigt, 1e-12)
+		assert.near(2 * r.s ^ r.a, r.sigt, 1e-12)
+	end)
+
+	it("張力跟單軸同一個折減：岩體的抗張／抗壓比 = 完整岩石的 σt/σci", function()
+		for _, g in ipairs({30, 50, 75, 100}) do
+			local r = rockmass.params(SHALE, g)
+			assert.near(2 / 30, r.sigt / r.ucs_m, 1e-9)
+		end
 	end)
 
 	it("相似比 N：σci、σt 都 ÷ N", function()
