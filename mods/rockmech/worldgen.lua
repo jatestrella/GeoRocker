@@ -224,6 +224,11 @@ function M.generate(world_conf)
 		if M.RECIPES[k] and not seen[k] then ores[#ores + 1] = k; seen[k] = true end
 	end
 	if #ores == 0 then ores[1] = "coal" end
+	-- 斑岩銅礦是岩漿侵入，可以侵入任何岩層：有勾別的礦時銅礦不是一種地質區，而是散在各斷塊裡的礦區（copper_districts）；
+	-- 只勾銅礦時，圍岩是安山岩（銅礦的柱狀圖）
+	local types = {}
+	for _, o in ipairs(ores) do if ore_key(o) ~= "copper" then types[#types + 1] = o end end
+	if #types == 0 then types[1] = ores[1] end
 	local mode = choice("strata", {"single", "inter"})
 	local terrain = choice("terrain", {"hills", "cuesta"})
 	-- 每種礦自己的滑桿：rockmech_gen_<礦>_scale（礦體規模）、gen_<礦>_outcrop（離營地的距離）、大理岩 gen_marble_schist（片岩夾層）。
@@ -248,11 +253,9 @@ function M.generate(world_conf)
 	-- 斷層：法線方位隨機；第 1 條離出生點 90–140 m（營地、第 1 區的露頭都在這之內），之後每條再往外 150–250 m
 	local faz = r:next(0, 359)
 	local fnx, fnz = math.sin(math.rad(faz)), math.cos(math.rad(faz))
-	local faults, fd = {}, 0
-	for k = 2, #ores do
-		fd = fd + (k == 2 and r:next(90, 140) or r:next(150, 250))
-		faults[#faults + 1] = {d = fd, w = r:next(6, 14)}
-	end
+	-- 重複的斷塊：寬 200–400 m、斷層帶寬 6–14 m，種類輪流（stress.block_strata）；沒有盡頭
+	local faults = {}
+	local fault_w = r:next(6, 14)
 
 	local set = function(k, v) world_conf:set("rockmech_" .. k, tostring(v)) end
 	-- 真實地形（rockmech_terrain = dem,檔名）：不擲地形；礦層露頭的高度照那裡的地面
@@ -277,7 +280,7 @@ function M.generate(world_conf)
 	local function jr() return pick(r, {1, 1.5, 2, 3}) end
 	local function ja() return pick(r, {1, 2, 3, 4}) end
 	local main_dip, main_dipdir
-	for k, ore in ipairs(ores) do
+	for k, ore in ipairs(types) do
 		local R = M.RECIPES[ore]
 		local beds = {}
 		local function add(lith, t, lens)      -- lens：透鏡尺度 (m)，見 stress.strata_column
@@ -318,9 +321,7 @@ function M.generate(world_conf)
 			px, pz = tonumber(cx) or 0, tonumber(cz) or 0
 		elseif k == 1 then px, pz = -dist * sdd, -dist * cdd
 		else
-			local f = faults[k - 1]
-			local o = f.d + f.w / 2 + dist
-			px, pz = o * fnx, o * fnz
+			px, pz = dist * fnx, dist * fnz      -- 第 2 種以後：每一塊的高度由 stress.block_strata 照 dist 重算，這裡只是佔位
 		end
 		-- 頂面高程 ref_y(P) = y0 − tan·(P·傾向) + fold(P)；主礦層頂 = ref_y(P) − top(P)/cos = 0
 		local y0 = top_at(px, pz) / cosd + tand * (px * sdd + pz * cdd) - fold_at(px, pz)
@@ -341,7 +342,9 @@ function M.generate(world_conf)
 		local parts = {}
 		for _, b in ipairs(beds) do parts[#parts + 1] = ("%s:%g"):format(b[1], b[2]) .. (b[3] and (":" .. b[3]) or "") end
 		local sfx = k == 1 and "" or ("_" .. k)
-		if R.body then
+		set("strata_main" .. (k == 1 and "" or ("_" .. k)), main_i)
+		set("strata_dist" .. (k == 1 and "" or ("_" .. k)), dist)
+		if false and R.body then      -- 舊的單一斑岩體（新世界改用礦區 copper_districts）
 			-- 斑岩體：x0,z0,半徑,地下水位深,富集帶厚,氧化帶厚,富集倍率,中心品位
 			local Rr = r:next(30, 75)
 			local bx, bz
@@ -366,11 +369,11 @@ function M.generate(world_conf)
 			local depth = math.floor(ground(0, 0) - (y0 + fold_at(0, 0) - top_at(0, 0) / cosd) + 0.5)
 			logs[#logs + 1] = ("%s %s %d 層、傾角 %d°/%03d°、露頭 %d m 外、營地底下 %d m"):format(ore, mode, nseam, dip, dipdir, dist, depth)
 		else
-			logs[#logs + 1] = ("斷層 %d m 外（帶寬 %d m）→ %s 傾角 %d°/%03d°"):format(faults[k - 1].d, faults[k - 1].w, ore, dip, dipdir)
+			logs[#logs + 1] = ("第 %d 種斷塊 %s 傾角 %d°/%03d°"):format(k, ore, dip, dipdir)
 		end
 		-- 節理：離散裂隙網路（dfn.lua），每區 3 組：層面（大理岩是片岩的葉理）＋兩組陡傾節理，
 		-- 第 k 區是第 3k−2 … 3k 組；兩區以上時每組只長在自己的區
-		local b, zs = 3 * (k - 1), #ores > 1 and ("," .. k) or ""
+		local b, zs = 3 * (k - 1), #types > 1 and ("," .. k) or ""
 		set("joint_set_" .. (b + 1), R.joint1(r, dip, dipdir, round, range, pick))
 		set("joint_dfn_" .. (b + 1), R.dfn1(r, round, range) .. zs)
 		local d2 = r:next(0, 359)
@@ -393,11 +396,17 @@ function M.generate(world_conf)
 	set("only_lithologies", "true")
 	set("lith_mode", "zones")
 	set("zone_width", 100000)
-	if #faults > 0 then
-		local fp = {tostring(faz)}
-		for _, f in ipairs(faults) do fp[#fp + 1] = ("%d:%d"):format(f.d, f.w) end
-		set("faults", table.concat(fp, ","))
-		set("gsi_breccia", round(range(r, 10, 25)))
+	set("fault_blocks", ("%d,200,400,%d"):format(faz, fault_w))
+	set("gsi_breccia", round(range(r, 10, 25)))
+	set("geo_seed", seed % 1000000)
+	if seen.copper then
+		-- 礦區：800 m 一格、每區衛星礦體數（自訂滑桿 gen_copper_sat 0–100 → 0–6，預設 3）、古地下水位深、營地那一區的礦體距離
+		local ns = gen_num("copper_sat")
+		local nsat = ns and math.floor(6 * math.max(0, math.min(100, ns)) / 100 + 0.5) or 3
+		local D = round(10 + 30 * frac("wtdepth"))
+		set("copper_districts", ("800,%d,%d,%d"):format(nsat, D, dist_of("copper")))
+		set("ore_scale_copper", scale_of("copper"))
+		logs[#logs + 1] = ("斑岩銅礦區每 800 m 一區、衛星 %d 根、古地下水位 %d m"):format(nsat, D)
 	end
 	if relief > 0 and not dem then set("terrain", ("%s,%d,%d"):format(terrain, relief, terrain == "cuesta" and 120 or 60)) end
 	set("gsi_sandstone", round(range(r, 45, 70)))
@@ -417,6 +426,8 @@ function M.generate(world_conf)
 		set("gsi_cu_oxide", round(range(r, 50, 65)))
 		set("gsi_cu_enriched", round(range(r, 48, 60)))      -- 斑岩銅礦露天礦常見 45–65；富集帶沿裂隙黏土化，取偏低
 		set("gsi_gossan", round(range(r, 45, 60)))
+		set("gsi_phyllic", round(range(r, 40, 55)))           -- 絹英岩化帶：絹雲母，軟
+		set("gsi_propylitic", round(range(r, 50, 65)))
 	end
 	local okeys, oseen = {}, {}
 	for _, k in ipairs(ores) do
@@ -469,10 +480,11 @@ function M.register_command()
 				local function name(k) local L = rockmech.cfg.lithologies[k]; return L and S(L.description) or k end
 				local faults = {}
 				for d, w in g("faults"):gmatch("(%-?[%d.]+):([%d.]+)") do faults[#faults + 1] = {d, w} end
-				for k = 1, #faults + 1 do
+				local blocks = g("fault_blocks") ~= "-"
+				for k = 1, blocks and 8 or (#faults + 1) do
 					local sfx = k == 1 and "" or ("_" .. k)
 					if g("strata" .. sfx) == "-" then break end
-					if k > 1 then
+					if k > 1 and faults[k - 1] then
 						out[#out + 1] = S("Fault @1 m out (normal @2°), fault zone @3 m of @4", faults[k - 1][1], g("faults"):match("^[^,]+"), faults[k - 1][2], name("breccia"))
 						if not seen.breccia then seen.breccia = true; gsi[#gsi + 1] = name("breccia") .. " " .. g("gsi_breccia") end
 					end

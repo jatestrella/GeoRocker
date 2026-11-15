@@ -111,10 +111,11 @@ function rockmech.get_joint_sets()
 			-- 離散裂隙網路：多個地質區時，每組只長在自己的區（斷層帶裡沒有）
 			opts = {dfn = rockmech.dfn}
 			local S = cfg.strata
-			if S and S.faults then
+			if S and (S.faults or S.blocks) then
 				local idx, dom = {}, rockmech.stress.strata_domain
 				for k, D in ipairs(S.domains) do idx[D] = k end
-				opts.where = function(x, y, z) local D = dom(S, x, z); return D and idx[D] end
+				-- 重複的斷塊：每塊的柱狀圖帶著它是第幾種（_type）
+				opts.where = function(x, y, z) local D = dom(S, x, z); return D and (D._type or idx[D]) end
 			end
 			for _, js in ipairs(cfg.joint_sets) do
 				if js.lith or js.lith_p32 then

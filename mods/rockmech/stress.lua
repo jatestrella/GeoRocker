@@ -266,7 +266,9 @@ end
 -- 多個地質區（S.faults，地圖產生器選了兩種以上的礦）：幾條平行的直立斷層把地圖切成幾區，每區一套柱狀圖（S.domains[k]，
 -- 第 1 區就是 S 自己）。斷層 k 在沿法線方向 d 公尺、斷層帶寬 w：帶裡是斷層角礫岩（S.faults.lith）。
 -- 回傳 (x, z) 這一欄的柱狀圖；在斷層帶裡回傳 nil
+local block_of
 local function domain_of(S, x, z)
+	if S.blocks then return block_of(S, x, z) end
 	local F = S.faults
 	if not F then return S end
 	local s = x * F.nx + z * F.nz
@@ -277,6 +279,64 @@ local function domain_of(S, x, z)
 	return S.domains[#F + 1]
 end
 stress.strata_domain = domain_of
+
+-- 重複的斷塊（S.blocks，config.lua 的 rockmech_fault_blocks）：沿斷層法線 s = x·nx + z·nz，第 k 塊在 bnd(k) … bnd(k + 1)；
+-- 界線 = (k − ½)·平均寬 ± 隨機（寬度在最窄 … 最寬之間），第 0 塊包含營地。斷層帶（寬 fw）裡是斷層角礫岩（回傳 nil）
+local function hseed(B) return (B.seed or 0) % 997 end
+local function bnd(Bk, k)
+	local Wm = (Bk.wmin + Bk.wmax) / 2
+	return (k - 0.5) * Wm + (hash(k, 7, hseed(Bk) + 501) - 0.5) * (Bk.wmax - Bk.wmin) * 0.8
+end
+local function block_index(Bk, s)
+	local k = math.floor(s / ((Bk.wmin + Bk.wmax) / 2) + 0.5)
+	while s < bnd(Bk, k) do k = k - 1 end
+	while s >= bnd(Bk, k + 1) do k = k + 1 end
+	return k
+end
+stress.block_index = function(S, x, z)
+	local Bk = S.blocks
+	return Bk and block_index(Bk, x * Bk.nx + z * Bk.nz) or 0
+end
+local strata_column_raw
+-- 第 k 塊的柱狀圖：第 (k mod 種類數) + 1 種，傾角 ±5°、傾向 ±10°、厚度 ×0.85–1.15，各自錯動：主礦層頂在塊裡
+-- 離斷層 dist m 的地方露頭（沿走向隨機 ±200 m）。第 0 塊就是原本那一套（營地的露頭照地圖產生器算的）
+function stress.block_strata(S, k)
+	local cache = S._bk
+	if not cache then cache = {}; S._bk = cache end
+	local B = cache[k]
+	if B then return B end
+	local Bk, n = S.blocks, #S.domains
+	local D = S.domains[k % n + 1]
+	if k == 0 then cache[k] = D; return D end
+	local sd = hseed(Bk)
+	local dip = math.max(2, math.min(80, D.dip_deg + (hash(k, 11, sd) - 0.5) * 10))
+	local dd = D.dipdir_deg + (hash(k, 13, sd) - 0.5) * 20
+	B = setmetatable({}, {__index = D})
+	B.dip_deg, B.dipdir_deg = dip, dd
+	B.tan_dip, B.cos_dip = math.tan(math.rad(dip)), math.cos(math.rad(dip))
+	B.sin_dd, B.cos_dd = math.sin(math.rad(dd)), math.cos(math.rad(dd))
+	B.tmul = 0.85 + 0.3 * hash(k, 17, sd)
+	local s0, s1 = bnd(Bk, k), bnd(Bk, k + 1)
+	local so = math.min(s1 - Bk.fw, s0 + Bk.fw / 2 + (D.dist or 40))
+	local w = (hash(k, 19, sd) - 0.5) * 400
+	local px, pz = so * Bk.nx + w * Bk.nz, so * Bk.nz - w * Bk.nx
+	B.y0 = 0
+	local col = strata_column_raw(B, px, pz)
+	local top = (D.main_i or 1) > 1 and col[D.main_i - 1] or 0
+	local f = B.fold
+	local fold = f and f.A * math.sin(2 * math.pi * (px * f.cx + pz * f.cz) / f.L) or 0
+	B.y0 = top / B.cos_dip + B.tan_dip * (px * B.sin_dd + pz * B.cos_dd) - fold + (Bk.sy or 0)
+	cache[k] = B
+	return B
+end
+block_of = function(S, x, z)
+	local Bk = S.blocks
+	local s = x * Bk.nx + z * Bk.nz
+	local k = block_index(Bk, s)
+	local hw = Bk.fw / 2
+	if s - bnd(Bk, k) < hw or bnd(Bk, k + 1) - s < hw then return nil end
+	return stress.block_strata(S, k)
+end
 
 -- 柱狀圖頂面在 (x, z) 的高程（S 是單一一區的柱狀圖）
 function stress.strata_ref_y(S, x, z)
@@ -289,15 +349,20 @@ end
 -- 透鏡（b.lens = 尺度 m）：厚度乘上雜訊鐘形，大部分地方是 0、一塊塊鼓起來（水泥礦大理岩裡的片岩透鏡）
 function stress.strata_column(S, x, z, dmax)
 	S = domain_of(S, x, z)
+	if not S then return {} end          -- 斷層帶
+	return strata_column_raw(S, x, z, dmax)
+end
+-- 已經是某一區（某一塊）的柱狀圖 S：不再找區
+strata_column_raw = function(S, x, z, dmax)
 	local out, d = {}, 0
-	if not S then return out end          -- 斷層帶
+	local tm = S.tmul or 1
 	local v = S.var
 	local past = 0
 	for i, b in ipairs(S.beds) do
 		local m = 1
 		if v then m = math.max(0, 1 + v.f * (2 * fbm(x / v.scale + i * 3.7, z / v.scale, 50 + i) - 1)) end
 		if b.lens then m = m * smooth((fbm(x / b.lens + i * 7.3, z / b.lens - i * 3.1, 300 + i) - (b.lens_c and stress.lens_threshold(b.lens_c) or 0.45)) / 0.15) end
-		d = d + b.t * m
+		d = d + b.t * m * tm
 		out[i] = d
 		if dmax and d > dmax then past = past + 1; if past > 2 then break end end
 	end
@@ -306,16 +371,31 @@ end
 -- 岩性、第幾層、在這層裡的位置（0 頂 … 1 底）。col：strata_column 的結果（同一欄重複用）
 -- 位置：同一種岩性中間只隔著尖滅（厚度 0）的透鏡，當成同一層算（品位不會在看不到的界線跳）
 function stress.strata_at(S, x, y, z, col)
+	local cu, prop = S.cu, false
+	if cu then           -- 斑岩體侵入任何岩層：核心、絹英岩化帶、表生分帶直接回傳；青盤岩化帶等圍岩算好再蓋上去
+		local lith, p2, pr = stress.copper_point(cu, x, y, z)
+		if lith then return lith, 1, 0.5, p2 end
+		prop = pr
+	end
 	local D = domain_of(S, x, z)
-	if not D then return S.faults.lith, 0, 0.5 end
-	S = D
+	if not D then return prop and "propylitic" or (S.blocks or S.faults).lith, 0, 0.5 end
+	if prop then
+		local lith, i, fr = stress.strata_at_domain(D, x, y, z, col)
+		local L = cu.cfg and cu.cfg.lithologies[lith]
+		if L and L.ore then return lith, i, fr end            -- 礦層（煤、大理岩）不蓋
+		return "propylitic", i, fr
+	end
+	return stress.strata_at_domain(D, x, y, z, col)
+end
+-- 已經是某一區（某一塊）的柱狀圖 S 裡的岩性
+function stress.strata_at_domain(S, x, y, z, col)
 	if S.body then       -- 斑岩銅礦：斑岩體裡照風化分帶，第 4 個回傳值是品位 param2
 		local lith, p2 = stress.copper_at(S.body, x, y, z)
 		if lith then return lith, 1, 0.5, p2 end
 	end
 	local d = (stress.strata_ref_y(S, x, z) - y) * S.cos_dip
 	if d < 0 then return S.beds[1].lith, 1, 0 end           -- 柱狀圖頂面以上：最上面那層往上延伸
-	col = col or stress.strata_column(S, x, z, d)
+	col = col or strata_column_raw(S, x, z, d)
 	local prev = 0
 	for i, bot in ipairs(col) do
 		if d < bot then
@@ -374,19 +454,153 @@ function stress.copper_at(B, x, y, z)
 	return "cu_primary", clamp_p2(prim)
 end
 
+---------------------------------------------------------------------------
+-- 斑岩銅礦的礦區（cfg.strata.cu，新世界）：世界切成 cell 大小的格子，每格一個礦區（格子裡位置隨機），
+-- 一根主礦體＋nsat 根衛星礦體（主礦體外 150–400 m）。營地那一格的主礦體邊緣在營地外 dist + 25 m。
+-- 每根斑岩體：半徑 30–75 m × 規模（衛星 × 0.4–0.8）、軸線傾伏 60–85°（方位隨機，越深中心越往傾伏方向偏）、
+-- 中心品位、富集倍率、富集帶和氧化帶厚、品位遞減深度、鐵帽山丘高、古地下水位深（礦區的 ± 5 m）各自隨機。全部由種子算，沒有清單
+-- 由內往外：核心（鉀化帶，原生帶 cu_primary）→ 絹英岩化帶（R … 1.5R，低品位銅）→ 青盤岩化帶（1.5R … 3R，沒有銅）→ 圍岩；
+-- 表生分帶（鐵帽、氧化帶、富集帶）照深度疊在核心和絹英岩化帶上
+---------------------------------------------------------------------------
+local CU_TOP, CU_BOT = 60, 400        -- 斑岩體軸線從地表上 60 m 到地表下 400 m（找附近礦體用的範圍）
+local function cu_body(cu, sd, i, j, n, x0, z0, sat)
+	local function h(a) return hash(i * 31 + n, j * 17 + a, sd) end
+	local f = cu.f
+	local R = (30 + 45 * h(1)) * f * (sat and (0.4 + 0.4 * h(2)) or 1)
+	local pl = math.rad(60 + 25 * h(3))
+	local paz = 2 * math.pi * h(4)
+	return {x0 = x0, z0 = z0, R = math.max(4, R), cot = math.cos(pl) / math.sin(pl), dx = math.sin(paz), dz = math.cos(paz),
+		g0 = math.floor((40 + 20 * h(5)) * (sat and (0.7 + 0.4 * h(6)) or 1) + 0.5), fac = 2 + 1.5 * h(7),
+		E = 6 + 6 * h(8), ox = 3 + 3 * h(9), dd = (150 + 100 * h(10)) * f,      -- 富集帶、氧化帶是垂直的風化厚度，不跟礦體大小縮
+		hg = (sat and h(11) < 0.5) and 0 or 15 * h(12) * f, D = math.max(3, cu.D + 10 * (h(13) - 0.5)),
+		id = (i * 7 + j * 13 + n * 3) % 97, cfg = cu.cfg, sy = cu.sy or 0, new = true}
+end
+local function district(cu, i, j)
+	local cache = cu._d
+	if not cache then cache = {}; cu._d = cache end
+	local key = i .. "," .. j
+	local d = cache[key]
+	if d then return d end
+	local sd, C = (cu.seed or 0) % 991, cu.cell
+	local cx, cz
+	if i == 0 and j == 0 then
+		local az = 2 * math.pi * hash(0, 0, sd + 3)
+		local R0 = (30 + 45 * hash(0, 1, sd)) * cu.f
+		local r = R0 + (cu.dist or 40) + 25
+		cx, cz = r * math.sin(az), r * math.cos(az)
+	else
+		cx = (i + 0.7 * (hash(i, j, sd + 5) - 0.5)) * C
+		cz = (j + 0.7 * (hash(i, j, sd + 7) - 0.5)) * C
+	end
+	d = {}
+	local main = cu_body(cu, sd, i, j, 0, cx, cz, false)
+	if i == 0 and j == 0 then main.R = (30 + 45 * hash(0, 1, sd)) * cu.f end
+	d[1] = main
+	for n = 1, cu.nsat do
+		local a = 2 * math.pi * hash(i * 5 + n, j * 3 + n, sd + 9)
+		local r = 150 + 250 * hash(i * 3 + n, j * 5 + n, sd + 11)
+		d[#d + 1] = cu_body(cu, sd, i, j, n, cx + r * math.sin(a), cz + r * math.cos(a), true)
+	end
+	cache[key] = d
+	return d
+end
+-- (x, z) 附近（32 m 一塊，有記住）可能碰得到的斑岩體：軸線（地表上 60 m … 地表下 400 m）離這塊 3.1R + 23 m 以內
+local TILE_CU = 32
+function stress.cu_near(cu, x, z)
+	local tc = cu._t
+	if not tc then tc = {}; cu._t = tc; cu._tn = 0 end
+	local tx, tz = math.floor(x / TILE_CU), math.floor(z / TILE_CU)
+	local key = tx * 65536 + tz
+	local L = tc[key]
+	if L then return L end
+	L = {}
+	local mx, mz = (tx + 0.5) * TILE_CU, (tz + 0.5) * TILE_CU
+	local C = cu.cell
+	local ci, cj = math.floor(mx / C + 0.5), math.floor(mz / C + 0.5)
+	for i = ci - 1, ci + 1 do for j = cj - 1, cj + 1 do
+		for _, B in ipairs(district(cu, i, j)) do
+			-- 點到軸線線段（水平投影）的距離
+			local ax, az = B.x0 - CU_TOP * B.cot * B.dx, B.z0 - CU_TOP * B.cot * B.dz
+			local bx, bz = B.x0 + CU_BOT * B.cot * B.dx, B.z0 + CU_BOT * B.cot * B.dz
+			local vx, vz = bx - ax, bz - az
+			local t = ((mx - ax) * vx + (mz - az) * vz) / math.max(1e-9, vx * vx + vz * vz)
+			t = math.max(0, math.min(1, t))
+			local ex, ez = mx - (ax + t * vx), mz - (az + t * vz)
+			local reach = 3.1 * B.R * 1.2 + TILE_CU * 0.72
+			if ex * ex + ez * ez < reach * reach then L[#L + 1] = B end
+		end
+	end end
+	if cu._tn > 4000 then tc = {}; cu._t = tc; cu._tn = 0 end
+	tc[key], cu._tn = L, cu._tn + 1
+	return L
+end
+-- 一根新式斑岩體在 (x, y, z)：回傳 岩性, param2（核心、絹英岩化帶、表生分帶）；在青盤岩化帶回傳 nil, nil, true；外面回傳 nil
+local function cu_eval(B, x, y, z)
+	local h = B.sy - y
+	local ax, az = B.x0 + h * B.cot * B.dx, B.z0 + h * B.cot * B.dz
+	local dx, dz = x - ax, z - az
+	local R = B.R * (0.8 + 0.4 * fbm(x / 30, z / 30, 211 + B.id))
+	local rr = dx * dx + dz * dz
+	if rr >= (3 * R) ^ 2 then return nil end
+	if rr >= (1.5 * R) ^ 2 then return nil, nil, true end
+	local c = B._col
+	if not (c and c.x == x and c.z == z) then
+		local C = B.cfg
+		local rise = C and stress.has_terrain(C) and stress.terrain_rise(C, x, z) or 0
+		-- 古地下水位：地形的緩和版，再加起伏（不是平的）：45 m 波長 ±35%、12 m 波長 ±20%；富集帶、氧化帶厚度 0.6–1.4 倍，
+		-- 氧化帶底部沿裂隙鋸齒狀 ±2 m
+		local wt = B.sy + 0.4 * rise - B.D + 0.7 * B.D * (fbm(x / 45, z / 45, 251 + B.id) - 0.5)
+			+ 0.4 * B.D * (fbm(x / 12, z / 12, 263 + B.id) - 0.5)
+		c = {x = x, z = z, wt = wt, E = B.E * (0.6 + 0.8 * fbm(x / 20, z / 20, 223 + B.id)),
+			ox = math.max(0.5, B.ox * (0.6 + 0.8 * fbm(x / 17, z / 17, 227 + B.id)) + 4 * (fbm(x / 6, z / 6, 257) - 0.5))}
+		B._col = c
+	end
+	if y > c.wt + c.ox then return "gossan" end
+	local u2 = math.min(1, rr / (R * R))
+	local prim = B.g0 * (1 - 0.65 * u2) * (0.85 + 0.3 * fbm(x / 23 + y / 41, z / 23 - y / 37, 229))
+	local shell = rr >= R * R
+	if shell then prim = prim * 0.3 end                  -- 絹英岩化帶：低品位
+	if y > c.wt then return "cu_oxide", clamp_p2(prim * 0.8) end
+	if y > c.wt - c.E then return "cu_enriched", clamp_p2(prim * B.fac) end
+	prim = prim * math.exp(-(c.wt - c.E - y) / B.dd)
+	return shell and "phyllic" or "cu_primary", clamp_p2(prim)
+end
+stress.cu_eval = cu_eval
+-- (x, y, z) 的斑岩銅礦：岩性, param2, 在青盤岩化帶（true）, 礦體
+function stress.copper_point(cu, x, y, z)
+	local prop = false
+	for _, B in ipairs(stress.cu_near(cu, x, z)) do
+		local lith, p2, pr = cu_eval(B, x, y, z)
+		if lith then return lith, p2, false, B end
+		if pr then prop = true end
+	end
+	return nil, nil, prop
+end
+-- (x, y, z) 所在的斑岩體（舊世界的 S.body 或新世界的礦區）；鐵帽的化學成分要用
+function stress.body_at(cfg, x, y, z)
+	local S = cfg.strata
+	if not S then return nil end
+	if S.cu then
+		local _, _, _, B = stress.copper_point(S.cu, x, y, z)
+		return B
+	end
+	return S.body
+end
+
 -- 褐鐵礦（鐵帽）的化學成分（質量比例 0..1）：鐵、金、有害雜質（P、S、As）。
 --   鐵 35–50%：銅被淋走後留下的氧化鐵，變化不大。
 --   金 0.3–3 g/t：金不溶於地下水，留在鐵帽裡（殘留富集）；斑岩體中心高、往外降，鐵帽底部（靠氧化帶）比山頂富。
 --   有害雜質 1–6%：一塊一塊的（有的地方雜質高到賣了反而虧錢）
 local function stretch(v) return math.max(0, math.min(1, (v - 0.25) / 0.5)) end
 function stress.gossan_chem(B, x, y, z)
-	stress.copper_at(B, x, y, z)                 -- 算好這一欄的古地下水位（B._col）
+	if B.new then cu_eval(B, x, y, z) else stress.copper_at(B, x, y, z) end      -- 算好這一欄的古地下水位（B._col）
 	local c = B._col
 	local C = B.cfg
 	local top = (C and C.surface_y or 0) + (C and stress.has_terrain(C) and stress.terrain_rise(C, x, z) or 0)
 	local bot = (c and c.x == x and c.z == z) and (c.wt + c.ox) or (top - 10)
 	local f = math.max(0, math.min(1, (y - bot) / math.max(1, top - bot)))      -- 0 = 鐵帽底，1 = 地表
-	local dx, dz = x - B.x0, z - B.z0
+	local h0 = B.new and (B.sy - y) or 0
+	local dx, dz = x - B.x0 - h0 * (B.cot or 0) * (B.dx or 0), z - B.z0 - h0 * (B.cot or 0) * (B.dz or 0)
 	local u2 = math.min(1, (dx * dx + dz * dz) / (B.R * B.R))
 	local fe = 0.35 + 0.15 * stretch(fbm(x / 19 + y / 31, z / 19 - y / 29, 233))
 	local au = 0.3 + 2.7 * (1 - 0.6 * u2) * (1 - 0.5 * f) * stretch(fbm(x / 26 + y / 43, z / 26 + y / 37, 239))
@@ -430,7 +644,10 @@ function stress.body_hill(cfg, x, z)
 	local L = cfg.body_hills
 	if not L then return 0 end
 	local h = 0
+	local cu = cfg.strata and cfg.strata.cu
+	if cu then L = stress.cu_near(cu, x, z) end
 	for _, B in ipairs(L) do
+		if (B.hg or 0) > 0 then
 		local dx, dz = x - B.x0, z - B.z0
 		local rr = dx * dx + dz * dz
 		local Rmax = B.R * 1.2
@@ -440,6 +657,7 @@ function stress.body_hill(cfg, x, z)
 			if r < R then
 				h = math.max(h, B.hg * smooth((1 - r / R) / 0.35) * (0.8 + 0.4 * fbm(x / 15, z / 15, 233)))
 			end
+		end
 		end
 	end
 	return h

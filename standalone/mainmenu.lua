@@ -73,7 +73,7 @@ local state = {page = "title", map = nil, msg = nil, confirm = false}
 local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}, {"copper", "銅礦", "銅"}}
 local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
 	coal_scale = 20, coal_outcrop = 40, coalcont = 50, marble_scale = 20, marble_outcrop = 40, marble_schist = 30,
-	copper_scale = 20, copper_outcrop = 40, seed = ""}
+	copper_scale = 20, copper_outcrop = 40, copper_sat = 50, seed = ""}
 local function chosen()
 	local t = {}
 	for i, o in ipairs(GEN_ORE) do if gen.ores[i] then t[#t + 1] = o end end
@@ -118,6 +118,7 @@ local GEN_SLIDERS = {
 	{"marble_schist", "片岩夾層", function(v) return v <= 2 and "純大理岩" or ("約每 %d m 一層"):format(math.floor(40 - 34 * v / 100 + 0.5)) end, cat = "marble"},
 	{"copper_scale", "礦體規模", scale_text_for(3), cat = "copper"},
 	{"copper_outcrop", "礦體距離", function(v) return ("營地外 %d m"):format(math.floor(45 + 35 * v / 100 + 0.5)) end, cat = "copper"},
+	{"copper_sat", "衛星礦體數", function(v) return ("每個礦區 %d 根"):format(math.floor(6 * v / 100 + 0.5)) end, cat = "copper"},
 	{"wtdepth", "古地下水位", function(v) return ("地表下 %d m"):format(math.floor(10 + 30 * v / 100 + 0.5)) end, cat = "copper"},
 }
 -- 自訂地圖的頁籤（state.gen_tab）：每頁是一個大類的細項（下拉選單 drop、屬於它的滑桿）。need：有勾這種礦才有這一頁
@@ -235,6 +236,8 @@ local function create_save(m, title, kind)
 		mg = {}
 		for k, v in pairs(MAPGEN) do mg[k] = v end
 		if m.mapgen_limit then mg.mapgen_limit = tostring(m.mapgen_limit) end
+		-- 隨機、自訂地圖：礦在整個世界重複出現（斷塊、銅礦區），範圍不設限（引擎上限 ±31 km）；範本、上課地圖維持固定大小
+		if m.random or m.custom then mg.mapgen_limit = "31000" end
 	end
 	if m.random or m.custom or m.reseed then
 		math.randomseed(os.time())

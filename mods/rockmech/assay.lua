@@ -117,7 +117,7 @@ local function chem_lith(name)
 	return lith and lith.chem and lith or nil
 end
 function A.chem_at(lith, pos)
-	local B = rockmech.cfg.strata and rockmech.cfg.strata.body
+	local B = rockmech.stress.body_at and rockmech.stress.body_at(rockmech.cfg, pos.x, pos.y, pos.z)
 	if lith.name == "gossan" and B and rockmech.stress.gossan_chem then
 		local fe, au, harm = rockmech.stress.gossan_chem(B, pos.x, pos.y, pos.z)
 		return {fe = fe, au = au, harm = harm}

@@ -387,7 +387,7 @@ rockmech.gold_plant_step = step
 ---------------------------------------------------------------------------
 -- 先關掉（2026-11-14）：商店不賣提金廠、營地不出現貴金屬商，鐵帽的金直接在破碎站算錢。方塊和物品照樣註冊，舊地圖蓋好的不會變未知方塊
 local ENABLED = false
-local has_gold = ENABLED and cfg.strata and cfg.strata.body ~= nil
+local has_gold = ENABLED and cfg.strata and (cfg.strata.body ~= nil or cfg.strata.cu ~= nil)
 local WHO, ENTITY, FORM = "dealer", "rockmech:npc_dealer", "rockmech:dealer"
 
 local function count_gold(inv)

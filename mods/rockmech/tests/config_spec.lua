@@ -32,7 +32,7 @@ describe("config.load", function()
 		assert.are.equal(0, cfg.surface_y)
 		assert.are.equal(0.5, cfg.k0)
 		assert.is_true(cfg.replace_stone)
-		assert.are.equal(12, #cfg.lithology_order)
+		assert.are.equal(14, #cfg.lithology_order)      -- 含蝕變帶（絹英岩化、青盤岩化）
 		assert.are.equal(3, #cfg.joint_sets)
 		assert.are.equal(0, #warn)
 		assert.are.equal("coal", cfg.main_ore.lith)      -- 沒設定 rockmech_ores 就是煤

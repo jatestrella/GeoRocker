@@ -120,12 +120,30 @@ config.lithologies.cu_primary = {
 	texture = "default_stone.png^[colorize:#e0e0e0:200^default_mineral_copper.png",
 	rn = 0.40, rt = 0.85, mu_roll = 0.40, break_height = 6.0,
 }
+-- 斑岩體外圍的熱液蝕變帶（stress.copper_point，由內往外）：斑岩核心（鉀化帶，就是上面的原生帶）→ 絹英岩化帶 → 青盤岩化帶 → 圍岩。
+--   絹英岩化帶（石英－絹雲母－黃鐵礦，半徑 R … 1.5R）：低品位銅，漂白、軟（絹雲母讓節理面變滑），UCS 約 60
+--   青盤岩化帶（綠泥石－綠簾石，1.5R … 3R）：沒有銅，綠色，比圍岩稍弱
+-- 表生分帶（鐵帽、氧化帶、富集帶）照深度疊在核心和絹英岩化帶上面
+config.lithologies.phyllic = {
+	name = "phyllic", description = TR("Phyllic alteration"), ore = "copper", pure = "#b0a888",
+	gamma = 26.0, ucs = 60.0, tensile = 4.0, mi = 12,
+	color = "#b4ae9c", cracky = 2,
+	texture = "default_stone.png^[colorize:#f0ece0:210^default_mineral_iron.png",
+	rn = 0.35, rt = 0.80, mu_roll = 0.45, break_height = 4.0,
+}
+config.lithologies.propylitic = {
+	name = "propylitic", description = TR("Propylitic alteration"),
+	gamma = 26.0, ucs = 80.0, tensile = 5.5, mi = 18,
+	color = "#5f7a5c", cracky = 2,
+	rn = 0.38, rt = 0.82, mu_roll = 0.42, break_height = 5.0,
+}
 
 -- 方塊尺度的小節理（方塊 = 岩體，裡面的小節理只用 GSI 代表）的面況：Q 系統的 Jr、Ja。
 -- 只用來把 GSI 換成岩芯看得到的 RQD（Hoek、Carter & Diederichs 2013：GSI = 52·(Jr/Ja)/(1 + Jr/Ja) + RQD/2），不影響力學。
 -- 沒列的岩性用 Jr 2、Ja 1
 for key, v in pairs({sandstone = {2, 1}, shale = {1.5, 2}, granite = {3, 1}, coal = {1.5, 3}, marble = {2, 1}, schist = {1, 3}, breccia = {1, 6},
-		andesite = {2, 1}, gossan = {2, 2}, cu_oxide = {1.5, 2}, cu_enriched = {1, 3}, cu_primary = {2, 1}}) do
+		andesite = {2, 1}, gossan = {2, 2}, cu_oxide = {1.5, 2}, cu_enriched = {1, 3}, cu_primary = {2, 1},
+		phyllic = {1, 3}, propylitic = {1.5, 2}}) do
 	local l = config.lithologies[key]
 	if l then l.jr, l.ja = v[1], v[2] end
 end
@@ -283,7 +301,7 @@ end
 
 -- 註冊順序（固定，讓 content id / 測試結果可重現）
 config.lithology_order = {"sandstone", "shale", "granite", "coal", "marble", "schist", "breccia",
-	"andesite", "gossan", "cu_oxide", "cu_enriched", "cu_primary"}
+	"andesite", "gossan", "cu_oxide", "cu_enriched", "cu_primary", "phyllic", "propylitic"}
 
 -- 依深度分層：h = y0 - y，h < bottom 即屬於該層（由上往下排列）。
 -- h < 0（高於 y0 的山丘）歸入第一層。
@@ -867,6 +885,37 @@ function config.load(get, opts)
 			warnings[#warnings + 1] = "rockmech_faults: 格式不對或沒有第 2 區的柱狀圖（忽略）"
 		end
 	end
+	-- 重複的斷塊（新世界，worldgen.lua）：rockmech_fault_blocks = 法線方位,最窄,最寬,斷層帶寬（m）。
+	-- 平行的直立斷層把世界切成一條條斷塊（寬度在最窄…最寬之間，由種子決定），沒有盡頭；第 k 塊用第 (k mod 種類數) + 1 種柱狀圖
+	-- （rockmech_strata、rockmech_strata_2…：沉積岩、變質岩輪流）。每塊各自錯動：主礦層（rockmech_strata_main_k = 第幾層）
+	-- 在塊裡離斷層 rockmech_strata_dist_k m 的地方露頭，傾角 ±5°、厚度 ±15%（stress.block_strata）。第 0 塊（營地）照原本的 y0
+	local fb = numbers("rockmech_fault_blocks", 4)
+	if cfg.strata and fb then
+		local domains = {cfg.strata}
+		for k = 2, 8 do
+			local S = parse_strata("_" .. k)
+			if not S then break end
+			domains[k] = S
+		end
+		for k, D in ipairs(domains) do
+			D._type = k
+			D.main_i = tonumber(get("rockmech_strata_main" .. (k == 1 and "" or ("_" .. k))) or "") or 1
+			D.dist = tonumber(get("rockmech_strata_dist" .. (k == 1 and "" or ("_" .. k))) or "") or 40
+		end
+		local az = math.rad(fb[1])
+		cfg.strata.blocks = {nx = math.sin(az), nz = math.cos(az), az = fb[1], wmin = math.max(50, fb[2]),
+			wmax = math.max(fb[2], fb[3]), fw = math.max(0, fb[4]), lith = cfg.lithologies.breccia and "breccia" or domains[1].beds[1].lith,
+			seed = tonumber(get("rockmech_geo_seed") or "") or 0, sy = cfg.surface_y or 0}
+		cfg.strata.domains = domains
+	end
+	-- 斑岩銅礦的礦區（新世界）：rockmech_copper_districts = 格子大小,衛星礦體數,地下水位深,營地礦體距離（m）。
+	-- 世界切成格子，每格一個礦區（主礦體＋衛星礦體），尺寸照銅礦規模 cfg.ore_f_of("copper")；斑岩體侵入任何岩層（stress.copper_point）
+	local cd = numbers("rockmech_copper_districts", 4)
+	if cd and cfg.strata then
+		cfg.strata.cu = {cell = math.max(200, cd[1]), nsat = math.max(0, math.floor(cd[2])), D = cd[3], dist = cd[4],
+			f = cfg.ore_f_of("copper"), seed = tonumber(get("rockmech_geo_seed") or "") or 0, cfg = cfg, sy = cfg.surface_y or 0}
+		cfg.body_hills = cfg.body_hills or {}       -- 有公式地形（鐵帽山丘照礦區算，stress.body_hill）
+	end
 	-- 自由地形（非礦帶世界）：rockmech_terrain = 樣式,高度,尺度；樣式 hills（丘陵）或 cuesta（單面山，要有柱狀圖）
 	--   或 dem,檔名[,平台半徑]：真實地形的高程網格（世界資料夾裡的檔案，tools/dem_extract.py 產生）。
 	--   高度是相對 surface_y 的（地圖產生器把 surface_y 設成出生點高度的負值，出生點就在 y ≈ 0）；
@@ -1392,6 +1441,8 @@ function config.load(get, opts)
 			if cfg.strata then
 				for _, S in ipairs(cfg.strata.domains or {cfg.strata}) do for _, b in ipairs(S.beds) do keys[b.lith] = true end end
 				if cfg.strata.faults then keys[cfg.strata.faults.lith] = true end
+				if cfg.strata.blocks then keys[cfg.strata.blocks.lith] = true end
+				if cfg.strata.cu then keys.gossan, keys.phyllic, keys.propylitic = true, true, true end
 			else
 				for _, k in ipairs(cfg.zone_order or {}) do keys[k] = true end
 				for _, l in ipairs(cfg.layers or {}) do keys[l.lith] = true end
