@@ -471,7 +471,7 @@ local PROPS = {
 local function ground_y(x, z)
 	for y = 40, -30, -1 do
 		local n = core.get_node({x = x, y = y, z = z}).name
-		if n ~= "air" and n ~= "ignore" then return y end
+		if not rockmech.air_like(n) and n ~= "ignore" then return y end
 	end
 end
 

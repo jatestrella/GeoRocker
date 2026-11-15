@@ -502,7 +502,7 @@ if build then
 		local y
 		for yy = 40, -30, -1 do
 			local n = core.get_node({x = x0 + RES_DX - 3, y = yy, z = RES_Z - 3}).name
-			if n ~= "air" and n ~= "ignore" and n ~= "rockmech:tent_pole" and not n:find("canvas") then y = yy; break end
+			if not rockmech.air_like(n) and n ~= "ignore" and n ~= "rockmech:tent_pole" and not n:find("canvas") then y = yy; break end
 		end
 		if y and storage:get_string(flag_of(x0)) == "" then add_spot(x0, y) end
 	end
@@ -523,7 +523,7 @@ core.after(3, function()
 				if rem > 0 or storage:get_string(flag_of(x0)) ~= "" then return end
 				for yy = 40, -30, -1 do
 					local n = core.get_node({x = p.x, y = yy, z = p.z}).name
-					if n ~= "air" and n ~= "ignore" and n ~= "rockmech:tent_pole" and not n:find("canvas") then
+					if not rockmech.air_like(n) and n ~= "ignore" and n ~= "rockmech:tent_pole" and not n:find("canvas") then
 						add_spot(x0, yy)
 						return
 					end

@@ -1051,7 +1051,7 @@ function rockmech.career_build_professor(x0)
 	local y
 	for yy = 40, -30, -1 do
 		local n = core.get_node({x = cx, y = yy, z = cz}).name
-		if n ~= "air" and n ~= "ignore" then y = yy; break end
+		if not rockmech.air_like(n) and n ~= "ignore" then y = yy; break end
 	end
 	y = y or 0
 	local set, at, yaw = rockmech.career_placer(cx, cz, y, "north")

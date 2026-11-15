@@ -717,6 +717,7 @@ Broadcast radio@nKeep it on you to see prices and news at the top right=
 
 ### materials.lua
 Topsoil=
+Grass=
 Loose soil=
 Compacted rubble=
 Construction waste=

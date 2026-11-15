@@ -92,7 +92,7 @@ local function chest_near(pos)
 		if math.abs(x - pos.x) == 2 or math.abs(z - pos.z) == 2 then
 			local p = {x = x, y = y, z = z}
 			local n = core.get_node(p).name
-			if n ~= "air" and n ~= "ignore" then
+			if not rockmech.air_like(n) and n ~= "ignore" then
 				local inv = core.get_meta(p):get_inventory()
 				if inv:get_size("main") > 0 then return p, inv end
 			end
@@ -469,7 +469,7 @@ core.register_on_mods_loaded(function()
 	local function ground(x, z)
 		for yy = 40, -30, -1 do
 			local n = core.get_node({x = x, y = yy, z = z}).name
-			if n ~= "air" and n ~= "ignore" and n ~= "rockmech:tent_pole" and not n:find("canvas") then return yy end
+			if not rockmech.air_like(n) and n ~= "ignore" and n ~= "rockmech:tent_pole" and not n:find("canvas") then return yy end
 		end
 	end
 	local build_research = rockmech.career_build_research

@@ -89,7 +89,7 @@ local function hole_site(self, want)
 		y = y - 1
 	end
 	local above = {x = x, y = y, z = z}
-	if core.get_node(above).name ~= "air" then return nil, S("The hole collar must be clear") end
+	if not rockmech.air_like(core.get_node(above).name) then return nil, S("The hole collar must be clear") end
 	if not rockmech.lith_of_node[core.get_node({x = x, y = y - 1, z = z}).name] then return nil, S("There is no rock under the mast (rubble cannot be drilled)") end
 	local n = 0
 	for k = 1, want do

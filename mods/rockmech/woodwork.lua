@@ -738,6 +738,18 @@ core.register_node(TOPSOIL, {
 		return ok
 	end,
 })
+-- 草叢：長在表土上的裝飾，人、車、碎石都穿得過，蓋東西直接取代，底下的表土沒了就消失（不掉東西）。
+-- 地圖產生時撒在整格表土上（mapgen.lua）；不是大地材料，不進應力解
+core.register_node(rockmech.modname .. ":grass", {
+	description = S("Grass"),
+	drawtype = "plantlike",
+	tiles = {"default_grass_3.png"}, inventory_image = "default_grass_3.png", wield_image = "default_grass_3.png",
+	paramtype = "light", sunlight_propagates = true, walkable = false, buildable_to = true, floodable = true,
+	selection_box = {type = "fixed", fixed = {-6 / 16, -0.5, -6 / 16, 6 / 16, -3 / 16, 6 / 16}},
+	groups = {snappy = 3, attached_node = 1, flora = 1, not_in_creative_inventory = 1},
+	sounds = default.node_sound_leaves_defaults(), drop = "",
+})
+
 -- 薄的表土（1/8 … 7/8 m）：山腳那一圈逐漸變薄的坡腳用。一樣有草、不流動；被擾動變成同樣厚度的鬆土
 local TOPSOIL_THIN = {}
 for k = 1, NLEV - 1 do

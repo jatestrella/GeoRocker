@@ -281,6 +281,13 @@ end
 -- 碎石種類：一般碎石（灰）與花崗岩碎石（粉紅，同花崗岩色調）。皆屬 group rockmech_rubble。
 local gravel_sounds = has_default and default.node_sound_gravel_defaults and default.node_sound_gravel_defaults() or sounds
 
+-- 當成空氣的方塊：空氣，或不擋路、可以直接蓋掉的（草叢這類，woodwork.lua）。碎石落地、孔口、找地面都用這個
+function rockmech.air_like(name)
+	if name == "air" then return true end
+	local d = core.registered_nodes[name]
+	return d ~= nil and d.buildable_to == true and d.walkable == false and (d.liquidtype or "none") == "none"
+end
+
 rockmech.RUBBLE = rockmech.modname .. ":rubble"
 core.register_node(rockmech.RUBBLE, {
 	description = S("Rubble"),

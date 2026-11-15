@@ -114,7 +114,8 @@ for k = 1, 7 do c_road[k] = core.get_content_id("rockmech:rubble_l" .. k .. "_c"
 local TS = cfg.mapgen_topsoil and core.registered_nodes["rockmech:topsoil"] and core.registered_nodes["default:tree"] and true
 local NL = 8
 local SC = stress.SOIL         -- 厚度規則在 stress.natural_soil（應力解的參考狀態也用同一個公式）
-local c_soil, c_log, c_leaf, c_apple = {}, nil, nil, nil
+local c_soil, c_log, c_leaf, c_apple, c_grass = {}, nil, nil, nil, nil
+local GRASS_P = 0.2           -- 草叢：整格表土上，兩成的欄長一叢（不滿格的表土上會浮空，不長）
 local is_rock = {[c_stone] = true}
 if TS then
 	for k = 1, NL - 1 do c_soil[k] = core.get_content_id("rockmech:topsoil_" .. k) end
@@ -122,6 +123,7 @@ if TS then
 	c_log = core.get_content_id("default:tree")
 	c_leaf = core.get_content_id("default:leaves")
 	c_apple = core.get_content_id(core.registered_nodes["default:apple"] and "default:apple" or "default:leaves")
+	if core.registered_nodes["rockmech:grass"] then c_grass = core.get_content_id("rockmech:grass") end
 	for _, t in pairs(c_var) do for _, id in pairs(t) do is_rock[id] = true end end
 	for _, t in pairs(c_plane) do for _, id in pairs(t) do is_rock[id] = true end end
 end
@@ -177,7 +179,14 @@ local function lay_topsoil(area, minp, maxp)
 				-- 樹（stress.tree_at）：表土整格都鋪上了，樹幹 4–5 m、樹冠半徑 2 m，整棵在 chunk 裡
 				local hillside = top - sy >= SC.min_rise or (cfg.terrain and cfg.terrain.quarry and true)
 				local seed = hillside and stress.tree_ok(cfg, x, z) and stress.tree_at(x, z)
-				if seed and done * NL == t then plant[#plant + 1] = {x, z, top + done, seed} end
+				if seed and done * NL == t then plant[#plant + 1] = {x, z, top + done, seed}
+				elseif c_grass and r == 0 and full > 0 and done == full and rnd(x, z, 77) < GRASS_P then
+					local y = top + full + 1
+					if y <= maxp.y then
+						local vi = area:index(x, y, z)
+						if data[vi] == c_air then data[vi] = c_grass end
+					end
+				end
 			end
 		end
 	end end

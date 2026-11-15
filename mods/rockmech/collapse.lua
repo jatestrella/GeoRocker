@@ -78,11 +78,11 @@ local sliding_node_def = {
             self.object:remove()
             if self.reserved_side then release_pos(self.reserved_side) end
 
-            if core.get_node(tp).name == "air" then
+            if rockmech.air_like(core.get_node(tp).name) then
                 core.set_node(tp, {name = self.node_name})
                 -- 落地後仍檢查下方：若仍是空氣（例如 escape 落到懸空位置）就掉落
                 local below = {x=tp.x, y=tp.y-1, z=tp.z}
-                if core.get_node(below).name == "air" then
+                if rockmech.air_like(core.get_node(below).name) then
                     -- 物理系統內部操作：不當作新的開挖觸發
                     physics_updating = true
                     core.spawn_falling_node(tp)
@@ -138,7 +138,7 @@ local function compute_landing_y(pos)
     for _ = 1, 64 do
         local n = core.get_node({x=pos.x, y=y, z=pos.z})
         -- 裝飾木製品（木板、木牆板…）擋不住，會被壓壞（fall_with_slope_settle 移除）
-        if n.name ~= "air" and core.get_item_group(n.name, "rubble_breaks") == 0 then return y + 1 end
+        if not rockmech.air_like(n.name) and core.get_item_group(n.name, "rubble_breaks") == 0 then return y + 1 end
         y = y - 1
     end
     return nil
@@ -503,7 +503,7 @@ core.register_abm({
     neighbors = {"air"},
     interval = 3, chance = 4, catch_up = false,
     action = function(pos)
-        if core.get_node({x = pos.x, y = pos.y + 1, z = pos.z}).name == "air" then granular_settle(pos, 1) end
+        if rockmech.air_like(core.get_node({x = pos.x, y = pos.y + 1, z = pos.z}).name) then granular_settle(pos, 1) end
     end,
 })
 
@@ -550,7 +550,7 @@ end
 try_escape_or_destroy = function(pos, node)
     -- 優先檢查下方，沒支撐就直接掉落
     local below = {x=pos.x, y=pos.y-1, z=pos.z}
-    if core.get_node(below).name == "air" then
+    if rockmech.air_like(core.get_node(below).name) then
         core.spawn_falling_node(pos)
         return
     end
@@ -562,7 +562,7 @@ try_escape_or_destroy = function(pos, node)
     }
     for _, ed in ipairs(escape_dirs) do
         local target = {x=pos.x+ed.x, y=pos.y+ed.y, z=pos.z+ed.z}
-        if core.get_node(target).name == "air" and not is_reserved(target) then
+        if rockmech.air_like(core.get_node(target).name) and not is_reserved(target) then
             local original_name = node.name
             reserve_pos(target)
             core.remove_node(pos)

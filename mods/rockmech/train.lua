@@ -471,7 +471,7 @@ core.register_globalstep(function(dtime)
 				local blocked
 				for dx = 0, 2 do
 					local n = core.get_node({x = math.floor(st.head + dx + 0.5), y = y, z = RAIL_Z}).name
-					if n ~= "air" and n ~= "ignore" then blocked = n; break end
+					if not rockmech.air_like(n) and n ~= "ignore" then blocked = n; break end
 				end
 				if blocked then
 					local now = core.get_gametime()

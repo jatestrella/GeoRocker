@@ -409,7 +409,7 @@ end
 local function cannot_drill(under, above)
 	if not rockmech.lith_of_node[core.get_node(under).name] then return S("You can only drill into rock (rubble cannot be drilled)") end
 	local an = core.get_node(above).name
-	if an ~= "air" and core.get_item_group(an, "shotcrete_lining") == 0 then return S("The space in front of the hole collar must be empty") end   -- 噴凝土可以鑽穿（那格換成孔）
+	if not rockmech.air_like(an) and core.get_item_group(an, "shotcrete_lining") == 0 then return S("The space in front of the hole collar must be empty") end   -- 噴凝土可以鑽穿（那格換成孔）
 end
 -- 鑽好一個孔
 function rockmech.make_hole(under, above)
@@ -566,7 +566,7 @@ function rockmech.load_charge(under, above, player)
 		return true
 	end
 	local nd = core.registered_nodes[node.name]
-	if not (nd and nd.walkable ~= false) or core.get_node(above).name ~= "air" then return false end
+	if not (nd and nd.walkable ~= false) or not rockmech.air_like(core.get_node(above).name) then return false end
 	core.set_node(above, {name = SURFACE, param2 = core.dir_to_wallmounted(vector.subtract(under, above))})
 	core.get_meta(above):set_int("n", 1)
 	mark(above, player)
