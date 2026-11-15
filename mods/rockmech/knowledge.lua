@@ -1047,14 +1047,15 @@ local function prof_flag(x0) return "professor_site:" .. x0 end
 function rockmech.career_build_professor(x0)
 	if not rockmech.career_placer then return end
 	storage:set_string(prof_flag(x0), "2")       -- "1"：舊位置（OLD_PROF_DX）；"2"：現在的位置
-	local cx, cz = x0 + PROF_DX, PROF_Z
-	local y
-	for yy = 40, -30, -1 do
-		local n = core.get_node({x = cx, y = yy, z = cz}).name
-		if not rockmech.air_like(n) and n ~= "ignore" then y = yy; break end
+	local cx, cz, y, face = rockmech.camp_frame("lecture_hall", x0, x0 + PROF_DX, PROF_Z, nil, "north")
+	if not y then
+		for yy = 40, -30, -1 do
+			local n = core.get_node({x = cx, y = yy, z = cz}).name
+			if not rockmech.air_like(n) and n ~= "ignore" then y = yy; break end
+		end
 	end
 	y = y or 0
-	local set, at, yaw = rockmech.career_placer(cx, cz, y, "north")
+	local set, at, yaw = rockmech.career_placer(cx, cz, y, face)
 	for dx = -2, 2 do
 		set(dx, 1, -2, "rockmech:camp_blackboard"); set(dx, 2, -2, "rockmech:camp_blackboard")
 	end

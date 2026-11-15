@@ -243,4 +243,43 @@ function V.build_ground(plan, done)
 	end)
 end
 
+-- 存起來的村莊配置（mod storage "village_plan"）：建造時算一次，之後建築、NPC、保護、出生點都照它
+local KEY = "village_plan"
+local cache
+function V.store(plan)
+	cache = plan
+	rockmech.collapse.storage:set_string(KEY, core.serialize({roads = plan.roads, lots = plan.lots, cx = plan.cx, cz = plan.cz}))
+end
+function V.get()
+	if cache == nil then
+		local s = rockmech.collapse.storage:get_string(KEY)
+		cache = s ~= "" and core.deserialize(s) or false
+	end
+	return cache or nil
+end
+-- 第 n 個（預設第 1 個）kind 的地塊；沒有村莊回傳 nil
+function rockmech.village_lot(kind, n)
+	local P = V.get()
+	if not P then return nil end
+	local k = 0
+	for _, L in ipairs(P.lots) do
+		if L.kind == kind then
+			k = k + 1
+			if k == (n or 1) then return L end
+		end
+	end
+end
+-- (x, z) 在不在村莊的地塊或道路上（保護、爆炸不炸村莊建築用）
+function V.in_village(x, z, margin)
+	local P = V.get()
+	if not P then return false end
+	margin = margin or 0
+	for _, L in ipairs(P.lots) do
+		local a, b, c, d = lot_rect(L)
+		if x >= a - margin and x <= c + margin and z >= b - margin and z <= d + margin then return true end
+	end
+	return false
+end
+
+rockmech.village = V
 return V

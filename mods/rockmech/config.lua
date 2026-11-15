@@ -846,6 +846,8 @@ function config.load(get, opts)
 		end
 		return S
 	end
+	-- 村莊（rockmech_village = true，新的隨機、自訂世界）：營地是沿著道路分散的店家（village.lua），不是一整片地坪
+	cfg.village = get("rockmech_village") == "true"
 	-- 礦體規模 rockmech_ore_scale（2 = 真實規模，0.5–3；新世界預設 1）：斑岩銅礦的半徑、富集帶、氧化帶、品位遞減深度、
 	-- 鐵帽山丘，煤層透鏡的大小都乘 ore_scale / 2。沒寫（舊世界）= 2（不縮）
 	local osc = tonumber(get("rockmech_ore_scale") or "")

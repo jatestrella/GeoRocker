@@ -442,12 +442,14 @@ local BENCH_Z = -19
 local function flag_of(x0) return "opbench_site:" .. x0 end
 function rockmech.career_build_opbench(x0, acc)
 	storage:set_string(flag_of(x0), "1")
-	local cx = x0 + (rockmech.career_office_dx or 27)
-	local y = ground_y(cx, BENCH_Z) or 0
+	-- 村莊：人力派遣的地塊（長椅沿著正面一排）；舊營地：貨櫃辦公室南邊、面向北
+	local cx, cz, fy, face = rockmech.camp_frame("staffing", x0, x0 + (rockmech.career_office_dx or 27), BENCH_Z, nil, "north")
+	local y = fy or ground_y(cx, cz) or 0
+	local set, at = rockmech.career_placer(cx, cz, y, face)
 	local seats = {}
 	for k = 0, SEATS - 1 do
-		local p = {x = cx - 2 + k, y = y + 1, z = BENCH_Z}
-		core.set_node(p, {name = BENCH, param2 = 0})
+		local p = at(k - 2, 1, 0)
+		set(k - 2, 1, 0, BENCH, 0)
 		for h = 1, 2 do core.set_node({x = p.x, y = p.y + h, z = p.z}, {name = "air"}) end
 		seats[#seats + 1] = p
 	end

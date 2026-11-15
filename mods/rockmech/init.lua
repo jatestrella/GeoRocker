@@ -179,6 +179,7 @@ dofile(modpath .. "/loadout.lua")
 dofile(modpath .. "/dumphopper.lua")   -- 受料斗：卡車倒進來、交給輸送帶運走
 dofile(modpath .. "/facilitydamage.lua")   -- 設施耐久度：爆炸扣整座的血、裂紋、炸毀、技工修理
 dofile(modpath .. "/npc_skins.lua")
+dofile(modpath .. "/village.lua")          -- 村莊配置（新世界：道路、店家的地塊）
 dofile(modpath .. "/career.lua")
 dofile(modpath .. "/team.lua")
 dofile(modpath .. "/nametag.lua")

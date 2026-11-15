@@ -478,9 +478,9 @@ end
 local function flag_of(x0) return "research_site:" .. x0 end
 function rockmech.career_build_research(x0)
 	storage:set_string(flag_of(x0), "1")       -- 這座營地蓋過研究帳篷了（下面補蓋時看這個）
-	local cx, cz = x0 + RES_DX, RES_Z
-	local y = ground_y(cx, cz) or 0
-	local set, at, yaw = rockmech.career_placer(cx, cz, y, "north")
+	local cx, cz, fy, face = rockmech.camp_frame("research", x0, x0 + RES_DX, RES_Z, nil, "north")
+	local y = fy or ground_y(cx, cz) or 0
+	local set, at, yaw = rockmech.career_placer(cx, cz, y, face)
 	for _, s in ipairs({{-3, -3}, {3, -3}, {-3, 3}, {3, 3}}) do
 		for h = 1, 3 do set(s[1], h, s[2], "rockmech:tent_pole") end
 	end

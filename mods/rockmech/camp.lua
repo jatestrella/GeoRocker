@@ -191,8 +191,13 @@ local function pave_when_loaded(x0)
 end
 -- 新蓋的營地：career.lua 蓋營地時整地完先鋪（rockmech.camp_pave），建築、擺設再蓋在地坪上；
 -- 舊的營地開服 4 秒後補鋪（或縮小）
-function rockmech.camp_pave(x0) if not done(x0) then pave(x0) end end
+local function village() return rockmech.village and rockmech.village.get() end
+function rockmech.camp_pave(x0)
+	if village() then storage:set_string("pad8:" .. x0, "1"); return end      -- 村莊：不鋪整片地坪
+	if not done(x0) then pave(x0) end
+end
 core.after(4, function()
+	if village() then return end
 	for _, x0 in ipairs(sites()) do
 		if not done(x0) then pave_when_loaded(x0) end
 	end
@@ -200,8 +205,27 @@ end)
 
 -- 保護：地坪範圍、地坪下 UNDER m 到上方 40 m。碎石隨時可以清；地面以上玩家自己放的東西（置物櫃…）拿得走
 local BUILT = {"^rockmech:office_", "^rockmech:camp_", "^rockmech:tent_", "^rockmech:sign_", "^doors:", "^default:glass$", "^stairs:"}
+-- 村莊：有 NPC 的店（地塊）不能拆、不能挖（碎石照樣可以清）；其他店、道路可以
+local NPC_LOTS = {tech_office = true, research = true, lecture_hall = true, staffing = true, vehicle_dealer = true,
+	garage = true, consulting = true, blasting = true, hardware = true, receiving = true}
+local function village_protected(pos, name)
+	local P = village()
+	if not P then return nil end
+	for _, L in ipairs(P.lots) do
+		if NPC_LOTS[L.kind] and pos.y >= L.y - UNDER and pos.y <= L.y + 40 then
+			local a, b, c, d = rockmech.village.lot_rect(L)
+			if pos.x >= a and pos.x <= c and pos.z >= b and pos.z <= d then
+				if name and name ~= "" and core.check_player_privs(name, {rockmech = true}) then return false end
+				return not rockmech.rubble_level[core.get_node(pos).name]
+			end
+		end
+	end
+	return false
+end
 local function pad_protected(pos, name)
 	if not cfg.career then return false end
+	local vp = village_protected(pos, name)
+	if vp ~= nil then return vp end
 	local base = sy()
 	if pos.y < base - UNDER or pos.y > base + 40 then return false end
 	local x0

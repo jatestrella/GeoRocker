@@ -459,7 +459,9 @@ core.register_on_mods_loaded(function()
 	local function flag_of(x0) return "dealer_site:" .. x0 end
 	local function add_spot(x0, y)
 		storage:set_string(flag_of(x0), "1")
-		local _, at, yaw = rockmech.career_placer(x0 + RES_DX, RES_Z, y, "north")
+		local cx, cz, fy, face = rockmech.camp_frame("research", x0, x0 + RES_DX, RES_Z, y, "north")
+		y = fy or y
+		local _, at, yaw = rockmech.career_placer(cx, cz, y, face)
 		local p = at(2, 0, -2)
 		local key = rockmech.career_vendor_spots
 		local list = core.deserialize(storage:get_string(key)) or {}

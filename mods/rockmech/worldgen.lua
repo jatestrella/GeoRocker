@@ -456,6 +456,7 @@ function M.generate(world_conf)
 	set("weakness_max_spacing", 1.5)
 	set("career", "true")
 	set("design_slope", "true")    -- 地形退化到穩定坡角（config.lua 的 rockmech_design_slope）
+	set("village", "true")         -- 營地是村莊（village.lua）
 	-- 礦體規模（2 = 真實）、煤層連續性：自訂地圖的滑桿（rockmech_gen_orescale、gen_coalcont，0–100），沒有就用預設（真實的一半、一半面積有煤）
 	local gos, gcc = tonumber(world_conf:get("rockmech_gen_orescale") or ""), tonumber(world_conf:get("rockmech_gen_coalcont") or "")
 	set("ore_scale", gos and round(0.5 + 2.5 * math.max(0, math.min(100, gos)) / 100, 0.05) or 1)

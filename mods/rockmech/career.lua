@@ -840,16 +840,25 @@ end
 -- 建築的本地座標 dx 沿長邊（往右）、dz 朝正面，轉成世界座標：
 --   face = "west"（預設）：正面 +dz → 西（−x），右手 +dx → 北（+z）；facedir 的方塊 +3，人的 yaw = π/2
 --   face = "north"：正面 +dz → 北（+z），右手 +dx → 東（+x）；facedir 不轉，人的 yaw = 0
+--   face = 0..3（村莊的地塊）：正面朝 北、東、南、西（facedir 就是這個數），右手是正面順時針轉 90°
 local FACE_YAW = math.pi / 2
 function rockmech.career_placer(cx, cz, y, face)
-	local north = face == "north"
+	local rot = face == "north" and 0 or type(face) == "number" and face % 4 or 3
+	local fx, fz = ({0, 1, 0, -1})[rot + 1], ({1, 0, -1, 0})[rot + 1]      -- 正面
+	local rx, rz = fz, -fx                                                 -- 右手
 	local function at(dx, h, dz)
-		if north then return {x = cx + dx, y = y + h, z = cz + dz} end
-		return {x = cx - dz, y = y + h, z = cz + dx}
+		return {x = cx + dx * rx + dz * fx, y = y + h, z = cz + dx * rz + dz * fz}
 	end
-	local rot = north and 0 or 3
 	local function set(dx, h, dz, node, p2) core.set_node(at(dx, h, dz), {name = node, param2 = ((p2 or 0) + rot) % 4}) end
-	return set, at, north and 0 or FACE_YAW
+	return set, at, ((4 - rot) % 4) * math.pi / 2
+end
+
+-- 營地裡一棟建築的座標框：村莊（新世界，rockmech.village_lot）照它的地塊（中心、地面高度、朝向）；
+-- 舊營地照原本的固定位置（cx, cz、地面 y、朝向 face）。回傳 cx, cz, y, face
+function rockmech.camp_frame(kind, x0, cx, cz, y, face)
+	local L = rockmech.village_lot and rockmech.village_lot(kind)
+	if L then return L.x, L.z, L.y, L.rot end
+	return cx, cz, y, face
 end
 -- 貨櫃辦公室中心：營地中心往東、南北位置（破碎站在往東 CRUSHER_X、z = CAMP_Z；辦公室往南讓開，卡車在受料倉前掉頭倒車）
 local OFFICE_DX, OFFICE_Z = 27, -10
@@ -890,9 +899,10 @@ function rockmech.career_office_stairs(set, RX)
 end
 
 local function build_market(x0)
-	local cx, cz = x0 + OFFICE_DX, OFFICE_Z
-	local y = ground_y(cx, cz) or 0
-	local set, at = rockmech.career_placer(cx, cz, y)
+	-- 村莊：技師事務所的地塊（面向道路）；舊營地：東邊那一排、面向西
+	local cx, cz, fy, face = rockmech.camp_frame("tech_office", x0, x0 + OFFICE_DX, OFFICE_Z, nil, 3)
+	local y = fy or ground_y(cx, cz) or 0
+	local set, at, yaw = rockmech.career_placer(cx, cz, y, face)
 	local RX, RZ = MARKET_RX, MARKET_RZ
 	-- 外殼：角柱、牆（最下一層是底樑）、屋頂、室內地板
 	for dx = -RX, RX do
@@ -946,7 +956,7 @@ local function build_market(x0)
 		for _, p in ipairs(BOOTH_PROPS[kind]) do set(bx + p[1], p[3], p[2], "rockmech:camp_" .. p[4]) end
 		-- 坐著的攤主在椅面上（椅面比地面高 0.55 m），站著的在地面。攤主不存進地圖：記下位置，有人走近時才放（見下面）
 		local p = at(bx, 0, 1)
-		list[#list + 1] = {kind = kind, pos = {x = p.x, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = p.z}, yaw = FACE_YAW}
+		list[#list + 1] = {kind = kind, pos = {x = p.x, y = y + (BOOTHS[kind].sit and 1.05 or 0.5), z = p.z}, yaw = yaw}
 	end
 	for kind in pairs(OFFICE_NPC) do list[#list + 1] = office_spot(kind, at, y) end   -- 2 樓的三位技師（椅子上、面向門）
 	storage:set_string("stairs4:" .. x0, "1")   -- 新版的樓梯和擺設（不用再補）
@@ -1071,14 +1081,20 @@ local function quietly(fn, ...)
 end
 
 local function build_camp_now(owner, x0)
+	-- 村莊（新世界）：鋪路、整地已經做好（village.build_ground），各建築照自己的地塊蓋（rockmech.camp_frame）；
+	-- 舊營地的補丁（2 樓、樓梯、告示板、三位技師）都是新版，直接標記做過
+	local village = rockmech.village_lot and rockmech.village and rockmech.village.get()
+	if village then
+		for _, k in ipairs({"sign4", "camp_layout2", "office4", "stairs4", "board3", "pad8"}) do storage:set_string(k .. ":" .. (x0 or 0), "1") end
+	end
 	-- 先把營地範圍的平地整成一層平整的表土，建築、家具蓋在土上面（woodwork.lua）
-	if rockmech.level_camp_soil then
+	if not village and rockmech.level_camp_soil then
 		local a, b = rockmech.career_area(x0 or 0)
 		rockmech.level_camp_soil(a, b, cfg.camp_y or math.floor(cfg.surface_y or 0))
 	end
 	storage:set_string("sign4:" .. x0, "1")
 	x0 = x0 or 0
-	-- 混凝土地坪先鋪（orders.lua），建築、擺設再蓋在上面（先蓋的話擺設底下會留洞）
+	-- 混凝土地坪先鋪（orders.lua），建築、擺設再蓋在上面（先蓋的話擺設底下會留洞）；村莊只鋪交車區、收料區（各自的地塊）
 	if rockmech.camp_pave then rockmech.camp_pave(x0) end
 	storage:set_string("camp_layout2:" .. x0, "1")       -- 新配置（建築在破碎站那一排、面向西）
 	build_market(x0)
@@ -1088,8 +1104,12 @@ local function build_camp_now(owner, x0)
 	local team = owner:match("^team:(%d)$")
 	if team then build_sign(x0, team) end
 	if cfg.camp_crusher == false then return end      -- 有豎井的地圖：破碎站在井底（oreshaft.lua）
-	local y = ground_y(x0 + CRUSHER_X, CAMP_Z) or 0
-	if not rockmech.crusher_build({x = x0 + CRUSHER_X, y = y + 1, z = CAMP_Z}, -1, 0, owner) then
+	local ccx, ccz, cy, cface = rockmech.camp_frame("crusher", x0, x0 + CRUSHER_X, CAMP_Z, nil, 3)
+	local y = cy or ground_y(ccx, ccz) or 0
+	-- 破碎站的受料倉朝向（crusher_build 的 dx, dz）：舊營地朝西（−1, 0）；村莊朝地塊的正面（面向道路）
+	local fdx, fdz = -1, 0
+	if village then fdx, fdz = ({0, 1, 0, -1})[cface + 1], ({1, 0, -1, 0})[cface + 1] end
+	if not rockmech.crusher_build({x = ccx, y = y + 1, z = ccz}, fdx, fdz, owner) then
 		core.log("warning", ("[rockmech] 營地 x = %d 的破碎站蓋不起來：地形不平"):format(x0))
 	end
 end
@@ -1120,6 +1140,23 @@ end
 
 -- 在 x0 蓋一座營地（帳篷、供應商、破碎站掛在 owner 的帳戶），地圖生成完才蓋；done(spawn) 拿到營地中心的落腳點
 function rockmech.career_build_camp(owner, x0, done)
+	-- 村莊（新世界）：算配置、存起來、鋪路整地，再蓋建築
+	if cfg.village and rockmech.village then
+		local V = rockmech.village
+		local P = V.get()
+		if not P then
+			local function ground(x, z)
+				return (cfg.surface_y or 0) + rockmech.stress.terrain_rise(cfg, math.floor(x + 0.5), math.floor(z + 0.5))
+			end
+			P = V.plan(ground, cfg.strata and cfg.strata.prov and cfg.strata.prov.seed or 0, 0, 0)
+			V.store(P)
+		end
+		V.build_ground(P, function()
+			build_camp(owner, x0)
+			if done then done(rockmech.career_spawn(x0)) end
+		end)
+		return
+	end
 	local a, b = camp_area(x0)
 	core.emerge_area(a, b, function(_, _, rem)
 		if rem > 0 then return end
@@ -1171,6 +1208,14 @@ rockmech.career_area = camp_area
 
 -- 營地中心（帳篷和破碎站之間）的落腳點；地圖還沒生成就先給地面高度附近
 function rockmech.career_spawn(x0)
+	local P = rockmech.village and rockmech.village.get()
+	if P then      -- 村莊：中心那一段路上
+		local p = P.roads[1].points[math.floor(#P.roads[1].points / 2) + 1]
+		for yy = 60, -40, -1 do
+			local n = core.get_node({x = p[1], y = yy, z = p[2]}).name
+			if n ~= "air" and n ~= "ignore" and not rockmech.air_like(n) then return {x = p[1], y = yy + 1, z = p[2]} end
+		end
+	end
 	local y = ground_y(x0, 0)
 	return {x = x0, y = (y or 10) + 1, z = 0}
 end
