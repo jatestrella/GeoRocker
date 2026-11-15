@@ -114,7 +114,7 @@ end
 function V.dealer_yard(L)
 	local hw, hd = math.floor(L.w / 2), math.floor(L.d / 2)
 	local _, zf = V.dealer_store(L)
-	return V.local_rect(L, -hw + 1, hw - 1, zf + 2, hd - 1)
+	return V.local_rect(L, -hw + 1, hw - 1, zf + 1, hd - 1)      -- 緊接著店門口（中間不留草地）
 end
 
 -- 選址（參考 Luanti 的 settlements／mg_villages：先找適合的地點，不硬把地形削平）：出生點 R m 內、每 40 m 一個候選，

@@ -1081,6 +1081,17 @@ local function quietly(fn, ...)
 	if not ok then error(err) end
 end
 
+-- 玻璃片（像 Minecraft 的單片玻璃）：薄薄一片，facedir 0 是沿東西向（牆沿 x）；村莊建築的窗、車輛商的玻璃正面
+local PANE = "rockmech:glass_pane"
+core.register_node(PANE, {
+	description = S("Glass pane"), drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
+	sunlight_propagates = true, use_texture_alpha = "clip", is_ground_content = false,
+	tiles = {"default_glass.png"}, inventory_image = "default_glass.png", wield_image = "default_glass.png",
+	node_box = {type = "fixed", fixed = {-0.5, -0.5, -1 / 16, 0.5, 0.5, 1 / 16}},
+	groups = {cracky = 3, oddly_breakable_by_hand = 3},
+	sounds = default and default.node_sound_glass_defaults and default.node_sound_glass_defaults() or nil,
+})
+
 ---------------------------------------------------------------------------
 -- 村莊的店（新世界）：每家店一個地塊，單層貨櫃店面（照地塊大小），門朝道路，裡面一排櫃台、攤主在櫃台後面面向門。
 -- 車輛商是交車區角落的接待處（展示場本身就是交車區）。攤主照 BOOTHS／career_npcs 的種類
@@ -1124,29 +1135,31 @@ local function build_shell(kind, n, opts)
 		end
 	end
 	if floors > 1 then
-		-- 樓梯：靠右牆、從門口往裡爬（2 樓地板在踏步上方開口）。用內建的木樓梯（木工桌拿木板做得出來），下面墊木板；
-		-- 木樓梯 facedir 0 是往 +z 爬，這裡往後牆（−dz）爬 → 2
+		-- 樓梯：靠右牆、從後牆往門口爬（第一階後面 zb + 1 留一格空地走得過去；2 樓地板在踏步上方開口）。
+		-- 用內建的木樓梯（木工桌拿木板做得出來），下面墊整格方塊；木樓梯 facedir 0 是往 +z 爬，這裡往正面（+dz）爬 → 0
 		for k = 1, 4 do
-			for h = 1, k - 1 do set(hw - 1, h, zf - k, "rockmech:timber_plank") end
-			set(hw - 1, k, zf - k, "stairs:stair_wood", 2)
-			for h = k + 1, math.min(k + 3, 7) do set(hw - 1, h, zf - k, "air") end
+			local dz = zb + 1 + k
+			for h = 1, k - 1 do set(hw - 1, h, dz, "rockmech:office_floor") end
+			set(hw - 1, k, dz, "stairs:stair_wood", 0)
+			for h = k + 1, math.min(k + 3, 7) do set(hw - 1, h, dz, "air") end
 		end
-		for k = 1, 3 do set(hw - 1, 4, zf - k, "air") end
+		set(hw - 1, 1, zb + 1, "air"); set(hw - 1, 2, zb + 1, "air")         -- 樓梯口
+		for k = 1, 3 do set(hw - 1, 4, zb + 1 + k, "air") end
 		local zm2 = math.floor((zb + zf) / 2)
-		set(-hw, 6, zm2, "default:glass"); set(hw, 6, zm2, "default:glass")
-		for _, dx in ipairs({-hw + 2, hw - 2}) do set(dx, 6, zf, "default:glass") end
+		set(-hw, 6, zm2, PANE, 1); set(hw, 6, zm2, PANE, 1)
+		for _, dx in ipairs({-hw + 2, hw - 2}) do set(dx, 6, zf, PANE, 0) end
 		set(0, 7, zm2, "rockmech:camp_lamp")
 	end
 	-- 門（正面中間，修車廠開三格寬）、窗（正面兩側、側牆中間）
 	local door = opts.wide_door and 1 or 0
 	-- 玻璃正面（車輛商的展售店）：正面牆整片玻璃（角柱留著）
 	if opts.glass_front then
-		for dx = -hw + 1, hw - 1 do for h = 1, 3 do set(dx, h, zf, "default:glass") end end
+		for dx = -hw + 1, hw - 1 do for h = 1, 3 do set(dx, h, zf, PANE, 0) end end
 	end
 	for dx = -door, door do for h = 1, 2 + (opts.wide_door and 1 or 0) do set(dx, h, zf, "air") end end
-	for _, dx in ipairs({-hw + 2, hw - 2}) do if math.abs(dx) > door + 1 then set(dx, 2, zf, "default:glass") end end
+	for _, dx in ipairs({-hw + 2, hw - 2}) do if math.abs(dx) > door + 1 and not opts.glass_front then set(dx, 2, zf, PANE, 0) end end
 	local zm = math.floor((zb + zf) / 2)
-	set(-hw, 2, zm, "default:glass"); set(hw, 2, zm, "default:glass")
+	set(-hw, 2, zm, PANE, 1); set(hw, 2, zm, PANE, 1)
 	set(0, 3, zm, "rockmech:camp_lamp")
 	return set, at, yaw, hw, zf, zb, L
 end
@@ -1164,8 +1177,9 @@ local function build_shop(kind, n, vendors, props, opts)
 		local p = at(vx, 0, zb + 1)
 		list[#list + 1] = {kind = v[1], pos = {x = p.x, y = L.y + (v[2] and 1.05 or 0.5), z = p.z}, yaw = yaw}
 	end
+	local maxdx = (opts and opts.floors or 1) > 1 and hw - 3 or hw - 1      -- 兩層樓：右邊一排是樓梯、旁邊一排是走到樓梯口的走道
 	for _, p in ipairs(props or {}) do      -- 擺設限制在牆內
-		set(math.max(-hw + 1, math.min(hw - 1, p[1])), p[3], zb + p[2], "rockmech:camp_" .. p[4])
+		set(math.max(-hw + 1, math.min(maxdx, p[1])), p[3], zb + p[2], "rockmech:camp_" .. p[4])
 	end
 	-- 2 樓的擺設（{dx, dz（離後牆）, 高度層（2 樓地板上 = 5…）, 名稱}），避開右邊的樓梯
 	for _, p in ipairs((opts and opts.upstairs) or {}) do
