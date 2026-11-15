@@ -156,10 +156,10 @@ function V.plan(ground, seed, cx, cz)
 	local cells = road_cells(roads)
 	local taken = {}
 	local lots = {}
-	-- 不壓到路（留 1 m）、跟別的地塊留 2 m（村莊集中一點）
+	-- 不壓到路（留 1 m）、跟別的地塊留 1 m（像小鎮一樣密）
 	local function free(L)
 		local x1, z1, x2, z2 = lot_rect(L)
-		for x = math.floor(x1) - 2, math.ceil(x2) + 2 do for z = math.floor(z1) - 2, math.ceil(z2) + 2 do
+		for x = math.floor(x1) - 1, math.ceil(x2) + 1 do for z = math.floor(z1) - 1, math.ceil(z2) + 1 do
 			if taken[x .. "," .. z] then return false end
 		end end
 		for x = math.floor(x1) - 1, math.ceil(x2) + 1 do for z = math.floor(z1) - 1, math.ceil(z2) + 1 do

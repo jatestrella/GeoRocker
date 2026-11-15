@@ -1104,18 +1104,35 @@ local function build_shell(kind, n, opts)
 	local hw = opts.hw or math.floor((L.w - 2) / 2)    -- 店面半寬（沿路）
 	local zf = math.floor(L.d / 2) - 2                  -- 正面牆（門）
 	local zb = zf - (L.d - 3) + 1                       -- 後牆（室內至少三排：攤主、櫃台、客人）
+	-- opts.floors = 2：兩層樓（2 樓地板在 h 4、屋頂在 h 8），室內右後角一道樓梯（四階實心的踏步）
+	local floors = opts.floors or 1
+	local top = 4 * floors
 	for dx = -hw, hw do
 		for dz = zb, zf do
 			local ex, ez = math.abs(dx) == hw, dz == zb or dz == zf
 			set(dx, 0, dz, "rockmech:office_floor")
-			for h = 1, 3 do
-				if ex and ez then set(dx, h, dz, "rockmech:office_post")
-				elseif ex or ez then set(dx, h, dz, h == 1 and "rockmech:office_wall_base" or "rockmech:office_wall")
-				else set(dx, h, dz, "air") end
+			for f = 0, floors - 1 do
+				for h = 4 * f + 1, 4 * f + 3 do
+					if ex and ez then set(dx, h, dz, "rockmech:office_post")
+					elseif ex or ez then set(dx, h, dz, (h % 4 == 1) and "rockmech:office_wall_base" or "rockmech:office_wall")
+					else set(dx, h, dz, "air") end
+				end
+				if f < floors - 1 then set(dx, 4 * f + 4, dz, (ex or ez) and "rockmech:office_post" or "rockmech:office_floor") end
 			end
-			set(dx, 4, dz, (ex or ez) and "rockmech:office_post" or "rockmech:office_roof")
-			for h = 5, 7 do set(dx, h, dz, "air") end
+			set(dx, top, dz, (ex or ez) and "rockmech:office_post" or "rockmech:office_roof")
+			for h = top + 1, top + 3 do set(dx, h, dz, "air") end
 		end
+	end
+	if floors > 1 then
+		for k = 1, 4 do      -- 樓梯：靠右牆、從門口往裡爬（2 樓地板在踏步上方開口）
+			set(hw - 1, k, zf - k, "rockmech:office_floor")
+			for h = k + 1, math.min(k + 3, 7) do set(hw - 1, h, zf - k, "air") end
+		end
+		for k = 1, 3 do set(hw - 1, 4, zf - k, "air") end
+		local zm2 = math.floor((zb + zf) / 2)
+		set(-hw, 6, zm2, "default:glass"); set(hw, 6, zm2, "default:glass")
+		for _, dx in ipairs({-hw + 2, hw - 2}) do set(dx, 6, zf, "default:glass") end
+		set(0, 7, zm2, "rockmech:camp_lamp")
 	end
 	-- 門（正面中間，修車廠開三格寬）、窗（正面兩側、側牆中間）
 	local door = opts.wide_door and 1 or 0
@@ -1143,6 +1160,10 @@ local function build_shop(kind, n, vendors, props, opts)
 	for _, p in ipairs(props or {}) do      -- 擺設限制在牆內
 		set(math.max(-hw + 1, math.min(hw - 1, p[1])), p[3], zb + p[2], "rockmech:camp_" .. p[4])
 	end
+	-- 2 樓的擺設（{dx, dz（離後牆）, 高度層（2 樓地板上 = 5…）, 名稱}），避開右邊的樓梯
+	for _, p in ipairs((opts and opts.upstairs) or {}) do
+		set(math.max(-hw + 1, math.min(hw - 2, p[1])), p[3], zb + math.max(1, math.min(p[2], zf - zb - 1)), "rockmech:camp_" .. p[4])
+	end
 	storage:set_string(VENDOR_SPOTS, core.serialize(list))
 	return set, at, hw, zf
 end
@@ -1155,9 +1176,15 @@ local function build_village_shops()
 	end
 	build_shop("blasting", 1, {{"blast", false}}, {{-2, 1, 1, "explosives"}, {2, 1, 1, "crate"}, {3, 1, 1, "barrel"}})
 	build_shop("hardware", 1, {{"tools", true}}, {{-3, 1, 1, "shelf"}, {-3, 1, 2, "shelf"}, {3, 1, 1, "shelf"}, {2, 1, 1, "crate"}})
-	local set, at, hw, zf = build_shop("consulting", 1, {{"civil", true}}, {{-3, 1, 1, "blackboard"}, {-3, 1, 2, "blackboard"}, {3, 1, 1, "shelf"}})
+	-- 工程顧問公司、第一間技師事務所是兩層樓：2 樓是辦公室（辦公桌、文件、黑板）
+	-- {dx, 離後牆幾格, 高度層（2 樓地板上一格 = 5）, 名稱}；右邊 dx = hw − 1 是樓梯
+	local UPSTAIRS = {{-2, 1, 5, "table"}, {-1, 1, 5, "table"}, {-1, 1, 6, "papers"}, {-1, 2, 5, "chair"},
+		{-3, 3, 5, "table"}, {-3, 3, 6, "helmets"}, {1, 1, 5, "shelf"}, {1, 1, 6, "shelf"}}
+	local set, at, hw, zf = build_shop("consulting", 1, {{"civil", true}}, {{-3, 1, 1, "blackboard"}, {-3, 1, 2, "blackboard"}, {3, 1, 1, "shelf"}},
+		{floors = 2, upstairs = UPSTAIRS})
 	if set and rockmech.news_board_put then rockmech.news_board_put(at(-hw, 2, zf + 1), at(-hw, 2, zf)) end      -- 告示板（礦價）掛在正面角柱
-	build_shop("tech_office", 1, {{"geo", true}}, {{-3, 1, 1, "shelf"}, {3, 1, 1, "crate"}, {3, 2, 1, "papers"}})
+	build_shop("tech_office", 1, {{"geo", true}}, {{-3, 1, 1, "shelf"}, {3, 1, 1, "crate"}, {3, 2, 1, "papers"}},
+		{floors = 2, upstairs = UPSTAIRS})
 	build_shop("tech_office", 2, {{"geotech", true}}, {{-3, 1, 1, "shelf"}, {3, 1, 1, "blackboard"}, {3, 1, 2, "blackboard"}})
 	build_shop("garage", 1, {{"mechanic", false}}, {{-4, 1, 1, "toolbox"}, {-4, 1, 2, "tires"}, {4, 1, 1, "barrel"}, {4, 1, 2, "crate"}},
 		{wide_door = true})
@@ -1224,20 +1251,43 @@ function rockmech.in_camp(pos)
 end
 
 -- 在 x0 蓋一座營地（帳篷、供應商、破碎站掛在 owner 的帳戶），地圖生成完才蓋；done(spawn) 拿到營地中心的落腳點
-function rockmech.career_build_camp(owner, x0, done, progress)
-	-- 村莊（新世界）：算配置、存起來、鋪路整地，再蓋建築
-	if cfg.village and rockmech.village then
-		local V = rockmech.village
-		local P = V.get()
-		if not P then
-			local function ground(x, z)
-				return (cfg.surface_y or 0) + rockmech.stress.terrain_rise(cfg, math.floor(x + 0.5), math.floor(z + 0.5))
-			end
-			local vx, vz = V.site(ground, 500)          -- 出生點 500 m 內最平的地點
-			P = V.plan(ground, cfg.strata and cfg.strata.prov and cfg.strata.prov.seed or 0, vx, vz)
-			V.store(P)
+-- 村莊的地形（算配置、鋪路、整地）：伺服器一啟動就開始做（不等玩家進來），做完記 village_ground。
+-- 做的時候有人要等：waiters（做完呼叫）、listeners（進度 0..1）
+local vprep = {waiters = {}, listeners = {}, running = false}
+local function village_prepare(done, progress)
+	if storage:get_string("village_ground") == "1" then if done then done() end return end
+	if done then vprep.waiters[#vprep.waiters + 1] = done end
+	if progress then vprep.listeners[#vprep.listeners + 1] = progress end
+	if vprep.running then return end
+	vprep.running = true
+	local V = rockmech.village
+	local P = V.get()
+	if not P then
+		local function ground(x, z)
+			return (cfg.surface_y or 0) + rockmech.stress.terrain_rise(cfg, math.floor(x + 0.5), math.floor(z + 0.5))
 		end
-		V.build_ground(P, function()
+		local vx, vz = V.site(ground, 500)          -- 出生點 500 m 內最平的地點
+		P = V.plan(ground, cfg.strata and cfg.strata.prov and cfg.strata.prov.seed or 0, vx, vz)
+		V.store(P)
+	end
+	V.build_ground(P, function()
+		storage:set_string("village_ground", "1")
+		vprep.running = false
+		local w = vprep.waiters
+		vprep.waiters, vprep.listeners = {}, {}
+		for _, f in ipairs(w) do f() end
+	end, function(f) for _, l in ipairs(vprep.listeners) do l(f) end end)
+end
+if cfg.village and cfg.career then
+	core.after(0, function()
+		if storage:get_string(SITE_KEY) == "" then village_prepare() end      -- 新世界：先做地形，玩家還在載入時就開始
+	end)
+end
+
+function rockmech.career_build_camp(owner, x0, done, progress)
+	-- 村莊（新世界）：地形做好（village_prepare）再蓋建築
+	if cfg.village and rockmech.village then
+		village_prepare(function()
 			build_camp(owner, x0)
 			if done then done(rockmech.career_spawn(x0)) end
 		end, progress)
@@ -1317,20 +1367,32 @@ core.register_on_joinplayer(function(player)
 		rockmech.add_money(owner, rockmech.team_of(name) and 0 or cfg.career_start)
 		if cfg.village then
 			-- 村莊：生成要一段時間。玩家先固定在原地、畫面中央顯示進度，生成完才傳送到村莊、恢復移動
+			-- 跟 Luanti 的載入畫面一樣：深色全螢幕、中間一條綠色進度條（地形多半在載入材質時已經做完一部分）
 			player:set_physics_override({speed = 0, jump = 0, gravity = 0})
-			local hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.5}, alignment = {x = 0, y = 0},
-				text = S("Generating the map @1%", 0), number = 0xFFFFFF, size = {x = 2, y = 2}, z_index = 1000})
-			local bg = player:hud_add({type = "image", position = {x = 0.5, y = 0.5}, scale = {x = -100, y = -100},
-				text = "[fill:16x16:#3a4a3a", z_index = 999})
+			local BAR = 400
+			local huds = {
+				player:hud_add({type = "image", position = {x = 0.5, y = 0.5}, scale = {x = -100, y = -100},
+					text = "[fill:16x16:#1b1f23", z_index = 990}),
+				player:hud_add({type = "image", position = {x = 0.5, y = 0.55}, offset = {x = -BAR / 2, y = 0}, alignment = {x = 1, y = 0},
+					scale = {x = BAR, y = 14}, text = "[fill:1x1:#3c3c3c", z_index = 991}),
+			}
+			local fill = player:hud_add({type = "image", position = {x = 0.5, y = 0.55}, offset = {x = -BAR / 2, y = 0}, alignment = {x = 1, y = 0},
+				scale = {x = 1, y = 14}, text = "[fill:1x1:#4caf50", z_index = 992})
+			local label = player:hud_add({type = "text", position = {x = 0.5, y = 0.55}, offset = {x = 0, y = -28}, alignment = {x = 0, y = 0},
+				text = S("Generating the map @1%", 0), number = 0xDDDDDD, z_index = 993})
+			huds[#huds + 1], huds[#huds + 2] = fill, label
 			rockmech.career_build_camp(owner, cfg.career_camp_dx, function(spawn)
 				local p = core.get_player_by_name(name)
 				if not p then return end
 				if spawn then p:set_pos(spawn) end
-				p:hud_remove(hud); p:hud_remove(bg)
+				for _, h in ipairs(huds) do p:hud_remove(h) end
 				p:set_physics_override({speed = 1, jump = 1, gravity = 1})
 			end, function(f)
 				local p = core.get_player_by_name(name)
-				if p then p:hud_change(hud, "text", S("Generating the map @1%", math.floor(f * 100))) end
+				if p then
+					p:hud_change(fill, "scale", {x = math.max(1, BAR * f), y = 14})
+					p:hud_change(label, "text", S("Generating the map @1%", math.floor(f * 100)))
+				end
 			end)
 		else
 			rockmech.career_build_camp(owner, cfg.career_camp_dx)
