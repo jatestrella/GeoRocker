@@ -1063,6 +1063,14 @@ function rockmech.career_build_professor(x0)
 	for _, c in ipairs({{-2, 3}, {0, 3}, {2, 3}, {-1, 4}, {1, 4}}) do
 		set(c[1], 1, c[2], "rockmech:camp_chair", 2)       -- 學生椅轉過來面向教授
 	end
+	-- 村莊：教授出野外上課，講台和學生椅上方搭帆布棚（四角立柱、屋脊高一格）
+	if rockmech.cfg.village then
+		for _, c in ipairs({{-4, -3}, {4, -3}, {-4, 5}, {4, 5}}) do
+			for h = 1, 3 do set(c[1], h, c[2], "rockmech:tent_pole") end
+		end
+		for dx = -4, 4 do for dz = -3, 5 do set(dx, 4, dz, "rockmech:tent_canvas") end end
+		for dx = -1, 1 do for dz = -3, 5 do set(dx, 5, dz, "rockmech:tent_canvas") end end
+	end
 	local key = rockmech.career_vendor_spots
 	local list = core.deserialize(storage:get_string(key)) or {}
 	local pp = at(0, 0, 0)

@@ -1102,8 +1102,8 @@ local function build_shell(kind, n, opts)
 	local function set(dx, h, dz, n, p2) set0(dx + cx, h, dz, n, p2) end
 	local function at(dx, h, dz) return at0(dx + cx, h, dz) end
 	local hw = opts.hw or math.floor((L.w - 2) / 2)    -- 店面半寬（沿路）
-	local zf = math.floor(L.d / 2) - 2                  -- 正面牆（門）
-	local zb = zf - (L.d - 3) + 1                       -- 後牆（室內至少三排：攤主、櫃台、客人）
+	local zf = opts.zf or (math.floor(L.d / 2) - 2)     -- 正面牆（門）
+	local zb = opts.zb or (zf - (L.d - 3) + 1)          -- 後牆（室內至少三排：攤主、櫃台、客人）
 	-- opts.floors = 2：兩層樓（2 樓地板在 h 4、屋頂在 h 8），室內右後角一道樓梯（四階實心的踏步）
 	local floors = opts.floors or 1
 	local top = 4 * floors
@@ -1139,6 +1139,10 @@ local function build_shell(kind, n, opts)
 	end
 	-- 門（正面中間，修車廠開三格寬）、窗（正面兩側、側牆中間）
 	local door = opts.wide_door and 1 or 0
+	-- 玻璃正面（車輛商的展售店）：正面牆整片玻璃（角柱留著）
+	if opts.glass_front then
+		for dx = -hw + 1, hw - 1 do for h = 1, 3 do set(dx, h, zf, "default:glass") end end
+	end
 	for dx = -door, door do for h = 1, 2 + (opts.wide_door and 1 or 0) do set(dx, h, zf, "air") end end
 	for _, dx in ipairs({-hw + 2, hw - 2}) do if math.abs(dx) > door + 1 then set(dx, 2, zf, "default:glass") end end
 	local zm = math.floor((zb + zf) / 2)
@@ -1171,11 +1175,12 @@ local function build_shop(kind, n, vendors, props, opts)
 	return set, at, hw, zf
 end
 local function build_village_shops()
-	-- 車輛商：地塊左邊 10 m 的店面（課長坐在櫃台後），右邊是交車區（camp.yard_rect）
+	-- 車輛商：小鎮的汽車展售店——後面是玻璃正面的店（課長坐在櫃台後），門口正對前面的交車區（camp.yard_rect）
 	local dl = rockmech.village_lot and rockmech.village_lot("vehicle_dealer")
 	if dl then
-		build_shop("vehicle_dealer", 1, {{"vehicle", true}}, {{-3, 1, 1, "tires"}, {3, 1, 1, "shelf"}, {3, 2, 1, "helmets"}},
-			{cx = -math.floor(dl.w / 2) + 5, hw = 4})
+		local zb, zf = rockmech.village.dealer_store(dl)
+		build_shop("vehicle_dealer", 1, {{"vehicle", true}}, {{-5, 1, 1, "tires"}, {-5, 2, 1, "tires"}, {5, 1, 1, "shelf"}, {5, 2, 1, "helmets"}},
+			{hw = math.floor(dl.w / 2) - 1, zb = zb, zf = zf, glass_front = true})
 	end
 	build_shop("blasting", 1, {{"blast", false}}, {{-2, 1, 1, "explosives"}, {2, 1, 1, "crate"}, {3, 1, 1, "barrel"}})
 	build_shop("hardware", 1, {{"tools", true}}, {{-3, 1, 1, "shelf"}, {-3, 1, 2, "shelf"}, {3, 1, 1, "shelf"}, {2, 1, 1, "crate"}})

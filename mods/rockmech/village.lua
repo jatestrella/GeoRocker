@@ -16,8 +16,7 @@ local MAX_RELIEF = 3
 -- 店家（kind、沿路寬 w、深 d）。順序 = 找位置的順序（大的先找）
 -- 小店：地塊 10 × 11 → 店面外牆 8 × 7、室內 7 × 5（使用者 2026-11-16：室內深 3 格太小）
 V.LOTS = {
-	{kind = "vehicle_dealer", w = 26, d = 14},     -- 重型機械車輛商：左邊店面（10 m）、右邊交車區（16 m，兩台車）
-	{kind = "crusher", w = 12, d = 12},            -- 破碎站
+	{kind = "vehicle_dealer", w = 16, d = 22},     -- 重型機械車輛商：後面是玻璃正面的展售店（7 m 深），前面是交車區（兩台車），接著道路
 	{kind = "receiving", w = 8, d = 14},           -- 收料場：收料車、地磅
 	{kind = "garage", w = 14, d = 12},             -- 修車廠：工房＋待修空地
 	{kind = "lecture_hall", w = 13, d = 10},       -- 大學講堂
@@ -28,6 +27,7 @@ V.LOTS = {
 	{kind = "blasting", w = 10, d = 11},           -- 爆破器材行
 	{kind = "hardware", w = 10, d = 11},           -- 五金工具行
 	{kind = "staffing", w = 10, d = 11},           -- 人力派遣：操作員宿舍（長椅在屋裡）
+	{kind = "crusher", w = 12, d = 12, outer = true},      -- 收煤站（破碎站）：一律在小鎮最外圍（其他店都排好，再往外找）
 }
 
 local function hash(a, b, seed)
@@ -106,10 +106,15 @@ function V.local_rect(L, dx1, dx2, dz1, dz2)
 	local up = unpack or table.unpack
 	return math.min(up(xs)), math.min(up(zs)), math.max(up(xs)), math.max(up(zs))
 end
--- 車輛商的交車區（本地座標）：右邊 16 m
+-- 車輛商：後面是展售店（本地 dz −hd+1 … −hd+7），前面是交車區（店門口外 1 m 到地塊正面）
+function V.dealer_store(L)
+	local hd = math.floor(L.d / 2)
+	return -hd + 1, -hd + 7
+end
 function V.dealer_yard(L)
 	local hw, hd = math.floor(L.w / 2), math.floor(L.d / 2)
-	return V.local_rect(L, hw - 16, hw - 1, -hd + 1, hd - 1)
+	local _, zf = V.dealer_store(L)
+	return V.local_rect(L, -hw + 1, hw - 1, zf + 2, hd - 1)
 end
 
 -- 選址（參考 Luanti 的 settlements／mg_villages：先找適合的地點，不硬把地形削平）：出生點 R m 內、每 40 m 一個候選，
@@ -193,11 +198,20 @@ function V.plan(ground, seed, cx, cz)
 		if da ~= db then return da < db end
 		return a.ri * 1000 + a.i * 2 + a.side < b.ri * 1000 + b.i * 2 + b.side
 	end)
+	local function dist2(x, z) return (x - cx) ^ 2 + (z - cz) ^ 2 end
 	for _, spec in ipairs(V.LOTS) do
 		local placed
+		-- 最外圍：離中心最遠那家店再往外 10 m 以上
+		local min_d2 = 0
+		if spec.outer then
+			local m = 0
+			for _, L in ipairs(lots) do m = math.max(m, math.sqrt(dist2(L.x, L.z))) end
+			min_d2 = (m + 10) ^ 2
+		end
 		for pass = 1, 3 do
 			local lim, off = MAX_RELIEF + (pass - 1) * 2, 0.5 + (pass - 1) * 3
 			for _, c in ipairs(cand) do
+				if dist2(c.x, c.z) >= min_d2 then
 				-- 面向道路：門朝向路，rot 照路的垂直方向取最近的 90°
 				local nx, nz = c.side * math.cos(c.ang), -c.side * math.sin(c.ang)       -- 路的法線（往地塊那一側）
 				local face = math.atan2(-nx, -nz)                                        -- 門朝路
@@ -223,6 +237,7 @@ function V.plan(ground, seed, cx, cz)
 						placed = L
 						break
 					end
+				end
 				end
 			end
 			if placed then break end
