@@ -718,9 +718,7 @@ local function geo_terrain(cfg, x, z, H)
 	local a = 0.5 + 0.5 * smooth((d2 - d1) / 300)
 	local h = geo_style(S.domains[t1], wx, wz, H)
 	if t2 and a < 1 then h = a * h + (1 - a) * geo_style(S.domains[t2], wx, wz, H) end
-	local r = math.sqrt(x * x + z * z)
-	local edge = 50 + 40 * fbm(x / 40, z / 40, 371)
-	return h * (0.25 + 0.75 * smooth((r - edge) / 120))
+	return h      -- 營地附近不再壓平（會變成一個碗）：村莊自己找平的地點（village.lua 的 V.site）
 end
 
 function stress.free_terrain(cfg, x, z)

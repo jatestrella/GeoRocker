@@ -1233,7 +1233,8 @@ function rockmech.career_build_camp(owner, x0, done, progress)
 			local function ground(x, z)
 				return (cfg.surface_y or 0) + rockmech.stress.terrain_rise(cfg, math.floor(x + 0.5), math.floor(z + 0.5))
 			end
-			P = V.plan(ground, cfg.strata and cfg.strata.prov and cfg.strata.prov.seed or 0, 0, 0)
+			local vx, vz = V.site(ground, 500)          -- 出生點 500 m 內最平的地點
+			P = V.plan(ground, cfg.strata and cfg.strata.prov and cfg.strata.prov.seed or 0, vx, vz)
 			V.store(P)
 		end
 		V.build_ground(P, function()

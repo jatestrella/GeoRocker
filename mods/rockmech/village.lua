@@ -112,6 +112,25 @@ function V.dealer_yard(L)
 	return V.local_rect(L, hw - 16, hw - 1, -hd + 1, hd - 1)
 end
 
+-- 選址（參考 Luanti 的 settlements／mg_villages：先找適合的地點，不硬把地形削平）：出生點 R m 內、每 40 m 一個候選，
+-- 看 80 × 80 m 的範圍（每 10 m 取樣）高差最小的，離出生點遠一點扣一點分
+function V.site(ground, R)
+	R = R or 500
+	local best, bx, bz
+	for x = -R, R, 40 do for z = -R, R, 40 do
+		if x * x + z * z <= R * R then
+			local lo, hi = math.huge, -math.huge
+			for dx = -40, 40, 10 do for dz = -40, 40, 10 do
+				local h = ground(x + dx, z + dz)
+				lo, hi = math.min(lo, h), math.max(hi, h)
+			end end
+			local score = (hi - lo) + math.sqrt(x * x + z * z) / 100
+			if not best or score < best then best, bx, bz = score, x, z end
+		end
+	end end
+	return bx or 0, bz or 0
+end
+
 function V.plan(ground, seed, cx, cz)
 	cx, cz = cx or 0, cz or 0
 	seed = (seed or 0) % 997
@@ -189,7 +208,16 @@ function V.plan(ground, seed, cx, cz)
 				L.x, L.z = math.floor(c.x + nx * dist + 0.5), math.floor(c.z + nz * dist + 0.5)
 				if free(L) then
 					local r, med = relief(L)
-					if r <= lim then
+					-- 門前那段路的地面跟地塊差 1.5 m 以內（不要門口對著山壁或懸崖）
+					local fx, fz = ({0, 1, 0, -1})[rot + 1], ({1, 0, -1, 0})[rot + 1]
+					local hd = ((rot % 2 == 1) and spec.w or spec.d) / 2 + 2
+					local ok = true
+					for _, k in ipairs({-0.4, 0, 0.4}) do
+						local hw2 = ((rot % 2 == 1) and spec.d or spec.w) * k
+						local gx, gz = L.x + fx * hd + fz * hw2, L.z + fz * hd - fx * hw2
+						if math.abs(ground(gx, gz) - med) > 1.5 then ok = false end
+					end
+					if ok and r <= lim then
 						L.y = math.floor(med + 0.5)
 						L.rx, L.rz = c.x, c.z          -- 接到的路上那一點（門前路從這裡接）
 						placed = L
@@ -341,6 +369,26 @@ function V.build_ground(plan, done, progress)
 				end
 				if t and n == 4 and t > hi then data[area:index(x, t, z)] = c_air end
 			end
+		end
+		-- 地塊外圍 10 m 做 1:1 的緩坡（不要垂直切壁）：離地塊 d m 的地面限制在 L.y ± d 之間，高的削、低的填，表面是表土
+		for _, L in ipairs(plan.lots) do
+			local a, b, c, d = lot_rect(L)
+			local xa, za, xb, zb = math.floor(a) - 1, math.floor(b) - 1, math.ceil(c) + 1, math.ceil(d) + 1
+			for x = xa - 10, xb + 10 do for z = za - 10, zb + 10 do
+				local dd = math.max(xa - x, x - xb, za - z, z - zb)
+				if dd >= 1 and area:contains(x, pmin.y, z) then
+					local t = top_at(x, z)
+					if t then
+						local hi, lo = L.y + dd, L.y - dd
+						if t > hi then
+							for y = hi + 1, t do data[area:index(x, y, z)] = c_air end
+							data[area:index(x, hi, z)] = c_soil
+						elseif t < lo then
+							for y = t + 1, lo do data[area:index(x, y, z)] = c_soil end
+						end
+					end
+				end
+			end end
 		end
 		-- 地塊
 		local lotted = {}
