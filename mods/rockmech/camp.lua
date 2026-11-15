@@ -57,7 +57,9 @@ local function in_pad(x0, pos)
 end
 -- (x, z) 地面最上面那格的 y（走得上去的方塊）
 local function ground_y(x, z)
-	for y = sy() + 8, sy() - 6, -1 do
+	local hi, lo = sy() + 8, sy() - 6
+	if rockmech.village and rockmech.village.get() then hi, lo = sy() + 80, sy() - 40 end      -- 村莊：地形有起伏
+	for y = hi, lo, -1 do
 		local n = core.get_node({x = x, y = y, z = z}).name
 		if n == "ignore" then return nil end
 		local d = core.registered_nodes[n]
@@ -192,8 +194,45 @@ end
 -- 新蓋的營地：career.lua 蓋營地時整地完先鋪（rockmech.camp_pave），建築、擺設再蓋在地坪上；
 -- 舊的營地開服 4 秒後補鋪（或縮小）
 local function village() return rockmech.village and rockmech.village.get() end
+local function vlot(kind) return village() and rockmech.village_lot and rockmech.village_lot(kind) end
+-- 村莊：交車區 = 重型機械車輛商的地塊（世界座標 {x1, x2, z1（北）, z2（南）}）；收料車停在收料場地塊中央、車頭朝北，地磅在車底
+local function yard_rect(x0)
+	local L = vlot("vehicle_dealer")
+	if not L then return nil end
+	local a, b, c, d = rockmech.village.lot_rect(L)
+	return {x1 = math.ceil(a), x2 = math.floor(c), z1 = math.floor(d), z2 = math.ceil(b)}
+end
+local function bay(x0)
+	local L = vlot("receiving")
+	if L then return L.x, L.z end
+	return x0 + BAY.x, BAY.z
+end
+local function on_scale(x0, x, z)
+	local bx, bz = bay(x0)
+	return x >= bx - 1 and x <= bx + 1 and z >= bz - 7 and z <= bz + 1
+end
+-- 村莊的地坪：交車區（展示場，黃線外框）、收料場（黃線外框＋地磅），鋪在整好地的地塊表面
+local function village_pave(x0)
+	for _, kind in ipairs({"vehicle_dealer", "receiving"}) do
+		local L = vlot(kind)
+		if L then
+			local a, b, c, d = rockmech.village.lot_rect(L)
+			local x1, x2, z1, z2 = math.ceil(a), math.floor(c), math.ceil(b), math.floor(d)
+			for x = x1, x2 do for z = z1, z2 do
+				local want = kind == "receiving" and on_scale(x0, x, z) and SCALE_NODE
+					or (x == x1 or x == x2 or z == z1 or z == z2) and LINE or CONCRETE
+				core.set_node({x = x, y = L.y, z = z}, {name = want})
+			end end
+		end
+	end
+end
 function rockmech.camp_pave(x0)
-	if village() then storage:set_string("pad8:" .. x0, "1"); return end      -- 村莊：不鋪整片地坪
+	if village() then      -- 村莊：只鋪交車區、收料場（不鋪整片地坪）
+		village_pave(x0)
+		storage:set_string("pad8:" .. x0, "1")
+		storage:set_string("pad:" .. x0, "1")
+		return
+	end
 	if not done(x0) then pave(x0) end
 end
 core.after(4, function()
@@ -270,4 +309,5 @@ core.register_on_protection_violation(function(pos, name)
 end)
 
 rockmech.camp = {sites = sites, site_of = site_of, sy = sy, ground_y = ground_y, in_pad = in_pad,
-	protect = function(r) EXTRA[#EXTRA + 1] = r end, PADS = PADS, BAY = BAY, SCALE = SCALE}
+	protect = function(r) EXTRA[#EXTRA + 1] = r end, PADS = PADS, BAY = BAY, SCALE = SCALE,
+	yard_rect = yard_rect, bay = bay}

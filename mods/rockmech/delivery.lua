@@ -14,7 +14,13 @@ local cfg = rockmech.cfg
 local H = rockmech.hopper_lib
 local S = rockmech.S
 
-local YARD = {x1 = 10, x2 = 36, z1 = -36, z2 = -46}   -- 交車區（相對營地中心 x0；z 是絕對座標，營地中心在 z = 0）：研究帳篷、講堂（z −31..−24）南邊，看板（z −48，x0−4..x0+3）東邊
+local YARD = {x1 = 10, x2 = 36, z1 = -36, z2 = -46}
+-- 交車區的世界座標 {x1, x2（西、東）, z1（北）, z2（南）}：村莊是重型機械車輛商的展示場（camp.yard_rect），舊營地照 YARD
+local function yard(x0)
+	local r = rockmech.camp and rockmech.camp.yard_rect and rockmech.camp.yard_rect(x0)
+	if r then return r end
+	return {x1 = x0 + YARD.x1, x2 = x0 + YARD.x2, z1 = YARD.z1, z2 = YARD.z2}
+end   -- 交車區（相對營地中心 x0；z 是絕對座標，營地中心在 z = 0）：研究帳篷、講堂（z −31..−24）南邊，看板（z −48，x0−4..x0+3）東邊
 
 ---------------------------------------------------------------------------
 -- 障礙物偵測
@@ -83,9 +89,10 @@ end
 -- 營地中心 x0 的交車區裡，第一個放得下 kind 的位置：回傳 車身中心（跟手放的高度一樣）或 nil、原因
 local function find_slot(x0, kind)
 	local def = V.TYPES[kind]
+	local Y = yard(x0)
 	-- 交車區不一定有人在附近：先從資料庫讀進來，再從中央往下找地面當基準
-	core.load_area({x = x0 + YARD.x1, y = -40, z = YARD.z2}, {x = x0 + YARD.x2, y = 60, z = YARD.z1})
-	local mx, mz = x0 + math.floor((YARD.x1 + YARD.x2) / 2), math.floor((YARD.z1 + YARD.z2) / 2)
+	core.load_area({x = Y.x1, y = -40, z = Y.z2}, {x = Y.x2, y = 60, z = Y.z1})
+	local mx, mz = math.floor((Y.x1 + Y.x2) / 2), math.floor((Y.z1 + Y.z2) / 2)
 	local base
 	for y = 60, -40, -1 do
 		local n = core.get_node({x = mx, y = y, z = mz}).name
@@ -98,16 +105,16 @@ local function find_slot(x0, kind)
 	-- 一排：車頭朝北、貼著交車區北緣（深 11 m，放得下最長的礦用卡車 10 m）。車前面是空地，直接開得出去；
 	-- 左右跟別的車至少隔 GAP m（從西往東找）
 	local GAP = 1
-	local rows = {{yaw = 0, z0 = YARD.z1, step = -1}}
+	local rows = {{yaw = 0, z0 = Y.z1, step = -1}}
 	for _, r in ipairs(rows) do
-		for ix = x0 + YARD.x1 + 1, x0 + YARD.x2 - 1 do
+		for ix = Y.x1 + 1, Y.x2 - 1 do
 			-- 這一欄：從交車區邊緣往內，第一個整台車都在交車區裡的位置
 			for iz = r.z0, r.z0 + r.step * 12, r.step do
 				local cx, cz = ix + off, iz + off
 				local cells = body_cells(def, cx, cz, r.yaw)
 				local inside = true
 				for _, c in ipairs(cells) do
-					if c[1] < x0 + YARD.x1 or c[1] > x0 + YARD.x2 or c[2] > YARD.z1 or c[2] < YARD.z2 then inside = false; break end
+					if c[1] < Y.x1 or c[1] > Y.x2 or c[2] > Y.z1 or c[2] < Y.z2 then inside = false; break end
 				end
 				if inside then
 					local gy, ok = nil, true
@@ -139,8 +146,9 @@ end
 
 -- 交車區裡有沒有東西擋著：回傳是什麼（車名、人、地上的東西），淨空回傳 nil
 function rockmech.yard_obstacle(x0)
-	core.load_area({x = x0 + YARD.x1, y = -40, z = YARD.z2}, {x = x0 + YARD.x2, y = 60, z = YARD.z1})
-	local mx, mz = x0 + math.floor((YARD.x1 + YARD.x2) / 2), math.floor((YARD.z1 + YARD.z2) / 2)
+	local Y = yard(x0)
+	core.load_area({x = Y.x1, y = -40, z = Y.z2}, {x = Y.x2, y = 60, z = Y.z1})
+	local mx, mz = math.floor((Y.x1 + Y.x2) / 2), math.floor((Y.z1 + Y.z2) / 2)
 	local base
 	for y = 60, -40, -1 do
 		local n = core.get_node({x = mx, y = y, z = mz}).name
@@ -148,8 +156,8 @@ function rockmech.yard_obstacle(x0)
 	end
 	if not base then return nil end
 	local cells = {}
-	for x = x0 + YARD.x1, x0 + YARD.x2 do
-		for z = YARD.z2, YARD.z1 do
+	for x = Y.x1, Y.x2 do
+		for z = Y.z2, Y.z1 do
 			cells[#cells + 1] = {x, z}
 			for y = base + 1, base + 3 do
 				local n = core.get_node({x = x, y = y, z = z}).name

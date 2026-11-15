@@ -182,9 +182,10 @@ local function truck_of(acc)
 end
 
 local function bay_pos(x0)
-	local gy = ground_y(x0 + BAY.x, BAY.z)
+	local bx, bz = C.bay(x0)
+	local gy = ground_y(bx, bz)
 	if not gy then return nil end
-	return {x = x0 + BAY.x + 0.5, y = gy + 0.5 + 1.5, z = BAY.z + 0.5}
+	return {x = bx + 0.5, y = gy + 0.5 + 1.5, z = bz + 0.5}
 end
 local function spawn_truck(acc, o)
 	local x0 = site_of(acc)
@@ -338,7 +339,9 @@ core.register_globalstep(function(dtime)
 					-- 收料區的區塊載入了才放。還有一台存在地圖裡（o.truck）：它載入時會自己報到（on_load），
 					-- 要有人站在旁邊（那一帶一定是活躍的）3 秒還沒報到，才當作不見了重放一台
 					local x0 = site_of(acc)
-					local bp = x0 and {x = x0 + BAY.x, y = sy(), z = BAY.z}
+					local bx, bz
+					if x0 then bx, bz = C.bay(x0) end
+					local bp = x0 and {x = bx, y = sy(), z = bz}
 					local ready = bp and core.get_node(bp).name ~= "ignore"
 					if ready and o.truck then
 						ready = false
