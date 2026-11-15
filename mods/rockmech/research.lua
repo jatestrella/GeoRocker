@@ -492,7 +492,9 @@ function rockmech.career_build_research(x0)
 	local key = rockmech.career_vendor_spots
 	local list = core.deserialize(storage:get_string(key)) or {}
 	local m, g = at(-2, 0, 0), at(2, 0, 0)
-	list[#list + 1] = {kind = "mechanic", pos = {x = m.x, y = y + 0.5, z = m.z}, yaw = yaw}
+	if not cfg.village then      -- 村莊：技工在修車廠（career.lua 的 build_village_shops）
+		list[#list + 1] = {kind = "mechanic", pos = {x = m.x, y = y + 0.5, z = m.z}, yaw = yaw}
+	end
 	list[#list + 1] = {kind = "geologist", pos = {x = g.x, y = y + 1.05, z = g.z}, yaw = yaw}
 	storage:set_string(key, core.serialize(list))
 end
