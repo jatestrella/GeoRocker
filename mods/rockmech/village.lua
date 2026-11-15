@@ -34,9 +34,8 @@ local function hash(a, b, seed)
 	return v - math.floor(v)
 end
 
--- ground(x, z)：地面高度（公式地形）。村莊核心（離中心 CORE m 內）的路只走正東西南北（建築不能轉，路要跟建築對齊），
--- 轉彎是 90°、至少直走 3 步才轉；出了核心才緩慢彎曲
-local CORE = 90
+-- ground(x, z)：地面高度（公式地形）。路照地形自由彎曲；只有建築正前方那一段是正方向（V.plan 的門前路）
+local CORE = 0
 local HALF = math.pi / 2
 local function grow_road(ground, x, z, ang, steps, seed, id, cx, cz)
 	local pts = {{x, z}}
@@ -98,7 +97,7 @@ function V.plan(ground, seed, cx, cz)
 	cx, cz = cx or 0, cz or 0
 	seed = (seed or 0) % 997
 	local roads = {}
-	local a0 = HALF * math.floor(4 * hash(1, 2, seed))         -- 主路從正東西南北其中一個方向出發
+	local a0 = 2 * math.pi * hash(1, 2, seed)
 	local p1 = grow_road(ground, cx, cz, a0, 30, seed, 1, cx, cz)
 	local p2 = grow_road(ground, cx, cz, a0 + math.pi, 30, seed, 2, cx, cz)
 	-- 主路：p2 反過來接 p1
@@ -143,10 +142,7 @@ function V.plan(ground, seed, cx, cz)
 		for i = 2, #r.points - 1 do
 			local p, q = r.points[i], r.points[i + 1]
 			local ang = math.atan2(q[1] - p[1], q[2] - p[2])
-			-- 只沿著正方向的路段放店（建築不能轉，要跟路對齊）
-			if math.abs(ang / HALF - math.floor(ang / HALF + 0.5)) < 0.05 then
-				for _, side in ipairs({1, -1}) do cand[#cand + 1] = {x = p[1], z = p[2], ang = ang, side = side, ri = ri, i = i} end
-			end
+			for _, side in ipairs({1, -1}) do cand[#cand + 1] = {x = p[1], z = p[2], ang = ang, side = side, ri = ri, i = i} end
 		end
 	end
 	-- 離中心近的先試（店家集中在村子中間）
@@ -172,6 +168,7 @@ function V.plan(ground, seed, cx, cz)
 					local r, med = relief(L)
 					if r <= lim then
 						L.y = math.floor(med + 0.5)
+						L.rx, L.rz = c.x, c.z          -- 接到的路上那一點（門前路從這裡接）
 						placed = L
 						break
 					end
@@ -183,6 +180,21 @@ function V.plan(ground, seed, cx, cz)
 			lots[#lots + 1] = placed
 			local x1, z1, x2, z2 = lot_rect(placed)
 			for x = math.floor(x1), math.ceil(x2) do for z = math.floor(z1), math.ceil(z2) do taken[x .. "," .. z] = true end end
+			-- 門前路：沿著建築正面、正東西或正南北的一段直路（中線在正面外 2 m，寬 3 m、長 = 建築寬），接到彎曲的路上
+			local r = placed.rot
+			local fx, fz = ({0, 1, 0, -1})[r + 1], ({1, 0, -1, 0})[r + 1]
+			local wx, wz = fz, -fx
+			local hd = ((r % 2 == 1) and placed.w or placed.d) / 2 + 2      -- 中心到門前路中線
+			local hw = ((r % 2 == 1) and placed.d or placed.w) / 2          -- 正面的半寬
+			local mx, mz = placed.x + fx * hd, placed.z + fz * hd
+			local seg = {points = {{math.floor(mx - wx * hw + 0.5), math.floor(mz - wz * hw + 0.5)},
+				{math.floor(mx + wx * hw + 0.5), math.floor(mz + wz * hw + 0.5)}}, front = true}
+			roads[#roads + 1] = seg
+			-- 離路比較遠（第 2、3 輪往外退）：門前路中點拉一段接到路上
+			local link = {points = {{math.floor(mx + 0.5), math.floor(mz + 0.5)}, {placed.rx, placed.rz}}, front = true}
+			roads[#roads + 1] = link
+			for k in pairs(road_cells({seg, link})) do cells[k] = true end
+			placed.rx, placed.rz = nil, nil
 		end
 	end
 	return {roads = roads, lots = lots, cx = cx, cz = cz}
