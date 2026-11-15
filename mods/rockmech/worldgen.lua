@@ -84,13 +84,28 @@ M.RECIPES = {
 		-- 傾角 20–45°：葉理再陡，坡面一露出就沿葉理一層層往後滑（連鎖崩塌、卡頓）
 		dip = function(f) return round(20 + 25 * f) end,
 		host_only = true,      -- 圍岩只有片岩
-		column = function(r, mode, nseam, add, sum, range, count)
+		-- o.scale：礦體規模 ÷ 2（主大理岩的厚度乘它）；o.schist（0–1）：主大理岩裡的片岩夾層（透鏡），0 = 一整塊純大理岩，
+		-- 越大越密（間距 40 → 6 m，厚 1–3 m、一塊塊 25–60 m，其他地方尖滅；賣的時候混進來會被水泥廠罰款）
+		column = function(r, mode, nseam, add, sum, range, count, o)
 			local main_top, main_i
+			local f, sch = o and o.scale or 1, o and o.schist or 0
+			local function main_body(t)
+				t = t * f
+				if sch <= 0.02 then add("marble", t); return end
+				local gap = 40 - 34 * sch
+				local left = t
+				while left > 0 do
+					local seg = math.min(left, gap * (0.7 + 0.6 * r:next(0, 100) / 100))
+					add("marble", seg)
+					left = left - seg
+					if left > 2 then add("schist", range(r, 1, 3), r:next(25, 60)) end
+				end
+			end
 			if mode == "single" then
 				add("schist", 40)
 				main_top = sum()
-				add("marble", range(r, 15, 40))
-				main_i = count()
+				main_i = count() + 1
+				main_body(range(r, 15, 40))
 				add("schist", 250)
 				return main_top, main_i
 			end
@@ -100,7 +115,8 @@ M.RECIPES = {
 			for k = 1, nseam do
 				if k == main then
 					main_top = sum()
-					add("marble", range(r, 12, 30)); main_i = count()
+					main_i = count() + 1
+					main_body(range(r, 12, 30))
 				else
 					add("marble", range(r, 2, 8))
 				end
@@ -210,7 +226,17 @@ function M.generate(world_conf)
 	if #ores == 0 then ores[1] = "coal" end
 	local mode = choice("strata", {"single", "inter"})
 	local terrain = choice("terrain", {"hills", "cuesta"})
-	local dist = round(20 + 35 * frac("outcrop"))
+	-- 每種礦自己的滑桿：rockmech_gen_<礦>_scale（礦體規模）、gen_<礦>_outcrop（離營地的距離）、大理岩 gen_marble_schist（片岩夾層）。
+	-- 沒有就用舊的共用滑桿（gen_orescale、gen_outcrop），再沒有：規模 1（真實的一半）、距離隨機
+	local function gen_num(k) return tonumber(world_conf:get("rockmech_gen_" .. k) or "") end
+	local function scale_of(ok)
+		local v = gen_num(ok .. "_scale") or gen_num("orescale")
+		return v and round(0.5 + 2.5 * math.max(0, math.min(100, v)) / 100, 0.05) or 1
+	end
+	local function dist_of(ok)
+		local v = gen_num(ok .. "_outcrop")
+		return round(20 + 35 * (v and math.max(0, math.min(100, v)) / 100 or frac("outcrop")))
+	end
 	local var = round(0.6 * frac("thickvar"), 0.01)
 	local foldA = round(25 * frac("fold"))
 	local relief = round(40 * frac("relief"))
@@ -257,7 +283,12 @@ function M.generate(world_conf)
 			else beds[#beds + 1] = {lith, round(t, 0.5), lens} end
 		end
 		local function sum() local d = 0 for _, b in ipairs(beds) do d = d + b[2] end return d end
-		local main_top, main_i = R.column(r, mode, nseam, add, sum, range, function() return #beds end)
+		local okey = ore_key(ore)
+		local sc = scale_of(okey)
+		set("ore_scale_" .. okey, sc)
+		local dist = dist_of(okey)
+		local main_top, main_i = R.column(r, mode, nseam, add, sum, range, function() return #beds end,
+			{scale = sc / 2, schist = okey == "marble" and (gen_num("marble_schist") and gen_num("marble_schist") / 100 or frac("marble_schist")) or 0})
 		local dip = R.dip(frac("dip"))
 		local dipdir = r:next(0, 359)
 		-- 範本可以指定傾向（rockmech_gen_dipdir，±15° 隨機），例如和平礦場的片岩大致往東南傾
@@ -285,7 +316,7 @@ function M.generate(world_conf)
 		elseif k == 1 then px, pz = -dist * sdd, -dist * cdd
 		else
 			local f = faults[k - 1]
-			local o = f.d + f.w / 2 + r:next(25, 50)
+			local o = f.d + f.w / 2 + dist
 			px, pz = o * fnx, o * fnz
 		end
 		-- 頂面高程 ref_y(P) = y0 − tan·(P·傾向) + fold(P)；主礦層頂 = ref_y(P) − top(P)/cos = 0
@@ -312,7 +343,7 @@ function M.generate(world_conf)
 			local Rr = r:next(30, 75)
 			local bx, bz
 			if k == 1 then
-				local az, d = math.rad(r:next(0, 359)), Rr + dist + 25      -- 邊緣在營地外 45–80 m（營地不壓在礦上）
+				local az, d = math.rad(r:next(0, 359)), Rr * sc / 2 + dist + 25      -- 邊緣（縮放後的半徑）在營地外 dist + 25 m（營地不壓在礦上）
 				bx, bz = d * math.sin(az), d * math.cos(az)
 			else bx, bz = px + Rr * 0.5 * fnx, pz + Rr * 0.5 * fnz end
 			local D, E, ox = round(10 + 30 * frac("wtdepth")), round(range(r, 6, 12)), round(range(r, 3, 6))

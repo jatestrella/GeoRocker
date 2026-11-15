@@ -812,7 +812,7 @@ function config.load(get, opts)
 		local b = numbers("rockmech_copper" .. sfx, 8)
 		if b and b[3] > 0 then
 			-- 礦體規模（cfg.ore_f）：半徑、富集帶厚、氧化帶厚、品位遞減深度、鐵帽山丘高（地下水位深不是礦體大小，不縮）
-			local f = cfg.ore_f
+			local f = cfg.ore_f_of("copper")
 			S.body = {x0 = b[1], z0 = b[2], R = b[3] * f, D = b[4], E = math.max(0, b[5]) * f, ox = math.max(0, b[6]) * f,
 				fac = math.max(1, b[7]), g0 = math.max(1, math.min(250, b[8])), cfg = cfg,
 				dd = b[9] and b[9] > 0 and b[9] * f or nil, hg = b[10] and b[10] > 0 and b[10] * f or nil}
@@ -827,11 +827,16 @@ function config.load(get, opts)
 	-- 鐵帽山丘，煤層透鏡的大小都乘 ore_scale / 2。沒寫（舊世界）= 2（不縮）
 	local osc = tonumber(get("rockmech_ore_scale") or "")
 	cfg.ore_f = osc and math.max(0.25, math.min(1.5, osc / 2)) or 1
+	-- 每種礦自己的規模 rockmech_ore_scale_<礦>（自訂地圖的滑桿），沒有就用共用的
+	function cfg.ore_f_of(key)
+		local v = tonumber(get("rockmech_ore_scale_" .. key) or "")
+		return v and math.max(0.25, math.min(1.5, v / 2)) or cfg.ore_f
+	end
 	-- 煤層連續性 rockmech_coal_continuity（有煤的面積比例 0..1；1 = 整片連續）：煤層變成一塊塊透鏡（真實尺度約 200 m × 礦體規模），
 	-- 透鏡之間沒有煤，要靠鑽探找。沒寫（舊世界）= 1
 	local cc = tonumber(get("rockmech_coal_continuity") or "")
 	cfg.coal_continuity = cc and math.max(0.05, math.min(1, cc)) or 1
-	cfg.coal_lens_L = 200 * cfg.ore_f
+	cfg.coal_lens_L = 200 * cfg.ore_f_of("coal")
 	if cfg.coal_seam and cfg.coal_continuity < 1 then
 		cfg.coal_seam.lens = {L = cfg.coal_lens_L, c = cfg.coal_continuity}      -- 門檻 thr 在 stress 載入後補上（stress.seam_t）
 	end

@@ -72,7 +72,8 @@ local state = {page = "title", map = nil, msg = nil, confirm = false}
 -- 銅礦：斑岩銅礦（安山岩裡一根直立斑岩體，鐵帽、氧化帶、次生富集帶、原生帶）
 local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}, {"copper", "銅礦", "銅"}}
 local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
-	orescale = 20, coalcont = 50, seed = ""}
+	coal_scale = 20, coal_outcrop = 40, coalcont = 50, marble_scale = 20, marble_outcrop = 40, marble_schist = 30,
+	copper_scale = 20, copper_outcrop = 40, seed = ""}
 local function chosen()
 	local t = {}
 	for i, o in ipairs(GEN_ORE) do if gen.ores[i] then t[#t + 1] = o end end
@@ -92,11 +93,11 @@ local DIP = {coal = function(v) return math.max(3, math.floor(40 * v / 100 + 0.5
 	marble = function(v) return math.floor(20 + 25 * v / 100 + 0.5) end,
 	copper = function(v) return math.floor(5 + 20 * v / 100 + 0.5) end}
 local GEN_TERRAIN = {{"hills", "丘陵"}, {"cuesta", "單面山"}}
+local function scale_text(v) return ("真實的 %d%%"):format(math.floor((0.5 + 2.5 * v / 100) / 2 * 100 + 0.5)) end
 local GEN_SLIDERS = {
 	-- cat：屬於哪個大類（GEN_CATS）
 	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end, cat = "terrain"},
 	{"seams", "礦層數（互層）", function(v) return ("%d 層"):format(1 + math.floor(4 * v / 100 + 0.5)) end, cat = "strata"},
-	{"outcrop", "主礦層露頭距離", function(v) return ("營地外 %d m"):format(math.floor(20 + 35 * v / 100 + 0.5)) end, cat = "ore"},
 	{"dip", "地層傾角", function(v)
 		local c, t = chosen(), {}
 		if #c == 1 then return ("%d°"):format(DIP[c[1][1]](v)) end
@@ -104,20 +105,32 @@ local GEN_SLIDERS = {
 		return table.concat(t, "／") end, cat = "strata"},
 	{"thickvar", "厚度變化", function(v) return ("±%d%%"):format(math.floor(60 * v / 100 + 0.5)) end, cat = "strata"},
 	{"fold", "褶皺", function(v) return ("振幅 %d m"):format(math.floor(25 * v / 100 + 0.5)) end, cat = "strata"},
-	{"wtdepth", "古地下水位", function(v) return ("地表下 %d m"):format(math.floor(10 + 30 * v / 100 + 0.5)) end, cat = "copper"},
-	-- 礦體規模 0.5–3（2 = 真實規模；worldgen.lua 寫成 rockmech_ore_scale）、煤層連續性（有煤的面積比例）
-	{"orescale", "礦體規模", function(v) return ("真實的 %d%%"):format(math.floor((0.5 + 2.5 * v / 100) / 2 * 100 + 0.5)) end, cat = "ore"},
+	-- 每種礦自己的規模（0.5–3，2 = 真實規模；worldgen.lua 寫成 rockmech_ore_scale_<礦>）、離營地的距離，和各自的特性
+	{"coal_scale", "礦體規模", scale_text, cat = "coal"},
+	{"coal_outcrop", "露頭距離", function(v) return ("營地外 %d m"):format(math.floor(20 + 35 * v / 100 + 0.5)) end, cat = "coal"},
 	{"coalcont", "煤層連續性", function(v) return ("%d%% 面積有煤"):format(math.max(5, math.floor(v + 0.5))) end, cat = "coal"},
+	{"marble_scale", "礦體規模", scale_text, cat = "marble"},
+	{"marble_outcrop", "露頭距離", function(v) return ("營地外 %d m"):format(math.floor(20 + 35 * v / 100 + 0.5)) end, cat = "marble"},
+	{"marble_schist", "片岩夾層", function(v) return v <= 2 and "純大理岩" or ("約每 %d m 一層"):format(math.floor(40 - 34 * v / 100 + 0.5)) end, cat = "marble"},
+	{"copper_scale", "礦體規模", scale_text, cat = "copper"},
+	{"copper_outcrop", "礦體距離", function(v) return ("營地外 %d m"):format(math.floor(45 + 35 * v / 100 + 0.5)) end, cat = "copper"},
+	{"wtdepth", "古地下水位", function(v) return ("地表下 %d m"):format(math.floor(10 + 30 * v / 100 + 0.5)) end, cat = "copper"},
 }
--- 自訂地圖的大類：標題按一下展開／收起（state.gen_open[key]），底下是細項（下拉選單 drop、屬於它的滑桿）。
--- need：有勾這種礦才出現
+-- 自訂地圖的頁籤（state.gen_tab）：每頁是一個大類的細項（下拉選單 drop、屬於它的滑桿）。need：有勾這種礦才有這一頁
 local GEN_CATS = {
 	{key = "terrain", label = "地形", drop = "terrain"},
 	{key = "strata", label = "地層", drop = "strata"},
-	{key = "ore", label = "礦體"},
 	{key = "coal", label = "煤礦", need = "coal"},
+	{key = "marble", label = "大理岩", need = "marble"},
 	{key = "copper", label = "銅礦", need = "copper"},
 }
+-- 內容區固定高度（最多細項的那一頁）：切換頁籤時畫面不動
+local GEN_TAB_H = 0
+for _, c in ipairs(GEN_CATS) do
+	local h = c.drop and 0.9 or 0
+	for _, sl in ipairs(GEN_SLIDERS) do if sl.cat == c.key then h = h + 0.75 end end
+	GEN_TAB_H = math.max(GEN_TAB_H, h)
+end
 local function cat_shown(c)
 	if not c.need then return true end
 	for _, o in ipairs(chosen()) do if o[1] == c.need then return true end end
@@ -426,21 +439,8 @@ local function formspec()
 		return table.concat(fs)
 	end
 	local cm = state.page == "new_custom"
-	-- 自訂頁面的高度：其他部分 11.75，每個大類標題 0.75，展開的大類加下拉選單 0.9、每列滑桿 0.75
-	local ch = 11.75
-	if cm then
-		state.gen_open = state.gen_open or {}
-		for _, c in ipairs(GEN_CATS) do
-			if cat_shown(c) then
-				ch = ch + 0.75
-				if state.gen_open[c.key] then
-					if c.drop then ch = ch + 0.9 end
-					for _, sl in ipairs(GEN_SLIDERS) do if sl.cat == c.key then ch = ch + 0.75 end end
-				end
-			end
-		end
-	end
-	local PH = cm and ch or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
+	-- 自訂頁面的高度：其他部分 11.75，頁籤一列 0.9，內容區固定 GEN_TAB_H
+	local PH = cm and (11.75 + 0.9 + GEN_TAB_H) or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
 	local PW = state.page:sub(1, 4) == "new_" and 22 or 14     -- 開新遊戲的頁面比較寬（選項多）
 	local fs = {("formspec_version[6]size[%g,%g]bgcolor[#00000000;true]"):format(PW, PH), ("box[0,0;%g,%g;#000000b0]"):format(PW, PH)}
 	header(fs, PW)
@@ -545,18 +545,29 @@ local function formspec()
 					fs[#fs + 1] = ("label[15.9,%g;%s]"):format(y, F(("%d　%s"):format(gen[sl[1]], sl[3](gen[sl[1]]))))
 					y = y + 0.75
 				end
+				-- 頁籤：選中的那一頁底色不同；選中的礦沒勾了就回到地形
+				local sel = state.gen_tab or "terrain"
+				local x = 0.5
+				for _, c in ipairs(GEN_CATS) do
+					if c.key == sel and not cat_shown(c) then sel = "terrain" end
+				end
 				for _, c in ipairs(GEN_CATS) do
 					if cat_shown(c) then
-						local open = state.gen_open[c.key]
-						fs[#fs + 1] = ("button[0.5,%g;6,0.6;g_cat_%s;%s]"):format(y - 0.3, c.key, F((open and "▾ " or "▸ ") .. c.label))
-						y = y + 0.75
-						if open then
-							if c.drop == "terrain" then dd(1.0, "g_terrain", "地形", GEN_TERRAIN, gen.terrain); y = y + 0.9
-							elseif c.drop == "strata" then dd(1.0, "g_strata", "地層", GEN_STRATA, gen.strata, strata_col()); y = y + 0.9 end
-							for _, sl in ipairs(GEN_SLIDERS) do if sl.cat == c.key then slider(sl) end end
-						end
+						if c.key == sel then fs[#fs + 1] = ("style[g_tab_%s;bgcolor=#3a6ea5;textcolor=#ffffff]"):format(c.key) end
+						fs[#fs + 1] = ("button[%g,%g;3.2,0.7;g_tab_%s;%s]"):format(x, y - 0.35, c.key, F(c.label))
+						x = x + 3.3
 					end
 				end
+				y = y + 0.9
+				local y_end = y + GEN_TAB_H
+				for _, c in ipairs(GEN_CATS) do
+					if c.key == sel then
+						if c.drop == "terrain" then dd(1.0, "g_terrain", "地形", GEN_TERRAIN, gen.terrain); y = y + 0.9
+						elseif c.drop == "strata" then dd(1.0, "g_strata", "地層", GEN_STRATA, gen.strata, strata_col()); y = y + 0.9 end
+						for _, sl in ipairs(GEN_SLIDERS) do if sl.cat == c.key then slider(sl) end end
+					end
+				end
+				y = y_end
 				fs[#fs + 1] = ("field[0.5,%g;10.3,0.8;g_seed;%s;%s]"):format(y + 0.4, F("種子"), F(gen.seed))
 				fs[#fs + 1] = "field_close_on_enter[g_seed;false]"
 				fs[#fs + 1] = ("button[11.2,%g;10.3,0.8;g_random;%s]"):format(y + 0.4, F("全部隨機"))
@@ -621,7 +632,7 @@ core.button_handler = function(fields)
 	end
 	if fields.g_random then gen_randomize() end
 	for _, c in ipairs(GEN_CATS) do
-		if fields["g_cat_" .. c.key] then state.gen_open = state.gen_open or {}; state.gen_open[c.key] = not state.gen_open[c.key] end
+		if fields["g_tab_" .. c.key] then state.gen_tab = c.key end
 	end
 	if fields.tpls then
 		local e = core.explode_textlist_event(fields.tpls)
