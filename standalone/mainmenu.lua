@@ -71,7 +71,8 @@ local state = {page = "title", map = nil, msg = nil, confirm = false}
 -- 勾兩種以上：每種礦一個地質區，隔著斷層（worldgen.lua 的 rockmech_gen_ores）。加一種礦：這裡加一列、worldgen.lua 加它的地質
 -- 銅礦：斑岩銅礦（安山岩裡一根直立斑岩體，鐵帽、氧化帶、次生富集帶、原生帶）
 local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}, {"copper", "銅礦", "銅"}}
-local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30, seed = ""}
+local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
+	orescale = 20, coalcont = 50, seed = ""}
 local function chosen()
 	local t = {}
 	for i, o in ipairs(GEN_ORE) do if gen.ores[i] then t[#t + 1] = o end end
@@ -103,6 +104,9 @@ local GEN_SLIDERS = {
 	{"thickvar", "厚度變化", function(v) return ("±%d%%"):format(math.floor(60 * v / 100 + 0.5)) end},
 	{"fold", "褶皺", function(v) return ("振幅 %d m"):format(math.floor(25 * v / 100 + 0.5)) end},
 	{"wtdepth", "銅礦古地下水位", function(v) return ("地表下 %d m"):format(math.floor(10 + 30 * v / 100 + 0.5)) end},
+	-- 礦體規模 0.5–3（2 = 真實規模；worldgen.lua 寫成 rockmech_ore_scale）、煤層連續性（有煤的面積比例）
+	{"orescale", "礦體規模", function(v) return ("真實的 %d%%"):format(math.floor((0.5 + 2.5 * v / 100) / 2 * 100 + 0.5)) end},
+	{"coalcont", "煤層連續性", function(v) return ("%d%% 面積有煤"):format(math.max(5, math.floor(v + 0.5))) end},
 }
 local function gen_randomize()
 	math.randomseed(os.time())
@@ -407,7 +411,7 @@ local function formspec()
 		return table.concat(fs)
 	end
 	local cm = state.page == "new_custom"
-	local PH = cm and 17.9 or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
+	local PH = cm and 19.4 or (state.page == "new_random" or state.page == "new_template") and 12 or 10.5
 	local PW = state.page:sub(1, 4) == "new_" and 22 or 14     -- 開新遊戲的頁面比較寬（選項多）
 	local fs = {("formspec_version[6]size[%g,%g]bgcolor[#00000000;true]"):format(PW, PH), ("box[0,0;%g,%g;#000000b0]"):format(PW, PH)}
 	header(fs, PW)
