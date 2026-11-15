@@ -73,7 +73,7 @@ local state = {page = "title", map = nil, msg = nil, confirm = false}
 local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}, {"copper", "銅礦", "銅"}}
 local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
 	coal_scale = 20, coal_outcrop = 40, coalcont = 50, marble_scale = 20, marble_outcrop = 40, marble_schist = 30,
-	copper_scale = 20, copper_outcrop = 40, seed = ""}
+	copper_scale = 7, copper_outcrop = 40, seed = ""}
 local function chosen()
 	local t = {}
 	for i, o in ipairs(GEN_ORE) do if gen.ores[i] then t[#t + 1] = o end end

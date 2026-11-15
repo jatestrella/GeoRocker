@@ -229,9 +229,11 @@ function M.generate(world_conf)
 	-- 每種礦自己的滑桿：rockmech_gen_<礦>_scale（礦體規模）、gen_<礦>_outcrop（離營地的距離）、大理岩 gen_marble_schist（片岩夾層）。
 	-- 沒有就用舊的共用滑桿（gen_orescale、gen_outcrop），再沒有：規模 1（真實的一半）、距離隨機
 	local function gen_num(k) return tonumber(world_conf:get("rockmech_gen_" .. k) or "") end
+	-- 預設規模（遊戲性，使用者 2026-11-15）：銅礦真實的 1/3、其他真實的 1/2
+	local SCALE0 = {copper = 0.675}
 	local function scale_of(ok)
 		local v = gen_num(ok .. "_scale") or gen_num("orescale")
-		return v and round(0.5 + 2.5 * math.max(0, math.min(100, v)) / 100, 0.05) or 1
+		return v and round(0.5 + 2.5 * math.max(0, math.min(100, v)) / 100, 0.025) or SCALE0[ok] or 1
 	end
 	local function dist_of(ok)
 		local v = gen_num(ok .. "_outcrop")
