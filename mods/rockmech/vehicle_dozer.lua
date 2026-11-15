@@ -123,6 +123,7 @@ local function cut_cell(c, node, k, keep, got, grade)
 	local ca = road and A.new(0) or A.get(c, node)          -- 成分（assay.lua）：grade[base] 是這種碎石的料倉
 	grade[base] = A.bin_put(grade[base] or {lv = 0, q = 0}, base, take, ca)
 	got[base] = (got[base] or 0) + take
+	if rockmech.fem_load_change then rockmech.fem_load_change(c, -take) end      -- 荷重變了（femstress.lua）
 	if keep > 0 then
 		local nn = road and (rockmech.modname .. ":road_l" .. keep) or rockmech.rubble_with_level(base, keep, p2)
 		core.swap_node(c, {name = nn, param2 = p2})

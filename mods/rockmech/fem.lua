@@ -387,14 +387,15 @@ function fem.natural_job(job)
 	if not n then return nil end
 	return {nx = job.nx, ny = job.ny, nz = job.nz, solid = n.solid, soft = n.soft, soil = n.soil, gam = n.gam,
 		sxx = n.sxx, syy = n.syy, szz = n.szz, sxz = n.sxz, gamma = job.gamma, nu = job.nu, tol = job.tol,
-		max_iter = job.max_iter, soft_e = job.soft_e, soil_e = job.soil_e, blend = job.blend, u0 = n.u0}
+		max_iter = job.max_iter, soft_e = job.soft_e, soil_e = job.soil_e, blend = job.blend, u0 = n.u0, press = n.press,
+		coarse = job.coarse}     -- 外緣用同一個粗網格的解：兩個解只差在局部的開挖（外緣不同的話，陡的谷地兩個解差很多）
 end
 
--- job.nat 有給：另外解一次天然地形（外緣 Δu = 0），放在 res.nat。用來分辨「開挖造成的破壞」和天然就有的應力集中
+-- job.nat 有給：另外解一次天然地形（外緣跟現況一樣用粗網格的解），放在 res.nat。用來分辨「開挖造成的破壞」和天然就有的應力集中
 local solve_nested_inner
 function fem.solve_nested(job)
 	local nj = fem.natural_job(job)
-	local nres = nj and fem.solve(nj)
+	local nres = nj and solve_nested_inner(nj)
 	local res = solve_nested_inner(job)
 	if nres then
 		res.nat = nres
@@ -467,6 +468,7 @@ solve_nested_inner = function(job)
 	res.ms = res.ms + cres.ms
 	return res
 end
+fem.solve_sub = function(job) return solve_nested_inner(job) end      -- 只解這一個（有粗網格就先解粗網格）
 
 -- 對稱 3×3 應力張量的主應力（壓為正）：回傳 σ1 ≥ σ2 ≥ σ3
 -- 臨空面的邊界條件：法向應力 = 支護壓力 p、面上的剪應力 = 0（一階元素外插到面上不滿足，

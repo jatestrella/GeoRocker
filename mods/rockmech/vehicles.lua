@@ -752,6 +752,7 @@ function V.take_rubble(cell, want)
 	local t = math.min(k, want)
 	local c = A.get(cell, node)      -- 成分（assay.lua）：取走的那份跟著走
 	local rest = A.place(cell, base, k - t, c, true)
+	if rockmech.fem_load_change then rockmech.fem_load_change(cell, -t) end     -- 荷重變了（femstress.lua）
 	collapse.check_cell({x = cell.x, y = cell.y + 1, z = cell.z})   -- 上方的碎石往下掉
 	-- 這格拿空了：旁邊（同一層、上一層）的碎石也判定一次，比殘餘摩擦角陡就流進來
 	-- （不然料堆底下的輸送帶吸料時，兩側會留下直立的碎石牆）
@@ -829,6 +830,7 @@ local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
 		if not passable(core.get_node({x = x, y = y - 1, z = z}).name) then break end
 		y = y - 1
 	end
+	local a0 = a
 	for _ = 1, max_h or 8 do
 		if a <= 0 then break end
 		local p = {x = x, y = y, z = z}
@@ -848,6 +850,7 @@ local function deposit_column(x, z, ytop, base, a, max_h, placed, g)
 		end
 		y = y + 1
 	end
+	if a0 > a and rockmech.fem_load_change then rockmech.fem_load_change({x = x, y = y, z = z}, a0 - a) end   -- 荷重（femstress.lua）
 	return a
 end
 V.deposit_column = deposit_column

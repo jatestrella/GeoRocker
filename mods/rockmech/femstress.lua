@@ -152,14 +152,15 @@ end
 local function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
 -- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料：厚度 (m)、重量 Σγ·h (kPa)，從 ly 那一格開始算。
 -- 整格表土是應力解的元素（自己有重量），不算鬆散材料
-local function loose_above(g, gx, ly, gz)
+-- only_nat：只算天然的（地圖生成的不滿格表土），玩家放的碎石不算（天然地形那一解用）
+local function loose_above(g, gx, ly, gz, only_nat)
 	local h, q = 0, 0
 	local sy, sz = g.nx, g.nx * g.ny
 	for y = ly, g.ny - 1 do
 		local cid = g.data[1 + gx + y * sy + gz * sz]
 		local f = (cid ~= soil_cid or not fcfg.soil) and g.loose_of[cid]
 		if not f then break end
-		h, q = h + f, q + f * gamma_s(cid)
+		if not only_nat or topsoil_f[cid] then h, q = h + f, q + f * gamma_s(cid) end
 	end
 	return h, q
 end
@@ -241,7 +242,9 @@ local function make_job(pos)
 				in_situ(job, c, sv)
 			end
 			if nat then
-				if not is_excavated_at(a.x + x, wy, a.z + z) then
+				if job.soft[c] and not job.soil[c] then
+					nat.solid[c] = false             -- 碎石、木柱：人放的，天然地形沒有
+				elseif not is_excavated_at(a.x + x, wy, a.z + z) then
 					nat.solid[c], nat.soft[c], nat.soil[c], nat.gam[c] = job.solid[c], job.soft[c], job.soil[c], job.gam[c]
 					nat.sxx[c], nat.syy[c], nat.szz[c], nat.sxz[c] = job.sxx[c], job.syy[c], job.szz[c], job.sxz[c]
 				elseif wy > top then             -- 挖掉的土
@@ -261,6 +264,8 @@ local function make_job(pos)
 		if x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n then return 1 + x + y * n + z * n * n end
 	end, 1)
 	-- 鬆散材料的重量：頂面 γ·h、側面 K₀·γ·z（見上面 loose_above）
+	-- 天然地形那一解（nat）：只有天然的不滿格表土的重量，沒有人放的碎石、支撐、設施
+	local press_nat = {}
 	if g.loose_of then
 		local press = job.press or {}
 		job.press = press
@@ -269,22 +274,26 @@ local function make_job(pos)
 			local c = 1 + x + y * n + z * n * n
 			if job.solid[c] and (not job.soft[c] or job.soil[c]) then
 				local gx, ly, gz = a.x + x - g.ox, a.y + y - g.oy, a.z + z - g.oz
-				local h, q = loose_above(g, gx, ly + 1, gz)
-				if h > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, q end
-				for _, d in ipairs(SIDES) do
-					local nx_, nz_ = gx + d[1], gz + d[2]
-					if nx_ >= 0 and nz_ >= 0 and nx_ < g.nx and nz_ < g.nz then
-						local cid = g.data[1 + nx_ + ly * gsy + nz_ * gsz]
-						local f = (cid ~= soil_cid or not fcfg.soil) and g.loose_of[cid]
-						if f then
-							local _, q = loose_above(g, nx_, ly + 1, nz_)
-							press[#press + 1], press[#press + 2], press[#press + 3] = c, d[3], K0_S * (q + gamma_s(cid) * f / 2)
+				for pass = 1, nat and 2 or 1 do
+					local only_nat, list = pass == 2, pass == 2 and press_nat or press
+					local h, q = loose_above(g, gx, ly + 1, gz, only_nat)
+					if h > 0 then list[#list + 1], list[#list + 2], list[#list + 3] = c, 3, q end
+					for _, d in ipairs(SIDES) do
+						local nx_, nz_ = gx + d[1], gz + d[2]
+						if nx_ >= 0 and nz_ >= 0 and nx_ < g.nx and nz_ < g.nz then
+							local cid = g.data[1 + nx_ + ly * gsy + nz_ * gsz]
+							local f = (cid ~= soil_cid or not fcfg.soil) and g.loose_of[cid]
+							if f and (not only_nat or topsoil_f[cid]) then
+								local _, q = loose_above(g, nx_, ly + 1, nz_, only_nat)
+								list[#list + 1], list[#list + 2], list[#list + 3] = c, d[3], K0_S * (q + gamma_s(cid) * f / 2)
+							end
 						end
 					end
 				end
 			end
 		end end end
 	end
+	if nat then nat.press = press_nat end
 	-- 判定要用：每格的岩性（collapse.rock 查強度）、是不是空的（碎石算空：貼著它的岩面要判定，反力在 face_fs）
 	-- 設施的荷重（facilitydamage.lua 的 rockmech.facility_footing）：地基格頂面的均布壓力 q；天然地形沒有這些荷重
 	local fac_top = {}
@@ -313,7 +322,10 @@ local function make_job(pos)
 	for i = 1, #press, 3 do
 		local key = press[i] * 8 + press[i + 1]
 		meta.press[key] = (meta.press[key] or 0) + press[i + 2]
-		meta.press_nat[key] = meta.press[key]
+	end
+	for i = 1, #press_nat, 3 do
+		local key = press_nat[i] * 8 + press_nat[i + 1]
+		meta.press_nat[key] = (meta.press_nat[key] or 0) + press_nat[i + 2]
 	end
 	for c, q in pairs(fac_top) do
 		if job.solid[c] then
@@ -541,7 +553,7 @@ end
 rockmech.fem_report = report
 
 -- 天然地形的解（fem.solve_nested 的 res.nat）的快取：同一個範圍、天然地形（填回去之後的格子與現地應力）沒變就直接沿用，
--- 不送去背景再解；變了就用上次的位移當初始值。天然地形只在放東西、碎石移動、從頂上挖岩石時才會變
+-- 不送去背景再解；變了就用上次的位移當初始值。天然地形只在從頂上挖岩石、挖表土時才會變（人放的碎石、支撐不在天然地形裡）
 local NAT_KEEP = 6
 local nat_cache = {}          -- {key, sig, res}，最近用的在後面
 local function nat_signature(nat)
@@ -553,6 +565,8 @@ local function nat_signature(nat)
 			h2 = (h2 * 37 + math.floor((nat.syy[c] or 0) * 10 + (nat.sxx[c] or 0))) % 2147483629
 		end
 	end
+	local pr = nat.press or {}
+	for i = 1, #pr, 3 do h2 = (h2 * 41 + pr[i] * 8 + pr[i + 1] + math.floor(pr[i + 2] * 10)) % 2147483629 end
 	return h1 .. ":" .. h2
 end
 local function nat_lookup(key)
@@ -608,7 +622,7 @@ function rockmech.fem_run(pos, callback)
 		callback(job, res, meta, (core.get_us_time() - t0) / 1000, t_build)
 	end
 	if nat and not nat_hit then
-		core.handle_async(function(j) return core.rockmech_fem.solve(j) end,
+		core.handle_async(function(j) return core.rockmech_fem.solve_sub(j) end,
 			function(r) res_nat = r; finish() end, fem.natural_job(job))
 	end
 	job.nat = nil                -- 現況的解不帶天然地形（handle_async 呼叫時就複製好 job，回來再放回去）
@@ -841,6 +855,28 @@ function rockmech.fem_queue(pos, round, far, excav)
 	pending[#pending + 1] = {pos = p, round = round, far = far, excav = excav}
 	core.after(0, pump)
 end
+-- 碎石、土的增減（倒車、推土機、輸送帶出料、挖走）：荷重變了也要重算。同一區（fcfg.radius / 2）累積變動
+-- ≥ 1 m³（8 級，倒進和拿走都算）排一次應力解，判定附近的面。天然地形那一解沒有人放的碎石和它的荷重，
+-- 所以只有「堆上去、挖走坡腳」造成的 穩定 → 不穩定 才算（天然解要開著：rockmech_fem_soil）
+local load_acc = {}
+function rockmech.fem_load_change(pos, dlev)
+	if not fcfg.drive or not fcfg.soil or not dlev or dlev == 0 then return end
+	local s = math.max(1, math.floor(fcfg.radius / 2))
+	local k = math.floor(pos.x / s) .. "," .. math.floor(pos.y / s) .. "," .. math.floor(pos.z / s)
+	local v = (load_acc[k] or 0) + math.abs(dlev)
+	if v >= rockmech.RUBBLE_LEVELS then
+		load_acc[k] = nil
+		rockmech.fem_queue(pos, 1, false, true)
+	else
+		load_acc[k] = v
+	end
+end
+-- 玩家手挖碎石、土（崩落時碎石自己流動不算：那是連鎖的一部分，有自己的輪數上限）
+core.register_on_dignode(function(pos, oldnode, digger)
+	if digger and digger.is_player and digger:is_player() and rockmech.rubble_level[oldnode.name] then
+		rockmech.fem_load_change(pos, rockmech.rubble_level[oldnode.name])
+	end
+end)
 local PARK_CHECK = 2      -- 每幾秒看一次玩家回來了沒
 local park_t = 0
 core.register_globalstep(function(dtime)
