@@ -73,7 +73,7 @@ local state = {page = "title", map = nil, msg = nil, confirm = false}
 local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}, {"copper", "銅礦", "銅"}}
 local gen = {ores = {true, false, false}, wtdepth = 50, strata = 2, terrain = 1, relief = 50, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
 	coal_scale = 20, coal_outcrop = 40, coalcont = 50, marble_scale = 20, marble_outcrop = 40, marble_schist = 30,
-	copper_scale = 7, copper_outcrop = 40, seed = ""}
+	copper_scale = 20, copper_outcrop = 40, seed = ""}
 local function chosen()
 	local t = {}
 	for i, o in ipairs(GEN_ORE) do if gen.ores[i] then t[#t + 1] = o end end
@@ -93,7 +93,11 @@ local DIP = {coal = function(v) return math.max(3, math.floor(40 * v / 100 + 0.5
 	marble = function(v) return math.floor(20 + 25 * v / 100 + 0.5) end,
 	copper = function(v) return math.floor(5 + 20 * v / 100 + 0.5) end}
 local GEN_TERRAIN = {{"hills", "丘陵"}, {"cuesta", "單面山"}}
-local function scale_text(v) return ("真實的 %d%%"):format(math.floor((0.5 + 2.5 * v / 100) / 2 * 100 + 0.5)) end
+-- 礦體規模參數 0.5–3（預設 1）；real：多少算真實規模（銅礦 3、煤和大理岩 2，跟 mods/rockmech/config.lua 的 ORE_REAL 一樣）
+local function scale_text_for(real)
+	return function(v) return ("%.2g（真實 = %d）"):format(math.floor((0.5 + 2.5 * v / 100) * 20 + 0.5) / 20, real) end
+end
+local scale_text = scale_text_for(2)
 local GEN_SLIDERS = {
 	-- cat：屬於哪個大類（GEN_CATS）
 	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(40 * v / 100 + 0.5)) end, cat = "terrain"},
@@ -112,7 +116,7 @@ local GEN_SLIDERS = {
 	{"marble_scale", "礦體規模", scale_text, cat = "marble"},
 	{"marble_outcrop", "露頭距離", function(v) return ("營地外 %d m"):format(math.floor(20 + 35 * v / 100 + 0.5)) end, cat = "marble"},
 	{"marble_schist", "片岩夾層", function(v) return v <= 2 and "純大理岩" or ("約每 %d m 一層"):format(math.floor(40 - 34 * v / 100 + 0.5)) end, cat = "marble"},
-	{"copper_scale", "礦體規模", scale_text, cat = "copper"},
+	{"copper_scale", "礦體規模", scale_text_for(3), cat = "copper"},
 	{"copper_outcrop", "礦體距離", function(v) return ("營地外 %d m"):format(math.floor(45 + 35 * v / 100 + 0.5)) end, cat = "copper"},
 	{"wtdepth", "古地下水位", function(v) return ("地表下 %d m"):format(math.floor(10 + 30 * v / 100 + 0.5)) end, cat = "copper"},
 }

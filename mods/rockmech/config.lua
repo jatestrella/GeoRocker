@@ -713,6 +713,10 @@ end
 -- get(key) 回傳字串或 nil（引擎內為 core.settings:get）。
 -- opts.read_file(name)：讀世界資料夾裡的檔案（高程網格用），回傳內容或 nil
 -- 回傳 cfg, warnings
+-- 礦體規模參數（rockmech_ore_scale_<礦>）多少算真實規模：銅礦 3、其他 2（使用者 2026-11-15：遊戲性上銅礦要縮得比較多，
+-- 參數範圍都是 0.5–3、預設 1 → 銅礦真實的 1/3、煤和大理岩真實的 1/2）
+config.ORE_REAL = {copper = 3, coal = 2, marble = 2}
+
 -- Hoek-Brown 在 σ3 = 0 的瞬時摩擦角（度）：dσ1/dσ3 = 1 + a·mb·s^(a−1)，sin φ = (k − 1)/(k + 1)。用地表的 GSI、D = 0
 function config.phi0(lith)
 	if not lith or not lith.mi then return nil end
@@ -830,7 +834,7 @@ function config.load(get, opts)
 	-- 每種礦自己的規模 rockmech_ore_scale_<礦>（自訂地圖的滑桿），沒有就用共用的
 	function cfg.ore_f_of(key)
 		local v = tonumber(get("rockmech_ore_scale_" .. key) or "")
-		return v and math.max(0.25, math.min(1.5, v / 2)) or cfg.ore_f
+		return v and math.max(0.1, math.min(1.5, v / (config.ORE_REAL[key] or 2))) or cfg.ore_f
 	end
 	-- 煤層連續性 rockmech_coal_continuity（有煤的面積比例 0..1；1 = 整片連續）：煤層變成一塊塊透鏡（真實尺度約 200 m × 礦體規模），
 	-- 透鏡之間沒有煤，要靠鑽探找。沒寫（舊世界）= 1

@@ -229,12 +229,13 @@ function M.generate(world_conf)
 	-- 每種礦自己的滑桿：rockmech_gen_<礦>_scale（礦體規模）、gen_<礦>_outcrop（離營地的距離）、大理岩 gen_marble_schist（片岩夾層）。
 	-- 沒有就用舊的共用滑桿（gen_orescale、gen_outcrop），再沒有：規模 1（真實的一半）、距離隨機
 	local function gen_num(k) return tonumber(world_conf:get("rockmech_gen_" .. k) or "") end
-	-- 預設規模（遊戲性，使用者 2026-11-15）：銅礦真實的 1/3、其他真實的 1/2
-	local SCALE0 = {copper = 0.675}
+	-- 礦體規模參數 0.5–3、預設 1；多少算真實規模照礦種（config.ORE_REAL：銅礦 3、煤和大理岩 2，使用者 2026-11-15），
+	-- 所以預設是銅礦真實的 1/3、煤和大理岩真實的 1/2
 	local function scale_of(ok)
 		local v = gen_num(ok .. "_scale") or gen_num("orescale")
-		return v and round(0.5 + 2.5 * math.max(0, math.min(100, v)) / 100, 0.025) or SCALE0[ok] or 1
+		return v and round(0.5 + 2.5 * math.max(0, math.min(100, v)) / 100, 0.05) or 1
 	end
+	local function real_f(ok) return (rockmech.config.ORE_REAL[ok] or 2) end
 	local function dist_of(ok)
 		local v = gen_num(ok .. "_outcrop")
 		return round(20 + 35 * (v and math.max(0, math.min(100, v)) / 100 or frac("outcrop")))
@@ -290,7 +291,7 @@ function M.generate(world_conf)
 		set("ore_scale_" .. okey, sc)
 		local dist = dist_of(okey)
 		local main_top, main_i = R.column(r, mode, nseam, add, sum, range, function() return #beds end,
-			{scale = sc / 2, schist = okey == "marble" and (gen_num("marble_schist") and gen_num("marble_schist") / 100 or frac("marble_schist")) or 0})
+			{scale = sc / real_f(okey), schist = okey == "marble" and (gen_num("marble_schist") and gen_num("marble_schist") / 100 or frac("marble_schist")) or 0})
 		local dip = R.dip(frac("dip"))
 		local dipdir = r:next(0, 359)
 		-- 範本可以指定傾向（rockmech_gen_dipdir，±15° 隨機），例如和平礦場的片岩大致往東南傾
@@ -345,7 +346,7 @@ function M.generate(world_conf)
 			local Rr = r:next(30, 75)
 			local bx, bz
 			if k == 1 then
-				local az, d = math.rad(r:next(0, 359)), Rr * sc / 2 + dist + 25      -- 邊緣（縮放後的半徑）在營地外 dist + 25 m（營地不壓在礦上）
+				local az, d = math.rad(r:next(0, 359)), Rr * sc / real_f("copper") + dist + 25      -- 邊緣（縮放後的半徑）在營地外 dist + 25 m（營地不壓在礦上）
 				bx, bz = d * math.sin(az), d * math.cos(az)
 			else bx, bz = px + Rr * 0.5 * fnx, pz + Rr * 0.5 * fnz end
 			local D, E, ox = round(10 + 30 * frac("wtdepth")), round(range(r, 6, 12)), round(range(r, 3, 6))
