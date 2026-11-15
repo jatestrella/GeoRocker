@@ -1124,8 +1124,11 @@ local function build_shell(kind, n, opts)
 		end
 	end
 	if floors > 1 then
-		for k = 1, 4 do      -- 樓梯：靠右牆、從門口往裡爬（2 樓地板在踏步上方開口）
-			set(hw - 1, k, zf - k, "rockmech:office_floor")
+		-- 樓梯：靠右牆、從門口往裡爬（2 樓地板在踏步上方開口）。用內建的木樓梯（木工桌拿木板做得出來），下面墊木板；
+		-- 木樓梯 facedir 0 是往 +z 爬，這裡往後牆（−dz）爬 → 2
+		for k = 1, 4 do
+			for h = 1, k - 1 do set(hw - 1, h, zf - k, "rockmech:timber_plank") end
+			set(hw - 1, k, zf - k, "stairs:stair_wood", 2)
 			for h = k + 1, math.min(k + 3, 7) do set(hw - 1, h, zf - k, "air") end
 		end
 		for k = 1, 3 do set(hw - 1, 4, zf - k, "air") end

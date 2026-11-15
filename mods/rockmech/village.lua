@@ -335,7 +335,7 @@ function V.build_ground(plan, done, progress)
 		end
 		for _, L in ipairs(plan.lots) do
 			local a, b, c, d = lot_rect(L)
-			for x = math.floor(a) - 8, math.ceil(c) + 8 do for z = math.floor(b) - 8, math.ceil(d) + 8 do wide[x .. "," .. z] = true end end
+			for x = math.floor(a) - 11, math.ceil(c) + 11 do for z = math.floor(b) - 11, math.ceil(d) + 11 do wide[x .. "," .. z] = true end end      -- 含緩坡（外推 10 m）
 		end
 		for k in pairs(wide) do
 			local x, z = k:match("^(%-?%d+),(%-?%d+)$")
@@ -413,6 +413,36 @@ function V.build_ground(plan, done, progress)
 				if t then
 					data[area:index(x, t, z)] = c_road
 					clear_above(x, t, z, 4)
+				end
+			end
+		end
+		-- 最後再平滑一次（地塊、緩坡、道路都做完以後；地塊本身不動）：比四個鄰格都高的欄拿掉最上面那格（道路往下一格重鋪），
+		-- 比四個鄰格都低的單格凹洞填一格。做兩輪
+		for _ = 1, 2 do
+			local tops = {}
+			for k in pairs(wide) do
+				if not lotted[k] then
+					local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+					tops[k] = top_at(tonumber(x), tonumber(z))
+				end
+			end
+			for k, t in pairs(tops) do
+				local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+				x, z = tonumber(x), tonumber(z)
+				local hi, lo, n = -math.huge, math.huge, 0
+				for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
+					local q = (x + d[1]) .. "," .. (z + d[2])
+					local u = tops[q] or (lotted[q] and nil)
+					if u then hi, lo = math.max(hi, u), math.min(lo, u); n = n + 1 end
+				end
+				if t and n == 4 then
+					local road = cells[k]
+					if t > hi then
+						data[area:index(x, t, z)] = c_air
+						if road then data[area:index(x, t - 1, z)] = c_road end
+					elseif t < lo then
+						data[area:index(x, t + 1, z)] = road and c_road or c_soil
+					end
 				end
 			end
 		end
