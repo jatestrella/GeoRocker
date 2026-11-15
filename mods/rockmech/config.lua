@@ -123,7 +123,7 @@ config.lithologies.cu_primary = {
 -- 斑岩體外圍的熱液蝕變帶（stress.copper_point，由內往外）：斑岩核心（鉀化帶，就是上面的原生帶）→ 絹英岩化帶（岩石：絹英岩）→
 -- 青盤岩化帶（岩石：青盤岩）→ 圍岩。方塊是岩石，名稱用岩石名
 --   絹英岩化帶（石英－絹雲母－黃鐵礦，半徑 R … 1.5R）：低品位銅，漂白、軟（絹雲母讓節理面變滑），UCS 約 60
---   青盤岩化帶（綠泥石－綠簾石，1.5R … 3R）：沒有銅，綠色，比圍岩稍弱
+--   青盤岩化帶（綠泥石－綠簾石，1.5R … 2.3R）：沒有銅，綠色，比圍岩稍弱
 -- 表生分帶（鐵帽、氧化帶、富集帶）照深度疊在核心和絹英岩化帶上面
 config.lithologies.phyllic = {
 	name = "phyllic", description = TR("Quartz-sericite rock"), ore = "copper", pure = "#b0a888",

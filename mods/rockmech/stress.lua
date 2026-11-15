@@ -506,20 +506,21 @@ end
 -- 一根主礦體＋nsat 根衛星礦體（主礦體外 150–400 m）。營地那一格的主礦體邊緣在營地外 dist + 25 m。
 -- 每根斑岩體：半徑 30–75 m × 規模（衛星 × 0.4–0.8）、軸線傾伏 60–85°（方位隨機，越深中心越往傾伏方向偏）、
 -- 中心品位、富集倍率、富集帶和氧化帶厚、品位遞減深度、鐵帽山丘高、古地下水位深（礦區的 ± 5 m）各自隨機。全部由種子算，沒有清單
--- 由內往外：核心（鉀化帶，原生帶 cu_primary）→ 絹英岩化帶（R … 1.5R，低品位銅）→ 青盤岩化帶（1.5R … 3R，沒有銅）→ 圍岩；
+-- 由內往外：核心（鉀化帶，原生帶 cu_primary）→ 絹英岩化帶（R … 1.5R，低品位銅）→ 青盤岩化帶（1.5R … 2.3R，沒有銅）→ 圍岩；
 -- 表生分帶（鐵帽、氧化帶、富集帶）照深度疊在核心和絹英岩化帶上
 ---------------------------------------------------------------------------
 local CU_TOP, CU_BOT = 60, 400        -- 斑岩體軸線從地表上 60 m 到地表下 400 m（找附近礦體用的範圍）
 local function cu_body(cu, sd, i, j, n, x0, z0, sat)
 	local function h(a) return hash(i * 31 + n, j * 17 + a, sd) end
 	local f = cu.f
-	local R = (30 + 45 * h(1)) * f * (sat and (0.4 + 0.4 * h(2)) or 1)
+	local R = (18 + 30 * h(1)) * f * (sat and (0.4 + 0.4 * h(2)) or 1)
 	local pl = math.rad(60 + 25 * h(3))
 	local paz = 2 * math.pi * h(4)
 	return {x0 = x0, z0 = z0, R = math.max(4, R), cot = math.cos(pl) / math.sin(pl), dx = math.sin(paz), dz = math.cos(paz),
 		g0 = math.floor((40 + 20 * h(5)) * (sat and (0.7 + 0.4 * h(6)) or 1) + 0.5), fac = 2 + 1.5 * h(7),
 		E = 6 + 6 * h(8), ox = 3 + 3 * h(9), dd = (150 + 100 * h(10)) * f,      -- 富集帶、氧化帶是垂直的風化厚度，不跟礦體大小縮
-		hg = (sat and h(11) < 0.5) and 0 or 15 * h(12) * f, D = math.max(3, cu.D + 10 * (h(13) - 0.5)),
+		hg = (sat and h(11) < 0.5) and 0 or 8 * h(12) * f, D = math.max(3, cu.D + 10 * (h(13) - 0.5)),
+		asp = 1 + 1.4 * h(14), sa = math.sin(2 * math.pi * h(15)), ca = math.cos(2 * math.pi * h(15)),      -- 橢圓：長短軸比、方向
 		id = (i * 7 + j * 13 + n * 3) % 97, cfg = cu.cfg, sy = cu.sy or 0, new = true}
 end
 local function district(cu, i, j)
@@ -532,7 +533,7 @@ local function district(cu, i, j)
 	local cx, cz
 	if i == 0 and j == 0 then
 		local az = 2 * math.pi * hash(0, 0, sd + 3)
-		local R0 = (30 + 45 * hash(0, 1, sd)) * cu.f
+		local R0 = (18 + 30 * hash(0, 1, sd)) * cu.f
 		local r = R0 + (cu.dist or 40) + 25
 		cx, cz = r * math.sin(az), r * math.cos(az)
 	else
@@ -549,7 +550,7 @@ local function district(cu, i, j)
 		if hash(i, j, sd + 13) >= p then cache[key] = d; return d end
 	end
 	local main = cu_body(cu, sd, i, j, 0, cx, cz, false)
-	if i == 0 and j == 0 then main.R = (30 + 45 * hash(0, 1, sd)) * cu.f end
+	if i == 0 and j == 0 then main.R = (18 + 30 * hash(0, 1, sd)) * cu.f end
 	d[1] = main
 	for n = 1, cu.nsat do
 		local a = 2 * math.pi * hash(i * 5 + n, j * 3 + n, sd + 9)
@@ -581,7 +582,7 @@ function stress.cu_near(cu, x, z)
 			local t = ((mx - ax) * vx + (mz - az) * vz) / math.max(1e-9, vx * vx + vz * vz)
 			t = math.max(0, math.min(1, t))
 			local ex, ez = mx - (ax + t * vx), mz - (az + t * vz)
-			local reach = 3.1 * B.R * 1.2 + TILE_CU * 0.72
+			local reach = 2.4 * B.R * 1.45 * math.sqrt(B.asp or 1) + TILE_CU * 0.72
 			if ex * ex + ez * ez < reach * reach then L[#L + 1] = B end
 		end
 	end end
@@ -590,13 +591,21 @@ function stress.cu_near(cu, x, z)
 	return L
 end
 -- 一根新式斑岩體在 (x, y, z)：回傳 岩性, param2（核心、絹英岩化帶、表生分帶）；在青盤岩化帶回傳 nil, nil, true；外面回傳 nil
+-- 斑岩體的形狀（核心、蝕變帶、鐵帽山丘都用它）：隨機方向的橢圓（長短軸比 asp，面積不變），邊界再加兩層起伏
+--（22 m 波長 0.55–1.45 倍、8 m 波長 ±15%）。回傳 (點到軸的「橢圓距離」)², 這裡的半徑
+local function cu_shape(B, x, z, dx, dz)
+	local asp = B.asp or 1
+	local u, v = dx * (B.ca or 1) + dz * (B.sa or 0), -dx * (B.sa or 0) + dz * (B.ca or 1)
+	local rr = u * u / asp + v * v * asp
+	local R = B.R * (0.55 + 0.9 * fbm(x / 22, z / 22, 211 + B.id)) * (0.85 + 0.3 * fbm(x / 8, z / 8, 217 + B.id))
+	return rr, R
+end
+stress.cu_shape = cu_shape
 local function cu_eval(B, x, y, z)
 	local h = B.sy - y
 	local ax, az = B.x0 + h * B.cot * B.dx, B.z0 + h * B.cot * B.dz
-	local dx, dz = x - ax, z - az
-	local R = B.R * (0.8 + 0.4 * fbm(x / 30, z / 30, 211 + B.id))
-	local rr = dx * dx + dz * dz
-	if rr >= (3 * R) ^ 2 then return nil end
+	local rr, R = cu_shape(B, x, z, x - ax, z - az)
+	if rr >= (2.3 * R) ^ 2 then return nil end
 	if rr >= (1.5 * R) ^ 2 then return nil, nil, true end
 	local c = B._col
 	if not (c and c.x == x and c.z == z) then
@@ -756,9 +765,10 @@ function stress.body_hill(cfg, x, z)
 		if (B.hg or 0) > 0 then
 		local dx, dz = x - B.x0, z - B.z0
 		local rr = dx * dx + dz * dz
-		local Rmax = B.R * 1.2
+		local Rmax = B.R * (B.new and 1.45 * math.sqrt(B.asp or 1) or 1.2)
 		if rr < Rmax * Rmax then
 			local R = B.R * (0.8 + 0.4 * fbm(x / 30, z / 30, 211))
+			if B.new then rr, R = cu_shape(B, x, z, dx, dz) end
 			local r = math.sqrt(rr)
 			if r < R then
 				h = math.max(h, B.hg * smooth((1 - r / R) / 0.35) * (0.8 + 0.4 * fbm(x / 15, z / 15, 233)))

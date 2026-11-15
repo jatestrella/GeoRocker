@@ -193,7 +193,8 @@ local function pave_when_loaded(x0)
 end
 -- 新蓋的營地：career.lua 蓋營地時整地完先鋪（rockmech.camp_pave），建築、擺設再蓋在地坪上；
 -- 舊的營地開服 4 秒後補鋪（或縮小）
-local function village() return rockmech.village and rockmech.village.get() end
+-- 村莊世界（設定 rockmech_village）：看設定，不看配置存了沒（啟動時配置可能還沒算）
+local function village() return cfg.village and rockmech.village and rockmech.village.get() end
 local function vlot(kind) return village() and rockmech.village_lot and rockmech.village_lot(kind) end
 -- 村莊：交車區 = 重型機械車輛商的地塊（世界座標 {x1, x2, z1（北）, z2（南）}）；收料車停在收料場地塊中央、車頭朝北，地磅在車底
 local function yard_rect(x0)
@@ -236,7 +237,7 @@ function rockmech.camp_pave(x0)
 	if not done(x0) then pave(x0) end
 end
 core.after(4, function()
-	if village() then return end
+	if cfg.village then return end
 	for _, x0 in ipairs(sites()) do
 		if not done(x0) then pave_when_loaded(x0) end
 	end

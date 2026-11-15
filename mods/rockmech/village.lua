@@ -174,16 +174,26 @@ end
 -- 鋪路、整地（VoxelManip：不算開挖，天然邊坡照舊）。plan：V.plan 的結果；done()：做完呼叫
 --   路：3 m 寬，路面是壓實碎石，高度照當地地面（順著地形），路上 4 m 內的樹、草清掉
 --   地塊（外推 1 m）：整平到 L.y，高的削掉（12 m 內）、低的用表土填，表面是表土
-function V.build_ground(plan, done)
+function V.build_ground(plan, done, progress)
 	local x1, z1, x2, z2 = math.huge, math.huge, -math.huge, -math.huge
 	local function grow(x, z) x1, z1, x2, z2 = math.min(x1, x), math.min(z1, z), math.max(x2, x), math.max(z2, z) end
 	local cells = road_cells(plan.roads)
-	for k in pairs(cells) do local x, z = k:match("^(%-?%d+),(%-?%d+)$"); grow(tonumber(x), tonumber(z)) end
-	for _, L in ipairs(plan.lots) do local a, b, c, d = lot_rect(L); grow(a - 2, b - 2); grow(c + 2, d + 2) end
+	for k in pairs(cells) do
+		local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+		grow(tonumber(x) - 3, tonumber(z) - 3); grow(tonumber(x) + 3, tonumber(z) + 3)
+	end
+	for _, L in ipairs(plan.lots) do local a, b, c, d = lot_rect(L); grow(a - 5, b - 5); grow(c + 5, d + 5) end
 	local sy = math.floor(rockmech.cfg.surface_y or 0)
-	local pmin = {x = math.floor(x1), y = sy - 40, z = math.floor(z1)}
-	local pmax = {x = math.ceil(x2), y = sy + 140, z = math.ceil(z2)}
+	-- 高度範圍：地塊高度和地形起伏以內（不要整根 180 m 都生成，進遊戲比較快）
+	local ylo, yhi = sy, sy
+	for _, L in ipairs(plan.lots) do ylo, yhi = math.min(ylo, L.y), math.max(yhi, L.y) end
+	local H = rockmech.cfg.terrain and rockmech.cfg.terrain.h or 30
+	local pmin = {x = math.floor(x1), y = ylo - 16, z = math.floor(z1)}
+	local pmax = {x = math.ceil(x2), y = math.max(yhi, sy + H) + 24, z = math.ceil(z2)}
+	local total
 	core.emerge_area(pmin, pmax, function(_, _, left)
+		total = total or (left + 1)
+		if progress then progress(1 - left / total) end
 		if left > 0 then return end
 		local vm = core.get_voxel_manip()
 		local e1, e2 = vm:read_from_map(pmin, pmax)
@@ -203,10 +213,34 @@ function V.build_ground(plan, done)
 			local d = core.registered_nodes[core.get_name_from_content_id(c)]
 			return d and d.walkable ~= false
 		end
+		-- 村莊範圍（道路、地塊各外推 2 m）裡不滿 1 m 的薄表土先拿掉：路面、地塊都在整格的地面上，路不會比旁邊高出一截
+		local thin = {}
+		for k = 1, (rockmech.RUBBLE_LEVELS or 8) - 1 do
+			local n = "rockmech:topsoil_" .. k
+			if core.registered_nodes[n] then thin[core.get_content_id(n)] = true end
+		end
 		local function top_at(x, z)
+			if not area:contains(x, pmin.y, z) then return nil end
 			for y = pmax.y, pmin.y, -1 do
-				if solid(data[area:index(x, y, z)]) then return y end
+				local i = area:index(x, y, z)
+				local c = data[i]
+				if thin[c] or skip[c] then data[i] = c_air
+				elseif solid(c) then return y end
 			end
+		end
+		local margin = {}
+		for k in pairs(cells) do
+			local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+			x, z = tonumber(x), tonumber(z)
+			for dx = -2, 2 do for dz = -2, 2 do margin[(x + dx) .. "," .. (z + dz)] = true end end
+		end
+		for _, L in ipairs(plan.lots) do
+			local a, b, c, d = lot_rect(L)
+			for x = math.floor(a) - 3, math.ceil(c) + 3 do for z = math.floor(b) - 3, math.ceil(d) + 3 do margin[x .. "," .. z] = true end end
+		end
+		for k in pairs(margin) do
+			local x, z = k:match("^(%-?%d+),(%-?%d+)$")
+			top_at(tonumber(x), tonumber(z))
 		end
 		local function clear_above(x, y, z, h)
 			for yy = y + 1, math.min(pmax.y, y + h) do data[area:index(x, yy, z)] = c_air end

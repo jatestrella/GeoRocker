@@ -1031,6 +1031,7 @@ local function remove_sign_at(x0, zf)
 	end
 end
 local function build_sign(x0, text)
+	if cfg.village then return end      -- 村莊沒有組號看板（上課地圖才有）
 	local glyph = DIGITS[text]
 	if not glyph then return end
 	local zf = SIGN_Z                            -- 正面（南），背面在北邊一格
@@ -1139,7 +1140,7 @@ function rockmech.in_camp(pos)
 end
 
 -- 在 x0 蓋一座營地（帳篷、供應商、破碎站掛在 owner 的帳戶），地圖生成完才蓋；done(spawn) 拿到營地中心的落腳點
-function rockmech.career_build_camp(owner, x0, done)
+function rockmech.career_build_camp(owner, x0, done, progress)
 	-- 村莊（新世界）：算配置、存起來、鋪路整地，再蓋建築
 	if cfg.village and rockmech.village then
 		local V = rockmech.village
@@ -1154,7 +1155,7 @@ function rockmech.career_build_camp(owner, x0, done)
 		V.build_ground(P, function()
 			build_camp(owner, x0)
 			if done then done(rockmech.career_spawn(x0)) end
-		end)
+		end, progress)
 		return
 	end
 	local a, b = camp_area(x0)
@@ -1229,7 +1230,26 @@ core.register_on_joinplayer(function(player)
 		-- 世界第一次有人進來：出生點的營地。分了組的玩家另有自己組的營地（team.lua），這座歸第一個進來的人
 		local owner = rockmech.team_of(name) and "camp:spawn" or name
 		rockmech.add_money(owner, rockmech.team_of(name) and 0 or cfg.career_start)
-		rockmech.career_build_camp(owner, cfg.career_camp_dx)
+		if cfg.village then
+			-- 村莊：生成要一段時間。玩家先固定在原地、畫面中央顯示進度，生成完才傳送到村莊、恢復移動
+			player:set_physics_override({speed = 0, jump = 0, gravity = 0})
+			local hud = player:hud_add({type = "text", position = {x = 0.5, y = 0.5}, alignment = {x = 0, y = 0},
+				text = S("Generating the map @1%", 0), number = 0xFFFFFF, size = {x = 2, y = 2}, z_index = 1000})
+			local bg = player:hud_add({type = "image", position = {x = 0.5, y = 0.5}, scale = {x = -100, y = -100},
+				text = "[fill:16x16:#3a4a3a", z_index = 999})
+			rockmech.career_build_camp(owner, cfg.career_camp_dx, function(spawn)
+				local p = core.get_player_by_name(name)
+				if not p then return end
+				if spawn then p:set_pos(spawn) end
+				p:hud_remove(hud); p:hud_remove(bg)
+				p:set_physics_override({speed = 1, jump = 1, gravity = 1})
+			end, function(f)
+				local p = core.get_player_by_name(name)
+				if p then p:hud_change(hud, "text", S("Generating the map @1%", math.floor(f * 100))) end
+			end)
+		else
+			rockmech.career_build_camp(owner, cfg.career_camp_dx)
+		end
 	elseif site == "1" then
 		-- 舊版的世界：帳篷搬走（NPC 在 on_activate 自己消失）
 		core.emerge_area(a, b, function(_, _, rem)
@@ -1337,8 +1357,8 @@ if cfg.career then
 end
 
 -- 已經蓋好的營地：組號看板從礦帶裡（舊位置）搬到南邊的走廊、重蓋成兩面都有數字；
--- sign4：之前的 sign3 重蓋時沒拆原地的單面看板，新看板疊在上面變兩塊，再拆掉重蓋一次
-if cfg.career then
+-- sign4：之前的 sign3 重蓋時沒拆原地的單面看板，新看板疊在上面變兩塊，再拆掉重蓋一次。村莊沒有組號看板
+if cfg.career and not cfg.village then
 	core.after(2.5, function()
 		local sites = {}
 		if storage:get_string("career_site") == "2" then sites[#sites + 1] = {x0 = cfg.career_camp_dx, t = "0"} end
