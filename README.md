@@ -37,7 +37,23 @@ GeoRocker 是一款岩石力學、隧道與大地工程的採礦模擬遊戲，�
 
 問題回報、教學使用或合作詢問，請開 [Issue](https://github.com/jatestrella/GeoRocker/issues)。
 
+## 第三方素材
+
+| 素材 | 出處 | 授權 |
+|---|---|---|
+| 遊戲引擎 | [Luanti](https://www.luanti.org/)（Windows 下載包內附） | LGPL-2.1+ |
+| `mods/default`、`stairs`、`doors`、`fire`、`tnt`、`sfinv`、`creative`、`player_api` | [Minetest Game](https://github.com/luanti-org/minetest_game) | 程式 LGPL-2.1+ 或 MIT；圖片、音效 CC BY-SA 3.0 等，作者與細節見各資料夾的 `license.txt` |
+| 字型 `fonts/Cubic_11.ttf` | [俐方體 11 號（Cubic 11）](https://github.com/ACh-K/Cubic-11) | SIL Open Font License 1.1 |
+
+GeoRocker 有些方塊直接使用 Minetest Game 的貼圖（例如玻璃、泥土、碎石、草），這些貼圖仍依原授權，作者權利歸原作者。
+
 ## 授權
 
 保留所有權利，僅公開閱覽，詳見 [LICENSE](LICENSE)。
-`mods/` 下來自 Minetest Game 的模組與 Cubic 11 字型依其原授權。
+上表的第三方素材依其原授權，不在此限。
+
+## 聲明
+
+GeoRocker 是獨立製作的遊戲，與 Mojang Studios、Microsoft 及 Minecraft 沒有任何關係，也未經其認可或贊助。Minecraft 是 Mojang Synergies AB 的商標。
+
+*GeoRocker is an independent game. It is not affiliated with, endorsed by, or sponsored by Mojang Studios, Microsoft, or Minecraft. Minecraft is a trademark of Mojang Synergies AB.*
