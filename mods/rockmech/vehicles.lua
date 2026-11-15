@@ -779,19 +779,29 @@ function V.load_put(self, base, lv, g)
 	if ex then
 		self.loada = self.loada or {}
 		self.loada[base] = ex
+		-- 礦的含量照質量平均：loadq 換成 級數 × 質量平均的含量（用 loadq 的地方都不用改）
+		if A.ore_of(base) and ex.m and ex.m > 0 then self.loadq[base] = self.load[base] * ex.mg / ex.m end
 	end
 end
 -- 車上這種碎石的平均成分（倒出來、轉給別台車用；副產品跟著走）
 function V.load_assay(self, base)
 	local c = A.new(V.load_grade(self, base))
 	local lv, ex = self.load[base], self.loada and self.loada[base]
-	if ex and lv and lv > 0 then for k, v in pairs(ex) do c[k] = v / lv end end
+	local x, g = A.acc_comp(ex, lv)          -- 含量類照質量平均、體積類照體積平均
+	for k, v in pairs(x) do c[k] = v end
+	if g and A.ore_of(base) then c.g = g end
 	A.slim(c)
 	if A.has_v(c) then      -- 三種以上成分：外觀的 param2 照平均後的體積表重算
 		local _, p = A.compose(A.vol(nil, c, 1, {}))
 		if A.ore_of(base) then c.w = p else c.g = p end      -- 礦石碎石的 g 是含量，外觀是體積比例 w
 	end
 	return c
+end
+-- 車上這種碎石的質量（相對值：級數 × 每單位體積的質量，assay.rho）；品位是質量比，整車平均要照質量加權
+function V.load_mass(self, base)
+	local a = self.loada and self.loada[base]
+	if a and a.m then return a.m end
+	return (self.load[base] or 0) * A.rho(base, nil)
 end
 -- 車上這種碎石的平均品位（param2）
 function V.load_grade(self, base)
@@ -1351,9 +1361,10 @@ end
 function V.load_ore(self)
 	local total, ore, q = 0, nil, 0
 	for base, lv in pairs(self.load or {}) do
-		total = total + lv
+		local m = V.load_mass(self, base)
+		total = total + m
 		local o = rockmech.ore_of_rubble[base]
-		if o then ore, q = o, q + (self.loadq[base] or 0) end
+		if o then ore, q = o, q + (self.loadq[base] or 0) / lv * m end
 	end
 	if not ore or total == 0 then return nil end
 	return ore, q / total / 255

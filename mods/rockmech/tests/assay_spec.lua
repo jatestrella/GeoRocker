@@ -79,7 +79,7 @@ describe("assay 成分", function()
 		local base = "rubble_coal"
 		local acc, lv, q = nil, 0, 0
 		acc = A.acc_put(acc, base, lv, q, 200, 6); lv, q = lv + 6, q + 6 * 200
-		assert.is_nil(acc)                                   -- 只有兩種成分：不用累加器
+		assert.is_false(A.has_v(acc))                        -- 只有兩種成分：不記體積表
 		local _, c = A.merge("rubble_coal", 8, 128, G, 4, 0)
 		acc = A.acc_put(acc, base, lv, q, c, 12)
 		local coal = 6 * 200 / 255 + 12 * c["v:" .. COAL]
@@ -134,6 +134,39 @@ describe("assay 礦的含量與體積分開", function()
 		assert.are.equal("colluvium", b)
 		assert.is_nil(c.w)
 		assert.are.equal(128, c.g)
+	end)
+end)
+rockmech, core = saved_rm, saved_core
+
+-- 含量是質量比：混合照質量加權（煤 γ 14、廢石 25）
+rockmech = {mix = mix, mix_ctx = ctx, mix_of = ctx.mix_of, rubble_base = {}, lith_of_node = {},
+	ore_of_rubble = {rubble_coal = ORE, rubble_coal_granite = ORE, rubble_coal_soil = ORE},
+	cfg = {lithologies = {coal = {gamma = 14}}, ores = {coal = {lith = "coal"}}}}
+core = {register_chatcommand = function() end}
+describe("assay 含量照質量加權", function()
+	it("煤碎石混同體積廢石：外觀 50 %，含量照質量稀釋", function()
+		local b, c = A.merge("rubble_coal", 4, {g = 191, w = 255}, R, 4, 0)
+		assert.are.equal("rubble_coal", b)
+		assert.are.equal(128, c.w)
+		assert.near(191 * 14 / (14 + 25), c.g, 1e-6)
+	end)
+	it("車斗累加：純煤和半煤碎石，含量照質量平均", function()
+		local v = {lv = 0, q = 0}
+		v = A.bin_put(v, "rubble_coal", 4, {g = 191, w = 255})
+		v = A.bin_put(v, "rubble_coal", 4, {g = 95, w = 128})
+		local r1, r2 = 14, (128 * 14 + 127 * 25) / 255
+		local g = (191 * r1 + 95 * r2) / (r1 + r2)
+		local c = A.bin_comp(v, "rubble_coal")
+		assert.near(g, c.g, 1e-6)
+		assert.near((255 + 128) / 2, c.w, 1e-6)
+		assert.near(g, v.q / v.lv, 1e-6)                  -- 用 q 的地方拿到的也是質量平均
+	end)
+	it("舊的累加器（照體積記、沒有 w）換算一次", function()
+		local v = {lv = 4, q = 4 * 191}                     -- 舊存檔：4 級純煤
+		v = A.bin_put(v, "rubble_coal", 4, {g = 191, w = 255})
+		local c = A.bin_comp(v, "rubble_coal")
+		assert.near(191, c.g, 1e-6)
+		assert.near(255, c.w, 1e-6)
 	end)
 end)
 rockmech, core = saved_rm, saved_core

@@ -207,14 +207,18 @@ end
 local function load_grade(e, ore)
 	local total, q = 0, 0
 	local m = ore and ore.metal
+	local mass = 0
 	for base, lv in pairs(e.load) do
 		total = total + lv
+		local w = rockmech.vehicles.load_mass(e, base)          -- 品位是質量比：照質量加權
+		mass = mass + w
+		local g = (e.loadq[base] or 0) / math.max(lv, 1e-9) * w
 		local o = rockmech.ore_of_rubble[base]
 		if m then
-			if o and o.metal and o.metal.family == m.family then q = q + (e.loadq[base] or 0) * o.metal.scale end
-		elseif o and (not ore or o == ore) then q = q + (e.loadq[base] or 0) end
+			if o and o.metal and o.metal.family == m.family then q = q + g * o.metal.scale end
+		elseif o and (not ore or o == ore) then q = q + g end
 	end
-	return total, total > 0 and q / total / 255 or 0
+	return total, mass > 0 and q / mass / 255 or 0
 end
 
 -- 驗收（滿了，或叫它先走）

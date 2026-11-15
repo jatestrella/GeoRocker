@@ -253,6 +253,37 @@ function A.vol(base, c, k, into)
 	end
 	return into
 end
+-- 質量：含量（品位、化學成分）是質量比，混合時照質量加權；體積比例（w、體積表）照體積加權。
+-- 碎石的孔隙率都一樣，所以每單位體積碎石的質量 ∝ 各成分的顆粒單位重 γs（只有比值有意義）：
+--   岩石、礦石：岩性的 γ（煤 14、大理岩 27…）；沒有岩性的用下表（精礦是硫化物，比重約 4.1）
+local GAMMA_S = {cu_conc = 41, cu_tail = 27}
+local GAMMA_COMP, GAMMA_CFG          -- 成分 → γs（第一次用到才建）
+local function gamma_comp(comp)
+	if not GAMMA_COMP or GAMMA_CFG ~= rockmech.cfg then
+		GAMMA_CFG = rockmech.cfg
+		local L = rockmech.cfg and rockmech.cfg.lithologies or {}
+		GAMMA_COMP = {}
+		if rockmech.RUBBLE_GRANITE then GAMMA_COMP[rockmech.RUBBLE_GRANITE] = L.granite and L.granite.gamma or 25 end
+		if rockmech.RUBBLE_SOIL then GAMMA_COMP[rockmech.RUBBLE_SOIL] = 26.5 end          -- 土粒比重 2.65
+		if rockmech.RUBBLE_DEBRIS then GAMMA_COMP[rockmech.RUBBLE_DEBRIS] = 24 end        -- 混凝土
+		for key, ore in pairs(rockmech.cfg and rockmech.cfg.ores or {}) do
+			GAMMA_COMP["ore:" .. key] = GAMMA_S[key] or (ore.lith and L[ore.lith] and L[ore.lith].gamma) or 25
+		end
+	end
+	return GAMMA_COMP[comp] or 25
+end
+A.gamma_comp = gamma_comp
+-- 一單位體積的 base 碎石（成分 c）的相對質量 = Σ 體積比例 × γs
+function A.rho(base, c)
+	local v = A.vol(base, c, 1, {})
+	local m, t = 0, 0
+	for comp, x in pairs(v) do m, t = m + x * gamma_comp(comp), t + x end
+	return t > 0 and m / t or 25
+end
+-- 含量類的鍵（照質量加權）：g 以外、不是體積比例 w、不是體積表、不是累加器的 m／mg
+local function mass_key(k) return k ~= "g" and k ~= "w" and k ~= "m" and k ~= "mg" and not is_v(k) end
+A.mass_key = mass_key
+
 -- 體積表 → 方塊種類, param2, 成分數（同族金屬礦合併後；compose 會改表，所以用複本）
 local function compose(v)
 	local t = {}
@@ -282,18 +313,21 @@ function A.merge(b1, k1, c1, b2, k2, c2)
 	local v = A.vol(b2, c2, k2, A.vol(b1, c1, k1, {}))
 	local b, p, cnt = compose(v)
 	b = b or b1
-	local x = A.extras_mix(c1, k1, c2, k2)
+	-- 質量：含量照質量加權（各份的體積 × 每單位體積的質量）
+	local m1, m2 = k1 * A.rho(b1, c1), k2 * A.rho(b2, c2)
+	local x = A.extras_mix(c1, m1, c2, m2)
+	if x then for k in pairs(x) do if not mass_key(k) then x[k] = nil end end end
 	local ore = ore_of(b)
 	local c
 	if ore then
 		local abs = 0
-		for _, it in ipairs({{b1, k1, c1}, {b2, k2, c2}}) do
+		for _, it in ipairs({{b1, m1, c1}, {b2, m2, c2}}) do
 			local o = ore_of(it[1])
 			if o and (o == ore or (o.metal and ore.metal and o.metal.family == ore.metal.family)) then
 				abs = abs + it[2] * A.g(it[3]) / 255 * unit(o)
 			end
 		end
-		abs = abs / math.max(1e-9, k1 + k2)
+		abs = abs / math.max(1e-9, m1 + m2)
 		-- 含量超過這種礦的刻度（例如精礦倒進原礦）：換成同一族裝得下的那種（刻度最小的）
 		if ore.metal and abs > unit(ore) + 1e-12 then
 			local fit
@@ -322,8 +356,24 @@ function A.slim(c)
 end
 -- 同一種碎石的累加器（車斗）：acc 裡已經有 lv0 級（主成分總和 q0），再放 lv 級成分 c。
 -- 有一方帶體積表時，另一方照 base＋param2 展開，加權才對
+-- 質量：acc.m = Σ 級數 × 每單位體積的質量、acc.mg = Σ 質量 × 主成分；含量類的鍵也是 Σ 質量 × 含量。
+-- 舊的累加器（沒有 m，全部照體積記的）先換算一次
 function A.acc_put(acc, base, lv0, q0, c, lv)
-	if ore_of(base) then c = A.norm(A.copy(A.c(c)), base) end     -- 礦石碎石的體積比例 w 一起累加（沒有的當 100 %）
+	local ore = ore_of(base)
+	if ore then c = A.norm(A.copy(A.c(c)), base) end     -- 礦石碎石的體積比例 w 一起累加（沒有的當 100 %）
+	if lv0 > 0 and not (acc and acc.m) then
+		acc = acc or {}
+		if ore and acc.w == nil then acc.w = 255 * lv0 end
+		local c0 = {g = q0 / lv0}
+		for k, v in pairs(acc) do c0[k] = v / lv0 end
+		local r0 = A.rho(base, c0)
+		for k, v in pairs(acc) do if mass_key(k) then acc[k] = v * r0 end end
+		acc.m, acc.mg = lv0 * r0, q0 * r0
+	end
+	local r = A.rho(base, c)
+	acc = acc or {}
+	acc.m = (acc.m or 0) + lv * r
+	acc.mg = (acc.mg or 0) + lv * r * A.g(c)
 	local cv, av = A.has_v(c), A.has_v(acc)
 	if cv and not av and lv0 > 0 then
 		acc = acc or {}
@@ -335,10 +385,22 @@ function A.acc_put(acc, base, lv0, q0, c, lv)
 	end
 	if type(c) == "table" then
 		for k, v in pairs(c) do
-			if k ~= "g" then acc = acc or {}; acc[k] = (acc[k] or 0) + lv * v end
+			if k ~= "g" then acc[k] = (acc[k] or 0) + (mass_key(k) and lv * r or lv) * v end
 		end
 	end
 	return acc
+end
+-- 累加器（總量 lv 級）→ 平均成分（g 以外的鍵：含量類 ÷ 質量、體積類 ÷ 級數）, 照質量平均的主成分
+function A.acc_comp(acc, lv)
+	local c = {}
+	if not acc or not lv or lv <= 0 then return c, nil end
+	local m = acc.m
+	for k, v in pairs(acc) do
+		if k ~= "m" and k ~= "mg" then
+			c[k] = (mass_key(k) and m and m > 0) and v / m or v / lv
+		end
+	end
+	return c, (m and m > 0 and acc.mg) and acc.mg / m or nil
 end
 
 -- 料倉（排矸站、裝車站、推土機鏟刀前）同一種碎石的一份：v = {lv = 級數, q = Σ 級數 × 主成分, a = 其他成分的累加器}
@@ -347,13 +409,17 @@ function A.bin_put(v, base, t, c)
 	v.lv = lv0 + t
 	v.q = q0 + t * (rockmech.mix_of[base] and A.g(c) or 0)
 	v.a = A.acc_put(v.a, base, lv0, q0, c, t)
+	-- 礦的含量照質量平均：q 換成 級數 × 質量平均的含量（用 q 的地方都不用改）
+	if ore_of(base) and v.a and v.a.m and v.a.m > 0 then v.q = v.lv * v.a.mg / v.a.m end
 	return v
 end
--- 平均成分（主成分照舊四捨五入成 param2 的刻度）
+-- 平均成分（主成分：礦石碎石是照質量平均的含量；其他照舊四捨五入成 param2 的刻度）
 function A.bin_comp(v, base)
 	local lv = v.lv or 0
+	local x, g = A.acc_comp(v.a, lv)
 	local c = A.new(lv > 0 and math.floor((v.q or 0) / lv + 0.5) or 0)
-	if v.a and lv > 0 then for k, x in pairs(v.a) do c[k] = x / lv end end
+	if ore_of(base) and g then c.g = g end
+	for k, y in pairs(x) do c[k] = y end
 	A.slim(c)
 	if A.has_v(c) then
 		local _, p = compose(A.vol(nil, c, 1, {}))
