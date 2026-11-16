@@ -584,6 +584,159 @@ local function buckle_strut(p)
 	core.log("action", ("[rockmech] 支撐挫屈 %s（%d m）"):format(core.pos_to_string(mid), #cells))
 end
 
+---------------------------------------------------------------------------
+-- 彈性支承梁法（wallbeam.lua）：每一欄板樁是一根薄梁，兩側的土是彈簧（夾在主動、被動土壓之間），
+-- 接著的 H 型鋼是只受壓的彈簧（圍令把一支的勁度分攤到兩支之間的寬度）。
+-- 應力解裡板樁是 1 m 厚、跟土黏在一起的元素，彎矩算不準（土的拖曳、樁腳被咬住…），所以彎矩、支撐力改由這裡算；
+-- 土會不會破壞（牆後、坑底）仍由應力解判定。土的參數跟應力解同一組（materials.lua：c、φ、γ、E）
+---------------------------------------------------------------------------
+local WB = dofile(rockmech.modpath .. "/wallbeam.lua")
+rockmech.wallbeam = WB
+local EI_PILE = E_STEEL * PILE_I
+local function cells_min(cells)
+	local m = cells[1]
+	for _, c in ipairs(cells) do
+		if c.x < m.x or (c.x == m.x and (c.y < m.y or (c.y == m.y and c.z < m.z))) then m = c end
+	end
+	return m
+end
+-- 板旁邊那一格的土：回傳 σv（kPa，從那一欄的土面算）、c、φ、kh；岩石回傳 rigid = true；不是土回傳 nil
+local function soil_at(p)
+	local n = core.get_node(p).name
+	if not holds(n) or IS_PILE[n] then return nil end
+	if rockmech.lith_of_node[n] and not rockmech.is_rubble(n) then return {rigid = true} end
+	local sp = rockmech.materials.defaults("rockmech:topsoil")
+	local h, q = 0, {x = p.x, y = p.y + 1, z = p.z}
+	for _ = 1, 40 do
+		local m = core.get_node(q).name
+		if not holds(m) or IS_PILE[m] then break end
+		h = h + 1
+		q.y = q.y + 1
+	end
+	local wet = 1 - (cfg.slope.rain_c_loss or 0) * (rockmech.rain_level and rockmech.rain_level() or 0)
+	local natural = core.get_item_group(n, "rockmech_topsoil") > 0
+	return {sv = sp.gamma * (h + 0.5), c = natural and sp.c * math.max(0, wet) or 0,
+		phi = natural and sp.phi or cfg.slope.phi_r, kh = (sp.e_rel or cfg.fem.soil_e) * E_ROCK_REF}
+end
+-- lo..hi 裡的每一欄板樁解一次。回傳 {[支撐最小格的 hash] = 軸力 kN}（接在板樁上的支撐）
+local function wall_check(lo, hi)
+	local cols, seen = {}, {}
+	for _, p in ipairs(core.find_nodes_in_area(lo, hi, {"group:rockmech_retain"})) do
+		local key = p.x .. "," .. p.z
+		if IS_PILE[core.get_node(p).name] and not seen[key] then
+			seen[key] = true
+			local cells = pile_column(p)
+			local dv = core.facedir_to_dir(core.get_node(cells[1]).param2 % 4)
+			local xaxis = dv.x ~= 0
+			local bent = false
+			for _, c in ipairs(cells) do
+				local info = PILE_INFO[core.get_node(c).name]
+				if info and info.state == "bent" then bent = true end
+			end
+			cols[#cols + 1] = {cells = cells, ax = xaxis and {x = 1, y = 0, z = 0} or {x = 0, y = 0, z = 1}, xaxis = xaxis,
+				t = xaxis and p.z or p.x, plane = xaxis and p.x or p.z, bent = bent}
+		end
+	end
+	-- 支撐：同一面牆（同軸向、同一個平面）、同一個高度、同一側 → 沿牆的位置清單
+	local lines = {}
+	local function line_key(col, y, s) return (col.xaxis and "x" or "z") .. col.plane .. ":" .. y .. ":" .. s end
+	for _, col in ipairs(cols) do
+		for _, q in ipairs(col.cells) do
+			for _, s in ipairs({1, -1}) do
+				local nb = vector.add(q, vector.multiply(col.ax, s))
+				local name = core.get_node(nb).name
+				local a = hb_axis(name)
+				if a and (col.xaxis and a.x ~= 0 or not col.xaxis and a.z ~= 0) then
+					local sc, ends = strut_line(nb)
+					local far_pile = false
+					for _, e in ipairs(ends) do
+						if not vector.equals(e, q) and IS_PILE[core.get_node(e).name] then far_pile = true end
+					end
+					local kind = HB_INFO[name].kind
+					local ks = (far_pile and 2 or 1) * E_STEEL * HB[kind].A / #sc        -- kN/m（兩邊都是板樁：各頂一半長度）
+					local lk = line_key(col, q.y, s)
+					lines[lk] = lines[lk] or {}
+					table.insert(lines[lk], {t = col.t, k = ks, id = core.hash_node_position(cells_min(sc))})
+				end
+			end
+		end
+	end
+	for _, l in pairs(lines) do table.sort(l, function(u, v) return u.t < v.t end) end
+	-- 圍令分攤：這一欄在 t 的位置分到的支撐勁度（kN/m，每公尺寬）；自己就是那一支的話一併回傳
+	local function prop_k(l, t)
+		local m = #l
+		local function gap(j)
+			local g = math.huge
+			if j > 1 then g = math.min(g, l[j].t - l[j - 1].t) end
+			if j < m then g = math.min(g, l[j + 1].t - l[j].t) end
+			return g == math.huge and 3 or g
+		end
+		for j = 1, m do
+			if l[j].t == t then return l[j].k / gap(j), l[j] end
+		end
+		if t < l[1].t then
+			local g = gap(1)
+			return (l[1].t - t <= math.floor(g / 2)) and l[1].k / g or nil
+		end
+		if t > l[m].t then
+			local g = gap(m)
+			return (t - l[m].t <= math.floor(g / 2)) and l[m].k / g or nil
+		end
+		for j = 1, m - 1 do
+			if l[j].t < t and t < l[j + 1].t then
+				local g = l[j + 1].t - l[j].t
+				if g <= 12 then return (l[j].k + l[j + 1].k) / 2 / g end
+				return nil
+			end
+		end
+	end
+	local strut_N = {}
+	local My = pile_my()
+	for _, col in ipairs(cols) do
+		local n = #col.cells
+		local t = {n = n, EI = EI_PILE * (col.bent and BENT_R or 1), soil = {}, props = {}}
+		local own = {}          -- props 的序號 → 這一欄自己的那一支支撐
+		for i, q in ipairs(col.cells) do
+			for _, s in ipairs({1, -1}) do
+				local nb = vector.add(q, vector.multiply(col.ax, s))
+				local so = soil_at(nb)
+				if so and so.rigid then
+					t.soil[#t.soil + 1] = {i, s, 0, 0, 1e6, 1e6}
+				elseif so then
+					t.soil[#t.soil + 1] = WB.soil_spring(i, s, so.sv, so.c, so.phi, so.kh)
+				end
+				local l = lines[line_key(col, q.y, s)]
+				if l then
+					local k, mine = prop_k(l, col.t)
+					if k then
+						t.props[#t.props + 1] = {i, s, k}
+						if mine then own[#t.props] = mine end
+					end
+				end
+			end
+		end
+		local r = WB.solve(t)
+		if not r.ok then
+			topple(col.cells)                -- 撐不住：埋入不夠、整片倒進坑裡
+		else
+			for k, mine in pairs(own) do
+				local N = (r.prop[k] or 0) / t.props[k][3] * mine.k            -- 這一支的軸力 = 它自己的勁度 × 位移
+				strut_N[mine.id] = math.max(strut_N[mine.id] or 0, N)
+			end
+			if not col.bent then
+				local Mmax = r.Mmax
+				if Mmax > My then
+					bend_column(col.cells)
+				else
+					local txt = S("Bending moment @1 kN·m/m / yield @2 kN·m/m (@3%)", d(Mmax), d(My), d(Mmax / My * 100))
+					for _, q in ipairs(col.cells) do pile_info(q, txt) end
+				end
+			end
+		end
+	end
+	return strut_N
+end
+
 -- job, res（fem.lua 的結果，lazy）, meta（femstress.lua：a 原點）
 function rockmech.retain_fem_check(job, res, meta)
 	local n, a = job.nx, meta.a
@@ -600,51 +753,25 @@ function rockmech.retain_fem_check(job, res, meta)
 	local half = math.floor((n - 2) / 2)
 	check_piles_near(vector.add(lo, half), half)
 	check_hbeams_near(vector.add(lo, half), half)    -- 崩落把撐著 H 型鋼的土帶走：懸空的掉下來
-	-- 板樁：每一欄取最大的彎矩
-	local done = {}
-	local My = pile_my()
-	for _, p in ipairs(core.find_nodes_in_area(lo, hi, PILE_LIVE)) do
-		local key = p.x .. "," .. p.z
-		if not done[key] then
-			done[key] = true
-			local cells = pile_column(p)
-			local Mmax = 0
-			for _, q in ipairs(cells) do
-				local c, x, y, z = cell(q)
-				if c then
-					local dv = core.facedir_to_dir(core.get_node(q).param2 % 4)       -- 板樁的法向
-					local s0, s1
-					if dv.x ~= 0 then
-						s0 = select(2, fem.point_stress(job, res, x, y, z, 0, 0.5, 0.5))
-						s1 = select(2, fem.point_stress(job, res, x, y, z, 1, 0.5, 0.5))
-					else
-						s0 = select(2, fem.point_stress(job, res, x, y, z, 0.5, 0.5, 0))
-						s1 = select(2, fem.point_stress(job, res, x, y, z, 0.5, 0.5, 1))
-					end
-					Mmax = math.max(Mmax, math.abs(s1 - s0) / 12)
-				end
-			end
-			if Mmax > My then
-				bend_column(cells)
-			else
-				local txt = S("Bending moment @1 kN·m/m / yield @2 kN·m/m (@3%)", d(Mmax), d(My), d(Mmax / My * 100))
-				for _, q in ipairs(cells) do pile_info(q, txt) end
-			end
-		end
-	end
+	-- 板樁的彎矩、接在板樁上的支撐軸力：彈性支承梁法（wall_check）。其他支撐（柱、撐在岩壁之間的）照應力解
+	local strut_N = wall_check(lo, hi)
 	-- 支撐：每一支取最大的軸力
-	done = {}
+	local done = {}
 	for _, p in ipairs(core.find_nodes_in_area(lo, hi, HB_NODES)) do
 		local key = core.hash_node_position(p)
 		if not done[key] then
 			local cells = strut_line(p)
 			for _, q in ipairs(cells) do done[core.hash_node_position(q)] = true end
 			local N = 0
-			for _, q in ipairs(cells) do
-				local c = cell(q)
-				if c then
-					local dv = hb_axis(core.get_node(q).name)
-					N = math.max(N, (dv.x ~= 0 and res.sxx or dv.y ~= 0 and res.syy or res.szz)[c])      -- kPa × 1 m² = kN（壓為正）
+			local beamN = strut_N[core.hash_node_position(cells_min(cells))]
+			if beamN then N = beamN
+			else
+				for _, q in ipairs(cells) do
+					local c = cell(q)
+					if c then
+						local dv = hb_axis(core.get_node(q).name)
+						N = math.max(N, (dv.x ~= 0 and res.sxx or dv.y ~= 0 and res.syy or res.szz)[c])      -- kPa × 1 m² = kN（壓為正）
+					end
 				end
 			end
 			local info = HB_INFO[core.get_node(p).name]

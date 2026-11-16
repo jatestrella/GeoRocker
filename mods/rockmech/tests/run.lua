@@ -27,6 +27,7 @@ local SPECS = {
 	"rockmass_spec.lua",
 	"support_spec.lua",
 	"fem_spec.lua",
+	"wallbeam_spec.lua",
 	"mix_spec.lua",
 	"assay_spec.lua",
 	"airflow_spec.lua",
