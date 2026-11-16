@@ -85,11 +85,17 @@ for fk, f in pairs(FILLS) do
 		local name = pile_name(fk, sk)
 		local first = fk == "soil" and sk == "plain"       -- 物品就是這一種
 		local t = f.tex
+		-- 鋼板的厚度：上面、左右兩面靠鋼板（−z）那一邊畫一條 2 px（約 12 cm）的鋼板色，從上面、側面都看得到板樁的邊。
+		-- 貼圖方向：+Y 面圖的下緣是 −z；+X 面（從東邊看）圖的右緣是 −z；−X 面圖的左緣是 −z
+		local edge = sk == "bent" and "#6e5440" or "#41474c"
+		local top = "(" .. t .. ")^[fill:16x2:0,14:" .. edge
+		local east = "(" .. t .. ")^[fill:2x16:14,0:" .. edge
+		local west = "(" .. t .. ")^[fill:2x16:0,0:" .. edge
 		core.register_node(name, def_with({
 			description = first and S("Sheet pile\nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig", tostring(PILE_LEN))
 				or (sk == "bent" and S("Sheet pile (yielded)") or S("Sheet pile")),
 			short_description = first and S("Sheet pile") or nil,
-			tiles = {t, t, t, t, t, st.face},      -- +Y −Y +X −X +Z −Z
+			tiles = {top, t, east, west, t, st.face},      -- +Y −Y +X −X +Z −Z
 			inventory_image = first and "[fill:16x16:#00000000^[fill:10x14:3,1:#5c6268^[fill:2x14:5,1:#41474c^[fill:2x14:9,1:#41474c" or nil,
 			drop = sk == "bent" and "" or PILE,
 			groups = first and {cracky = 2, rockmech_retain = 1} or {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
