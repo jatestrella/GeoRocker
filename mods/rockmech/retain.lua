@@ -88,11 +88,11 @@ for fk, f in pairs(FILLS) do
 		local first = fk == "soil" and sk == "plain"       -- 物品就是這一種
 		local t = f.tex
 		-- 鋼板的厚度：上面、左右兩面靠鋼板（−z）那一邊畫一條 2 px（約 12 cm）的鋼板色，從上面、側面都看得到板樁的邊。
-		-- 貼圖方向：+Y 面圖的下緣是 −z；+X 面（從東邊看）圖的右緣是 −z；−X 面圖的左緣是 −z
+		-- 貼圖方向（從外面看那一面）：+Y 面圖的下緣是 −z；+X 面（站東邊往西看）圖的左緣是 −z；−X 面圖的右緣是 −z
 		local edge = sk == "bent" and "#6e5440" or "#41474c"
 		local top = "(" .. t .. ")^[fill:16x2:0,14:" .. edge
-		local east = "(" .. t .. ")^[fill:2x16:14,0:" .. edge
-		local west = "(" .. t .. ")^[fill:2x16:0,0:" .. edge
+		local east = "(" .. t .. ")^[fill:2x16:0,0:" .. edge
+		local west = "(" .. t .. ")^[fill:2x16:14,0:" .. edge
 		core.register_node(name, def_with({
 			description = first and S("Sheet pile\nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig", tostring(PILE_LEN))
 				or (sk == "bent" and S("Sheet pile (yielded)") or S("Sheet pile")),
