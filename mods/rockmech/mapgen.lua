@@ -363,15 +363,17 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 		stripped = stripped + 1      -- 要重算光照
 	end
 
-	-- 覆土（rockmech_soil_cover = N）：surface_y 往下 N m 內的岩石換成整格表土（試驗場：全平面、純土）
+	-- 覆土（rockmech_soil_cover = N）：surface_y 往下 N m 內的岩石換成整格表土（試驗場：全平面、純土）。
+	-- 處理整個 VoxelManip 範圍（含外圍一圈）：上面那段會把隔壁 chunk 寫進邊緣的石頭換成岩性，不一起換的話
+	-- 那一圈先是岩石、節理網格照岩石建好，等隔壁 chunk 產生才變成土，土上就留著節理線
 	local cover = cfg.soil_cover or 0
 	if cover > 0 and c_cover_soil then
 		local sy = math.floor(cfg.surface_y or 0)
-		local ylo, yhi = math.max(minp.y, sy - cover + 1), math.min(maxp.y, sy)
+		local ylo, yhi = math.max(emin.y, sy - cover + 1), math.min(emax.y, sy)
 		if ylo <= yhi then
-			for z = minp.z, maxp.z do for y = ylo, yhi do
-				local vi = area:index(minp.x, y, z)
-				for _ = minp.x, maxp.x do
+			for z = emin.z, emax.z do for y = ylo, yhi do
+				local vi = area:index(emin.x, y, z)
+				for _ = emin.x, emax.x do
 					if lith_cid[data[vi]] then data[vi] = c_cover_soil; changed = true end
 					vi = vi + 1
 				end

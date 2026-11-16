@@ -726,7 +726,8 @@ end
 core.register_node(TOPSOIL, {
 	description = S("Topsoil"),
 	short_description = S("Topsoil"),
-	tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
+	-- 側面是泥土（不畫草邊）：厚的表土挖開時才不會一層一層都是草（2026-11-16）
+	tiles = {"default_grass.png", "default_dirt.png", "default_dirt.png"},
 	is_ground_content = false, groups = {crumbly = 3, soil = 1, rockmech_topsoil = 1},
 	sounds = default.node_sound_dirt_defaults(), drop = SOIL,
 	-- 挖：先變成鬆土再挖（經營模式就是撿起一份土），旁邊的表土也被擾動
@@ -758,7 +759,7 @@ for k = 1, NLEV - 1 do
 		description = S("Topsoil (@1/8 m)", tostring(k)),
 		drawtype = "nodebox", paramtype = "light",
 		node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.5 + k / NLEV, 0.5}},
-		tiles = {"default_grass.png", "default_dirt.png", {name = "default_dirt.png^default_grass_side.png", tileable_vertical = false}},
+		tiles = {"default_grass.png", "default_dirt.png", "default_dirt.png"},
 		is_ground_content = false, groups = {crumbly = 3, soil = 1, rockmech_topsoil = 1, not_in_creative_inventory = 1},
 		sounds = default.node_sound_dirt_defaults(), drop = "",
 		on_dig = function(pos, node, digger)
