@@ -34,6 +34,7 @@ local E_ROCK_REF = 7.5e6
 local PILE_I, PILE_Z = 1.68e-4, 1.34e-3      -- SP-III：每公尺寬 I (m⁴/m)、Z (m³/m)
 local STRUT_A, STRUT_I = 1.184e-2, 6.75e-5   -- H300×300×10×15：A (m²)、弱軸 I (m⁴)
 local PILE_R = E_STEEL * PILE_I * 12 / E_ROCK_REF      -- ≈ 0.054
+local STEEL_FRAC = 0.0191                    -- SP-III 每公尺寬斷面積 191 cm² → 一格 1 m³ 裡鋼的體積比例（倒塌變建築廢棄物）
 local STRUT_R = E_STEEL * STRUT_A / E_ROCK_REF         -- ≈ 0.32
 local BENT_R = 0.1
 local function n_scale() return cfg.model_scale or 1 end
@@ -300,7 +301,7 @@ end
 
 -- 板樁的支撐：埋入段 = 前後兩側（板的法向）都夾著東西（土、碎石、岩石…，空氣不算）的格數。
 -- 埋入 ≥ 2 m，或埋入 ≥ 1 m 且底下有東西頂著，才站得住；否則（開挖挖過板樁底、土從底下被掏空）整欄倒進坑裡：
--- 鋼板掉成物品（降伏過的不退）、夾著的材料掉下去（土 → 鬆土；碎石照原樣，含礦也是）、接在上面的支撐一起掉
+-- 鋼板變成建築廢棄物，跟夾著的材料（土 → 鬆土；碎石照原樣，含礦也是）照體積比例混成一格碎石掉下去；接在上面的支撐一起掉
 local function holds(n)
 	if n == "air" or IS_PILE[n] or n == STRUT then return false end
 	local def = core.registered_nodes[n]
@@ -329,22 +330,31 @@ local function topple(cells)
 			end
 		end
 	end
+	-- 每一格：夾著的材料（土 → 鬆土；碎石照原樣，品位、成分都在；軟岩 → 它的碎石）混進鋼板那一份的建築廢棄物，
+	-- 照體積比例（SP-III 每公尺寬斷面積 → 每格約 2% 是鋼）。碎石的合併規則照 assay.lua（含量照質量加權）
+	local A = rockmech.assay
+	local NLEV = rockmech.RUBBLE_LEVELS
 	for _, c in ipairs(cells) do
 		local keep = core.deserialize(core.get_meta(c):get_string("fill"))
 		local name = keep and keep.name
+		local base, k, comp
 		if name and core.get_item_group(name, "rockmech_topsoil") > 0 then
-			core.set_node(c, {name = rockmech.RUBBLE_SOIL})            -- 擾動過的土 → 鬆土
-		elseif name and rockmech.is_rubble(name) and core.registered_nodes[name] then
-			core.set_node(c, {name = name, param2 = keep.param2 or 0})  -- 碎石照原樣（品位、成分）
+			base, k, comp = rockmech.RUBBLE_SOIL, NLEV, A.new(0)              -- 擾動過的土 → 鬆土
+		elseif name and core.registered_nodes[name] and (rockmech.is_rubble(name) or rockmech.lith_of_node[name]) then
+			core.set_node(c, {name = name, param2 = keep.param2 or 0})
 			core.get_meta(c):from_table(keep.meta)
-		elseif name and rockmech.lith_of_node[name] then
-			core.set_node(c, {name = rockmech.rubble_for(name)})       -- 軟岩被打樁擠碎
+			local node = core.get_node(c)
+			base, k, comp = rockmech.rubble_for(name), rockmech.rubble_level[name] or NLEV, A.get(c, node)
+		end
+		if base then
+			local kd = NLEV * STEEL_FRAC
+			local b2, c2 = A.merge(base, k - kd, comp, rockmech.RUBBLE_DEBRIS, kd, A.new(0))
+			A.place(c, b2, k, c2)
 		else
-			core.remove_node(c)
+			A.place(c, rockmech.RUBBLE_DEBRIS, 1, A.new(0))                -- 沒記到材料（舊版打的）：只剩鋼板的廢料
 		end
 	end
 	local top = cells[1]
-	if not bent then core.add_item(cells[#cells], ItemStack(PILE)) end
 	for _, c in ipairs(cells) do
 		if rockmech.collapse and rockmech.collapse.update_affected_area then
 			core.after(0.1, rockmech.collapse.update_affected_area, vector.copy(c))
