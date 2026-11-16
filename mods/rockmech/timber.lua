@@ -613,6 +613,13 @@ local function break_post(top)
 		if IS_POST[core.get_node(p).name] then core.remove_node(p) end
 	end
 	falling = false
+	-- 鋼支保壓斷：變成建築廢棄物（H200 斷面積 × 長度，至少 1 級），放在柱腳往下掉；木柱壓斷就沒了
+	if steel and rockmech.RUBBLE_DEBRIS and rockmech.assay then
+		local NL = rockmech.RUBBLE_LEVELS
+		local lv = math.max(1, math.min(NL, math.floor(6.353e-3 * len * NL + 0.5)))
+		rockmech.assay.place(base, rockmech.RUBBLE_DEBRIS, lv, rockmech.assay.new(0))
+		core.after(0.1, rockmech.collapse.update_affected_area, vector.copy(base))
+	end
 	core.add_particlespawner({amount = 40, time = 0.3,
 		minpos = {x = base.x - 0.2, y = base.y - 0.4, z = base.z - 0.2}, maxpos = {x = base.x + 0.2, y = top.y + 0.4, z = base.z + 0.2},
 		minvel = {x = -2, y = -1, z = -2}, maxvel = {x = 2, y = 2, z = 2}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},

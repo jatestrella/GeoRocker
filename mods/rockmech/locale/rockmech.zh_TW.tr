@@ -2178,3 +2178,4 @@ Light H-beam@nRight-click the floor: a post up to the roof; a wall: a strut acro
 Heavy H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=重型 H 型鋼@n對地板按右鍵：往上到頂板當支柱；對牆面：水平架到對面當橫撐（每 1 m 一支）
 [H-beam] This span needs @1 (1 per metre), you have @2=[H 型鋼] 這段要 @1 支（每 1 m 一支），你只有 @2 支
 [H-beam] @1 m placed=[H 型鋼] 放好 @1 m
+[H-beam] An unsupported H-beam fell down=[H 型鋼] 懸空的 H 型鋼掉下來了

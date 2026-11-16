@@ -53,9 +53,9 @@ function rockmech.can_see(name, ability, no_items)
 	local player = name and core.get_player_by_name(name)
 	if not player then return false end
 	local meta = player:get_meta()
+	if meta:get_int("godmode:on") == 1 then return true end      -- /god：資訊全開（個人資料頁取消勾選的也顯示）
 	-- 個人資料頁取消勾選的能力：不自動顯示（儀器右鍵、岩芯判讀照常，no_items = false 那些）
 	if no_items and meta:get_string(HIDE .. ability) == "1" then return false end
-	if meta:get_int("godmode:on") == 1 then return true end
 	if meta:get_string(KNOW .. ability) == "1" then return true end
 	local a = AB[ability]
 	if a and a.item and not no_items and player:get_inventory():contains_item("main", a.item) then return true end

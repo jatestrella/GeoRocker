@@ -356,6 +356,69 @@ local function remove_strut(p, digger, refund)
 	if refund then give(digger, item, #cells) end
 	return #cells, item
 end
+-- H 型鋼壞掉（挫屈、跟著板樁倒、懸空掉下來）：變成建築廢棄物，量 = 鋼的體積（斷面積 × 長度，至少 1 級），
+-- 放在那一組最低的那一格，照碎石的規則往下掉。不退還物品
+local function beams_to_waste(cells)
+	if #cells == 0 then return end
+	local vol, low = 0, cells[1]
+	for _, c in ipairs(cells) do
+		local info = HB_INFO[core.get_node(c).name]
+		vol = vol + (info and HB[info.kind].A or STRUT_A)
+		if c.y < low.y then low = c end
+	end
+	for _, c in ipairs(cells) do core.remove_node(c) end
+	local NL = rockmech.RUBBLE_LEVELS
+	local lv = math.max(1, math.min(NL, math.floor(vol * NL + 0.5)))
+	rockmech.assay.place(low, rockmech.RUBBLE_DEBRIS, lv, rockmech.assay.new(0))
+	if rockmech.collapse and rockmech.collapse.update_affected_area then
+		core.after(0.1, rockmech.collapse.update_affected_area, vector.copy(low))
+	end
+end
+-- 懸空檢測：彼此相連（六個面相鄰）的一組 H 型鋼，只要有一格碰到實心的東西（地面、岩壁、土、碎石、板樁）就撐得住；
+-- 整組都沒碰到 → 整組掉下來變建築廢棄物。p 附近 ±r 找起點，沿著相連的 H 型鋼走（一組最多 MAX_GROUP 格，太大的不處理）
+local MAX_GROUP = 800
+local function supports_beam(n)
+	if n == "air" or HB_INFO[n] then return false end
+	local def = core.registered_nodes[n]
+	return def and def.walkable ~= false
+end
+local SIX = {{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 1, z = 0}, {x = 0, y = -1, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}
+local function check_hbeams_near(p, r)
+	local seen = {}
+	for _, q in ipairs(core.find_nodes_in_area(vector.subtract(p, r), vector.add(p, r), HB_NODES)) do
+		local h = core.hash_node_position(q)
+		if not seen[h] then
+			seen[h] = true
+			local comp, stack, supported = {}, {q}, false
+			while #stack > 0 and #comp < MAX_GROUP do
+				local c = table.remove(stack)
+				comp[#comp + 1] = c
+				for _, d in ipairs(SIX) do
+					local nb = vector.add(c, d)
+					local nn = core.get_node(nb).name
+					if HB_INFO[nn] then
+						local hn = core.hash_node_position(nb)
+						if not seen[hn] then seen[hn] = true; stack[#stack + 1] = nb end
+					elseif supports_beam(nn) then
+						supported = true
+					end
+				end
+			end
+			if not supported and #stack == 0 then
+				beams_to_waste(comp)
+				tell_near(q, S("[H-beam] An unsupported H-beam fell down"))
+				core.log("action", ("[rockmech] H 型鋼懸空掉落 %s（%d 格）"):format(core.pos_to_string(q), #comp))
+			end
+		end
+	end
+end
+rockmech.retain_check_beams = check_hbeams_near
+-- 載入區塊時也檢查（舊存檔裡已經懸空的 H 型鋼、崩落時沒在範圍內的）
+core.register_lbm({
+	label = "rockmech: 懸空的 H 型鋼掉下來", name = "rockmech:hbeam_hanging", nodenames = {"group:rockmech_hbeam"}, run_at_every_load = true,
+	action = function(pos) core.after(1, check_hbeams_near, vector.copy(pos), 0) end,
+})
+
 for _, name in ipairs(HB_NODES) do
 	core.override_item(name, {on_dig = function(pos, node, digger)
 		if digger and core.is_protected(pos, digger:get_player_name()) then return false end
@@ -399,9 +462,10 @@ local function topple(cells)
 		if info and info.state == "bent" then bent = true end
 		for _, v in ipairs({{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
 			local q = vector.add(c, v)
-			if HB_INFO[core.get_node(q).name] then
-				local n, item = remove_strut(q, nil, false)
-				core.add_item(q, ItemStack(item .. " " .. n))
+			if HB_INFO[core.get_node(q).name] then      -- 接在上面的 H 型鋼跟著壞掉：變建築廢棄物
+				local sc, ends = strut_line(q)
+				beams_to_waste(sc)
+				for _, e in ipairs(ends) do refresh_wale(e) end
 			end
 		end
 	end
@@ -438,6 +502,7 @@ local function topple(cells)
 	core.sound_play("default_dug_metal", {pos = top, gain = 1.0, max_hear_distance = 32}, true)
 	tell_near(top, S("[Sheet pile] The sheet pile at @1 lost its embedment and fell into the pit", core.pos_to_string(top)))
 	core.log("action", ("[rockmech] 鋼板樁倒塌（埋入段被掏空）%s（%d m）"):format(core.pos_to_string(top), #cells))
+	core.after(0.3, check_hbeams_near, vector.copy(top), #cells + 2)
 end
 -- p 附近（±r）的板樁欄：站不住的倒掉
 local function check_piles_near(p, r)
@@ -452,8 +517,8 @@ local function check_piles_near(p, r)
 end
 rockmech.retain_check_piles = check_piles_near
 core.register_on_dignode(function(pos, oldnode)
-	if IS_PILE[oldnode.name] or HB_INFO[oldnode.name] then return end
-	core.after(0.3, check_piles_near, vector.copy(pos), 2)
+	if not IS_PILE[oldnode.name] and not HB_INFO[oldnode.name] then core.after(0.3, check_piles_near, vector.copy(pos), 2) end
+	core.after(0.4, check_hbeams_near, vector.copy(pos), 2)      -- 挖掉撐著 H 型鋼的東西：懸空的掉下來
 end)
 for name in pairs(IS_PILE) do
 	core.override_item(name, {on_dig = function(pos, node, digger)
@@ -504,9 +569,10 @@ local function bend_column(cells)
 end
 local function buckle_strut(p)
 	local cells, ends = strut_line(p)
-	for _, c in ipairs(cells) do core.remove_node(c) end
+	local mid = vector.copy(cells[math.ceil(#cells / 2)])
+	beams_to_waste(cells)           -- 挫屈：整支變建築廢棄物
 	for _, e in ipairs(ends) do refresh_wale(e) end
-	local mid = cells[math.ceil(#cells / 2)]
+	core.after(0.2, check_hbeams_near, mid, 3)      -- 靠它撐著的其他 H 型鋼
 	core.add_particlespawner({amount = 30, time = 0.3,
 		minpos = vector.subtract(mid, 0.4), maxpos = vector.add(mid, 0.4),
 		minvel = {x = -2, y = -1, z = -2}, maxvel = {x = 2, y = 2, z = 2}, minacc = {x = 0, y = -9.8, z = 0}, maxacc = {x = 0, y = -9.8, z = 0},
@@ -531,6 +597,7 @@ function rockmech.retain_fem_check(job, res, meta)
 	-- 埋入段被掏空的板樁先倒掉（崩落連鎖把土從板樁底下帶走，不會觸發挖掘的檢查）
 	local half = math.floor((n - 2) / 2)
 	check_piles_near(vector.add(lo, half), half)
+	check_hbeams_near(vector.add(lo, half), half)    -- 崩落把撐著 H 型鋼的土帶走：懸空的掉下來
 	-- 板樁：每一欄取最大的彎矩
 	local done = {}
 	local My = pile_my()

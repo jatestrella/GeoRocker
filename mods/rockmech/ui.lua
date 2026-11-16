@@ -274,7 +274,8 @@ local active = {}      -- 玩家名稱 → {text, key, untl}
 local hud_timer = 0
 
 local function hud_enabled(player)
-	return player:get_meta():get_string(HUD_META) ~= "0"
+	local meta = player:get_meta()
+	return meta:get_int("godmode:on") == 1 or meta:get_string(HUD_META) ~= "0"      -- /god：資訊全開
 end
 
 -- 文字的寬高（像素，估計）：中日韓字 18 px、其他 9 px，一行 20 px
