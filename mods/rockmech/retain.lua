@@ -440,8 +440,10 @@ end
 -- 板樁的支撐：埋入段 = 前後兩側（板的法向）都夾著東西（土、碎石、岩石…，空氣不算）的格數。
 -- 埋入 ≥ 2 m，或埋入 ≥ 1 m 且底下有東西頂著，才站得住；否則（開挖挖過板樁底、土從底下被掏空）整欄倒進坑裡：
 -- 鋼板變成建築廢棄物，跟夾著的材料（土 → 鬆土；碎石照原樣，含礦也是）照體積比例混成一格碎石掉下去；接在上面的支撐一起掉
+-- 隔壁是另一片板樁也算夾著（轉角：一面牆的端板正對著另一面牆的板樁，兩片咬在一起）
 local function holds(n)
-	if n == "air" or IS_PILE[n] or HB_INFO[n] then return false end
+	if IS_PILE[n] then return true end
+	if n == "air" or HB_INFO[n] then return false end
 	local def = core.registered_nodes[n]
 	return def and def.walkable ~= false
 end
