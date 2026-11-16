@@ -68,21 +68,39 @@ local function def_with(t)
 	for k, v in pairs(t) do o[k] = v end
 	return o
 end
-local function faces(front) return {DIRT, DIRT, DIRT, DIRT, DIRT, front} end      -- +Y −Y +X −X +Z −Z
-core.register_node(PILE, def_with({
-	description = S("Sheet pile\nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig", tostring(PILE_LEN)),
-	short_description = S("Sheet pile"),
-	tiles = faces(STEEL),
-	inventory_image = "[fill:16x16:#00000000^[fill:10x14:3,1:#5c6268^[fill:2x14:5,1:#41474c^[fill:2x14:9,1:#41474c",
-}))
-core.register_node(PILE_W, def_with({
-	description = S("Sheet pile"), tiles = faces(WALE_FACE), drop = PILE,
-	groups = {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
-}))
-core.register_node(PILE_B, def_with({
-	description = S("Sheet pile (yielded)"), tiles = faces(RUST), drop = "",
-	groups = {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
-}))
+-- 填充材料（打進去的那一格原本是什麼）：土 → 泥土外觀；碎石、鬆土、軟岩（打樁把它擠碎）→ 碎石外觀。
+-- 含礦、品位不同的碎石都用同一個外觀；原本的方塊、品位、成分記在板樁格的 meta（fill），拔起來照原樣填回去
+local RUBBLE_TEX = (function()
+	local d = rockmech.RUBBLE and core.registered_nodes[rockmech.RUBBLE]
+	local t = d and d.tiles and d.tiles[1]
+	if type(t) == "table" then t = t.name end
+	return t or "[fill:16x16:#7a7470"
+end)()
+local FILLS = {soil = {suffix = "", tex = DIRT}, rubble = {suffix = "_r", tex = RUBBLE_TEX}}
+local STATES = {plain = {suffix = "", face = STEEL}, wale = {suffix = "_wale", face = WALE_FACE}, bent = {suffix = "_bent", face = RUST}}
+local PILE_INFO = {}          -- 方塊名稱 → {fill, state}
+local function pile_name(fill, state) return "rockmech:sheet_pile" .. FILLS[fill].suffix .. STATES[state].suffix end
+for fk, f in pairs(FILLS) do
+	for sk, st in pairs(STATES) do
+		local name = pile_name(fk, sk)
+		local first = fk == "soil" and sk == "plain"       -- 物品就是這一種
+		local t = f.tex
+		core.register_node(name, def_with({
+			description = first and S("Sheet pile\nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig", tostring(PILE_LEN))
+				or (sk == "bent" and S("Sheet pile (yielded)") or S("Sheet pile")),
+			short_description = first and S("Sheet pile") or nil,
+			tiles = {t, t, t, t, t, st.face},      -- +Y −Y +X −X +Z −Z
+			inventory_image = first and "[fill:16x16:#00000000^[fill:10x14:3,1:#5c6268^[fill:2x14:5,1:#41474c^[fill:2x14:9,1:#41474c" or nil,
+			drop = sk == "bent" and "" or PILE,
+			groups = first and {cracky = 2, rockmech_retain = 1} or {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
+		}))
+		PILE_INFO[name] = {fill = fk, state = sk}
+		IS_PILE[name] = true
+	end
+end
+-- 會受力的板樁（一般、有圍令；降伏的不再算彎矩）
+local PILE_LIVE = {}
+for name, i in pairs(PILE_INFO) do if i.state ~= "bent" then PILE_LIVE[#PILE_LIVE + 1] = name end end
 -- 支撐（H 型鋼，nodebox）
 base = {
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
@@ -148,8 +166,14 @@ core.override_item(PILE, {on_place = function(itemstack, placer, pointed)
 		return itemstack
 	end
 	for _, p in ipairs(cells) do
-		core.swap_node(p, {name = PILE, param2 = dir})
-		core.get_meta(p):from_table(nil)
+		-- 原本那一格（方塊、param2 品位、meta 成分）記下來，拔樁時填回去
+		local old = core.get_node(p)
+		local meta = core.get_meta(p)
+		local keep = core.serialize({name = old.name, param2 = old.param2, meta = meta:to_table()})
+		local fill = core.get_item_group(old.name, "rockmech_topsoil") > 0 and "soil" or "rubble"
+		core.swap_node(p, {name = pile_name(fill, "plain"), param2 = dir})
+		meta:from_table(nil)
+		meta:set_string("fill", keep)
 		collapse.mark_excavated(p)          -- 天然地形那一解照原本的材料（femstress.lua）
 		pile_info(p)
 	end
@@ -179,8 +203,9 @@ end
 -- 板樁換樣子：有支撐接著 → 有圍令；沒有 → 一般（降伏過的不變）
 local function refresh_wale(p)
 	local n = core.get_node(p)
-	if n.name ~= PILE and n.name ~= PILE_W then return end
-	local want = strut_at(p) and PILE_W or PILE
+	local info = PILE_INFO[n.name]
+	if not info or info.state == "bent" then return end
+	local want = pile_name(info.fill, strut_at(p) and "wale" or "plain")
 	if want ~= n.name then core.swap_node(p, {name = want, param2 = n.param2}) end
 end
 -- 一支支撐（從 p 沿軸向兩邊連續的支撐格）：回傳 格清單、兩端外面那一格
@@ -272,14 +297,24 @@ for name in pairs(IS_PILE) do
 		local cells = pile_column(pos)
 		local bent = false
 		for _, c in ipairs(cells) do
-			if core.get_node(c).name == PILE_B then bent = true end
+			local info = PILE_INFO[core.get_node(c).name]
+			if info and info.state == "bent" then bent = true end
 			-- 接在這片上的支撐跟著拆、退還
 			for _, v in ipairs({{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
 				local q = vector.add(c, v)
 				if core.get_node(q).name == STRUT then remove_strut(q, digger, true) end
 			end
 		end
-		for _, c in ipairs(cells) do core.remove_node(c) end      -- 拔掉：原本的土已經被擠開，留下空的孔
+		-- 拔掉：每一格照打下去時記住的原樣填回去（土、碎石、礦石的品位和成分）；沒記到的（舊版打的）留下空的孔
+		for _, c in ipairs(cells) do
+			local keep = core.deserialize(core.get_meta(c):get_string("fill"))
+			if keep and keep.name and core.registered_nodes[keep.name] then
+				core.set_node(c, {name = keep.name, param2 = keep.param2 or 0})
+				core.get_meta(c):from_table(keep.meta)
+			else
+				core.remove_node(c)
+			end
+		end
 		if not bent then give(digger, PILE, 1) end
 		if rockmech.fem_queue then rockmech.fem_queue(pos, 1, false, false) end
 		return true
@@ -293,7 +328,8 @@ end
 local function bend_column(cells)
 	for _, c in ipairs(cells) do
 		local n = core.get_node(c)
-		core.swap_node(c, {name = PILE_B, param2 = n.param2})
+		local info = PILE_INFO[n.name]
+		core.swap_node(c, {name = pile_name(info and info.fill or "soil", "bent"), param2 = n.param2})
 		core.get_meta(c):set_string("infotext", S("Sheet pile (yielded)"))
 	end
 	-- 降伏的板樁不再有圍令；接在上面的支撐照舊（還頂著）
@@ -331,7 +367,7 @@ function rockmech.retain_fem_check(job, res, meta)
 	-- 板樁：每一欄取最大的彎矩
 	local done = {}
 	local My = pile_my()
-	for _, p in ipairs(core.find_nodes_in_area(lo, hi, {PILE, PILE_W})) do
+	for _, p in ipairs(core.find_nodes_in_area(lo, hi, PILE_LIVE)) do
 		local key = p.x .. "," .. p.z
 		if not done[key] then
 			done[key] = true
@@ -389,9 +425,10 @@ end
 -- 應力解的勁度比（femstress.lua 的 make_job：support_ids.retain_r，方塊 id → 勁度比）
 core.register_on_mods_loaded(function()
 	rockmech.support_ids = rockmech.support_ids or {}
-	rockmech.support_ids.retain_r = {
-		[core.get_content_id(PILE)] = PILE_R, [core.get_content_id(PILE_W)] = PILE_R,
-		[core.get_content_id(PILE_B)] = PILE_R * BENT_R, [core.get_content_id(STRUT)] = STRUT_R,
-	}
+	local r = {[core.get_content_id(STRUT)] = STRUT_R}
+	for name, info in pairs(PILE_INFO) do
+		r[core.get_content_id(name)] = info.state == "bent" and PILE_R * BENT_R or PILE_R
+	end
+	rockmech.support_ids.retain_r = r
 end)
 rockmech.retain = {PILE_R = PILE_R, STRUT_R = STRUT_R, pile_my = pile_my, strut_cap = strut_cap, PILE_LEN = PILE_LEN}
