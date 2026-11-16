@@ -297,6 +297,79 @@ local function pile_column(p)
 	end
 	return cells
 end
+
+-- 板樁的支撐：埋入段 = 前後兩側（板的法向）都夾著東西（土、碎石、岩石…，空氣不算）的格數。
+-- 埋入 ≥ 2 m，或埋入 ≥ 1 m 且底下有東西頂著，才站得住；否則（開挖挖過板樁底、土從底下被掏空）整欄倒進坑裡：
+-- 鋼板掉成物品（降伏過的不退）、夾著的材料掉下去（土 → 鬆土；碎石照原樣，含礦也是）、接在上面的支撐一起掉
+local function holds(n)
+	if n == "air" or IS_PILE[n] or n == STRUT then return false end
+	local def = core.registered_nodes[n]
+	return def and def.walkable ~= false
+end
+local function pile_supported(cells)
+	local emb = 0
+	for _, c in ipairs(cells) do
+		local dv = core.facedir_to_dir(core.get_node(c).param2 % 4)
+		if holds(core.get_node(vector.add(c, dv)).name) and holds(core.get_node(vector.subtract(c, dv)).name) then emb = emb + 1 end
+	end
+	local bottom = cells[#cells]
+	local below = bottom and holds(core.get_node({x = bottom.x, y = bottom.y - 1, z = bottom.z}).name)
+	return emb >= 2 or (emb >= 1 and below), emb
+end
+local function topple(cells)
+	local bent = false
+	for _, c in ipairs(cells) do
+		local info = PILE_INFO[core.get_node(c).name]
+		if info and info.state == "bent" then bent = true end
+		for _, v in ipairs({{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
+			local q = vector.add(c, v)
+			if core.get_node(q).name == STRUT then
+				local n = remove_strut(q, nil, false)
+				core.add_item(q, ItemStack(STRUT .. " " .. n))
+			end
+		end
+	end
+	for _, c in ipairs(cells) do
+		local keep = core.deserialize(core.get_meta(c):get_string("fill"))
+		local name = keep and keep.name
+		if name and core.get_item_group(name, "rockmech_topsoil") > 0 then
+			core.set_node(c, {name = rockmech.RUBBLE_SOIL})            -- 擾動過的土 → 鬆土
+		elseif name and rockmech.is_rubble(name) and core.registered_nodes[name] then
+			core.set_node(c, {name = name, param2 = keep.param2 or 0})  -- 碎石照原樣（品位、成分）
+			core.get_meta(c):from_table(keep.meta)
+		elseif name and rockmech.lith_of_node[name] then
+			core.set_node(c, {name = rockmech.rubble_for(name)})       -- 軟岩被打樁擠碎
+		else
+			core.remove_node(c)
+		end
+	end
+	local top = cells[1]
+	if not bent then core.add_item(cells[#cells], ItemStack(PILE)) end
+	for _, c in ipairs(cells) do
+		if rockmech.collapse and rockmech.collapse.update_affected_area then
+			core.after(0.1, rockmech.collapse.update_affected_area, vector.copy(c))
+		end
+	end
+	core.sound_play("default_dug_metal", {pos = top, gain = 1.0, max_hear_distance = 32}, true)
+	tell_near(top, S("[Sheet pile] The sheet pile at @1 lost its embedment and fell into the pit", core.pos_to_string(top)))
+	core.log("action", ("[rockmech] 鋼板樁倒塌（埋入段被掏空）%s（%d m）"):format(core.pos_to_string(top), #cells))
+end
+-- p 附近（±r）的板樁欄：站不住的倒掉
+local function check_piles_near(p, r)
+	local seen = {}
+	for _, q in ipairs(core.find_nodes_in_area(vector.subtract(p, r), vector.add(p, r), {"group:rockmech_retain"})) do
+		if IS_PILE[core.get_node(q).name] and not seen[q.x .. "," .. q.z] then
+			seen[q.x .. "," .. q.z] = true
+			local cells = pile_column(q)
+			if #cells > 0 and not pile_supported(cells) then topple(cells) end
+		end
+	end
+end
+rockmech.retain_check_piles = check_piles_near
+core.register_on_dignode(function(pos, oldnode)
+	if IS_PILE[oldnode.name] or oldnode.name == STRUT then return end
+	core.after(0.3, check_piles_near, vector.copy(pos), 2)
+end)
 for name in pairs(IS_PILE) do
 	core.override_item(name, {on_dig = function(pos, node, digger)
 		if digger and core.is_protected(pos, digger:get_player_name()) then return false end
@@ -370,6 +443,9 @@ function rockmech.retain_fem_check(job, res, meta)
 		return c, x, y, z
 	end
 	local lo, hi = vector.add(a, 1), vector.add(a, n - 2)
+	-- 埋入段被掏空的板樁先倒掉（崩落連鎖把土從板樁底下帶走，不會觸發挖掘的檢查）
+	local half = math.floor((n - 2) / 2)
+	check_piles_near(vector.add(lo, half), half)
 	-- 板樁：每一欄取最大的彎矩
 	local done = {}
 	local My = pile_my()

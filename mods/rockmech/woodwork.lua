@@ -739,6 +739,19 @@ core.register_node(TOPSOIL, {
 		return ok
 	end,
 })
+-- 底土：表土底下的土，外觀全是泥土（頂面沒有草），其他都跟表土一樣（同一組力學參數、挖了變鬆土、懸空會掉）。
+-- 地圖生成時只有最上面那層是表土（有草），往下是底土：挖下去的坑底不會露出草
+local SUBSOIL = rockmech.modname .. ":subsoil"
+rockmech.SUBSOIL = SUBSOIL
+do
+	local d = core.registered_nodes[TOPSOIL]
+	core.register_node(SUBSOIL, {
+		description = S("Soil"), short_description = S("Soil"),
+		tiles = {"default_dirt.png"},
+		is_ground_content = false, groups = d.groups, sounds = d.sounds, drop = d.drop, on_dig = d.on_dig,
+	})
+	TOPSOIL_K[SUBSOIL] = NLEV
+end
 -- 草叢：長在表土上的裝飾，人、車、碎石都穿得過，蓋東西直接取代，底下的表土沒了就消失（不掉東西）。
 -- 地圖產生時撒在整格表土上（mapgen.lua）；不是大地材料，不進應力解
 core.register_node(rockmech.modname .. ":grass", {

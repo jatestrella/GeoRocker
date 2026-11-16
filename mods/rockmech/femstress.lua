@@ -65,7 +65,7 @@ local function set_press(job, g, to_cell, scale)
 end
 
 -- 土的參數表（下面 cid_tables 建）：粗網格、細網格都用，先宣告
-local K0_SOIL, gamma_of_cid, soil_cid, topsoil_f, cid_tables, gamma_s
+local K0_SOIL, gamma_of_cid, soil_cid, soil_set, topsoil_f, cid_tables, gamma_s
 
 -- 粗網格（子模型的外圍）：同樣的格數，每格 C³ 公尺，一半以上是岩石就算實心。
 -- 原點對齊 C 的倍數，附近的開挖共用同一個粗網格，上次的解當初始值。
@@ -112,7 +112,7 @@ local function make_coarse(pos)
 					local id = data[row + dx]
 					if bonded[id] or (under and id == ignore) then
 						count = count + 1
-						if use_soil and id == soil_cid then nsoil = nsoil + 1 end
+						if use_soil and soil_set[id] then nsoil = nsoil + 1 end
 					elseif rubble[id] == 1 then loose = loose + 1 end
 				end
 			end end
@@ -161,6 +161,9 @@ function cid_tables()
 		end
 	end
 	soil_cid = core.get_content_id("rockmech:topsoil")
+	-- 整格的土元素：表土和底土（woodwork.lua；底土就是頂面沒有草的表土）
+	soil_set = {[soil_cid] = true}
+	if core.registered_nodes["rockmech:subsoil"] then soil_set[core.get_content_id("rockmech:subsoil")] = true end
 	K0_SOIL = 1 - math.sin(math.rad(rockmech.materials.defaults("rockmech:topsoil").phi))
 end
 function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
@@ -172,7 +175,7 @@ local function loose_above(g, gx, ly, gz, only_nat)
 	local sy, sz = g.nx, g.nx * g.ny
 	for y = ly, g.ny - 1 do
 		local cid = g.data[1 + gx + y * sy + gz * sz]
-		local f = (cid ~= soil_cid or not fcfg.soil) and g.loose_of[cid]
+		local f = (not soil_set[cid] or not fcfg.soil) and g.loose_of[cid]
 		if not f then break end
 		if not only_nat or topsoil_f[cid] then h, q = h + f, q + f * gamma_s(cid) end
 	end
@@ -245,7 +248,7 @@ local function make_job(pos)
 				soft = retain_r[cid]; job.retain = job.retain or {}; job.retain[c] = (g.p2[gi] % 2 == 1) and 1 or 3
 			end
 			-- 整格表土：土的元素（勁度跟碎石一樣軟，但有現地應力、受重力；materials.lua）
-			local soil = fcfg.soil and cid == soil_cid
+			local soil = fcfg.soil and soil_set[cid]
 			if soil then soft, gamma = true, gam_soil; job.soil[c], job.gam[c] = true, gam_soil end
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			local sv = gamma * math.max(0, top + 0.5 - wy) + (wy <= top and sv_soil or 0)     -- kPa
@@ -304,7 +307,7 @@ local function make_job(pos)
 						local nx_, nz_ = gx + d[1], gz + d[2]
 						if nx_ >= 0 and nz_ >= 0 and nx_ < g.nx and nz_ < g.nz then
 							local cid = g.data[1 + nx_ + ly * gsy + nz_ * gsz]
-							local f = (cid ~= soil_cid or not fcfg.soil) and g.loose_of[cid]
+							local f = (not soil_set[cid] or not fcfg.soil) and g.loose_of[cid]
 							if f and (not only_nat or topsoil_f[cid]) then
 								local _, q = loose_above(g, nx_, ly + 1, nz_, only_nat)
 								list[#list + 1], list[#list + 2], list[#list + 3] = c, d[3], K0_S * (q + gamma_s(cid) * f / 2)

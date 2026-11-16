@@ -118,6 +118,7 @@ local c_soil, c_log, c_leaf, c_apple, c_grass = {}, nil, nil, nil, nil
 local GRASS_P = 0.2           -- 草叢：整格表土上，兩成的欄長一叢（不滿格的表土上會浮空，不長）
 -- 覆土（rockmech_soil_cover）：岩性方塊（含節理變體）→ 表土
 local c_cover_soil = core.registered_nodes["rockmech:topsoil"] and core.get_content_id("rockmech:topsoil")
+local c_subsoil = core.registered_nodes["rockmech:subsoil"] and core.get_content_id("rockmech:subsoil")
 local lith_cid = {[c_stone] = true}      -- 這個檔案在地圖生成的 Lua 環境跑（沒有 rockmech）：用上面的岩性方塊表
 for _, t in pairs(c_var) do for _, id in pairs(t) do lith_cid[id] = true end end
 for _, t in pairs(c_plane or {}) do for _, id in pairs(t) do lith_cid[id] = true end end
@@ -177,7 +178,9 @@ local function lay_topsoil(area, minp, maxp)
 					if y > maxp.y then break end
 					local vi = area:index(x, y, z)
 					if data[vi] ~= c_air then break end
-					data[vi] = c_soil[dy <= full and NL or r]
+					-- 最上面那層是表土（有草）；底下的整格是底土（頂面沒有草，挖下去的坑底不會露出草）
+					if dy <= full and (dy < full or r > 0) and c_subsoil then data[vi] = c_subsoil
+					else data[vi] = c_soil[dy <= full and NL or r] end
 					n_soil = n_soil + 1
 					if dy <= full then done = dy end
 				end
@@ -374,7 +377,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 			for z = emin.z, emax.z do for y = ylo, yhi do
 				local vi = area:index(emin.x, y, z)
 				for _ = emin.x, emax.x do
-					if lith_cid[data[vi]] then data[vi] = c_cover_soil; changed = true end
+					if lith_cid[data[vi]] then data[vi] = (y < sy and c_subsoil) or c_cover_soil; changed = true end
 					vi = vi + 1
 				end
 			end end
