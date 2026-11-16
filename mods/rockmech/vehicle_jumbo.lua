@@ -205,17 +205,28 @@ do
 	end
 	rockmech.vehicle_jumbo_holes = hole_list   -- 測試用
 
+	-- 坑道坡度（設計圖畫面切換）：nil 水平；n = 下坡，每往前 n m 降 1 m。
+	-- 鑽孔時每個孔記下設計底板（meta floor，drilling.lua 的爆破只破碎到這一層）：平常是最底排孔那層，
+	-- 下坡時離上次降的開挖面往前滿 n m 的那一輪，底板低一格（炸完地板降 1 m，鑽堡開下去下一輪接著挖）
+	local NEXT_SLOPE = {[0] = 8, [8] = 5, [5] = 0}      -- 水平 → 1:8 → 1:5 → 水平（0 = 水平）
+	local function slope_text(n)
+		if not n then return S("Level") end
+		return S("Decline 1:@1 (@2%)", ("%d"):format(n), ("%d"):format(math.floor(100 / n + 0.5)))
+	end
+	rockmech.vehicle_jumbo_slope_text = slope_text
+
 	function def.hud(self)
 		local plan = pattern(self)
-		local s = "\n" .. S("Blast hole pattern @1 × @2", ("%d"):format(plan.w), ("%d"):format(plan.h))
+		local s = "\n" .. S("Blast hole pattern @1 × @2", ("%d"):format(plan.w), ("%d"):format(plan.h)) .. (self.slope and ("  " .. S("Tunnel: @1", slope_text(self.slope))) or "")
 		if self.drill then s = s .. "  " .. S("Drilling @1 / @2", ("%d"):format(self.drill.done), ("%d"):format(#self.drill.list)) end
 		return s
 	end
 	function def.keys(self) return {{"E", S("Drill to pattern"), on = self.drill ~= nil}, {S("Space"), S("Edit pattern")}} end
 	function def.on_load(self, data)
 		if data.plan and data.plan.cells and #data.plan.cells == data.plan.w * data.plan.h then self.plan = data.plan end
+		self.slope, self.slope_ref = data.slope, data.slope_ref
 	end
-	function def.on_save(self, data) data.plan = self.plan end
+	function def.on_save(self, data) data.plan, data.slope, data.slope_ref = self.plan, self.slope, self.slope_ref end
 	function def.on_spawn(self) rest_booms(self) end
 	carrier_move(def, FRONT, function(self) return self.drill ~= nil end)
 
@@ -238,6 +249,7 @@ do
 					if rockmech.make_hole(h.under, h.above) then
 						local meta = core.get_meta(h.above)
 						meta:set_string("plan", h.plan)
+						if h.floor then meta:set_string("floor", tostring(h.floor)) end
 						meta:set_string("infotext", h.plan == "r" and S("Drill hole (design: relief hole, do not charge)") or S("Drill hole (design: charged hole)"))
 					end
 					dr.done = dr.done + 1
@@ -277,6 +289,12 @@ do
 			core.formspec_escape(S("Width @1", ("%d"):format(plan.w))), y, y)
 		fs[#fs + 1] = ("label[3.5,%.2f;%s]button[4.6,%.2f;0.7,0.7;h_dec;−]button[5.35,%.2f;0.7,0.7;h_inc;+]"):format(y + 0.35,
 			core.formspec_escape(S("Height @1", ("%d"):format(plan.h))), y, y)
+		-- 坑道坡度：研發「勻滑開炸」才能設定
+		if rockmech.eff_smooth_blast and not rockmech.eff_smooth_blast(self.owner) then
+			fs[#fs + 1] = ("label[6.3,%.2f;%s]"):format(y + 0.35, core.formspec_escape(S("Decline: research @1 first", S("Smooth blasting"))))
+		else
+			fs[#fs + 1] = ("button[6.3,%.2f;%.2f,0.7;slope;%s]"):format(y, math.max(2.6, W - 6.8), core.formspec_escape(slope_text(self.slope)))
+		end
 		y = y + 1.0
 		fs[#fs + 1] = ("button[0.5,%.2f;2.6,0.8;p_all;%s]button[3.2,%.2f;2.6,0.8;p_cut;%s]button[5.9,%.2f;2.6,0.8;p_cut4;%s]"):format(
 			y, core.formspec_escape(S("Charge all")), y, core.formspec_escape(S("Center relief-hole cut")), y, core.formspec_escape(S("Cross relief-hole cut")))
@@ -319,6 +337,11 @@ do
 		if fields.p_cut then plan.cells = preset(plan.w, plan.h, "cut") end
 		if fields.p_cut4 then plan.cells = preset(plan.w, plan.h, "cut4") end
 		if fields.p_none then plan.cells = preset(plan.w, plan.h, "none") end
+		if fields.slope then
+			local n = NEXT_SLOPE[self.slope or 0]
+			self.slope = n ~= 0 and n or nil
+			self.slope_ref = nil          -- 換坡度：下一輪起算
+		end
 		show_plan(self, name)
 		return true
 	end)
@@ -331,8 +354,22 @@ do
 			if #list == 0 then
 				self.msg = S("No rock face to drill within @1 m ahead (point the front at the rock wall)", ("%d"):format(REACH + 1))
 			else
+				-- 設計底板（研發「勻滑開炸」才有）：最底排孔那層；下坡時離上次降的開挖面滿 slope m 就低一格
+				local smooth = rockmech.eff_smooth_blast and rockmech.eff_smooth_blast(self.owner)
+				local y0 = V.ground_y(ctx.pos, def.half)
+				local fx, fz = 0, 0
+				for _, h in ipairs(list) do fx, fz = fx + h.under.x, fz + h.under.z end
+				fx, fz = fx / #list, fz / #list
+				local drop = false
+				if self.slope and smooth then
+					local r = self.slope_ref
+					local adv = r and ((fx - r.x) * ctx.s.x + (fz - r.z) * ctx.s.z) or math.huge
+					if adv >= self.slope - 0.5 then drop = true; self.slope_ref = {x = fx, z = fz} end
+				end
+				if smooth then for _, h in ipairs(list) do h.floor = y0 - (drop and 1 or 0) end end
+				if drop then self.msg = S("This round lowers the floor by 1 m") end
 				self.drill = {list = list, next = 1, done = 0, booms = {{}, {}}}
-				self.msg = nil
+				if not drop then self.msg = nil end
 			end
 			update_hud(self)
 		elseif ctrl.jump and d and not self.drill then

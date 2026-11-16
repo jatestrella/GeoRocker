@@ -1961,6 +1961,15 @@ function V.register(kind, def)
 				if h > hmax and not steep then steep = S("Step too high (@1 m > @2 m)", ("%.1f"):format(h), ("%.1f"):format(hmax)) end
 			end
 			if steep ~= self.steep then self.steep = steep; update_hud(self) end
+			-- 坡度顯示：車頭方向整台車長的平均坡度（跟爬坡判斷同一個量），每 0.5 s 更新，變了才重畫 HUD
+			if def.max_grade and d then
+				self.gr_t = (self.gr_t or 1) + dtime
+				if self.gr_t >= 0.5 then
+					self.gr_t = 0
+					local pct = math.floor(math.tan(travel_grade(pos, yaw, def, 1)) * 100 + 0.5)
+					if pct ~= self.grade_pct then self.grade_pct = pct; update_hud(self) end
+				end
+			end
 			if ctx.speed ~= 0 and on_shotcrete(pos, def, dir) then ctx.speed = ctx.speed * rockmech.cfg.shotcrete_speed end
 			if def.move then def.move(self, ctx) end
 			if def.pushed then

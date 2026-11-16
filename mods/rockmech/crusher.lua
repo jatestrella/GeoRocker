@@ -240,6 +240,12 @@ function rockmech.support_mult_at(pos)
 	local p = core.get_connected_players()[1]
 	return p and rockmech.eff_support_mult(p:get_player_name()) or 1
 end
+-- 勻滑開炸（平滑爆破）：鑽堡的孔記下設計底板，炸完地板平整、可以開下坡坑道（vehicle_jumbo.lua）。沒有研發的地圖（非經營模式）直接有
+function rockmech.eff_smooth_blast(owner)
+	return not rockmech.cfg.career or rockmech.research_level(owner, "smooth_blast") >= 1
+end
+-- 推土機推力：松土的可裂性門檻（岩體強度 σcm）每級 +20%（vehicle_dozer.lua）
+function rockmech.eff_rip_sigcm(owner) return rockmech.cfg.dozer_rip_sigcm * (1 + 0.2 * rockmech.research_level(owner, "dozer_thrust")) end
 function rockmech.eff_dig_mult(owner) return 1 + 0.1 * rockmech.research_level(owner, "skilled_miner") end   -- 熟練礦工：挖礦、鑽孔速度   -- 定期保養：車速
 function rockmech.eff_ore_recovery(owner, ore) return math.min(1, ore.recovery + 0.01 * rockmech.research_level(owner, "ore_recovery")) end
 -- 浮選（選礦場處理金屬礦）：精礦品位（研發「精礦品位」每級 +1%）、最高回收率（研發「排矸站回收率」每級 +1%，跟煤共用）

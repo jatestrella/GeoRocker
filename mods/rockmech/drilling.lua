@@ -257,10 +257,32 @@ local function detonate(pos)
 		center = vector.add(pos, vector.multiply(dir, 0.5))
 		R = R * bcfg.surface_factor
 	end
+	-- 設計底板（鑽堡鑽的孔記在 meta floor，vehicle_jumbo.lua）：這一層以下不破碎，坑道地板照設計（水平或下坡）
+	local fl = kind == CHARGED and tonumber(meta:get_string("floor")) or nil
 	core.remove_node(pos)
 	if rockmech.airq_blast then rockmech.airq_blast(center, n * rockmech.airq_kg.emulsion) end   -- 炮煙（airq.lua）
 	-- 擾動 D：每孔 1 條（控制爆破、平滑爆破）0.5；2 條以上或貼面裝藥 0.8（Hoek 2002）
-	rockmech.blast_charge(center, R, nil, (kind == CHARGED and n <= 1) and 0.5 or 0.8)
+	rockmech.blast_charge(center, R, fl, (kind == CHARGED and n <= 1) and 0.5 or 0.8)
+	-- 設計底板比孔低（下坡坑道降一格的那一輪，底排孔當底孔 lifter）：孔下方沿孔長的岩石破碎到設計底板，
+	-- 只碎上面那格已經炸開的（不往沒開挖的地方挖）。爆破圈是球形，只靠它底板會坑坑疤疤。
+	-- 等整輪炸完（同一輪的孔先後起爆）再碎
+	if fl and dir.y == 0 and fl < pos.y then
+		local p0, px, pz = vector.copy(pos), -dir.z, dir.x
+		core.after(1, function()
+			-- 左右 ±3 m：同一輪先炸的孔會把旁邊的孔連同後面的岩石一起炸掉（那些孔不會再起爆），
+			-- 由起爆的孔把整個底板碎完；只碎上面已經炸開的，不會挖到坑道外面
+			for t = 1, math.floor(depth + 2) do
+				for l = -3, 3 do
+					local x, z = p0.x + dir.x * t + px * l, p0.z + dir.z * t + pz * l
+					for y = p0.y - 1, fl, -1 do
+						if rockmech.lith_of_node[core.get_node({x = x, y = y + 1, z = z}).name] then break end
+						local q = {x = x, y = y, z = z}
+						if rockmech.lith_of_node[core.get_node(q).name] then core.dig_node(q) end
+					end
+				end
+			end
+		end)
+	end
 	-- 爆破直接改地圖、不會觸發貼壁方塊掉落：後面的岩石沒了的鑽孔、裝藥一起消失
 	local r = math.ceil(R) + depth + 1
 	clearing = clearing + 1

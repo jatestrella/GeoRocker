@@ -24,6 +24,7 @@ local function hud_text(self)
 	end
 	if def.hud then s = s .. def.hud(self) end
 	if def.top_speed then s = s .. ("  %d km/h"):format(self.kmh or 0) end
+	if self.grade_pct then s = s .. "  " .. S("Grade @1%", ("%+d"):format(self.grade_pct)) end   -- 車頭方向的平均坡度（vehicles.lua）
 	if rockmech.fuel_hud then s = s .. rockmech.fuel_hud(self) end
 	local hp = self.hp or 100
 	if hp <= 0 then s = s .. "\n" .. core.colorize("#ff6040", S("[WRECKED] Cannot be driven; get a mechanic to repair it"))

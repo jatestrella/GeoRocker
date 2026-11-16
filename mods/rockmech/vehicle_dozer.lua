@@ -7,6 +7,9 @@
 --   空白鍵：設計坡度（關 → 0% → +5% → +10% → −10% → −5%）。開著時放鏟往前，鏟刀把碎石削／填到設計坡面：
 --         切換坡度的那一刻，在鏟刀那一排、履帶底的高度起算，沿當時的車頭方向升降；之後收放鏟刀、來回推都對著同一個面，
 --         推出來的高度不跟著車子的高低走。多的碎石照樣推成前面那堆。
+--   松土（ripping）：放鏟往前被岩石擋住，一直往前頂 RIP_T 秒，就把擋住的岩石耙碎成碎石（原地，跟手挖一樣），接著推走。
+--         耙不耙得動看可裂性：岩體強度 σcm（Hoek 2002，含 GSI、相似比、爆破擾動 D）≤ rockmech_dozer_rip_sigcm（預設 10 MPa）。
+--         頁岩、煤、風化帶耙得動；花崗岩、安山岩這類硬岩要先爆破（擾動後 σcm 變低）。
 
 local V = rockmech.vehicles
 local S = rockmech.S
@@ -143,6 +146,7 @@ local function grade_cut(self, pos, s, lat, y0, got, grade)
 	local d = self.design
 	local cols = face_cells(pos, s, 1, 2, y0, 1, lat)
 	local low = {}
+	local rocks = {}         -- 設計面以上的岩石（每一欄都收集，松土一次耙完）
 	for _, c in ipairs(cols) do
 		local t = design_at(d, c.x, c.z)
 		for y = y0 + 2, y0 - 3, -1 do
@@ -154,13 +158,20 @@ local function grade_cut(self, pos, s, lat, y0, got, grade)
 				cut_cell(p, node, k, keep, got, grade)
 				if keep > 0 then break end
 			elseif not passable(node.name) then
-				if y + 0.5 > t + 0.5 / NLEV then return S("Rock above the design grade in front of the blade") end
+				if y + 0.5 > t + 0.5 / NLEV then
+					-- 設計面以上的岩石（這一欄設計面以上的都算）：給松土用
+					for yy = y, y0 + 2 do
+						local q = {x = c.x, y = yy, z = c.z}
+						if yy + 0.5 > t + 0.5 / NLEV and not passable(core.get_node(q).name) and not rockmech.rubble_level[core.get_node(q).name] then rocks[#rocks + 1] = q end
+					end
+				end
 				break
 			end
 		end
 		local top = V.ground_top(c.x, y0 + 2, c.z, 6)
 		if top and top < t - 0.5 / NLEV then low[#low + 1] = {x = c.x, z = c.z, top = top, t = t} end
 	end
+	if #rocks > 0 then return S("Rock above the design grade in front of the blade"), rocks end
 	-- 填：照缺的量從削下來的碎石補（先用最多的那種）
 	for _, f in ipairs(low) do
 		local need = math.floor((f.t - f.top) * NLEV + 0.5)
@@ -187,15 +198,17 @@ local function push(self, pos, s)
 	local got, grade = {}, {}
 	local src
 	if self.design then
-		local why = grade_cut(self, pos, s, lat, y0, got, grade)
-		if why then return why end
+		local why, rocks = grade_cut(self, pos, s, lat, y0, got, grade)
+		if why then return why, rocks end
 		src = face_cells(pos, s, 1, 2, y0, 1, lat)
 	else
 		src = face_cells(pos, s, 1, 2, y0, 3, lat)
+		local rocks = {}
 		for _, c in ipairs(src) do
 			local n = core.get_node(c).name
-			if not rockmech.rubble_level[n] and not passable(n) then return S("Rock in front of the blade") end   -- 岩石：推不動
+			if not rockmech.rubble_level[n] and not passable(n) then rocks[#rocks + 1] = c end
 		end
+		if #rocks > 0 then return S("Rock in front of the blade"), rocks end   -- 岩石：推不動（頂久了松土）
 		for _, c in ipairs(face_cells(pos, s, 1, 1, y0, 1, lat)) do src[#src + 1] = c end
 		for _, c in ipairs(src) do
 			local node = core.get_node(c)
@@ -241,6 +254,35 @@ local function push(self, pos, s)
 	return blocked and S("The rubble ahead is piled full (max @1 blocks high, @2 rows ahead)", ("%d"):format(PILE_H), ("%d"):format(PILE_ROWS)) or nil
 end
 
+-- 松土：可裂性看岩體強度 σcm（MPa）；不是岩石（設施、木頭…）回傳 nil
+local RIP_T = 3            -- 頂住岩石幾秒耙碎
+local function rip_sigcm(p)
+	local node = core.get_node(p)
+	local lith = rockmech.lith_of_node[node.name]
+	if not lith then return nil end
+	local D = collapse.damage_at_xyz and collapse.damage_at_xyz(p.x, p.y, p.z)
+	return collapse.rock.at(lith.name, p.y, node.param2, D).sigcm
+end
+-- 擋住的岩石：耙得動的、最硬的那格強度
+local function rip_limit(owner)
+	return rockmech.eff_rip_sigcm and owner and rockmech.eff_rip_sigcm(owner) or rockmech.cfg.dozer_rip_sigcm   -- 研發「推土機推力」
+end
+local function rippable(rocks, owner)
+	local ok, hard = {}, nil
+	local limit = rip_limit(owner)
+	for _, p in ipairs(rocks) do
+		local sc = rip_sigcm(p)
+		if sc and sc <= limit and not core.is_protected(p, "") then ok[#ok + 1] = p
+		elseif sc and sc > limit then hard = math.max(hard or 0, sc) end
+	end
+	return ok, hard
+end
+-- 耙碎：跟手挖一樣（岩石原地變滿格碎石、開挖記錄、穩定判定都照 collapse.lua）
+local function rip(cells)
+	for _, p in ipairs(cells) do core.dig_node(p) end
+end
+rockmech.dozer_rip_sigcm = rip_sigcm      -- 測試用
+
 -- 鏟刀前那堆碎石的量（級）：鏟刀前 PILE_ROWS 排、高 3 層
 local function pile_amount(pos, s)
 	local y0 = ground_y(pos, def.half)
@@ -280,7 +322,8 @@ function def.hud(self)
 				("%d"):format(ds.x), ("%d"):format(ds.z), ("%.1f"):format(ds.h))
 			or S("Design grade: @1 (resets from the blade when switched)", grade_text(self.grade)))
 		.. "\n" .. S("Rubble in front of the blade: @1", V.volume_text(self.pile_lv or 0))
-		.. (self.push_msg and ("\n" .. S("Can't push: @1; back up and change direction, or clear the way first", self.push_msg)) or "")
+		.. (self.push_msg and ("\n" .. (self.push_plain and self.push_msg
+			or S("Can't push: @1; back up and change direction, or clear the way first", self.push_msg))) or "")
 end
 function def.keys(self) return {{"E", S("Blade down (push rubble)"), on = self.blade}, {S("Space"), S("Design grade")}} end
 function def.on_load(self, data)
@@ -309,10 +352,31 @@ function def.move(self, ctx)
 		update_hud(self)
 	end
 	if self.blade and fwd > 0 then
-		local why = push(self, pos, s)
+		self.push_plain = nil
+		local why, rocks = push(self, pos, s)
 		if why then ctx.speed = 0; settle_pile(self) end
+		-- 松土：被岩石擋住，耙得動的頂 RIP_T 秒就耙碎；全部耙不動就說多硬
+		local ok, hard = {}, nil
+		if rocks then ok, hard = rippable(rocks, self.owner) end
+		if #ok > 0 then
+			self.rip_t = (self.rip_t or 0) + ctx.dtime
+			if self.rip_t >= RIP_T then
+				self.rip_t = 0
+				rip(ok)
+			else
+				why = S("Ripping the rock in front of the blade (@1 s)", ("%d"):format(math.ceil(RIP_T - self.rip_t)))
+				self.push_plain = true
+			end
+		else
+			self.rip_t = 0
+			if hard then
+				why = S("Rock too hard to rip (rock mass strength @1 MPa > @2 MPa): blast it first",
+					("%.0f"):format(hard), ("%.0f"):format(rip_limit(self.owner)))
+			end
+		end
 		if why ~= self.push_msg then self.push_msg = why; update_hud(self) end
 	else
+		self.rip_t = 0
 		settle_pile(self)
 		if fwd > 0 and overhang_blocked(pos, s, 1, {1, 2}) then ctx.speed = 0 end   -- 收鏟：看鏟刀抬起的高度
 		if self.push_msg then self.push_msg = nil; update_hud(self) end
