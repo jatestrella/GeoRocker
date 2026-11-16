@@ -360,7 +360,8 @@ function fem.solve(job)
 		local tp = math.tan(math.rad(plastic.phi or 30))
 		local den = math.sqrt(9 + 12 * tp * tp)
 		local alpha, kc = 3 * tp / den, 3 * (plastic.c or 0) / den     -- alpha 已乘 3：√J2 ≤ α_I1·I1 + k = (3α_I1)·p + k
-		local p_apex = alpha > 1e-9 and -kc / alpha or 0
+		-- 應變軟化：降伏過的土格（有塑性應力 P）凝聚力降到殘餘值 c_res × c（膠結破壞），φ 不變
+		local kres = kc * math.max(0, math.min(1, plastic.c_res or 1))
 		local cells = {}
 		for c in pairs(job.soil) do if solid[c] then cells[#cells + 1] = c end end
 		table.sort(cells)
@@ -398,12 +399,14 @@ function fem.solve(job)
 				local pm = (s1 + s2 + s3) / 3
 				local d1, d2, d3 = s1 - pm, s2 - pm, s3 - pm
 				local sq = math.sqrt(0.5 * (d1 * d1 + d2 * d2 + d3 * d3) + s4 * s4 + s5 * s5 + s6 * s6)
-				local lim = alpha * pm + kc
+				local kk = pc and kres or kc
+				local lim = alpha * pm + kk
 				local scale = alpha * math.abs(pm) + kc + 0.1
 				if sq > lim + 0.01 * scale then
 					local r1, r2, r3, r4, r5, r6
 					if lim <= 0 then
-						r1, r2, r3, r4, r5, r6 = p_apex, p_apex, p_apex, 0, 0, 0
+						local pa = alpha > 1e-9 and -kk / alpha or 0      -- 錐頂（張力上限）
+						r1, r2, r3, r4, r5, r6 = pa, pa, pa, 0, 0, 0
 					else
 						local fr = lim / sq
 						r1, r2, r3 = pm + d1 * fr, pm + d2 * fr, pm + d3 * fr

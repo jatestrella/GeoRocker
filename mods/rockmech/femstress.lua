@@ -341,7 +341,8 @@ local function make_job(pos)
 	for c in pairs(job.soil) do meta.soil[c] = soil_str end
 	-- 土的塑性（fem.lua 的 job.plastic）：同一組 c（kPa，下雨打折）、φ；迭代上限 rockmech_fem_plastic_iters
 	if next(job.soil) and (fcfg.plastic_iters or 0) > 0 then
-		job.plastic = {c = sp.c * wet, phi = sp.phi, iters = fcfg.plastic_iters, pcg_iter = fcfg.plastic_pcg or 300}
+		job.plastic = {c = sp.c * wet, phi = sp.phi, iters = fcfg.plastic_iters, pcg_iter = fcfg.plastic_pcg or 300,
+			c_res = fcfg.soil_c_res or 0.5}
 	end
 	local damage_at = rockmech.collapse.damage_at_xyz
 	local press = job.press or {}
@@ -509,8 +510,18 @@ local function find_failed(job, res, meta, center)
 			if plastic_soil then
 				local fl = res.flow and res.flow[c0]
 				local nat_fl = res.nat and res.nat.flow and res.nat.flow[c0]
+				-- 降伏了、又有側面或下面緊鄰空氣（沒有任何支撐：土、碎石、板樁都算支撐）→ 表層剝落。
+				-- 只有上面臨空的（水平地表）不算：底下和四周都撐著，降伏只是裂縫，不會掉。天然地形也降伏的不算
+				local yielded = res.P and res.P[c0]
+				local nat_y = res.nat and res.nat.P and res.nat.P[c0]
+				local exposed = false
+				if yielded and not nat_y then
+					for _, f in ipairs(FACES) do
+						if f[2] ~= 1 and not job.solid[c0 + f[1] + f[2] * n + f[3] * n * n] then exposed = true; break end
+					end
+				end
 				if low < 1 then low = 1 end
-				if fl and not nat_fl then low = 0 end
+				if (fl and not nat_fl) or exposed then low = 0 end
 			elseif low < 1 and res.nat and natural_fs(job, res, meta, x, y, z) < 1 then
 				low = math.huge          -- 天然地形就已經 FS < 1（台階凹角的應力集中）：不是開挖造成的，不算
 			end
