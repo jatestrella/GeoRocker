@@ -64,6 +64,9 @@ local function set_press(job, g, to_cell, scale)
 	job.press = press
 end
 
+-- 土的參數表（下面 cid_tables 建）：粗網格、細網格都用，先宣告
+local K0_SOIL, gamma_of_cid, soil_cid, topsoil_f, cid_tables, gamma_s
+
 -- 粗網格（子模型的外圍）：同樣的格數，每格 C³ 公尺，一半以上是岩石就算實心。
 -- 原點對齊 C 的倍數，附近的開挖共用同一個粗網格，上次的解當初始值。
 -- 頂面對齊粗格（現地應力與重力才平衡，沒有開挖時 Δu = 0）。還沒生成的區塊：地表以下算岩石
@@ -74,9 +77,13 @@ local function make_coarse(pos)
 	local function snap(v) return math.floor((v - half) / C + 0.5) * C end
 	local a = {x = snap(pos.x), y = snap(pos.y), z = snap(pos.z)}
 	local g = rockmech.collapse.read_grid(a, vector.add(a, n * C - 1))
+	cid_tables()
 	local job = {nx = n, ny = n, nz = n, h = C, a = a, solid = {}, sxx = {}, syy = {}, szz = {}, sxz = {},
 		nu = fcfg.nu, tol = fcfg.tol, max_iter = fcfg.max_iter, blend = fcfg.coarse_blend,
-		soft = {}, soft_e = fcfg.rubble_e}
+		soft = {}, soft_e = fcfg.rubble_e, soil = {}, gam = {}, soil_e = rockmech.materials.defaults("rockmech:topsoil").e_rel}
+	-- 土佔多數的粗格是土元素（勁度、單位重、K0 跟細網格一樣）；以前一律當岩石，細網格的外緣在土裡幾乎是固定的
+	local use_soil = fcfg.soil
+	local gam_soil = gamma_s(soil_cid)
 	local sy, sz = g.nx, g.nx * g.ny
 	local data, bonded = g.data, g.bonded_of
 	local rubble = fcfg.rubble_e > 0 and g.rubble_of or {}
@@ -97,25 +104,33 @@ local function make_coarse(pos)
 		local ktop = math.floor((top - a.y) / C)
 		for y = 0, n - 1 do
 			local c = 1 + x + y * n + z * n * n
-			local count, loose = 0, 0
+			local count, loose, nsoil = 0, 0, 0
 			for dz = 0, C - 1 do for dy = 0, C - 1 do
 				local row = base + C * x + (C * y + dy) * sy + (C * z + dz) * sz
 				local under = a.y + C * y + dy <= surf
 				for dx = 0, C - 1 do
 					local id = data[row + dx]
-					if bonded[id] or (under and id == ignore) then count = count + 1
+					if bonded[id] or (under and id == ignore) then
+						count = count + 1
+						if use_soil and id == soil_cid then nsoil = nsoil + 1 end
 					elseif rubble[id] == 1 then loose = loose + 1 end
 				end
 			end end
 			local solid = 2 * count > C * C * C
 			local soft = not solid and 2 * (count + loose) > C * C * C
+			local is_soil = solid and 2 * nsoil > count
 			job.solid[c] = solid or soft
-			job.soft[c] = soft or nil
+			job.soft[c] = (soft or is_soil) or nil
 			local lith = cfg.lithologies[g.lith_of[data[base + cx + (C * y + mid) * sy + cz * sz]]]
 			local gamma = lith and lith.gamma or cfg.failure.gamma_other
-			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
+			if solid and not is_soil then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			in_situ(job, c, gamma * C * math.max(0, ktop - y + 0.5))
 			if soft then job.sxx[c], job.syy[c], job.szz[c], job.sxz[c] = 0, 0, 0, 0 end
+			if is_soil then
+				local sv = gam_soil * C * math.max(0, ktop - y + 0.5)
+				job.soil[c], job.gam[c] = true, gam_soil * C
+				job.syy[c], job.sxz[c], job.sxx[c], job.szz[c] = sv, 0, K0_SOIL * sv, K0_SOIL * sv
+			end
 		end
 	end end
 	job.gamma = C * (gam_n > 0 and gam_sum / gam_n or 25)    -- 單位立方體的方程式：γ·h，解出 Δu / h
@@ -132,10 +147,9 @@ end
 -- 天然表土（mapgen 鋪的，stress.natural_soil 算得出厚度）的重量也算進現地應力 σ₀，所以沒動過的地形兩邊抵銷、照樣平衡；
 -- 剝掉表土等於卸載，堆上碎石等於加載。γ 用非岩性格的單位重（rockmech_failure_gamma_other）
 local K0_S = 1 - math.sin(math.rad(cfg.slope.phi_r))
-local K0_SOIL        -- 表土的 K₀（cid_tables 裡算：表土在 woodwork.lua 才註冊）
+-- K0_SOIL：表土的 K₀（cid_tables 裡算：表土在 woodwork.lua 才註冊）
 -- 材料表（materials.lua）的單位重、整格表土的 content id（第一次用到才查：內容 id 要等全部註冊完）
-local gamma_of_cid, soil_cid, topsoil_f
-local function cid_tables()
+function cid_tables()
 	if gamma_of_cid then return end
 	gamma_of_cid, topsoil_f = {}, {}
 	for name, def in pairs(core.registered_nodes) do
@@ -149,7 +163,7 @@ local function cid_tables()
 	soil_cid = core.get_content_id("rockmech:topsoil")
 	K0_SOIL = 1 - math.sin(math.rad(rockmech.materials.defaults("rockmech:topsoil").phi))
 end
-local function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
+function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
 -- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料：厚度 (m)、重量 Σγ·h (kPa)，從 ly 那一格開始算。
 -- 整格表土是應力解的元素（自己有重量），不算鬆散材料
 -- only_nat：只算天然的（地圖生成的不滿格表土），玩家放的碎石不算（天然地形那一解用）
@@ -194,6 +208,8 @@ local function make_job(pos)
 	-- 木磚（timber.lua）：整格木頭，勁度 = 岩石 × block_fem，受力的算法跟木柱一樣
 	local block_ids = rockmech.support_ids and rockmech.support_ids.wood_block or {}
 	local block_r = math.max(1e-4, cfg.support.block_fem or 0.1)
+	-- 鋼板樁、內支撐（retain.lua）：勁度比照等效斷面（板樁 EI、支撐 EA）
+	local retain_r = rockmech.support_ids and rockmech.support_ids.retain_r or {}
 	for z = 0, n - 1 do for x = 0, n - 1 do
 		-- 這一欄的地表：岩石頂面，或 surface_y（挖掉的算回去，所以開挖才會放出應力）
 		local gx, gz = a.x + x - g.ox, a.z + z - g.oz
@@ -223,7 +239,11 @@ local function make_job(pos)
 			local gamma = lith and lith.gamma or cfg.failure.gamma_other
 			local solid = g.bonded_of[cid] and true or false
 			local soft = fcfg.rubble_e > 0 and g.rubble_of[cid] == 1
-			if post_ids[cid] then soft = post_rs[cid] or post_r elseif block_ids[cid] then soft = block_r end
+			if post_ids[cid] then soft = post_rs[cid] or post_r elseif block_ids[cid] then soft = block_r
+			elseif retain_r[cid] then
+				-- 擋土元素的作用方向（板樁的法向、支撐的軸向）：1 = x、3 = z（facedir 0/2 → z，1/3 → x）
+				soft = retain_r[cid]; job.retain = job.retain or {}; job.retain[c] = (g.p2[gi] % 2 == 1) and 1 or 3
+			end
 			-- 整格表土：土的元素（勁度跟碎石一樣軟，但有現地應力、受重力；materials.lua）
 			local soil = fcfg.soil and cid == soil_cid
 			if soil then soft, gamma = true, gam_soil; job.soil[c], job.gam[c] = true, gam_soil end
@@ -242,8 +262,9 @@ local function make_job(pos)
 				in_situ(job, c, sv)
 			end
 			if nat then
-				if job.soft[c] and not job.soil[c] then
-					nat.solid[c] = false             -- 碎石、木柱：人放的，天然地形沒有
+				-- 鋼板樁打下去的格記成開挖過：天然地形照原本的土、岩石填回去（下面的分支），不會多出一條溝
+				if job.soft[c] and not job.soil[c] and not (retain_r[cid] and is_excavated_at(a.x + x, wy, a.z + z)) then
+					nat.solid[c] = false             -- 碎石、木柱、支撐：人放的，天然地形沒有
 				elseif not is_excavated_at(a.x + x, wy, a.z + z) then
 					nat.solid[c], nat.soft[c], nat.soil[c], nat.gam[c] = job.solid[c], job.soft[c], job.soil[c], job.gam[c]
 					nat.sxx[c], nat.syy[c], nat.szz[c], nat.sxz[c] = job.sxx[c], job.syy[c], job.szz[c], job.sxz[c]
@@ -272,7 +293,8 @@ local function make_job(pos)
 		local SIDES = {{1, 0, 1}, {-1, 0, 2}, {0, 1, 5}, {0, -1, 6}}
 		for z = 0, n - 1 do for y = 0, n - 1 do for x = 0, n - 1 do
 			local c = 1 + x + y * n + z * n * n
-			if job.solid[c] and (not job.soft[c] or job.soil[c]) then
+			-- 鋼板樁、支撐也受鬆散材料的側壓（牆後的土破壞變成碎石，就是主動土壓的楔形塊）
+			if job.solid[c] and (not job.soft[c] or job.soil[c] or (job.retain and job.retain[c])) then
 				local gx, ly, gz = a.x + x - g.ox, a.y + y - g.oy, a.z + z - g.oz
 				for pass = 1, nat and 2 or 1 do
 					local only_nat, list = pass == 2, pass == 2 and press_nat or press
@@ -317,6 +339,10 @@ local function make_job(pos)
 	local wet = math.max(0, 1 - (cfg.slope.rain_c_loss or 0) * rain)
 	local soil_str = {c = sp.c / 1000 * wet, phi = math.rad(sp.phi), t = (sp.tensile or 0) / 1000 * wet}
 	for c in pairs(job.soil) do meta.soil[c] = soil_str end
+	-- 土的塑性（fem.lua 的 job.plastic）：同一組 c（kPa，下雨打折）、φ；迭代上限 rockmech_fem_plastic_iters
+	if next(job.soil) and (fcfg.plastic_iters or 0) > 0 then
+		job.plastic = {c = sp.c * wet, phi = sp.phi, iters = fcfg.plastic_iters, pcg_iter = fcfg.plastic_pcg or 300}
+	end
 	local damage_at = rockmech.collapse.damage_at_xyz
 	local press = job.press or {}
 	for i = 1, #press, 3 do
@@ -476,7 +502,16 @@ local function find_failed(job, res, meta, center)
 					if fs < low then low, lmode = fs, mode end
 				end
 			end
-			if low < 1 and res.nat and natural_fs(job, res, meta, x, y, z) < 1 then
+			-- 土（塑性解，fem.lua 的 job.plastic）：應力不會超過破壞面，臨空面的 FS 只拿來顯示裂紋；
+			-- 破壞 = 迭代上限到了還在流動（形成機構）。天然地形那一解也在流動的不算（天然就不穩，不是開挖造成的）
+			local c0 = 1 + x + y * n + z * n * n
+			local plastic_soil = job.plastic and meta.soil[c0]
+			if plastic_soil then
+				local fl = res.flow and res.flow[c0]
+				local nat_fl = res.nat and res.nat.flow and res.nat.flow[c0]
+				if low < 1 then low = 1 end
+				if fl and not nat_fl then low = 0 end
+			elseif low < 1 and res.nat and natural_fs(job, res, meta, x, y, z) < 1 then
 				low = math.huge          -- 天然地形就已經 FS < 1（台階凹角的應力集中）：不是開挖造成的，不算
 			end
 			if low < 1 then
@@ -489,6 +524,8 @@ local function find_failed(job, res, meta, center)
 	table.sort(failed, function(u, v) return u.y > v.y end)
 	return failed, faces, warned
 end
+
+rockmech.fem_find_failed = find_failed     -- 測試用
 
 -- 警戒裂紋：每次解完，範圍內判定過的面裡 1 ≤ FS < fswarn.max 的格（換掉這個範圍原本的記錄）
 local cracks = {}
@@ -834,6 +871,8 @@ pump = function()
 				return math.max(0, res.syy[c])        -- kPa × 1 m² = kN（壓為正）
 			end)
 		end
+		-- 鋼板樁彎矩、支撐軸力（retain.lua）
+		if rockmech.retain_fem_check then rockmech.retain_fem_check(job, res, meta) end
 		if not cur.far then squeeze_rubble(job, res, meta) end
 		if rockmech.fswarn_refresh then rockmech.fswarn_refresh(cur.pos) end
 		if cur.excav or #failed > 0 then rockmech.collapse.queue_block_check(cur.pos) end

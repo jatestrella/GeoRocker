@@ -260,4 +260,32 @@ describe("fem 彈性應力場", function()
 		local ra, rb = fem.solve(a), fem.solve(b)
 		for k = 1, #ra.syy do assert.near(ra.syy[k], rb.syy[k], 1e-9) end
 	end)
+
+	-- 土的塑性（job.plastic）：c 10 kPa、φ 30°、γ 18 的土，垂直開挖臨界高度 Hc = 4c/γ·tan(45° + φ/2) ≈ 3.9 m。
+	-- 外緣固定、三維（z 方向 13 格）：2 m 收斂、穩定；7 m 迭代上限到了還在流動（形成機構）
+	it("土的塑性：淺的垂直開挖收斂，深的形成機構", function()
+		local function cut(H)
+			local nx, ny, nz = 24, 14, 13
+			local j = {nx = nx, ny = ny, nz = nz, solid = {}, sxx = {}, syy = {}, szz = {}, sxz = {}, soft = {}, soil = {}, gam = {},
+				gamma = 18, nu = 0.3, tol = 1e-4, max_iter = 3000, soil_e = 0.002, plastic = {c = 10, phi = 30, iters = 20, pcg_iter = 600}}
+			local top, K0 = ny - 2, 1 - math.sin(math.rad(30))
+			for z = 0, nz - 1 do for y = 0, ny - 1 do for x = 0, nx - 1 do
+				local c = 1 + x + y * nx + z * nx * ny
+				local sv = 18 * (top + 0.5 - y)
+				local s = y <= top and not (x >= 12 and y > top - H)
+				j.solid[c] = s
+				if s then j.soft[c], j.soil[c], j.gam[c] = true, true, 18 end
+				j.syy[c], j.sxx[c], j.szz[c], j.sxz[c] = sv, K0 * sv, K0 * sv, 0
+			end end end
+			local res = fem.solve(j)
+			local nflow = 0
+			for _ in pairs(res.flow or {}) do nflow = nflow + 1 end
+			return nflow, res.piters
+		end
+		local f2, it2 = cut(2)
+		assert.is_true(f2 == 0)
+		assert.is_true(it2 < 20)
+		local f7 = cut(7)
+		assert.is_true(f7 > 50)
+	end)
 end)

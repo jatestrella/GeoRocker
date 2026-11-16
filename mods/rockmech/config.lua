@@ -249,6 +249,9 @@ config.shop = {
 	{key = "stress_cell", shop = "geotech", item = "rockmech:stress_cell", label = TR("Borehole stress cell"), price = 12000},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = TR("Timber post"), price = 200, count = 10},
 	{key = "steel_set", shop = "tools", item = "rockmech:steel_set", label = TR("Steel set"), price = 2000, count = 10},
+	-- 擋土（retain.lua）：鋼板樁（SP-III，寬 1 m、長 9 m）、內支撐（H300，每支 1 m）
+	{key = "sheet_pile", shop = "tools", item = "rockmech:sheet_pile", label = TR("Sheet pile"), price = 2500, count = 5},
+	{key = "strut", shop = "tools", item = "rockmech:strut", label = TR("Strut"), price = 1000, count = 10},
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = TR("Timber plank"), price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = TR("Timber slab"), price = 100, count = 10},
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = TR("Drone"), price = 2000},
@@ -428,6 +431,8 @@ config.fem_defaults = {
 	soil_e = 0.002,           -- 表土的勁度 / 岩石的勁度（materials.lua）
 	facility_load = false,    -- 設施是地基上的荷重、應力解判地基承載（彈性解逐格判定對土太保守：c 10 kPa 的表土撐不住 160 kPa 的破碎站），先關
 	soil = true,              -- 整格表土當應力解的土元素（materials.lua 的 γ、c、φ，取代自立高度 H_c 規則）
+	plastic_iters = 20,       -- 土的塑性迭代上限（fem.lua 初始應力法；0 = 土照舊彈性、逐面判定）。到上限還在流動的土格算破壞
+	plastic_pcg = 300,        -- 每一輪塑性迭代重解的共軛梯度上限（從上一輪的位移出發，通常幾十輪就收斂）
 	active_range = 64,        -- 離所有玩家超過此距離 (m) 的應力解與連鎖崩落先暫停，玩家回來才接著算（0 = 不限）
 	tol = 0.001,              -- 共軛梯度法的相對殘差
 	max_iter = 1500,          -- 最多迭代幾輪

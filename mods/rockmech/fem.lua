@@ -280,6 +280,9 @@ function fem.solve(job)
 		end
 	end
 
+	-- 共軛梯度：解 K·u = fv（u 就地更新，從目前的 u 出發）。回傳 迭代次數, 相對殘差
+	local tol = job.tol or 1e-3
+	local function pcg(fv, max_iter)
 	-- r = f − K·u（只有自由節點）
 	matvec(u, q)
 	local rz, r0, ri = 0, 0, 0
@@ -288,18 +291,17 @@ function fem.solve(job)
 		local st = stencils[m]
 		for d = 1, 3 do
 			local j = idx + d
-			local v = f[j] - q[j]
+			local v = fv[j] - q[j]
 			r[j] = v
 			local zv = v / (d == 1 and st.d1 or d == 2 and st.d2 or st.d3)
 			z_[j] = zv
 			p[j] = zv
 			rz = rz + v * zv
-			r0 = r0 + f[j] * f[j]
+			r0 = r0 + fv[j] * fv[j]
 			ri = ri + v * v
 		end
 	end
 	r0 = math.sqrt(math.max(r0, ri))     -- 只有外緣給定位移時 f = 0
-	local tol, max_iter = job.tol or 1e-3, job.max_iter or 1500
 	local iters, rel = 0, 0
 	if r0 > 0 then
 		repeat
@@ -340,11 +342,105 @@ function fem.solve(job)
 			end
 		until rel < tol or iters >= max_iter
 	end
+	return iters, rel
+	end
+	local iters, rel = pcg(f, job.max_iter or 1500)
+
+	-- 土的塑性（job.plastic = {c（kPa）, phi（°）, iters（迭代上限）}，job.soil 的格）：初始應力法
+	-- （Smith & Griffiths 的黏塑性迭代，勁度矩陣不變）。每一輪算土格中心的應力，超出破壞面的部分拉回破壞面，
+	-- 拉回的量累積成「塑性應力」P（壓為正），當成多出來的初始應力加進外力，從上一輪的位移再解一次。
+	-- 破壞面：Drucker-Prager，配 Mohr-Coulomb 的平面應變（√J2 ≤ α·I1 + k，α = tanφ / √(9 + 12 tan²φ)、k = 3c / √(…)，I1 = 3p）：
+	-- 靜止土壓 K0 = 1 − sinφ 的狀態在面內；錐頂 p = −k/α 就是張力上限（c·cot φ 的同級）。偏應力照比例縮回錐面（徑向回映），
+	-- 超過錐頂就整個拉到錐頂（土不能再受拉）。
+	-- 結果：牆後的土到了強度上限就維持在上限推牆（主動土壓）、被擠的土最多頂到被動土壓。
+	-- 迭代上限到了還有格子在超出（res.flow：超出的比例）→ 形成機構、還在流動（femstress.lua 拿來判定破壞）
+	local P, flow, piters = nil, nil, 0
+	local plastic = job.plastic
+	if plastic and job.soil and next(job.soil) then
+		local tp = math.tan(math.rad(plastic.phi or 30))
+		local den = math.sqrt(9 + 12 * tp * tp)
+		local alpha, kc = 3 * tp / den, 3 * (plastic.c or 0) / den     -- alpha 已乘 3：√J2 ≤ α_I1·I1 + k = (3α_I1)·p + k
+		local p_apex = alpha > 1e-9 and -kc / alpha or 0
+		local cells = {}
+		for c in pairs(job.soil) do if solid[c] then cells[#cells + 1] = c end end
+		table.sort(cells)
+		P = {}
+		local fv = {}
+		local function cell_strain(c)
+			local k = c - 1
+			local cx, cy, cz = k % nx, math.floor(k / nx) % ny, math.floor(k / (nx * ny))
+			local exx, eyy, ezz, gxy, gyz, gzx = 0, 0, 0, 0, 0, 0
+			for a = 1, 8 do
+				local cr = cs[a]
+				local n3 = ((cx + cr[1]) + (cy + cr[2]) * sy + (cz + cr[3]) * sz) * 3
+				local gx, gy, gz = cr[4], cr[5], cr[6]
+				local ux, uy, uz = u[n3 + 1], u[n3 + 2], u[n3 + 3]
+				exx = exx + gx * ux; eyy = eyy + gy * uy; ezz = ezz + gz * uz
+				gxy = gxy + gy * ux + gx * uy; gyz = gyz + gz * uy + gy * uz; gzx = gzx + gx * uz + gz * ux
+			end
+			return cx, cy, cz, exx, eyy, ezz, gxy, gyz, gzx
+		end
+		for it = 1, plastic.iters or 15 do
+			piters = it
+			local over = {}
+			local any = false
+			for _, c in ipairs(cells) do
+				local _, _, _, exx, eyy, ezz, gxy, gyz, gzx = cell_strain(c)
+				local w = w_of(c)
+				local tr = w * lam * (exx + eyy + ezz)
+				local pc = P[c]
+				local s1 = job.sxx[c] - (tr + 2 * w * mu * exx) + (pc and pc[1] or 0)
+				local s2 = job.syy[c] - (tr + 2 * w * mu * eyy) + (pc and pc[2] or 0)
+				local s3 = job.szz[c] - (tr + 2 * w * mu * ezz) + (pc and pc[3] or 0)
+				local s4 = -w * mu * gxy + (pc and pc[4] or 0)
+				local s5 = -w * mu * gyz + (pc and pc[5] or 0)
+				local s6 = job.sxz[c] - w * mu * gzx + (pc and pc[6] or 0)
+				local pm = (s1 + s2 + s3) / 3
+				local d1, d2, d3 = s1 - pm, s2 - pm, s3 - pm
+				local sq = math.sqrt(0.5 * (d1 * d1 + d2 * d2 + d3 * d3) + s4 * s4 + s5 * s5 + s6 * s6)
+				local lim = alpha * pm + kc
+				local scale = alpha * math.abs(pm) + kc + 0.1
+				if sq > lim + 0.01 * scale then
+					local r1, r2, r3, r4, r5, r6
+					if lim <= 0 then
+						r1, r2, r3, r4, r5, r6 = p_apex, p_apex, p_apex, 0, 0, 0
+					else
+						local fr = lim / sq
+						r1, r2, r3 = pm + d1 * fr, pm + d2 * fr, pm + d3 * fr
+						r4, r5, r6 = s4 * fr, s5 * fr, s6 * fr
+					end
+					if not pc then pc = {0, 0, 0, 0, 0, 0}; P[c] = pc end
+					pc[1], pc[2], pc[3] = pc[1] - (s1 - r1), pc[2] - (s2 - r2), pc[3] - (s3 - r3)
+					pc[4], pc[5], pc[6] = pc[4] - (s4 - r4), pc[5] - (s5 - r5), pc[6] - (s6 - r6)
+					over[c] = (sq - math.max(lim, 0)) / scale
+					any = true
+				end
+			end
+			flow = over
+			if not any then flow = nil; break end
+			-- 外力 = 原本的 + 塑性應力當初始應力（σ0 在 f 裡是 +σ0·∂N/∂x，同一個寫法）
+			for i = 1, ndof do fv[i] = f[i] end
+			for c, pc in pairs(P) do
+				local k = c - 1
+				local cx, cy, cz = k % nx, math.floor(k / nx) % ny, math.floor(k / (nx * ny))
+				for a = 1, 8 do
+					local cr = cs[a]
+					local n3 = ((cx + cr[1]) + (cy + cr[2]) * sy + (cz + cr[3]) * sz) * 3
+					local gx, gy, gz = cr[4], cr[5], cr[6]
+					fv[n3 + 1] = fv[n3 + 1] + pc[1] * gx + pc[4] * gy + pc[6] * gz
+					fv[n3 + 2] = fv[n3 + 2] + pc[4] * gx + pc[2] * gy + pc[5] * gz
+					fv[n3 + 3] = fv[n3 + 3] + pc[6] * gx + pc[5] * gy + pc[3] * gz
+				end
+			end
+			local it2, rel2 = pcg(fv, plastic.pcg_iter or 300)
+			iters, rel = iters + it2, rel2
+		end
+	end
 
 	-- 每格中心的總應力（壓為正）。job.lean：只回傳位移 u（背景執行緒用：少傳 6 個陣列回主執行緒，
-	-- 主執行緒用到哪一格再算，見 fem.lazy_stress）
+	-- 主執行緒用到哪一格再算，見 fem.lazy_stress）。P：土的塑性應力（有才有），flow：迭代上限到了還在流動的土格
 	if job.lean then
-		return {u = u, iters = iters, res = rel, ms = (os.clock() - t_start) * 1000}
+		return {u = u, iters = iters, res = rel, ms = (os.clock() - t_start) * 1000, P = P, flow = flow, piters = piters}
 	end
 	local out = {sxx = {}, syy = {}, szz = {}, sxy = {}, syz = {}, szx = {}, u = u, iters = iters, res = rel}
 	local ncell = nx * ny * nz
@@ -375,8 +471,14 @@ function fem.solve(job)
 			out.sxy[c] = -w * mu * gxy
 			out.syz[c] = -w * mu * gyz
 			out.szx[c] = job.sxz[c] - w * mu * gzx
+			local pc = P and P[c]
+			if pc then
+				out.sxx[c], out.syy[c], out.szz[c] = out.sxx[c] + pc[1], out.syy[c] + pc[2], out.szz[c] + pc[3]
+				out.sxy[c], out.syz[c], out.szx[c] = out.sxy[c] + pc[4], out.syz[c] + pc[5], out.szx[c] + pc[6]
+			end
 		end
 	end end end
+	out.P, out.flow, out.piters = P, flow, piters
 	out.ms = (os.clock() - t_start) * 1000
 	return out
 end
@@ -392,6 +494,7 @@ function fem.natural_job(job)
 	return {nx = job.nx, ny = job.ny, nz = job.nz, solid = n.solid, soft = n.soft, soil = n.soil, gam = n.gam,
 		sxx = n.sxx, syy = n.syy, szz = n.szz, sxz = n.sxz, gamma = job.gamma, nu = job.nu, tol = job.tol,
 		max_iter = job.max_iter, soft_e = job.soft_e, soil_e = job.soil_e, blend = job.blend, u0 = n.u0, press = n.press,
+		plastic = job.plastic,
 		coarse = job.coarse}     -- 外緣用同一個粗網格的解：兩個解只差在局部的開挖（外緣不同的話，陡的谷地兩個解差很多）
 end
 
@@ -565,6 +668,11 @@ function fem.point_stress(job, res, x, y, z, xi, eta, zeta)
 		or not sf and 1 or type(sf) == "number" and sf or (job.soft_e or 0.1)      -- 勁度比例（土、碎石較軟）
 	lam, mu = w * lam, w * mu
 	local tr = lam * (exx + eyy + ezz)
+	local pc = res.P and res.P[c]       -- 土的塑性應力（fem.solve 的 job.plastic）
+	if pc then
+		return job.sxx[c] - (tr + 2 * mu * exx) + pc[1], job.syy[c] - (tr + 2 * mu * eyy) + pc[2],
+			job.szz[c] - (tr + 2 * mu * ezz) + pc[3], -mu * gxy + pc[4], -mu * gyz + pc[5], job.sxz[c] - mu * gzx + pc[6]
+	end
 	return job.sxx[c] - (tr + 2 * mu * exx), job.syy[c] - (tr + 2 * mu * eyy), job.szz[c] - (tr + 2 * mu * ezz),
 		-mu * gxy, -mu * gyz, job.sxz[c] - mu * gzx
 end
