@@ -119,7 +119,8 @@ end)
 local function pointed_node(player)
 	local eye = vector.add(player:get_pos(), {x = 0, y = player:get_properties().eye_height or 1.625, z = 0})
 	eye = vector.add(eye, vector.divide(player:get_eye_offset(), 10))
-	local to = vector.add(eye, vector.multiply(player:get_look_dir(), RANGE))
+	local reach = rockmech.build_view_reach and rockmech.build_view_reach(player:get_player_name()) or RANGE   -- 施工視角裡比較遠
+	local to = vector.add(eye, vector.multiply(player:get_look_dir(), reach))
 	for pt in core.raycast(eye, to, false, false) do
 		if pt.type == "node" then return pt end
 	end
@@ -170,7 +171,8 @@ core.register_globalstep(function(dtime)
 		local ent = item:sub(-5) == "_item" and core.registered_entities[item:sub(1, -6)]
 		local vdef = ent and ent.vkind and V.TYPES[ent.vkind]
 		local is_crusher, is_plant = item == "rockmech:crusher" or item == "rockmech:crusher_big", item == "rockmech:plant" and rockmech.plant_site_ok
-		local pt = (vdef or is_crusher or is_plant) and not player:get_attach() and pointed_node(player)
+		local in_view = rockmech.build_view_active and rockmech.build_view_active(name)
+		local pt = (vdef or is_crusher or is_plant) and (in_view or not player:get_attach()) and pointed_node(player)
 		if not pt then
 			if tiles[name] then clear(name) end
 		else

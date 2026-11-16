@@ -1930,3 +1930,4 @@ Warning: the face has daylighting joints @1, so the face may slide.=
 The face has no daylighting joints.=
 Generating the map @1%=
 Glass pane=
+Build view   E to exit=

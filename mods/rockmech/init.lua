@@ -230,3 +230,4 @@ end
 
 -- 營地炸不壞：要在所有方塊註冊完之後（最後載入）
 dofile(modpath .. "/campguard.lua")
+dofile(modpath .. "/buildview.lua")        -- 施工視角

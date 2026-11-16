@@ -305,6 +305,7 @@ local function e_check(pl)
 	e_down[name] = down
 end
 rockmech.belt_e_check = e_check      -- 測試用
+function rockmech.is_belt_node(name) return BELT_H[name] ~= nil end
 core.register_globalstep(function()
 	for _, pl in ipairs(core.get_connected_players()) do e_check(pl) end
 end)

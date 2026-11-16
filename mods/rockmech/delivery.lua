@@ -57,6 +57,10 @@ function rockmech.cells_blocked(cells, y0, y1, except)
 	end
 	local function hit(x, z) return set[math.floor(x + 0.5) .. "," .. math.floor(z + 0.5)] end
 	-- 車身最長大約 8 m：中心在範圍外 8 m 內的車也要看車身蓋不蓋到
+	-- 施工視角（buildview.lua）裡的人：本人站在進入點（看到的是替身），連自己也算
+	for _, h in ipairs(rockmech.build_view_homes and rockmech.build_view_homes() or {}) do
+		if h.pos.y >= y0 - 2 and h.pos.y <= y1 and hit(h.pos.x, h.pos.z) then return S("a person") end
+	end
 	for _, o in ipairs(core.get_objects_in_area({x = x1 - 8, y = y0 - 4, z = z1 - 8}, {x = x2 + 8, y = y1 + 4, z = z2 + 8})) do
 		local p = o:get_pos()
 		if o:is_player() then
@@ -246,6 +250,19 @@ function rockmech.facility_cells(item, a, dx, dz)
 	return cells
 end
 
+-- 施工視角（buildview.lua）裡到處都是保護區：施工這一下例外
+local function guarded(fn)
+	return function(itemstack, user, pointed)
+		local name = user and user.get_player_name and user:get_player_name()
+		if not (name and rockmech.build_view_placing) then return fn(itemstack, user, pointed) end
+		rockmech.build_view_placing(name, true)
+		local ok, res = pcall(fn, itemstack, user, pointed)
+		rockmech.build_view_placing(name, false)
+		if not ok then error(res) end
+		return res
+	end
+end
+
 for _, o in ipairs(ORDERS) do
 	local orig = core.registered_items[o.item]
 	local how = o.hopper and S("the hopper is dug on your side; check the preview frame on the ground first") or o.how
@@ -257,7 +274,7 @@ for _, o in ipairs(ORDERS) do
 		short_description = S("@1 work order", o.label),
 		inventory_image = (orig and orig.inventory_image ~= "" and orig.inventory_image or "rockmech_icon_crusher.png") .. "^" .. BADGE,
 		stack_max = o.item == "rockmech:belt" and 99 or 1,
-		on_place = function(itemstack, placer, pointed)
+		on_place = guarded(function(itemstack, placer, pointed)
 			if pointed.type ~= "node" or not placer or not orig then return itemstack end
 			local name = placer:get_player_name()
 			if o.hopper then
@@ -280,7 +297,8 @@ for _, o in ipairs(ORDERS) do
 				-- 自己站在施工範圍裡：移到受料倉外（倉朝自己這邊挖，不移會掉進去）
 				local pp = placer:get_pos()
 				local px, pz = math.floor(pp.x + 0.5), math.floor(pp.z + 0.5)
-				for _, c in ipairs(cells) do
+				local in_view = rockmech.build_view_active and rockmech.build_view_active(name)   -- 在空中（施工視角）：本人不在這裡
+				for _, c in ipairs(in_view and {} or cells) do
 					if c[1] == px and c[2] == pz then
 						local far = 2 + H.SIZE + 1
 						local q = {x = a.x + dx * far + (dx == 0 and (pp.x - a.x) or 0), y = a.y + 2, z = a.z + dz * far + (dz == 0 and (pp.z - a.z) or 0)}
@@ -300,8 +318,8 @@ for _, o in ipairs(ORDERS) do
 			local res = orig.on_place(tmp, placer, pointed)
 			if not core.is_creative_enabled(name) and res and res:get_count() == 0 then itemstack:take_item() end
 			return itemstack
-		end,
-		on_use = o.item == "rockmech:belt" and function(itemstack, user, pointed)
+		end),
+		on_use = o.item == "rockmech:belt" and guarded(function(itemstack, user, pointed)
 			if not orig.on_use then return end
 			local tmp = ItemStack(o.item)
 			local slope = itemstack:get_meta():get_int("slope")
@@ -324,6 +342,6 @@ for _, o in ipairs(ORDERS) do
 			local d = res:get_meta():get_string("description")
 			if d ~= "" then m:set_string("description", S("@1 work order   @2", o.label, d)) end
 			return itemstack
-		end or nil,
+		end) or nil,
 	})
 end
