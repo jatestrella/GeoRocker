@@ -77,6 +77,7 @@ local RUBBLE_TEX = (function()
 	if type(t) == "table" then t = t.name end
 	return t or "[fill:16x16:#7a7470"
 end)()
+local PILE_ICON = "[fill:16x16:#00000000^[fill:10x14:3,1:#5c6268^[fill:2x14:5,1:#41474c^[fill:2x14:9,1:#41474c"
 local FILLS = {soil = {suffix = "", tex = DIRT}, rubble = {suffix = "_r", tex = RUBBLE_TEX}}
 local STATES = {plain = {suffix = "", face = STEEL}, wale = {suffix = "_wale", face = WALE_FACE}, bent = {suffix = "_bent", face = RUST}}
 local PILE_INFO = {}          -- 方塊名稱 → {fill, state}
@@ -97,7 +98,8 @@ for fk, f in pairs(FILLS) do
 				or (sk == "bent" and S("Sheet pile (yielded)") or S("Sheet pile")),
 			short_description = first and S("Sheet pile") or nil,
 			tiles = {top, t, east, west, t, st.face},      -- +Y −Y +X −X +Z −Z
-			inventory_image = first and "[fill:16x16:#00000000^[fill:10x14:3,1:#5c6268^[fill:2x14:5,1:#41474c^[fill:2x14:9,1:#41474c" or nil,
+			inventory_image = first and PILE_ICON or nil,
+			wield_image = first and PILE_ICON or nil,      -- 手上拿的是一片鋼板（不是整格土）
 			drop = sk == "bent" and "" or PILE,
 			groups = first and {cracky = 2, rockmech_retain = 1} or {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
 		}))
