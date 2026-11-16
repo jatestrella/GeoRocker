@@ -181,6 +181,7 @@ dofile(modpath .. "/facilitydamage.lua")   -- 設施耐久度：爆炸扣整座�
 dofile(modpath .. "/npc_skins.lua")
 dofile(modpath .. "/village.lua")          -- 村莊配置（新世界：道路、店家的地塊）
 dofile(modpath .. "/career.lua")
+dofile(modpath .. "/buildwaste.lua")       -- 磚、石材、玻璃、貨櫃牆板拆了變建築廢棄物
 dofile(modpath .. "/team.lua")
 dofile(modpath .. "/nametag.lua")
 dofile(modpath .. "/npc_talk.lua")      -- NPC 對話泡泡（台詞在 npc_lines.lua）

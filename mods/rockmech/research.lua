@@ -478,6 +478,24 @@ end
 local function flag_of(x0) return "research_site:" .. x0 end
 function rockmech.career_build_research(x0)
 	storage:set_string(flag_of(x0), "1")       -- 這座營地蓋過研究帳篷了（下面補蓋時看這個）
+	-- 村莊：研究所是一間中屋（career.lua 的房型；兩人：駐點地質師、經濟分析師），各坐一張書桌後面面向門
+	if cfg.village and rockmech.village_build_shell then
+		local set, at, yaw, hw, zf, zb, L = rockmech.village_build_shell("research", 1, {size = "medium"})
+		if not set then return end
+		for _, p in ipairs({{-3, 2, 1, "table"}, {-2, 2, 1, "table"}, {-2, 2, 2, "papers"}, {-3, 1, 1, "chair"},
+			{3, 2, 1, "table"}, {2, 2, 1, "table"}, {2, 2, 2, "papers"}, {3, 1, 1, "chair"},
+			{-5, 1, 1, "shelf"}, {-5, 1, 2, "shelf"}, {0, 1, 1, "shelf"}, {5, 1, 1, "crate"}, {5, 1, 2, "crate"}, {5, 2, 1, "helmets"}}) do
+			set(p[1], p[3], zb + p[2], "rockmech:camp_" .. p[4])
+		end
+		local key = rockmech.career_vendor_spots
+		local list = core.deserialize(storage:get_string(key)) or {}
+		local g, a = at(-3, 0, zb + 1), at(3, 0, zb + 1)
+		list[#list + 1] = {kind = "geologist", pos = {x = g.x, y = L.y + 1.05, z = g.z}, yaw = yaw}
+		list[#list + 1] = {kind = "analyst", pos = {x = a.x, y = L.y + 1.05, z = a.z}, yaw = yaw}
+		storage:set_string(key, core.serialize(list))
+		storage:set_string("analyst_site:" .. x0, "1")      -- 分析師已經坐好了（market.lua 不用再加）
+		return
+	end
 	local cx, cz, fy, face = rockmech.camp_frame("research", x0, x0 + RES_DX, RES_Z, nil, "north")
 	local y = fy or ground_y(cx, cz) or 0
 	local set, at, yaw = rockmech.career_placer(cx, cz, y, face)

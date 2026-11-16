@@ -1102,7 +1102,82 @@ if cfg.village then
 	for _, it in ipairs(cfg.shop or {}) do if BLAST_VEHICLES[it.key] then it.shop = "vehicle" end end
 end
 -- vendors：{{kind, sit}, …}；props：店裡多的擺設 {{dx, dz（離後牆）, 高度層, 名稱}, …}
--- 單層貨櫃屋外殼（地塊裡、門朝道路）：回傳 set, at, yaw, hw（半寬）, zf（正面牆）, zb（後牆）, L
+--
+-- 小鎮的房子（貨櫃屋留給以後的郊外營地）：照人數分三種房型，長邊沿路（不做正方形）
+--   small  小屋     外牆 9 × 6，平房，1 人
+--   medium 中屋     外牆 13 × 8，平房，2–3 人（櫃台三個位子）
+--   large  兩層大屋 外牆 13 × 8 兩層＋左後方一間平房側翼 5 × 5（L 形），3–6 人（1 樓 3 位、2 樓 3 位）
+-- 外觀：每塊地照位置挑一套配色（牆、牆角柱、牆腳、屋頂），雙斜屋頂、屋簷外推一格、木門、單片玻璃窗。
+-- 磚、石磚這些玩家做不出來，拆掉會變建築廢棄物（buildwaste.lua）
+local HOUSE = {small = {hw = 4, depth = 6, floors = 1}, medium = {hw = 6, depth = 8, floors = 1},
+	large = {hw = 6, depth = 8, floors = 2, wing = true}}
+rockmech.village_house = HOUSE
+local STYLES = {
+	{wall = "default:brick", post = "default:tree", base = "default:cobble", roof = "junglewood"},          -- 紅磚、深色木屋頂
+	{wall = "default:stonebrick", post = "default:tree", base = "default:cobble", roof = "brick"},          -- 石磚、紅瓦
+	{wall = "default:wood", post = "default:tree", base = "default:stone_block", roof = "stonebrick"},      -- 木牆、灰瓦
+	{wall = "default:sandstonebrick", post = "default:acacia_tree", base = "default:sandstone_block", roof = "acacia_wood"},
+	{wall = "default:silver_sandstone_brick", post = "default:pine_tree", base = "default:cobble", roof = "pine_wood"},
+}
+local FLOOR = "default:wood"
+local function style_of(L)
+	local s = STYLES[((L.x * 31 + L.z * 17) % #STYLES + #STYLES) % #STYLES + 1]
+	local reg = core.registered_nodes
+	if not (reg[s.wall] and reg[s.post] and reg["stairs:stair_" .. s.roof]) then s = STYLES[1] end
+	return s
+end
+-- 一間方盒（牆、地板、各層天花板）：x1..x2、z1..z2 是外牆，floors 層，每層高 4（地板 h 4f、牆 4f+1..4f+3）
+local function house_room(set, x1, x2, z1, z2, floors, sty)
+	for dx = x1, x2 do
+		for dz = z1, z2 do
+			local ex, ez = dx == x1 or dx == x2, dz == z1 or dz == z2
+			set(dx, 0, dz, (ex or ez) and sty.base or FLOOR)
+			for f = 0, floors - 1 do
+				for h = 4 * f + 1, 4 * f + 3 do
+					if ex and ez then set(dx, h, dz, sty.post)
+					elseif ex or ez then set(dx, h, dz, h == 1 and sty.base or sty.wall)
+					else set(dx, h, dz, "air") end
+				end
+				set(dx, 4 * f + 4, dz, (ex and ez) and sty.post or (ex or ez) and sty.wall or FLOOR)
+			end
+		end
+	end
+end
+-- 雙斜屋頂：屋脊沿 axis（"x" 或 "z"），屋簷高 hb（天花板那層）、往外推一格，兩端山牆用牆的材料填滿。
+-- no_hi：屋脊方向的 + 端不外推（側翼接主屋的那一端）
+local function house_roof(set, x1, x2, z1, z2, hb, axis, sty, no_hi)
+	local stair, full = "stairs:stair_" .. sty.roof, "default:" .. sty.roof
+	if not core.registered_nodes[full] then full = sty.wall end
+	-- 沿屋脊的範圍 a1..a2、橫跨的範圍 b1..b2（外牆）
+	local a1, a2, b1, b2 = x1, x2, z1, z2
+	if axis == "z" then a1, a2, b1, b2 = z1, z2, x1, x2 end
+	local function put(a, h, b, n, p2)
+		if axis == "x" then set(a, h, b, n, p2) else set(b, h, a, n, p2) end
+	end
+	for b = b1 - 1, b2 + 1 do
+		local il, ih = b - (b1 - 1), (b2 + 1) - b
+		local i = math.min(il, ih)
+		for a = a1 - 1, a2 + (no_hi and -1 or 1) do
+			for h = hb + i + 1, hb + i + 3 do put(a, h, b, "air") end
+			if il == ih then put(a, hb + i, b, full)
+			elseif axis == "x" then put(a, hb + i, b, stair, ih < il and 2 or 0)      -- 正面那半邊往 −z 爬
+			else put(a, hb + i, b, stair, il < ih and 1 or 3) end                      -- 左半邊往 +x 爬
+			if b >= b1 and b <= b2 then
+				local gable = a == a1 or a == a2
+				for h = hb + 1, hb + i - 1 do put(a, h, b, gable and sty.wall or "air") end
+			end
+		end
+	end
+end
+-- 木門（內建的門，正面牆、往裡開）：下半 _a、上半 doors:hidden，facedir = 從外面看門的方向（−dz → 2）
+local function house_door(set, at, dx, dz, name)
+	if not core.registered_nodes[name .. "_a"] then set(dx, 1, dz, "air"); set(dx, 2, dz, "air"); return end
+	set(dx, 1, dz, name .. "_a", 2)
+	set(dx, 2, dz, "doors:hidden", 2)
+	core.get_meta(at(dx, 1, dz)):set_int("state", 0)
+end
+
+-- 房子外殼（地塊裡、門朝道路）：回傳 set, at, yaw, hw（半寬）, zf（正面牆）, zb（後牆）, L
 local function build_shell(kind, n, opts)
 	local L = rockmech.village_lot and rockmech.village_lot(kind, n)
 	if not L then return end
@@ -1112,57 +1187,60 @@ local function build_shell(kind, n, opts)
 	local cx = opts.cx or 0
 	local function set(dx, h, dz, n, p2) set0(dx + cx, h, dz, n, p2) end
 	local function at(dx, h, dz) return at0(dx + cx, h, dz) end
-	local hw = opts.hw or math.floor((L.w - 2) / 2)    -- 店面半寬（沿路）
-	local zf = opts.zf or (math.floor(L.d / 2) - 2)     -- 正面牆（門）
-	local zb = opts.zb or (zf - (L.d - 3) + 1)          -- 後牆（室內至少三排：攤主、櫃台、客人）
-	-- opts.floors = 2：兩層樓（2 樓地板在 h 4、屋頂在 h 8），室內右後角一道樓梯（四階實心的踏步）
-	local floors = opts.floors or 1
+	local T = HOUSE[opts.size or ""] or {}
+	local hw = opts.hw or T.hw or math.floor((L.w - 2) / 2)    -- 店面半寬（沿路）
+	local zf = opts.zf or (math.floor(L.d / 2) - 2)              -- 正面牆（門）
+	local zb = opts.zb or (T.depth and zf - T.depth + 1) or (zf - (L.d - 3) + 1)   -- 後牆（室內至少三排：攤主、櫃台、客人）
+	-- floors = 2：兩層樓（2 樓地板在 h 4、天花板在 h 8），室內右邊一道木樓梯
+	local floors = opts.floors or T.floors or 1
 	local top = 4 * floors
-	for dx = -hw, hw do
-		for dz = zb, zf do
-			local ex, ez = math.abs(dx) == hw, dz == zb or dz == zf
-			set(dx, 0, dz, "rockmech:office_floor")
-			for f = 0, floors - 1 do
-				for h = 4 * f + 1, 4 * f + 3 do
-					if ex and ez then set(dx, h, dz, "rockmech:office_post")
-					elseif ex or ez then set(dx, h, dz, (h % 4 == 1) and "rockmech:office_wall_base" or "rockmech:office_wall")
-					else set(dx, h, dz, "air") end
-				end
-				if f < floors - 1 then set(dx, 4 * f + 4, dz, (ex or ez) and "rockmech:office_post" or "rockmech:office_floor") end
-			end
-			set(dx, top, dz, (ex or ez) and "rockmech:office_post" or "rockmech:office_roof")
-			for h = top + 1, top + 3 do set(dx, h, dz, "air") end
-		end
+	local sty = style_of(L)
+	if T.wing then       -- 左後方的平房側翼（L 形）：先蓋側翼，主屋的後牆再蓋上去，中間開一個門洞
+		local wx1, wx2, wz1 = -hw, -hw + 4, zb - 4
+		house_room(set, wx1, wx2, wz1, zb, 1, sty)
+		house_roof(set, wx1, wx2, wz1, zb, 4, "z", sty, true)
+		set(wx1, 2, zb - 2, PANE, 1)
 	end
+	house_room(set, -hw, hw, zb, zf, floors, sty)
+	house_roof(set, -hw, hw, zb, zf, top, "x", sty)
+	if T.wing then for h = 1, 2 do set(-hw + 2, h, zb, "air") end end
 	if floors > 1 then
 		-- 樓梯：靠右牆、從後牆往門口爬（第一階後面 zb + 1 留一格空地走得過去；2 樓地板在踏步上方開口）。
 		-- 用內建的木樓梯（木工桌拿木板做得出來），下面墊整格方塊；木樓梯 facedir 0 是往 +z 爬，這裡往正面（+dz）爬 → 0
 		for k = 1, 4 do
 			local dz = zb + 1 + k
-			for h = 1, k - 1 do set(hw - 1, h, dz, "rockmech:office_floor") end
+			for h = 1, k - 1 do set(hw - 1, h, dz, FLOOR) end
 			set(hw - 1, k, dz, "stairs:stair_wood", 0)
 			for h = k + 1, math.min(k + 3, 7) do set(hw - 1, h, dz, "air") end
 		end
 		set(hw - 1, 1, zb + 1, "air"); set(hw - 1, 2, zb + 1, "air")         -- 樓梯口
 		for k = 1, 3 do set(hw - 1, 4, zb + 1 + k, "air") end
-		local zm2 = math.floor((zb + zf) / 2)
-		set(-hw, 6, zm2, PANE, 1); set(hw, 6, zm2, PANE, 1)
-		for _, dx in ipairs({-hw + 2, hw - 2}) do set(dx, 6, zf, PANE, 0) end
-		set(0, 7, zm2, "rockmech:camp_lamp")
 	end
-	-- 門（正面中間，修車廠開三格寬）、窗（正面兩側、側牆中間）
+	-- 門（正面中間的木門；修車廠開三格寬三格高的大門；車輛商玻璃門）、窗（正面每隔一格、側牆中間）
 	local door = opts.wide_door and 1 or 0
 	-- 玻璃正面（車輛商的展售店）：正面牆整片玻璃（角柱留著）
 	if opts.glass_front then
 		for dx = -hw + 1, hw - 1 do for h = 1, 3 do set(dx, h, zf, PANE, 0) end end
 	end
-	for dx = -door, door do for h = 1, 2 + (opts.wide_door and 1 or 0) do set(dx, h, zf, "air") end end
-	for _, dx in ipairs({-hw + 2, hw - 2}) do if math.abs(dx) > door + 1 and not opts.glass_front then set(dx, 2, zf, PANE, 0) end end
+	if opts.wide_door then
+		for dx = -1, 1 do for h = 1, 3 do set(dx, h, zf, "air") end end
+	else
+		house_door(set, at, 0, zf, opts.glass_front and "doors:door_glass" or "doors:door_wood")
+	end
 	local zm = math.floor((zb + zf) / 2)
-	set(-hw, 2, zm, PANE, 1); set(hw, 2, zm, PANE, 1)
-	set(0, 3, zm, "rockmech:camp_lamp")
+	for f = 0, floors - 1 do
+		local h = 4 * f + 2
+		if not opts.glass_front or f > 0 then
+			for dx = 2, hw - 1, 2 do
+				if dx > door + 1 then set(dx, h, zf, PANE, 0); set(-dx, h, zf, PANE, 0) end
+			end
+		end
+		set(-hw, h, zm, PANE, 1); set(hw, h, zm, PANE, 1)
+		set(0, 4 * f + 3, zm, "rockmech:camp_lamp")
+	end
 	return set, at, yaw, hw, zf, zb, L
 end
+rockmech.village_build_shell = build_shell
 local function build_shop(kind, n, vendors, props, opts)
 	local set, at, yaw, hw, zf, zb, L = build_shell(kind, n, opts)
 	if not set then return end
@@ -1177,7 +1255,8 @@ local function build_shop(kind, n, vendors, props, opts)
 		local p = at(vx, 0, zb + 1)
 		list[#list + 1] = {kind = v[1], pos = {x = p.x, y = L.y + (v[2] and 1.05 or 0.5), z = p.z}, yaw = yaw}
 	end
-	local maxdx = (opts and opts.floors or 1) > 1 and hw - 3 or hw - 1      -- 兩層樓：右邊一排是樓梯、旁邊一排是走到樓梯口的走道
+	local floors = opts and (opts.floors or (HOUSE[opts.size or ""] or {}).floors) or 1
+	local maxdx = floors > 1 and hw - 3 or hw - 1      -- 兩層樓：右邊一排是樓梯、旁邊一排是走到樓梯口的走道
 	for _, p in ipairs(props or {}) do      -- 擺設限制在牆內
 		set(math.max(-hw + 1, math.min(maxdx, p[1])), p[3], zb + p[2], "rockmech:camp_" .. p[4])
 	end
@@ -1196,22 +1275,30 @@ local function build_village_shops()
 		build_shop("vehicle_dealer", 1, {{"vehicle", true}}, {{-5, 1, 1, "tires"}, {-5, 2, 1, "tires"}, {5, 1, 1, "shelf"}, {5, 2, 1, "helmets"}},
 			{hw = math.floor(dl.w / 2) - 1, zb = zb, zf = zf, glass_front = true})
 	end
-	build_shop("blasting", 1, {{"blast", false}}, {{-2, 1, 1, "explosives"}, {2, 1, 1, "crate"}, {3, 1, 1, "barrel"}})
-	build_shop("hardware", 1, {{"tools", true}}, {{-3, 1, 1, "shelf"}, {-3, 1, 2, "shelf"}, {3, 1, 1, "shelf"}, {2, 1, 1, "crate"}})
-	-- 工程顧問公司、第一間技師事務所是兩層樓：2 樓是辦公室（辦公桌、文件、黑板）
-	-- {dx, 離後牆幾格, 高度層（2 樓地板上一格 = 5）, 名稱}；右邊 dx = hw − 1 是樓梯
+	-- 房型照人數（HOUSE）：爆破器材行、五金行、第二間技師事務所 1 人 → 小屋；第一間技師事務所（最多三位）→ 中屋；
+	-- 顧問公司、操作員宿舍 → 兩層大屋。研究所（地質學家 1 人，小屋）在 research.lua
+	build_shop("blasting", 1, {{"blast", false}}, {{-2, 1, 1, "explosives"}, {2, 1, 1, "crate"}, {3, 1, 1, "barrel"}}, {size = "small"})
+	build_shop("hardware", 1, {{"tools", true}}, {{-3, 1, 1, "shelf"}, {-3, 1, 2, "shelf"}, {3, 1, 1, "shelf"}, {2, 1, 1, "crate"}}, {size = "small"})
+	-- 2 樓是辦公室（辦公桌、文件、黑板）：{dx, 離後牆幾格, 高度層（2 樓地板上一格 = 5）, 名稱}；右邊 dx = hw − 1 是樓梯
 	local UPSTAIRS = {{-2, 1, 5, "table"}, {-1, 1, 5, "table"}, {-1, 1, 6, "papers"}, {-1, 2, 5, "chair"},
 		{-3, 3, 5, "table"}, {-3, 3, 6, "helmets"}, {1, 1, 5, "shelf"}, {1, 1, 6, "shelf"}}
 	local set, at, hw, zf = build_shop("consulting", 1, {{"civil", true}}, {{-3, 1, 1, "blackboard"}, {-3, 1, 2, "blackboard"}, {3, 1, 1, "shelf"}},
-		{floors = 2, upstairs = UPSTAIRS})
+		{size = "large", upstairs = UPSTAIRS})
+	if set then      -- 側翼：資料室
+		for _, p in ipairs({{-hw + 1, -1}, {-hw + 1, -2}, {-hw + 3, -3}}) do set(p[1], 1, zf - 7 + p[2], "rockmech:camp_shelf") end
+	end
 	if set and rockmech.news_board_put then rockmech.news_board_put(at(-hw, 2, zf + 1), at(-hw, 2, zf)) end      -- 告示板（礦價）掛在正面角柱
-	build_shop("tech_office", 1, {{"geo", true}}, {{-3, 1, 1, "shelf"}, {3, 1, 1, "crate"}, {3, 2, 1, "papers"}},
-		{floors = 2, upstairs = UPSTAIRS})
-	build_shop("tech_office", 2, {{"geotech", true}}, {{-3, 1, 1, "shelf"}, {3, 1, 1, "blackboard"}, {3, 1, 2, "blackboard"}})
+	build_shop("tech_office", 1, {{"geo", true}}, {{-5, 1, 1, "shelf"}, {5, 1, 1, "crate"}, {5, 2, 1, "papers"}}, {size = "medium"})
+	build_shop("tech_office", 2, {{"geotech", true}}, {{-3, 1, 1, "shelf"}, {3, 1, 1, "blackboard"}, {3, 1, 2, "blackboard"}}, {size = "small"})
 	build_shop("garage", 1, {{"mechanic", false}}, {{-4, 1, 1, "toolbox"}, {-4, 1, 2, "tires"}, {4, 1, 1, "barrel"}, {4, 1, 2, "crate"}},
 		{wide_door = true})
-	-- 操作員宿舍（人力派遣）：只蓋屋子，長椅由 operator.lua 擺在屋裡（地塊中心那一排）。以後聘用操作員要有住處
-	build_shell("staffing", 1)
+	-- 操作員宿舍（人力派遣）：兩層大屋，長椅由 operator.lua 擺在屋裡（地塊中心那一排）。以後聘用操作員要有住處
+	local sset, _, _, shw, _, szb = build_shell("staffing", 1, {size = "large"})
+	if sset then      -- 2 樓休息室：桌椅、置物櫃
+		for _, p in ipairs({{-3, 2, "table"}, {-2, 2, "table"}, {-3, 3, "chair"}, {-2, 3, "chair"}, {-shw + 1, 1, "shelf"}, {-shw + 2, 1, "shelf"}, {1, 1, "shelf"}}) do
+			sset(p[1], 5, szb + p[2], "rockmech:camp_" .. p[3])
+		end
+	end
 end
 
 local function build_camp_now(owner, x0)

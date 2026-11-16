@@ -20,13 +20,15 @@ V.LOTS = {
 	{kind = "receiving", w = 8, d = 14},           -- 收料場：收料車、地磅
 	{kind = "garage", w = 14, d = 12},             -- 修車廠：工房＋待修空地
 	{kind = "lecture_hall", w = 13, d = 10},       -- 大學講堂
-	{kind = "research", w = 11, d = 9},            -- 研究所
-	{kind = "consulting", w = 10, d = 11},         -- 工程顧問公司（採礦設備）
-	{kind = "tech_office", w = 10, d = 11},        -- 技師事務所（最多三位技師）
-	{kind = "tech_office", w = 10, d = 11},
-	{kind = "blasting", w = 10, d = 11},           -- 爆破器材行
-	{kind = "hardware", w = 10, d = 11},           -- 五金工具行
-	{kind = "staffing", w = 10, d = 11},           -- 人力派遣：操作員宿舍（長椅在屋裡）
+	-- 房型（career.lua 的 HOUSE）：小屋外牆 9 × 6 → 地塊 11 × 9；中屋 13 × 8 → 15 × 11；兩層大屋 13 × 8＋側翼 → 15 × 14
+	-- （左右各留 1 m 屋簷、正面留 2 m 門口）
+	{kind = "consulting", w = 15, d = 14},         -- 工程顧問公司（採礦設備）：兩層大屋
+	{kind = "staffing", w = 15, d = 14},           -- 人力派遣：操作員宿舍（長椅在屋裡）：兩層大屋
+	{kind = "tech_office", w = 15, d = 11},        -- 技師事務所（最多三位技師）：中屋
+	{kind = "research", w = 15, d = 11},           -- 研究所（地質師、經濟分析師）：中屋
+	{kind = "tech_office", w = 11, d = 9},         -- 第二間技師事務所（一位）：小屋
+	{kind = "blasting", w = 11, d = 9},            -- 爆破器材行：小屋
+	{kind = "hardware", w = 11, d = 9},            -- 五金工具行：小屋
 	{kind = "crusher", w = 12, d = 12, outer = true},      -- 收煤站（破碎站）：一律在小鎮最外圍（其他店都排好，再往外找）
 }
 
