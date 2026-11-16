@@ -664,9 +664,13 @@ core.register_on_mods_loaded(function()
 	rockmech.support_ids = rockmech.support_ids or {}
 	local r = {[core.get_content_id(STRUT)] = STRUT_R}
 	for name, info in pairs(HB_INFO) do r[core.get_content_id(name)] = E_STEEL * HB[info.kind].A / E_ROCK_REF end
+	local piles = {}
 	for name, info in pairs(PILE_INFO) do
-		r[core.get_content_id(name)] = info.state == "bent" and PILE_R * BENT_R or PILE_R
+		local cid = core.get_content_id(name)
+		r[cid] = info.state == "bent" and PILE_R * BENT_R or PILE_R
+		piles[cid] = true
 	end
 	rockmech.support_ids.retain_r = r
+	rockmech.support_ids.pile = piles
 end)
 rockmech.retain = {PILE_R = PILE_R, STRUT_R = STRUT_R, pile_my = pile_my, strut_cap = strut_cap, PILE_LEN = PILE_LEN}

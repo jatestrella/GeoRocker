@@ -213,6 +213,7 @@ local function make_job(pos)
 	local block_r = math.max(1e-4, cfg.support.block_fem or 0.1)
 	-- 鋼板樁、內支撐（retain.lua）：勁度比照等效斷面（板樁 EI、支撐 EA）
 	local retain_r = rockmech.support_ids and rockmech.support_ids.retain_r or {}
+	local pile_ids = rockmech.support_ids and rockmech.support_ids.pile or {}
 	for z = 0, n - 1 do for x = 0, n - 1 do
 		-- 這一欄的地表：岩石頂面，或 surface_y（挖掉的算回去，所以開挖才會放出應力）
 		local gx, gz = a.x + x - g.ox, a.z + z - g.oz
@@ -246,6 +247,7 @@ local function make_job(pos)
 			elseif retain_r[cid] then
 				-- 擋土元素的作用方向（板樁的法向、支撐的軸向）：1 = x、3 = z（facedir 0/2 → z，1/3 → x）
 				soft = retain_r[cid]; job.retain = job.retain or {}; job.retain[c] = (g.p2[gi] % 2 == 1) and 1 or 3
+				if pile_ids[cid] then job.pile = job.pile or {}; job.pile[c] = true end
 			end
 			-- 整格表土：土的元素（勁度跟碎石一樣軟，但有現地應力、受重力；materials.lua）
 			local soil = fcfg.soil and soil_set[cid]
@@ -282,6 +284,8 @@ local function make_job(pos)
 			end
 		end
 	end end
+	-- 板樁格：剪力減積分的元素（一層 1 m 的元素彎曲，全積分會剪力鎖定、彎矩被低估，fem.lua job.bend）
+	if job.pile then job.bend, job.bend_blend = job.pile, fcfg.coarse_blend end
 	if gam_n > 0 then job.gamma = gam_sum / gam_n end
 	set_press(job, g, function(wx, wy, wz)
 		local x, y, z = wx - a.x, wy - a.y, wz - a.z

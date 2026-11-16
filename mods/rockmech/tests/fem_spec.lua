@@ -288,4 +288,41 @@ describe("fem 彈性應力場", function()
 		local f7 = cut(7)
 		assert.is_true(f7 > 50)
 	end)
+
+	-- 懸臂：一欄 6 格的板樁（勁度比例 0.054）立在固定的底座上，頂格側面受 100 kPa（3 格寬）。
+	-- 底部彎矩 M = Δσyy/12 應接近 p·6 − p·0.5 = 550 kN·m/m：彎曲構件（job.bend，剪力減積分）在 20% 內，全積分鎖定只剩七成
+	local function cantilever(bend, other)
+		local nx, ny, nz, H = 5, 9, 5, 6
+		local j = {nx = nx, ny = ny, nz = nz, solid = {}, soft = {}, sxx = {}, syy = {}, szz = {}, sxz = {}, gamma = 0,
+			nu = 0.25, tol = 1e-8, max_iter = 20000, bend = {}, press = {}}
+		local function C(x, y, z) return 1 + x + y * nx + z * nx * ny end
+		for z = 0, nz - 1 do for y = 0, ny - 1 do for x = 0, nx - 1 do
+			local c = C(x, y, z)
+			j.sxx[c], j.syy[c], j.szz[c], j.sxz[c] = 0, 0, 0, 0
+			local pile = x == 2 and y >= 1 and y <= H and z >= 1 and z <= 3
+			j.solid[c] = y == 0 or pile or (other and x == 0 and y == 1)
+			if pile then j.soft[c] = 0.054; j.bend[c] = bend or nil end
+			if other and x == 0 and y == 1 then j.soft[c] = 0.3 end      -- 另一種勁度比例的構件（H 型鋼）
+		end end end
+		for z = 1, 3 do
+			local m = #j.press
+			j.press[m + 1], j.press[m + 2], j.press[m + 3] = C(2, H, z), 1, 100
+		end
+		local res = fem.solve(j)
+		local _, s0 = fem.point_stress(j, res, 2, 1, 2, 0, 0.5, 0.5)
+		local _, s1 = fem.point_stress(j, res, 2, 1, 2, 1, 0.5, 0.5)
+		return math.abs(s1 - s0) / 12, res.u[(2 + 7 * 6 + 2 * 60) * 3 + 1]
+	end
+	it("彎曲構件（板樁）用剪力減積分：懸臂彎矩接近靜力解", function()
+		local m_full = cantilever(false)
+		local m_bend = cantilever(true)
+		assert.near(550, m_bend, 110)
+		assert.is_true(m_full < m_bend)
+	end)
+	it("不同勁度比例的構件在同一個解裡各自的勁度", function()
+		-- 旁邊多一格勁度 0.3 的構件，不能把板樁也當成 0.3（以前同一個解只用一個構件勁度）
+		local _, u1 = cantilever(true)
+		local _, u2 = cantilever(true, true)
+		assert.near(u1, u2, math.abs(u1) * 0.05)
+	end)
 end)

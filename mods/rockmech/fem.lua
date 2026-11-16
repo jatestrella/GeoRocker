@@ -84,14 +84,14 @@ fem.element_stiffness = element_stiffness
 -- 一個節點周圍 8 格（位元 e = ex + 2ey + 4ez，該格在節點的 (ex−1, ey−1, ez−1) 位置）的組合 → 模版
 -- {n, dx[], dy[], dz[], k[]（每鄰點 9 個）, d1, d2, d3（對角）}
 -- soft（可選）：mask 裡哪幾格是軟的元素，勁度乘 ratio；post（可選）：哪幾格是木柱，勁度乘 pratio
-local function make_stencil(Ke, mask, soft, ratio, post, pratio, soilm, sratio)
+-- 一般形式：elems[e] = {w（勁度比例）, Ke（該格的元素勁度）}，沒有就是空格
+local function stencil_of(elems)
 	local sum = {}
 	for e = 0, 7 do
-		if math.floor(mask / 2 ^ e) % 2 == 1 then
+		local el = elems[e]
+		if el then
+			local w, Ke = el[1], el[2]
 			local ex, ey, ez = e % 2, math.floor(e / 2) % 2, math.floor(e / 4)
-			local w = post and math.floor(post / 2 ^ e) % 2 == 1 and pratio
-				or soilm and math.floor(soilm / 2 ^ e) % 2 == 1 and sratio
-				or soft and math.floor(soft / 2 ^ e) % 2 == 1 and ratio or 1
 			local a = (1 - ex) + 2 * (1 - ey) + 4 * (1 - ez)   -- 這個節點是該格的第 a 個角
 			local ai, aj, ak = 1 - ex, 1 - ey, 1 - ez
 			for b = 0, 7 do
@@ -116,6 +116,18 @@ local function make_stencil(Ke, mask, soft, ratio, post, pratio, soilm, sratio)
 		end
 	end
 	return st
+end
+local function make_stencil(Ke, mask, soft, ratio, post, pratio, soilm, sratio)
+	local elems = {}
+	for e = 0, 7 do
+		if math.floor(mask / 2 ^ e) % 2 == 1 then
+			local w = post and math.floor(post / 2 ^ e) % 2 == 1 and pratio
+				or soilm and math.floor(soilm / 2 ^ e) % 2 == 1 and sratio
+				or soft and math.floor(soft / 2 ^ e) % 2 == 1 and ratio or 1
+			elems[e] = {w, Ke}
+		end
+	end
+	return stencil_of(elems)
 end
 fem.make_stencil = make_stencil
 
@@ -164,14 +176,35 @@ function fem.solve(job)
 	local lam = E * nu / ((1 + nu) * (1 - 2 * nu))
 	local mu = E / (2 * (1 + nu))
 	local soft, ratio = job.soft or {}, job.soft_e or 0.1
-	local pratio = 1          -- 木柱的勁度比例（soft 裡的數字）
-	for _, v in pairs(soft) do if type(v) == "number" then pratio = v; break end end
 	local soil, sratio = job.soil or {}, job.soil_e or ratio
-	local function w_of(c)    -- 這格的勁度比例
+	local function w_of(c)    -- 這格的勁度比例（木柱、板樁、H 型鋼各自的數字）
 		if soil[c] then return sratio end
 		local s = soft[c]
 		if not s then return 1 end
 		return type(s) == "number" and s or ratio
+	end
+	-- 彎曲構件（job.bend[格]，鋼板樁）：一層 1 m 的元素彎曲，全積分會剪力鎖定（彎矩被假的剪應力吃掉、梁太硬），
+	-- 改用剪力項減積分的元素（job.bend_blend，同粗網格的 coarse_blend）
+	local bend = job.bend or {}
+	local Ke_bend
+	-- 材料編號：(勁度比例, 彎曲構件) → 1..63，模版用 8 格的編號組成的數字當鍵
+	-- （以前只分 岩石／碎石／土／木柱 四類，木柱類共用一個勁度比例：板樁、H 型鋼、鋼支保在同一解裡會被當成同一個勁度）
+	local mat_ids, mat_list, cell_mat = {}, {}, {}
+	local function mat_of(c)
+		local id = cell_mat[c]
+		if id then return id end
+		local w, b = w_of(c), bend[c] and true or false
+		local k = w .. "|" .. tostring(b)
+		id = mat_ids[k]
+		if not id then
+			id = #mat_list + 1
+			assert(id < 64, "fem: too many materials")
+			mat_ids[k] = id
+			if b and not Ke_bend then Ke_bend = element_stiffness(nu, job.bend_blend or 0.1) end
+			mat_list[id] = {w, b and Ke_bend or Ke}
+		end
+		cell_mat[c] = id
+		return id
 	end
 
 	local function is_solid(x, y, z)
@@ -184,27 +217,25 @@ function fem.solve(job)
 	local active, masks = {}, {}
 	local na = 0
 	for z = 1, Nz - 2 do for y = 1, Ny - 2 do for x = 1, Nx - 2 do
-		local m, sm, pm, om = 0, 0, 0, 0
+		local key, ids = 0, nil
 		for e = 0, 7 do
 			local ex, ey, ez = e % 2, math.floor(e / 2) % 2, math.floor(e / 4)
 			local cx, cy, cz = x + ex - 1, y + ey - 1, z + ez - 1
 			if is_solid(cx, cy, cz) then
-				m = m + 2 ^ e
-				local cc = 1 + cx + cy * nx + cz * nx * ny
-				local s = soft[cc]
-				if soil[cc] then om = om + 2 ^ e
-				elseif s then
-					if type(s) == "number" then pm = pm + 2 ^ e else sm = sm + 2 ^ e end
-				end
+				local id = mat_of(1 + cx + cy * nx + cz * nx * ny)
+				key = key + id * 64 ^ e
+				ids = ids or {}
+				ids[e] = id
 			end
 		end
-		if m > 0 then
-			local key = m + 256 * sm + 65536 * pm + 16777216 * om
+		if key > 0 then
 			na = na + 1
 			active[na] = x + y * sy + z * sz
 			masks[na] = key
 			if not stencils[key] then
-				local st = make_stencil(Ke, m, sm, ratio, pm, pratio, om, sratio)
+				local elems = {}
+				for e, id in pairs(ids) do elems[e] = mat_list[id] end
+				local st = stencil_of(elems)
 				stencils[key] = st
 				local o = {}
 				for s = 1, st.n do o[s] = (st.dx[s] + st.dy[s] * sy + st.dz[s] * sz) * 3 end
