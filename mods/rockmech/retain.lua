@@ -126,17 +126,18 @@ core.register_node(STRUT, def_with({
 -- 放下去的方塊依方向分三種（x 東西、z 南北、y 直立），本身是一整條 H 斷面；旁邊有「別的方向」的 H 型鋼時，
 -- 像柵欄一樣自動長出接過去的一段＋中間一塊接頭板（connected nodebox）：T 字、十字、支柱頂到橫撐都接得起來
 local HB = {
-	light = {item = "rockmech:steel_set", A = 6.353e-3, I = 1.6e-5, w = 0.13},     -- H200×200×8×12：A、弱軸 I
-	heavy = {item = STRUT, A = STRUT_A, I = STRUT_I, w = 0.18},                    -- H300×300×10×15
+	light = {item = "rockmech:steel_set", A = 6.353e-3, I = 1.6e-5, w = 0.10, tf = 0.05, tex = "[fill:16x16:#9aa0a6^[fill:16x2:0,7:#7c8288"},     -- H200×200×8×12：A、弱軸 I
+	heavy = {item = STRUT, A = STRUT_A, I = STRUT_I, w = 0.15, tf = 0.07, tex = "[fill:16x16:#5a6068^[fill:16x2:0,7:#454a50"},                    -- H300×300×10×15
 }
 local HB_INFO = {}             -- 方塊名稱 → {kind, axis}
 local HB_NODES = {}            -- 所有 H 型鋼方塊
 local function hb_name(kind, axis) return "rockmech:hbeam_" .. kind .. "_" .. axis end
 local AXIS_DIR = {x = {x = 1, y = 0, z = 0}, y = {x = 0, y = 1, z = 0}, z = {x = 0, y = 0, z = 1}}
 -- 沿 axis 的 H 斷面（從 lo 到 hi），寬 w、深 w，翼板厚 0.06、腹板半厚 0.03；腹板在 y（水平梁）或 x（直立）方向
-local function h_boxes(axis, w, lo, hi)
-	local tf, tw = 0.06, 0.03
-	local raw = {{-w, -w, -w, -w + tf}, {-w, w - tf, w, w}, {-tw, -w + tf, tw, w - tf}}   -- 斷面上的三個矩形（u1, v1, u2, v2）
+local function h_boxes(axis, w, lo, hi, tf)
+	tf = tf or 0.06
+	local tw = tf / 2
+	local raw = {{-w, -w, w, -w + tf}, {-w, w - tf, w, w}, {-tw, -w + tf, tw, w - tf}}   -- 斷面上的三個矩形（u1, v1, u2, v2）
 	local out = {}
 	for _, r in ipairs(raw) do
 		if axis == "z" then out[#out + 1] = {r[1], r[2], lo, r[3], r[4], hi}             -- u = x、v = y
@@ -150,8 +151,8 @@ for kind, k in pairs(HB) do
 	for axis in pairs(AXIS_DIR) do
 		local w = k.w
 		local gus = {-w - 0.02, -w - 0.02, -w - 0.02, w + 0.02, w + 0.02, w + 0.02}     -- 接頭板（相接處中間）
-		local function arm(ax, lo, hi) return add({gus}, h_boxes(ax, w, lo, hi)) end
-		local nb = {type = "connected", fixed = h_boxes(axis, w, -0.5, 0.5)}
+		local function arm(ax, lo, hi) return add({gus}, h_boxes(ax, w, lo, hi, k.tf)) end
+		local nb = {type = "connected", fixed = h_boxes(axis, w, -0.5, 0.5, k.tf)}
 		local others = {}
 		if axis ~= "x" then nb.connect_left, nb.connect_right = arm("x", -0.5, 0), arm("x", 0, 0.5); others[#others + 1] = "group:rockmech_hbeam_x" end
 		if axis ~= "z" then nb.connect_front, nb.connect_back = arm("z", -0.5, 0), arm("z", 0, 0.5); others[#others + 1] = "group:rockmech_hbeam_z" end
@@ -160,7 +161,7 @@ for kind, k in pairs(HB) do
 		core.register_node(name, {
 			description = kind == "light" and S("Light H-beam") or S("Heavy H-beam"),
 			drawtype = "nodebox", paramtype = "light", sunlight_propagates = true, is_ground_content = false,
-			tiles = {BEAM}, node_box = nb, connects_to = others,
+			tiles = {k.tex}, node_box = nb, connects_to = others,
 			groups = {cracky = 2, rockmech_retain = 1, rockmech_hbeam = 1, ["rockmech_hbeam_" .. axis] = 1, not_in_creative_inventory = 1},
 			sounds = base.sounds, drop = k.item,
 		})
