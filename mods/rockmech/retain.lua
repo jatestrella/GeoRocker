@@ -600,26 +600,32 @@ local function cells_min(cells)
 	end
 	return m
 end
--- 板旁邊那一格的土：回傳 σv（kPa，從那一欄的土面算）、c、φ、kh；岩石回傳 rigid = true；不是土回傳 nil
-local function soil_at(p)
+-- 板旁邊那一格的土：回傳 σv（kPa）、c、φ、kh；岩石回傳 rigid = true；不是土回傳 nil。
+-- σv：應力解有解到這裡（天然的土）就用應力解的 σv（地面上的荷重、堆的碎石、空洞上方的拱效應、轉角的幾何都在裡面）；
+-- 取離板再遠一格的土（貼著板的那一格被應力解裡的厚板樁拖著，σv 偏小）。沒有就用那一欄土的重量 γ·h
+local function soil_at(p, out, sv_of)
 	local n = core.get_node(p).name
 	if not holds(n) or IS_PILE[n] then return nil end
 	if rockmech.lith_of_node[n] and not rockmech.is_rubble(n) then return {rigid = true} end
 	local sp = rockmech.materials.defaults("rockmech:topsoil")
-	local h, q = 0, {x = p.x, y = p.y + 1, z = p.z}
-	for _ = 1, 40 do
-		local m = core.get_node(q).name
-		if not holds(m) or IS_PILE[m] then break end
-		h = h + 1
-		q.y = q.y + 1
+	local sv = sv_of and (sv_of(vector.add(p, out)) or sv_of(p))
+	if not sv then
+		local h, q = 0, {x = p.x, y = p.y + 1, z = p.z}
+		for _ = 1, 40 do
+			local m = core.get_node(q).name
+			if not holds(m) or IS_PILE[m] then break end
+			h = h + 1
+			q.y = q.y + 1
+		end
+		sv = sp.gamma * (h + 0.5)
 	end
 	local wet = 1 - (cfg.slope.rain_c_loss or 0) * (rockmech.rain_level and rockmech.rain_level() or 0)
 	local natural = core.get_item_group(n, "rockmech_topsoil") > 0
-	return {sv = sp.gamma * (h + 0.5), c = natural and sp.c * math.max(0, wet) or 0,
+	return {sv = sv, c = natural and sp.c * math.max(0, wet) or 0,
 		phi = natural and sp.phi or cfg.slope.phi_r, kh = (sp.e_rel or cfg.fem.soil_e) * E_ROCK_REF}
 end
--- lo..hi 裡的每一欄板樁解一次。回傳 {[支撐最小格的 hash] = 軸力 kN}（接在板樁上的支撐）
-local function wall_check(lo, hi)
+-- lo..hi 裡的每一欄板樁解一次。sv_of(位置) → 應力解的 σv（kPa）或 nil
+local function wall_solve(lo, hi, sv_of)
 	local cols, seen = {}, {}
 	for _, p in ipairs(core.find_nodes_in_area(lo, hi, {"group:rockmech_retain"})) do
 		local key = p.x .. "," .. p.z
@@ -690,20 +696,41 @@ local function wall_check(lo, hi)
 			end
 		end
 	end
-	local strut_N = {}
-	local My = pile_my()
+	-- 每一欄每一格兩側的土彈簧（p0, pa, pp, k）
+	local raw = {}
+	for _, col in ipairs(cols) do
+		for _, q in ipairs(col.cells) do
+			for _, s in ipairs({1, -1}) do
+				local nb = vector.add(q, vector.multiply(col.ax, s))
+				local so = soil_at(nb, vector.multiply(col.ax, s), sv_of)
+				local sp
+				if so and so.rigid then sp = {0, 0, 0, 0, 1e6, 1e6}
+				elseif so then sp = WB.soil_spring(0, s, so.sv, so.c, so.phi, so.kh) end
+				if sp then raw[line_key(col, q.y, s) .. ":" .. col.t] = sp end
+			end
+		end
+	end
+	local out = {}
 	for _, col in ipairs(cols) do
 		local n = #col.cells
 		local t = {n = n, EI = EI_PILE * (col.bent and BENT_R or 1), soil = {}, props = {}}
 		local own = {}          -- props 的序號 → 這一欄自己的那一支支撐
 		for i, q in ipairs(col.cells) do
 			for _, s in ipairs({1, -1}) do
-				local nb = vector.add(q, vector.multiply(col.ax, s))
-				local so = soil_at(nb)
-				if so and so.rigid then
-					t.soil[#t.soil + 1] = {i, s, 0, 0, 1e6, 1e6}
-				elseif so then
-					t.soil[#t.soil + 1] = WB.soil_spring(i, s, so.sv, so.c, so.phi, so.kh)
+				-- 鋼板互相咬合、連成一片：土彈簧取沿牆 ±1 m（同一面牆、同高度、同一側）的平均，
+				-- 不會因為一格背後的土剛好被判破壞，就只有那 1 m 寬倒下去
+				local lk = line_key(col, q.y, s)
+				local own_sp = raw[lk .. ":" .. col.t]
+				if own_sp then
+					local sum, cnt = {0, 0, 0, 0}, 0
+					for dt = -1, 1 do
+						local o = raw[lk .. ":" .. (col.t + dt)]
+						if o then
+							for f = 1, 4 do sum[f] = sum[f] + o[f + 2] end
+							cnt = cnt + 1
+						end
+					end
+					t.soil[#t.soil + 1] = {i, s, sum[1] / cnt, sum[2] / cnt, sum[3] / cnt, sum[4] / cnt}
 				end
 				local l = lines[line_key(col, q.y, s)]
 				if l then
@@ -715,7 +742,16 @@ local function wall_check(lo, hi)
 				end
 			end
 		end
-		local r = WB.solve(t)
+		out[#out + 1] = {col = col, t = t, r = WB.solve(t), own = own}
+	end
+	return out
+end
+-- 回傳 {[支撐最小格的 hash] = 軸力 kN}（接在板樁上的支撐）
+local function wall_check(lo, hi, sv_of)
+	local strut_N = {}
+	local My = pile_my()
+	for _, e in ipairs(wall_solve(lo, hi, sv_of)) do
+		local col, t, r, own = e.col, e.t, e.r, e.own
 		if not r.ok then
 			topple(col.cells)                -- 撐不住：埋入不夠、整片倒進坑裡
 		else
@@ -754,7 +790,11 @@ function rockmech.retain_fem_check(job, res, meta)
 	check_piles_near(vector.add(lo, half), half)
 	check_hbeams_near(vector.add(lo, half), half)    -- 崩落把撐著 H 型鋼的土帶走：懸空的掉下來
 	-- 板樁的彎矩、接在板樁上的支撐軸力：彈性支承梁法（wall_check）。其他支撐（柱、撐在岩壁之間的）照應力解
-	local strut_N = wall_check(lo, hi)
+	-- 應力解的 σv：只取天然的土格（碎石格在應力解裡沒有重量、沒有現地應力，照那一欄的重量算）
+	local strut_N = wall_check(lo, hi, function(p)
+		local c = cell(p)
+		if c and job.soil and job.soil[c] then return math.max(0, res.syy[c]) end
+	end)
 	-- 支撐：每一支取最大的軸力
 	local done = {}
 	for _, p in ipairs(core.find_nodes_in_area(lo, hi, HB_NODES)) do

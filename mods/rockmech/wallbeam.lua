@@ -131,6 +131,11 @@ function wb.solve(t)
 		local dlt = pr[2] * w[pr[1]]
 		out.prop[k] = dlt > 0 and pr[3] * dlt or 0
 	end
+	-- 每個土彈簧最後的土壓（kPa）：應力解把它當成板旁邊那格土受的面壓
+	out.p = {}
+	for k, sp in ipairs(soil) do
+		out.p[k] = math.min(sp[5], math.max(sp[4], sp[3] + sp[6] * sp[2] * w[sp[1]]))
+	end
 	return out
 end
 
