@@ -1,4 +1,4 @@
--- rockmech/village.lua
+﻿-- rockmech/village.lua
 -- 村莊配置（新的隨機、自訂世界）：營地不再是一整片混凝土地坪，而是沿著道路分散的店家，像 Minecraft 的村莊。
 -- 這裡只決定「路在哪、每家店的地塊在哪、面向哪」（純計算，由種子和地形決定，每次算出來都一樣）；蓋房子在各店的建造函式。
 --
@@ -13,6 +13,7 @@ local V = {}
 
 local STEP = 4
 local MAX_RELIEF = 3
+local STREET_HALF = 56      -- 主街半長 (m)：店家沿主街兩側排（小鎮）
 -- 店家（kind、沿路寬 w、深 d）。順序 = 找位置的順序（大的先找）
 -- 小店：地塊 10 × 11 → 店面外牆 8 × 7、室內 7 × 5（使用者 2026-11-16：室內深 3 格太小）
 V.LOTS = {
@@ -120,18 +121,22 @@ function V.dealer_yard(L)
 end
 
 -- 選址（參考 Luanti 的 settlements／mg_villages：先找適合的地點，不硬把地形削平）：出生點 R m 內、每 40 m 一個候選，
--- 看 80 × 80 m 的範圍（每 10 m 取樣）高差最小的，離出生點遠一點扣一點分
+-- 看主街那條帶子（沿街 ±STREET_HALF、兩側 ±20 m 放街屋，每 8 m 取樣）高差最小的，東西向、南北向取比較平的；
+-- 離出生點遠一點扣一點分。V.plan 的主街也照沿線比較平的方向，兩邊一致
 function V.site(ground, R)
 	R = R or 500
 	local best, bx, bz
+	local function strip(x, z, ax)
+		local lo, hi = math.huge, -math.huge
+		for a = -STREET_HALF, STREET_HALF, 8 do for b = -20, 20, 8 do
+			local h = ax and ground(x + a, z + b) or ground(x + b, z + a)
+			lo, hi = math.min(lo, h), math.max(hi, h)
+		end end
+		return hi - lo
+	end
 	for x = -R, R, 40 do for z = -R, R, 40 do
 		if x * x + z * z <= R * R then
-			local lo, hi = math.huge, -math.huge
-			for dx = -40, 40, 10 do for dz = -40, 40, 10 do
-				local h = ground(x + dx, z + dz)
-				lo, hi = math.min(lo, h), math.max(hi, h)
-			end end
-			local score = (hi - lo) + math.sqrt(x * x + z * z) / 100
+			local score = math.min(strip(x, z, true), strip(x, z, false)) + math.sqrt(x * x + z * z) / 100
 			if not best or score < best then best, bx, bz = score, x, z end
 		end
 	end end
@@ -142,18 +147,37 @@ function V.plan(ground, seed, cx, cz)
 	cx, cz = cx or 0, cz or 0
 	seed = (seed or 0) % 997
 	local roads = {}
-	local a0 = 2 * math.pi * hash(1, 2, seed)
-	local p1 = grow_road(ground, cx, cz, a0, 30, seed, 1, cx, cz)
-	local p2 = grow_road(ground, cx, cz, a0 + math.pi, 30, seed, 2, cx, cz)
-	-- 主路：p2 反過來接 p1
+	-- 主街（小鎮中心）：正東西或正南北的直街，長 2 × STREET_HALF，取沿線地形起伏小的那個方向；
+	-- 兩端再接照地形彎的路往外
+	local function line_relief(sx, sz)
+		local lo, hi = math.huge, -math.huge
+		for t = -STREET_HALF, STREET_HALF, STEP do
+			local h = ground(cx + sx * t, cz + sz * t)
+			lo, hi = math.min(lo, h), math.max(hi, h)
+		end
+		return hi - lo
+	end
+	local sx, sz = 1, 0
+	if line_relief(0, 1) < line_relief(1, 0) then sx, sz = 0, 1 end
+	local street = {}
+	for t = -STREET_HALF, STREET_HALF, STEP do street[#street + 1] = {cx + sx * t, cz + sz * t} end
+	local a0 = math.atan2(sx, sz)      -- grow_road：x += sin(a)、z += cos(a)
+	local p1 = grow_road(ground, cx + sx * STREET_HALF, cz + sz * STREET_HALF, a0, 20, seed, 1, cx, cz)
+	local p2 = grow_road(ground, cx - sx * STREET_HALF, cz - sz * STREET_HALF, a0 + math.pi, 20, seed, 2, cx, cz)
+	-- 主路：p2 反過來、主街、p1
 	local main = {}
 	for i = #p2, 2, -1 do main[#main + 1] = p2[i] end
-	for _, p in ipairs(p1) do main[#main + 1] = p end
+	local s1 = #main + 1
+	for _, p in ipairs(street) do main[#main + 1] = p end
+	local s2 = #main
+	for i = 2, #p1 do main[#main + 1] = p1[i] end
 	roads[1] = {points = main, main = true}
-	-- 岔路：主路上 2–3 個點，往左或右
-	local nb = 2 + math.floor(hash(3, 4, seed) * 2)
+	-- 岔路：主街以外的主路上 2–3 個點，往左或右（不從主街分出去，街屋才排得整齊）
+	local outside = {}
+	for i = 2, #main - 1 do if i < s1 - 1 or i > s2 + 1 then outside[#outside + 1] = i end end
+	local nb = #outside > 0 and (2 + math.floor(hash(3, 4, seed) * 2)) or 0
 	for b = 1, nb do
-		local i = math.floor(#main * (0.2 + 0.6 * hash(b, 5, seed))) + 1
+		local i = outside[math.floor(#outside * hash(b, 5, seed)) + 1]
 		local p, q = main[i], main[math.min(#main, i + 1)]
 		local ang = math.atan2(q[1] - p[1], q[2] - p[2]) + (hash(b, 6, seed) < 0.5 and 1 or -1) * math.pi / 2
 		local pts = grow_road(ground, p[1], p[2], ang, 10 + math.floor(hash(b, 7, seed) * 10), seed, 10 + b, cx, cz)
@@ -201,8 +225,39 @@ function V.plan(ground, seed, cx, cz)
 		return a.ri * 1000 + a.i * 2 + a.side < b.ri * 1000 + b.i * 2 + b.side
 	end)
 	local function dist2(x, z) return (x - cx) ^ 2 + (z - cz) ^ 2 end
+	-- 主街的街屋：兩側（side）各往兩端（dir）排，四個「排到哪裡」的游標（沿街距離，從中心起算）。
+	-- 每家店放在離中心最近、還排得下的那個游標：沿街寬 w、門朝主街，地塊正面離路邊 1 m（free 的間距），店與店隔 1 m。
+	-- 地不平（高差、門口跟街面差太多）就往外跳 2 m 再試，排到主街盡頭就換下一個游標
+	local fronts = {}
+	for _, side in ipairs({1, -1}) do for _, dir in ipairs({1, -1}) do fronts[#fronts + 1] = {side = side, dir = dir, cur = 0} end end
+	local function place_on_street(spec)
+		table.sort(fronts, function(a, b) return a.cur < b.cur end)
+		for _, f in ipairs(fronts) do
+			while f.cur + spec.w <= STREET_HALF do
+				local along = f.dir * (f.cur + spec.w / 2)
+				local nx, nz = f.side * sz, -f.side * sx              -- 主街的法線（往地塊那一側）
+				local face = math.atan2(-nx, -nz)                       -- 門朝主街
+				local rot = math.floor(((face / (math.pi / 2)) % 4) + 0.5) % 4
+				-- 路寬 3 m（中線 ±1）、地塊離路留 1 m：地塊邊緣在中線外 3 m 以上（進位，不會差半格壓到）
+				local off = math.ceil(3 + spec.d / 2)
+				local L = {kind = spec.kind, w = spec.w, d = spec.d, rot = rot, street = true}
+				L.x = math.floor(cx + sx * along + 0.5) + nx * off
+				L.z = math.floor(cz + sz * along + 0.5) + nz * off
+				if free(L) then
+					local r, med = relief(L)
+					local sgx, sgz = cx + sx * along, cz + sz * along
+					if r <= MAX_RELIEF + 1 and math.abs(ground(sgx, sgz) - med) <= 1.5 then
+						L.y = math.floor(med + 0.5)
+						f.cur = f.cur + spec.w + 1
+						return L
+					end
+				end
+				f.cur = f.cur + 2
+			end
+		end
+	end
 	for _, spec in ipairs(V.LOTS) do
-		local placed
+		local placed = not spec.outer and place_on_street(spec) or nil
 		-- 最外圍：離中心最遠那家店再往外 10 m 以上
 		local min_d2 = 0
 		if spec.outer then
@@ -210,7 +265,7 @@ function V.plan(ground, seed, cx, cz)
 			for _, L in ipairs(lots) do m = math.max(m, math.sqrt(dist2(L.x, L.z))) end
 			min_d2 = (m + 10) ^ 2
 		end
-		for pass = 1, 3 do
+		for pass = 1, placed and 0 or 3 do
 			local lim, off = MAX_RELIEF + (pass - 1) * 2, 0.5 + (pass - 1) * 3
 			for _, c in ipairs(cand) do
 				if dist2(c.x, c.z) >= min_d2 then
@@ -248,6 +303,8 @@ function V.plan(ground, seed, cx, cz)
 			lots[#lots + 1] = placed
 			local x1, z1, x2, z2 = lot_rect(placed)
 			for x = math.floor(x1), math.ceil(x2) do for z = math.floor(z1), math.ceil(z2) do taken[x .. "," .. z] = true end end
+		end
+		if placed and not placed.street then      -- 主街的街屋門口就是主街，不用另外拉門前路
 			-- 門前路：沿著建築正面、正東西或正南北的一段直路（中線在正面外 2 m，寬 3 m、長 = 建築寬），接到彎曲的路上
 			local r = placed.rot
 			local fx, fz = ({0, 1, 0, -1})[r + 1], ({1, 0, -1, 0})[r + 1]
