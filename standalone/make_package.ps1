@@ -64,6 +64,16 @@ if (-not $Class) {
 		}
 	}
 }
+if ($Branch -eq "release") {
+	# Development test maps (map.conf: dev = true) only go into dev packages
+	foreach ($m in Get-ChildItem (Join-Path $stage "games\georocker\standalone\maps") -Directory) {
+		$conf = Join-Path $m.FullName "map.conf"
+		if ((Test-Path $conf) -and (Select-String -Path $conf -Pattern "^\s*dev\s*=\s*true" -Quiet)) {
+			Say ("Leaving out dev map " + $m.Name)
+			Remove-Item $m.FullName -Recurse -Force
+		}
+	}
+}
 New-Item -ItemType Directory -Force (Join-Path $stage "worlds") | Out-Null
 
 Say "Replacing the main menu"

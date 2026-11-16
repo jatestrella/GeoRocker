@@ -85,6 +85,16 @@ if ($set.class -ne "1") {
 		}
 	}
 }
+if ($set.branch -eq "release") {
+	# Development test maps (map.conf: dev = true) only in dev packages
+	$maps = Join-Path $src "standalone\maps"
+	if (Test-Path $maps) {
+		foreach ($m in Get-ChildItem $maps -Directory) {
+			$mc = Join-Path $m.FullName "map.conf"
+			if ((Test-Path $mc) -and (Select-String -Path $mc -Pattern "^\s*dev\s*=\s*true" -Quiet)) { Remove-Item $m.FullName -Recurse -Force }
+		}
+	}
+}
 
 # Swap: current game -> backup, new game in place; on any error put the old one back
 if (Test-Path $backup) { Remove-Item $backup -Recurse -Force }

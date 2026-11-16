@@ -116,6 +116,11 @@ local NL = 8
 local SC = stress.SOIL         -- 厚度規則在 stress.natural_soil（應力解的參考狀態也用同一個公式）
 local c_soil, c_log, c_leaf, c_apple, c_grass = {}, nil, nil, nil, nil
 local GRASS_P = 0.2           -- 草叢：整格表土上，兩成的欄長一叢（不滿格的表土上會浮空，不長）
+-- 覆土（rockmech_soil_cover）：岩性方塊（含節理變體）→ 表土
+local c_cover_soil = core.registered_nodes["rockmech:topsoil"] and core.get_content_id("rockmech:topsoil")
+local lith_cid = {[c_stone] = true}      -- 這個檔案在地圖生成的 Lua 環境跑（沒有 rockmech）：用上面的岩性方塊表
+for _, t in pairs(c_var) do for _, id in pairs(t) do lith_cid[id] = true end end
+for _, t in pairs(c_plane or {}) do for _, id in pairs(t) do lith_cid[id] = true end end
 local is_rock = {[c_stone] = true}
 if TS then
 	for k = 1, NL - 1 do c_soil[k] = core.get_content_id("rockmech:topsoil_" .. k) end
@@ -356,6 +361,22 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 	if TS and lay_topsoil(area, minp, maxp) > 0 then
 		changed = true
 		stripped = stripped + 1      -- 要重算光照
+	end
+
+	-- 覆土（rockmech_soil_cover = N）：surface_y 往下 N m 內的岩石換成整格表土（試驗場：全平面、純土）
+	local cover = cfg.soil_cover or 0
+	if cover > 0 and c_cover_soil then
+		local sy = math.floor(cfg.surface_y or 0)
+		local ylo, yhi = math.max(minp.y, sy - cover + 1), math.min(maxp.y, sy)
+		if ylo <= yhi then
+			for z = minp.z, maxp.z do for y = ylo, yhi do
+				local vi = area:index(minp.x, y, z)
+				for _ = minp.x, maxp.x do
+					if lith_cid[data[vi]] then data[vi] = c_cover_soil; changed = true end
+					vi = vi + 1
+				end
+			end end
+		end
 	end
 
 	if logged < 3 and n > 0 then

@@ -1289,6 +1289,8 @@ function config.load(get, opts)
 	cfg.breaker_rate = math.max(0, tonumber(get("rockmech_breaker_s_per_mpa")) or 0.05)
 	-- 表土（根系）的凝聚力 (kPa)：決定自立高度 H_c = 4c/γ·tan(45° + φ/2)（woodwork.lua）
 	cfg.topsoil_c = math.max(0, tonumber(get("rockmech_topsoil_c")) or 10)
+	-- 覆土（mapgen.lua）：地表（surface_y）以下這麼多公尺的岩石全部換成表土（試驗場用，0 = 不換）
+	cfg.soil_cover = math.max(0, math.floor(tonumber(get("rockmech_soil_cover")) or 0))
 	-- 輸送帶（conveyor.lua）：運量 (t/s)、帶速 (m/s)、最大傾角 (deg，碎石在輸送帶上不往回滑的上限)
 	cfg.conveyor_rate = math.max(0.1, tonumber(get("rockmech_conveyor_rate")) or 4)
 	cfg.conveyor_speed = math.max(0.2, math.min(10, tonumber(get("rockmech_conveyor_speed")) or 2))
