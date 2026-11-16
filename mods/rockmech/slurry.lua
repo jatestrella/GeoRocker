@@ -1,0 +1,193 @@
+-- rockmech/slurry.lua
+-- 穩定液（皂土泥漿）：連續壁溝槽的護壁液。比水重（γ ≈ 11 kN/m³），液壓頂住溝壁，溝槽挖深才不會塌（femstress.lua 當面壓）。
+--
+-- 自製的守恆流體（不用引擎的液體：引擎的液體一格源頭可以無限往下流）：
+--   每格分 8 級（1/8 m），rockmech:slurry 是滿格，rockmech:slurry_l1 … _l7 是不滿格。總量守恆：灌多少就有多少。
+--   每一步（rockmech_slurry_step 秒，慢慢流）：底下是空的 → 整格往下掉；底下不滿 → 先把底下補滿；
+--   底下撐著 → 跟四周比液面，比最低的那一格高 2 級以上就分一半過去（差 1 級就算平了）。
+--   流進洞裡、漏到坑裡，液面就降下來，要補液。
+--   人、東西可以在裡面（不能站、會減速，像在水裡）；放方塊、碎石掉進去會把那一格的穩定液擠掉（不守恆，簡化）
+
+local S = rockmech.S
+local cfg = rockmech.cfg
+
+local NL = 8
+local BASE = "rockmech:slurry"
+local GAMMA = 11                     -- kN/m³（皂土泥漿，比重約 1.05–1.1）
+local STEP = tonumber(core.settings:get("rockmech_slurry_step") or "") or 0.5
+rockmech.SLURRY = BASE
+rockmech.SLURRY_GAMMA = GAMMA
+rockmech.slurry_level = {}           -- 方塊名稱 → 級數（滿格 8）
+
+local COLOR = "#8a7a5c"
+local function name_of(k)
+	if k <= 0 then return "air" end
+	if k >= NL then return BASE end
+	return BASE .. "_l" .. k
+end
+rockmech.slurry_with_level = name_of
+
+-- 被擠掉（放方塊、碎石掉進來、之後灌混凝土）：那一格的穩定液往上推（排開），不會憑空消失
+local internal = false               -- 流動自己改的不算
+local displace
+for k = 1, NL do
+	local top = -0.5 + k / NL
+	local name = name_of(k)
+	core.register_node(name, {
+		description = S("Bentonite slurry"),
+		drawtype = "nodebox",
+		node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, top, 0.5}},
+		tiles = {"[fill:16x16:" .. COLOR .. "c8"},
+		use_texture_alpha = "blend",
+		paramtype = "light",
+		sunlight_propagates = true,
+		walkable = false, pointable = false, diggable = false, buildable_to = true,
+		liquid_move_physics = true, move_resistance = 4,
+		post_effect_color = {a = 200, r = 0x6a, g = 0x5c, b = 0x44},
+		drowning = 1,
+		drop = "",
+		is_ground_content = false,
+		groups = {rockmech_slurry = k, not_in_creative_inventory = 1},
+		on_destruct = function(pos)
+			if internal then return end
+			local p = vector.copy(pos)
+			core.after(0, function() displace(p, k) end)
+		end,
+	})
+	rockmech.slurry_level[name] = k
+end
+
+local function level_at(p)
+	local n = core.get_node(p).name
+	if n == "air" then return 0 end
+	return rockmech.slurry_level[n]
+end
+local schedule
+local function set_level(p, k)
+	internal = true
+	core.set_node(p, {name = name_of(k)})
+	internal = false
+end
+-- 從 p 往上加 k 級：穿過滿格的穩定液，加在第一個不滿或空的格，滿了再往上（最多 32 格）。回傳加不進去的級數
+local function add_up(p, k, ymax)
+	local q = vector.copy(p)
+	for _ = 1, 32 do
+		if ymax and q.y > ymax then return k end
+		if k <= 0 then return 0 end
+		local kq = level_at(q)
+		if not kq then return k end                  -- 擋住了
+		local put = math.min(NL - kq, k)
+		if put > 0 then set_level(q, kq + put); k = k - put end
+		q.y = q.y + 1
+	end
+	return k
+end
+displace = function(p, k)
+	local up = {x = p.x, y = p.y + 1, z = p.z}
+	local left = add_up(up, k)
+	if left < k then schedule(up) end
+end
+
+-- 排一次流動判定（同一格合併）
+local pending = {}
+local step
+schedule = function(p)
+	local key = core.hash_node_position(p)
+	if pending[key] then return end
+	pending[key] = true
+	core.after(STEP, function()
+		pending[key] = nil
+		step(p)
+	end)
+end
+local function wake_around(p)
+	schedule({x = p.x, y = p.y + 1, z = p.z})
+	schedule({x = p.x + 1, y = p.y, z = p.z}); schedule({x = p.x - 1, y = p.y, z = p.z})
+	schedule({x = p.x, y = p.y, z = p.z + 1}); schedule({x = p.x, y = p.y, z = p.z - 1})
+end
+rockmech.slurry_wake = wake_around
+
+local DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+step = function(p)
+	local k = level_at(p)
+	if not k or k <= 0 then return end
+	local below = {x = p.x, y = p.y - 1, z = p.z}
+	local kb = level_at(below)
+	if kb and kb < NL then
+		-- 往下：先把底下補滿
+		local put = math.min(NL - kb, k)
+		set_level(below, kb + put)
+		set_level(p, k - put)
+		schedule(below)
+		wake_around(p)
+		if k - put > 0 then schedule(p) end
+		return
+	end
+	-- 底下撐著：往四周液面最低的那一格分一半
+	local best, bk
+	local s = math.random(4)
+	for j = 0, 3 do
+		local d = DIRS[(s + j - 1) % 4 + 1]
+		local q = {x = p.x + d[1], y = p.y, z = p.z + d[2]}
+		local kq = level_at(q)
+		if kq and (not bk or kq < bk) then best, bk = q, kq end
+	end
+	if best and k - bk >= 2 then
+		local t = math.floor((k - bk) / 2)
+		set_level(best, bk + t)
+		set_level(p, k - t)
+		schedule(best)
+		wake_around(p)
+		schedule(p)
+	end
+end
+rockmech.slurry_step = step
+
+-- 旁邊、底下的方塊被挖掉：穩定液往那裡流
+core.register_on_dignode(function(pos)
+	for _, v in ipairs({{x = 0, y = 1, z = 0}, {x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
+		local q = vector.add(pos, v)
+		if level_at(q) and level_at(q) > 0 then schedule(q) end
+	end
+end)
+-- 保險：玩家附近還沒平的穩定液（區塊重新載入、被別的機制改過）
+core.register_abm({
+	label = "rockmech: 穩定液流動",
+	nodenames = {"group:rockmech_slurry"},
+	neighbors = {"air", "group:rockmech_slurry"},
+	interval = 3, chance = 3, catch_up = false,
+	action = function(pos) schedule(pos) end,
+})
+
+-- 穩定液（1 m³）：對著地面、溝槽按右鍵倒進去（加在對準的那一格；滿了往上疊），然後自己流
+local ITEM = "rockmech:slurry_m3"
+core.register_craftitem(ITEM, {
+	description = S("Bentonite slurry\n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls"),
+	short_description = S("Bentonite slurry"),
+	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:" .. COLOR .. "^[fill:10x2:3,3:#a8987a",
+	stack_max = 99,
+	on_place = function(itemstack, placer, pointed)
+		if pointed.type ~= "node" then return itemstack end
+		local name = placer and placer:get_player_name() or ""
+		local p = level_at(pointed.under) and pointed.under or pointed.above
+		local ymax = p.y          -- 最多倒到對準的高度（液面已經到了就倒不進去，等它流開）
+		if core.is_protected(p, name) or not level_at(p) then return itemstack end
+		-- 倒進已經有的穩定液裡：沉到那一欄液體的底，從第一個不滿的格往上加（液面上升），不會疊成一根柱子
+		while level_at({x = p.x, y = p.y - 1, z = p.z}) do p.y = p.y - 1 end
+		-- 整份 1 m³ 放得下才倒（守恆：不倒一半丟一半）
+		local room, q = 0, vector.copy(p)
+		while q.y <= ymax and level_at(q) do room = room + NL - level_at(q); q.y = q.y + 1 end
+		if room < NL then return itemstack end
+		add_up(p, NL, ymax)
+		wake_around(p)
+		schedule(p)
+		for y = p.y, p.y + 16 do
+			local q = {x = p.x, y = y, z = p.z}
+			if not level_at(q) or level_at(q) == 0 then break end
+			schedule(q)
+		end
+		if not (core.is_creative_enabled and core.is_creative_enabled(name)) then itemstack:take_item() end
+		return itemstack
+	end,
+})
+rockmech.SLURRY_ITEM = ITEM

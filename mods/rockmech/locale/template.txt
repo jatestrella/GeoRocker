@@ -1967,3 +1967,5 @@ Heavy H-beam@nRight-click the floor: a post up to the roof; a wall: a strut acro
 [H-beam] This span needs @1 (1 per metre), you have @2=
 [H-beam] @1 m placed=
 [H-beam] An unsupported H-beam fell down=
+Bentonite slurry=
+Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=

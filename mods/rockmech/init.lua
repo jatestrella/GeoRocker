@@ -230,5 +230,6 @@ end
 
 -- 營地炸不壞：要在所有方塊註冊完之後（最後載入）
 dofile(modpath .. "/campguard.lua")
+dofile(modpath .. "/slurry.lua")           -- 穩定液：連續壁溝槽的護壁液（守恆流體、液壓進應力解）
 dofile(modpath .. "/retain.lua")           -- 擋土：鋼板樁、內支撐（應力解的元素）
 dofile(modpath .. "/buildview.lua")        -- 施工視角
