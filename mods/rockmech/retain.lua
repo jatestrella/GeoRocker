@@ -7,7 +7,7 @@
 --
 --   鋼板樁（SP-III 型，寬 1 m）：拿著對地面按右鍵，那一欄從地面往下打，打到 PILE_LEN m 或打不進去為止，一片就是一整欄。
 --     打得進：土、碎石，和岩體強度 σcm 不超過可裂性門檻的軟岩（跟推土機松土同一個門檻、同一個研發）。
---     方塊是一片薄板（像活板門），貼在你面對的那一側（要擋的土那一側），開挖後看起來就貼在土面上。
+--     方塊是整格的土夾一片鋼板：鋼板在打樁的人那一側（要開挖的那一側），挖開後露出一整排鋼板，後面是擋住的土。
 --     一格是 1 m 厚的實心元素，勁度比照「抗彎勁度 EI 相同」換算（E_eff = EI / (1/12)）；
 --     彎矩 M = 板厚方向兩面的鉛直應力差 / 12（一格元素裡應力沿板厚線性變化）→ 就是真實板樁的彎矩。
 --     M 超過降伏彎矩 M_y = fy·Z（÷ 相似比）→ 整欄降伏變形（勁度剩 1/10，荷重轉給土）。
@@ -54,11 +54,13 @@ end
 local STEEL = "[fill:16x16:#5c6268^[fill:2x16:2,0:#41474c^[fill:2x16:7,0:#41474c^[fill:2x16:12,0:#41474c"
 local RUST = "[fill:16x16:#6e5440^[fill:2x16:2,0:#4e3a2c^[fill:2x16:7,0:#4e3a2c^[fill:2x16:12,0:#4e3a2c"
 local BEAM = "[fill:16x16:#7a8086^[fill:16x2:0,7:#5a6066"
-local PANEL = {-0.5, -0.5, 0.38, 0.5, 0.5, 0.5}           -- 貼在 +z 那一側（facedir 轉到你面對的方向）
-local WALE = {{-0.5, -0.12, 0.18, 0.5, 0.12, 0.38}}       -- 圍令：橫向 H 型鋼，貼在板樁露出來的那一面
+-- 板樁格 = 土裡夾一片鋼板：整格方塊，五面是泥土，朝打樁的人那一面（−z，facedir 轉過）是鋼板。
+-- 打下去地面看起來還是一整片土；在你這一側往下挖，挖開的牆面露出一整排鋼板，後面是擋住的土。
+-- 圍令（接了支撐）：鋼板面上畫一條橫向的 H 型鋼
+local DIRT = core.registered_nodes["default:dirt"] and "default_dirt.png" or "[fill:16x16:#6a5030"
+local WALE_FACE = STEEL .. "^[fill:16x5:0,6:#7a8086^[fill:16x1:0,8:#5a6066"
 local base = {
-	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
-	is_ground_content = false, groups = {cracky = 2, rockmech_retain = 1},
+	paramtype2 = "facedir", is_ground_content = false, groups = {cracky = 2, rockmech_retain = 1},
 	sounds = default and default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil,
 }
 local function def_with(t)
@@ -66,20 +68,27 @@ local function def_with(t)
 	for k, v in pairs(t) do o[k] = v end
 	return o
 end
+local function faces(front) return {DIRT, DIRT, DIRT, DIRT, DIRT, front} end      -- +Y −Y +X −X +Z −Z
 core.register_node(PILE, def_with({
-	description = S("Sheet pile\nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel faces the soil you look at", tostring(PILE_LEN)),
+	description = S("Sheet pile\nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig", tostring(PILE_LEN)),
 	short_description = S("Sheet pile"),
-	tiles = {STEEL}, node_box = {type = "fixed", fixed = PANEL},
+	tiles = faces(STEEL),
 	inventory_image = "[fill:16x16:#00000000^[fill:10x14:3,1:#5c6268^[fill:2x14:5,1:#41474c^[fill:2x14:9,1:#41474c",
 }))
 core.register_node(PILE_W, def_with({
-	description = S("Sheet pile"), tiles = {STEEL, STEEL, STEEL, STEEL, STEEL, BEAM}, drop = PILE,
-	node_box = {type = "fixed", fixed = {PANEL, WALE[1]}}, groups = {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
+	description = S("Sheet pile"), tiles = faces(WALE_FACE), drop = PILE,
+	groups = {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
 }))
 core.register_node(PILE_B, def_with({
-	description = S("Sheet pile (yielded)"), tiles = {RUST}, drop = "",
-	node_box = {type = "fixed", fixed = {-0.5, -0.5, 0.3, 0.5, 0.5, 0.42}}, groups = {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
+	description = S("Sheet pile (yielded)"), tiles = faces(RUST), drop = "",
+	groups = {cracky = 2, rockmech_retain = 1, not_in_creative_inventory = 1},
 }))
+-- 支撐（H 型鋼，nodebox）
+base = {
+	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
+	is_ground_content = false, groups = {cracky = 2, rockmech_retain = 1},
+	sounds = base.sounds,
+}
 core.register_node(STRUT, def_with({
 	description = S("Strut (H-beam)\nRight-click a sheet pile face: lays a horizontal strut across to the opposite side (1 per metre)"),
 	short_description = S("Strut"),
