@@ -6,7 +6,7 @@
 --   不強制載入區塊（不能拿來探索）。施工單在施工視角裡可及 REACH m（物品 meta "range"），出來就恢復。
 --   施工視角裡只能施工（施工單的右鍵）、收回輸送帶（輸送帶施工單的左鍵）：其他的挖、點車、點 NPC、打人都不算
 --   （這段期間對這位玩家來說到處都是保護區，施工那一下例外）。
---   E 的優先順序：施工視角裡按 E 一律是離開；一般狀態準星對著輸送帶時 E 是輸送帶反向（conveyor.lua），其他地方才是進入。
+--   E：拿著施工單時一律是進入／離開施工視角（輸送帶反向 conveyor.lua 不管拿著施工單的人）。
 --   手上換成別的東西、斷線、伺服器重開：回到原地。
 
 local cfg = rockmech.cfg
@@ -129,6 +129,7 @@ end
 
 local function enter(player)
 	local name = player:get_player_name()
+	if views[name] then return end
 	local home = player:get_pos()
 	local yaw = player:get_look_horizontal()
 	local cam = core.add_entity(start_pos(home, yaw), CAM)
@@ -170,16 +171,6 @@ end
 -- 每一步：E、換手上的東西、移動
 ---------------------------------------------------------------------------
 
-local function pointing_belt(player)
-	if not rockmech.is_belt_node then return false end
-	local eye = vector.add(player:get_pos(), {x = 0, y = player:get_properties().eye_height or 1.625, z = 0})
-	local tip = vector.add(eye, vector.multiply(player:get_look_dir(), 6))
-	for th in core.raycast(eye, tip, false, false) do
-		if th.type == "node" then return rockmech.is_belt_node(core.get_node(th.under).name) end
-	end
-	return false
-end
-
 core.register_globalstep(function()
 	for _, player in ipairs(core.get_connected_players()) do
 		local name = player:get_player_name()
@@ -212,7 +203,7 @@ core.register_globalstep(function()
 				v.cam:set_velocity({x = vx, y = vy, z = vz})
 			end
 		elseif press and is_order(player:get_wielded_item():get_name()) and not player:get_attach()
-				and not (rockmech.drone_flying and rockmech.drone_flying(name)) and not pointing_belt(player) then
+				and not (rockmech.drone_flying and rockmech.drone_flying(name)) then
 			enter(player)
 		end
 	end

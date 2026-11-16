@@ -290,7 +290,9 @@ local e_down = {}
 local function e_check(pl)
 	local name = pl:get_player_name()
 	local down = pl:get_player_control().aux1
-	if down and not e_down[name] and not pl:get_attach() then
+	-- 拿著施工單時 E 是施工視角（buildview.lua），不反向
+	local order = rockmech.order_target and rockmech.order_target(pl:get_wielded_item():get_name())
+	if down and not e_down[name] and not pl:get_attach() and not order then
 		local eye = vector.add(pl:get_pos(), {x = 0, y = pl:get_properties().eye_height or 1.625, z = 0})
 		local tip = vector.add(eye, vector.multiply(pl:get_look_dir(), 6))
 		for th in core.raycast(eye, tip, false, false) do
@@ -305,7 +307,6 @@ local function e_check(pl)
 	e_down[name] = down
 end
 rockmech.belt_e_check = e_check      -- 測試用
-function rockmech.is_belt_node(name) return BELT_H[name] ~= nil end
 core.register_globalstep(function()
 	for _, pl in ipairs(core.get_connected_players()) do e_check(pl) end
 end)
