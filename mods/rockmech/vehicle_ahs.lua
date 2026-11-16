@@ -632,6 +632,10 @@ function AHS.step(self, def, ctx)
 		else
 			set_phase(self, a.bound and "to_exc" or "wait")
 		end
+	elseif a.phase == "to_exc" and not a.bound then
+		-- 開去怪手的途中被解除綁定（設定畫面解除、改溜槽、套用存好的路線）：改成在路線起點等裝料。
+		-- 2026-11-13 上課伺服器因為這個當掉（exc_spot 的 a.bound 是 nil）
+		set_phase(self, "wait")
 	elseif a.phase == "to_exc" then
 		local e, u, stop, far = exc_spot(a, def)
 		if far > cfg.ahs_max_dist then
