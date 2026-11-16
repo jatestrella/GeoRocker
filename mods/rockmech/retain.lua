@@ -122,6 +122,62 @@ core.register_node(STRUT, def_with({
 	inventory_image = "[fill:16x16:#00000000^[fill:14x3:1,3:#7a8086^[fill:14x3:1,10:#7a8086^[fill:14x4:1,6:#5a6066",
 }))
 
+-- H 型鋼（統一：支柱、橫撐都是它）：輕型 H200（物品就是原本的鋼支保 rockmech:steel_set）、重型 H300（物品是原本的內支撐 rockmech:strut）。
+-- 放下去的方塊依方向分三種（x 東西、z 南北、y 直立），本身是一整條 H 斷面；旁邊有「別的方向」的 H 型鋼時，
+-- 像柵欄一樣自動長出接過去的一段＋中間一塊接頭板（connected nodebox）：T 字、十字、支柱頂到橫撐都接得起來
+local HB = {
+	light = {item = "rockmech:steel_set", A = 6.353e-3, I = 1.6e-5, w = 0.13},     -- H200×200×8×12：A、弱軸 I
+	heavy = {item = STRUT, A = STRUT_A, I = STRUT_I, w = 0.18},                    -- H300×300×10×15
+}
+local HB_INFO = {}             -- 方塊名稱 → {kind, axis}
+local HB_NODES = {}            -- 所有 H 型鋼方塊
+local function hb_name(kind, axis) return "rockmech:hbeam_" .. kind .. "_" .. axis end
+local AXIS_DIR = {x = {x = 1, y = 0, z = 0}, y = {x = 0, y = 1, z = 0}, z = {x = 0, y = 0, z = 1}}
+-- 沿 axis 的 H 斷面（從 lo 到 hi），寬 w、深 w，翼板厚 0.06、腹板半厚 0.03；腹板在 y（水平梁）或 x（直立）方向
+local function h_boxes(axis, w, lo, hi)
+	local tf, tw = 0.06, 0.03
+	local raw = {{-w, -w, -w, -w + tf}, {-w, w - tf, w, w}, {-tw, -w + tf, tw, w - tf}}   -- 斷面上的三個矩形（u1, v1, u2, v2）
+	local out = {}
+	for _, r in ipairs(raw) do
+		if axis == "z" then out[#out + 1] = {r[1], r[2], lo, r[3], r[4], hi}             -- u = x、v = y
+		elseif axis == "x" then out[#out + 1] = {lo, r[2], r[1], hi, r[4], r[3]}          -- u = z、v = y
+		else out[#out + 1] = {r[2], lo, r[1], r[4], hi, r[3]} end                        -- 直立：u = z、v = x（翼板朝 x）
+	end
+	return out
+end
+local function add(t, list) for _, b in ipairs(list) do t[#t + 1] = b end return t end
+for kind, k in pairs(HB) do
+	for axis in pairs(AXIS_DIR) do
+		local w = k.w
+		local gus = {-w - 0.02, -w - 0.02, -w - 0.02, w + 0.02, w + 0.02, w + 0.02}     -- 接頭板（相接處中間）
+		local function arm(ax, lo, hi) return add({gus}, h_boxes(ax, w, lo, hi)) end
+		local nb = {type = "connected", fixed = h_boxes(axis, w, -0.5, 0.5)}
+		local others = {}
+		if axis ~= "x" then nb.connect_left, nb.connect_right = arm("x", -0.5, 0), arm("x", 0, 0.5); others[#others + 1] = "group:rockmech_hbeam_x" end
+		if axis ~= "z" then nb.connect_front, nb.connect_back = arm("z", -0.5, 0), arm("z", 0, 0.5); others[#others + 1] = "group:rockmech_hbeam_z" end
+		if axis ~= "y" then nb.connect_bottom, nb.connect_top = arm("y", -0.5, 0), arm("y", 0, 0.5); others[#others + 1] = "group:rockmech_hbeam_y" end
+		local name = hb_name(kind, axis)
+		core.register_node(name, {
+			description = kind == "light" and S("Light H-beam") or S("Heavy H-beam"),
+			drawtype = "nodebox", paramtype = "light", sunlight_propagates = true, is_ground_content = false,
+			tiles = {BEAM}, node_box = nb, connects_to = others,
+			groups = {cracky = 2, rockmech_retain = 1, rockmech_hbeam = 1, ["rockmech_hbeam_" .. axis] = 1, not_in_creative_inventory = 1},
+			sounds = base.sounds, drop = k.item,
+		})
+		HB_INFO[name] = {kind = kind, axis = axis}
+		HB_NODES[#HB_NODES + 1] = name
+	end
+end
+local function hb_cap(kind, L)      -- 承載力 min(降伏, 尤拉挫屈) ÷ 相似比（kN）
+	local k = HB[kind]
+	return math.min(FY * k.A, math.pi ^ 2 * E_STEEL * k.I / (L * L)) / n_scale()
+end
+-- 舊世界的內支撐方塊（rockmech:strut，facedir 0/2 = 南北、1/3 = 東西）換成新的重型 H 型鋼
+core.register_lbm({
+	label = "rockmech: 內支撐換成重型 H 型鋼", name = "rockmech:strut_to_hbeam", nodenames = {STRUT}, run_at_every_load = true,
+	action = function(pos, node) core.swap_node(pos, {name = hb_name("heavy", (node.param2 % 2 == 1) and "x" or "z")}) end,
+})
+
 ---------------------------------------------------------------------------
 -- 打板樁
 ---------------------------------------------------------------------------
@@ -194,20 +250,17 @@ end})
 -- 內支撐
 ---------------------------------------------------------------------------
 
-local function axis_dir(param2) return core.facedir_to_dir(param2 % 4) end
--- 板樁格 p 有沒有支撐接著（四周水平的支撐，軸向指著它）
+-- H 型鋼的軸向（方塊名稱決定）
+local function hb_axis(name) local i = HB_INFO[name]; return i and AXIS_DIR[i.axis] end
+-- 板樁格 p 有沒有橫撐接著（四周水平的 H 型鋼，軸向指著它）
 local function strut_at(p)
 	for _, v in ipairs({{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
-		local q = vector.add(p, v)
-		local nd = core.get_node(q)
-		if nd.name == STRUT then
-			local a = axis_dir(nd.param2)
-			if a.x ~= 0 and v.x ~= 0 or a.z ~= 0 and v.z ~= 0 then return true end
-		end
+		local a = hb_axis(core.get_node(vector.add(p, v)).name)
+		if a and (a.x ~= 0 and v.x ~= 0 or a.z ~= 0 and v.z ~= 0) then return true end
 	end
 	return false
 end
--- 板樁換樣子：有支撐接著 → 有圍令；沒有 → 一般（降伏過的不變）
+-- 板樁換樣子：有橫撐接著 → 有圍令；沒有 → 一般（降伏過的不變）
 local function refresh_wale(p)
 	local n = core.get_node(p)
 	local info = PILE_INFO[n.name]
@@ -215,15 +268,15 @@ local function refresh_wale(p)
 	local want = pile_name(info.fill, strut_at(p) and "wale" or "plain")
 	if want ~= n.name then core.swap_node(p, {name = want, param2 = n.param2}) end
 end
--- 一支支撐（從 p 沿軸向兩邊連續的支撐格）：回傳 格清單、兩端外面那一格
+-- 一支 H 型鋼（從 p 沿軸向兩邊連續、同一種同方向的格）：回傳 格清單、兩端外面那一格
 local function strut_line(p)
-	local nd = core.get_node(p)
-	local a = axis_dir(nd.param2)
-	local cells = {p}
-	local ends = {}
+	local name = core.get_node(p).name
+	local a = hb_axis(name)
+	local cells, ends = {p}, {}
+	if not a then return cells, ends end
 	for _, s in ipairs({1, -1}) do
 		local q = vector.add(p, vector.multiply(a, s))
-		while core.get_node(q).name == STRUT do
+		while core.get_node(q).name == name do
 			cells[#cells + 1] = q
 			q = vector.add(q, vector.multiply(a, s))
 		end
@@ -232,12 +285,15 @@ local function strut_line(p)
 	return cells, ends
 end
 
-core.override_item(STRUT, {on_place = function(itemstack, placer, pointed)
+-- 放 H 型鋼（輕型、重型同一套）：
+--   對地板（方塊頂面）按右鍵 → 往上；對頂板（方塊底面）→ 往下；對牆面 → 水平往前。
+--   一路經過空的格，碰到第一個實心的東西就停：中間整段放滿（支柱、橫撐），每 1 m 用一支；
+--   MAX_SPAN 內都沒碰到（上面是天空、對面太遠）→ 只放 1 m
+local function place_hbeam(kind, itemstack, placer, pointed)
 	if pointed.type ~= "node" or not placer then return itemstack end
 	local name = placer:get_player_name()
 	local from, a0 = pointed.under, pointed.above
 	local v = vector.subtract(a0, from)
-	if v.y ~= 0 then rockmech.notify(name, S("[Strut] Point at the side face of a sheet pile")); return itemstack end
 	local cells, stop = {}, nil
 	local q = vector.copy(a0)
 	for _ = 1, MAX_SPAN do
@@ -251,43 +307,59 @@ core.override_item(STRUT, {on_place = function(itemstack, placer, pointed)
 			break
 		end
 	end
-	if not stop or #cells == 0 then
-		rockmech.notify(name, S("[Strut] Nothing to brace against within @1 m", tostring(MAX_SPAN))); return itemstack
-	end
+	if #cells == 0 then return itemstack end
+	if not stop then cells = {cells[1]} end
 	local have = itemstack:get_count()
 	if not core.is_creative_enabled(name) and have < #cells then
-		rockmech.notify(name, S("[Strut] This span needs @1 struts (1 per metre), you have @2", tostring(#cells), tostring(have))); return itemstack
+		rockmech.notify(name, S("[H-beam] This span needs @1 (1 per metre), you have @2", tostring(#cells), tostring(have))); return itemstack
 	end
 	for _, c in ipairs(cells) do
-		if core.is_protected(c, name) then rockmech.notify(name, S("[Strut] Protected area")); return itemstack end
+		if core.is_protected(c, name) then return itemstack end
 	end
-	local p2 = horizontal_facedir(v)
-	for _, c in ipairs(cells) do core.set_node(c, {name = STRUT, param2 = p2}) end
-	refresh_wale(from); refresh_wale(stop)
-	rockmech.notify(name, S("[Strut] Strut @1 m placed", tostring(#cells)))
+	local axis = v.x ~= 0 and "x" or v.y ~= 0 and "y" or "z"
+	for _, c in ipairs(cells) do core.set_node(c, {name = hb_name(kind, axis)}) end
+	refresh_wale(from)
+	if stop then refresh_wale(stop) end
+	rockmech.notify(name, S("[H-beam] @1 m placed", tostring(#cells)))
 	if rockmech.fem_queue then rockmech.fem_queue(cells[math.ceil(#cells / 2)], 1, false, false) end
 	if not core.is_creative_enabled(name) then itemstack:take_item(#cells) end
 	return itemstack
-end})
-
+end
+core.override_item(STRUT, {
+	description = S("Heavy H-beam\nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)"),
+	short_description = S("Heavy H-beam"),
+	on_place = function(itemstack, placer, pointed) return place_hbeam("heavy", itemstack, placer, pointed) end,
+})
+if core.registered_items[HB.light.item] then
+	core.override_item(HB.light.item, {
+		description = S("Light H-beam\nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)"),
+		short_description = S("Light H-beam"),
+		on_place = function(itemstack, placer, pointed) return place_hbeam("light", itemstack, placer, pointed) end,
+	})
+end
 -- 拆：整支／整欄，退還給挖的人
 local function give(digger, item, n)
 	if not (digger and digger.is_player and digger:is_player()) or n <= 0 then return end
 	local left = digger:get_inventory():add_item("main", ItemStack(item .. " " .. n))
 	if not left:is_empty() then core.add_item(digger:get_pos(), left) end
 end
+-- 拆一支 H 型鋼（整條）：回傳 格數、物品名稱（輕型、重型）
 local function remove_strut(p, digger, refund)
+	local info = HB_INFO[core.get_node(p).name]
+	local item = info and HB[info.kind].item or STRUT
 	local cells, ends = strut_line(p)
 	for _, c in ipairs(cells) do core.remove_node(c) end
 	for _, e in ipairs(ends) do refresh_wale(e) end
-	if refund then give(digger, STRUT, #cells) end
-	return #cells
+	if refund then give(digger, item, #cells) end
+	return #cells, item
 end
-core.override_item(STRUT, {on_dig = function(pos, node, digger)
-	if digger and core.is_protected(pos, digger:get_player_name()) then return false end
-	remove_strut(pos, digger, true)
-	return true
-end})
+for _, name in ipairs(HB_NODES) do
+	core.override_item(name, {on_dig = function(pos, node, digger)
+		if digger and core.is_protected(pos, digger:get_player_name()) then return false end
+		remove_strut(pos, digger, true)
+		return true
+	end})
+end
 local function pile_column(p)
 	local cells = {}
 	local y = p.y
@@ -303,7 +375,7 @@ end
 -- 埋入 ≥ 2 m，或埋入 ≥ 1 m 且底下有東西頂著，才站得住；否則（開挖挖過板樁底、土從底下被掏空）整欄倒進坑裡：
 -- 鋼板變成建築廢棄物，跟夾著的材料（土 → 鬆土；碎石照原樣，含礦也是）照體積比例混成一格碎石掉下去；接在上面的支撐一起掉
 local function holds(n)
-	if n == "air" or IS_PILE[n] or n == STRUT then return false end
+	if n == "air" or IS_PILE[n] or HB_INFO[n] then return false end
 	local def = core.registered_nodes[n]
 	return def and def.walkable ~= false
 end
@@ -324,9 +396,9 @@ local function topple(cells)
 		if info and info.state == "bent" then bent = true end
 		for _, v in ipairs({{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
 			local q = vector.add(c, v)
-			if core.get_node(q).name == STRUT then
-				local n = remove_strut(q, nil, false)
-				core.add_item(q, ItemStack(STRUT .. " " .. n))
+			if HB_INFO[core.get_node(q).name] then
+				local n, item = remove_strut(q, nil, false)
+				core.add_item(q, ItemStack(item .. " " .. n))
 			end
 		end
 	end
@@ -377,7 +449,7 @@ local function check_piles_near(p, r)
 end
 rockmech.retain_check_piles = check_piles_near
 core.register_on_dignode(function(pos, oldnode)
-	if IS_PILE[oldnode.name] or oldnode.name == STRUT then return end
+	if IS_PILE[oldnode.name] or HB_INFO[oldnode.name] then return end
 	core.after(0.3, check_piles_near, vector.copy(pos), 2)
 end)
 for name in pairs(IS_PILE) do
@@ -391,7 +463,7 @@ for name in pairs(IS_PILE) do
 			-- 接在這片上的支撐跟著拆、退還
 			for _, v in ipairs({{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
 				local q = vector.add(c, v)
-				if core.get_node(q).name == STRUT then remove_strut(q, digger, true) end
+				if HB_INFO[core.get_node(q).name] then remove_strut(q, digger, true) end
 			end
 		end
 		-- 拔掉：每一格照打下去時記住的原樣填回去（土、碎石、礦石的品位和成分）；沒記到的（舊版打的）留下空的孔
@@ -468,7 +540,7 @@ function rockmech.retain_fem_check(job, res, meta)
 			for _, q in ipairs(cells) do
 				local c, x, y, z = cell(q)
 				if c then
-					local dv = axis_dir(core.get_node(q).param2)
+					local dv = core.facedir_to_dir(core.get_node(q).param2 % 4)       -- 板樁的法向
 					local s0, s1
 					if dv.x ~= 0 then
 						s0 = select(2, fem.point_stress(job, res, x, y, z, 0, 0.5, 0.5))
@@ -490,7 +562,7 @@ function rockmech.retain_fem_check(job, res, meta)
 	end
 	-- 支撐：每一支取最大的軸力
 	done = {}
-	for _, p in ipairs(core.find_nodes_in_area(lo, hi, {STRUT})) do
+	for _, p in ipairs(core.find_nodes_in_area(lo, hi, HB_NODES)) do
 		local key = core.hash_node_position(p)
 		if not done[key] then
 			local cells = strut_line(p)
@@ -499,15 +571,16 @@ function rockmech.retain_fem_check(job, res, meta)
 			for _, q in ipairs(cells) do
 				local c = cell(q)
 				if c then
-					local dv = axis_dir(core.get_node(q).param2)
-					N = math.max(N, (dv.x ~= 0 and res.sxx or res.szz)[c])      -- kPa × 1 m² = kN（壓為正）
+					local dv = hb_axis(core.get_node(q).name)
+					N = math.max(N, (dv.x ~= 0 and res.sxx or dv.y ~= 0 and res.syy or res.szz)[c])      -- kPa × 1 m² = kN（壓為正）
 				end
 			end
-			local P = strut_cap(#cells)
+			local info = HB_INFO[core.get_node(p).name]
+			local P = hb_cap(info and info.kind or "heavy", #cells)
 			if N > P then
 				buckle_strut(p)
 			else
-				local txt = S("Strut") .. "\n" .. S("Axial force @1 kN / capacity @2 kN (@3%)", d(N), d(P), d(N / P * 100))
+				local txt = (info and info.kind == "light" and S("Light H-beam") or S("Heavy H-beam")) .. "\n" .. S("Axial force @1 kN / capacity @2 kN (@3%)", d(N), d(P), d(N / P * 100))
 				for _, q in ipairs(cells) do core.get_meta(q):set_string("infotext", txt) end
 			end
 		end
@@ -518,6 +591,7 @@ end
 core.register_on_mods_loaded(function()
 	rockmech.support_ids = rockmech.support_ids or {}
 	local r = {[core.get_content_id(STRUT)] = STRUT_R}
+	for name, info in pairs(HB_INFO) do r[core.get_content_id(name)] = E_STEEL * HB[info.kind].A / E_ROCK_REF end
 	for name, info in pairs(PILE_INFO) do
 		r[core.get_content_id(name)] = info.state == "bent" and PILE_R * BENT_R or PILE_R
 	end

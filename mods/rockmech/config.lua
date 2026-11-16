@@ -248,10 +248,10 @@ config.shop = {
 	{key = "fea_tablet", shop = "geotech", item = "rockmech:fea_tablet", label = TR("Numerical analysis tablet"), price = 3000},
 	{key = "stress_cell", shop = "geotech", item = "rockmech:stress_cell", label = TR("Borehole stress cell"), price = 12000},
 	{key = "timber_post", shop = "tools", item = "rockmech:timber_post", label = TR("Timber post"), price = 200, count = 10},
-	{key = "steel_set", shop = "tools", item = "rockmech:steel_set", label = TR("Steel set"), price = 2000, count = 10},
-	-- 擋土（retain.lua）：鋼板樁（SP-III，寬 1 m、長 9 m）、內支撐（H300，每支 1 m）
+	{key = "steel_set", shop = "tools", item = "rockmech:steel_set", label = TR("Light H-beam"), price = 2000, count = 10},      -- H200（原本的鋼支保）
+	-- 擋土（retain.lua）：鋼板樁（SP-III，寬 1 m、長 9 m）；H 型鋼輕型 H200、重型 H300（每支 1 m，支柱、橫撐都用）
 	{key = "sheet_pile", shop = "tools", item = "rockmech:sheet_pile", label = TR("Sheet pile"), price = 2500, count = 5},
-	{key = "strut", shop = "tools", item = "rockmech:strut", label = TR("Strut"), price = 1000, count = 10},
+	{key = "strut", shop = "tools", item = "rockmech:strut", label = TR("Heavy H-beam"), price = 4000, count = 10},      -- H300（原本的內支撐）
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = TR("Timber plank"), price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = TR("Timber slab"), price = 100, count = 10},
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = TR("Drone"), price = 2000},
