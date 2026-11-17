@@ -4,7 +4,7 @@
 --   抓斗長 3 m、厚 1 m、高 6 m（實機的抓斗又高又重，靠高度導向、挖得直），抓斗頭可旋轉：長邊永遠對齊格線（東西或南北）。
 --   吊桿俯仰：抓斗離迴轉軸 R_MIN–R_MAX m。
 --   E：抓一斗（跟挖土機一樣，滑鼠指哪裡抓哪裡）：上部結構轉過去、吊桿俯仰到那一欄上方，抓斗沿吊索放下去
---      （穿過空氣、穩定液），咬下最上面那一層（3 格 × 1 m），收回地面。
+--      （穿過空氣、穩定液），咬下最上面兩層（3 格 × 2 m = 6 m³；下面那層咬不動就只咬上面那層），收回地面。
 --      咬得動：碎石、土、岩體強度 σcm ≤ 可裂性門檻的軟岩（跟推土機松土同一個門檻，研發「推土機推力」一起提高）。
 --      吊索 40 m：溝深到 40 m 就不能再往下。抓斗滿了（3 m³）要先倒掉。
 --   空白鍵：倒掉抓斗：滑鼠指著卡車就倒進車斗，指著地面就轉過去倒在那裡。
@@ -18,8 +18,9 @@ local NLEV = rockmech.RUBBLE_LEVELS
 
 local h2v = V.h2v
 local CABLE = 40             -- 吊索長 (m)：最深挖到地面下這麼深
-local WINCH = 3              -- 抓斗升降速度 (m/s)
-local BITE_T = 4             -- 咬一口的時間 (s)
+local WINCH = 5              -- 抓斗升降速度 (m/s)
+local BITE_T = 3             -- 咬一口的時間 (s)
+local BITE_LAYERS = 2        -- 一口咬幾層（每層 3 格 × 1 m）
 local PIVOT = {x = 0, y = 0.6, z = 0.9}          -- 吊桿腳（上部結構座標）
 local BOOM_L = 15            -- 吊桿長 (m)
 local R_MIN, R_MAX = 2.5, 8   -- 抓斗中心離迴轉軸 (m)：吊桿俯仰的範圍
@@ -33,12 +34,12 @@ local AIM_REACH = 24         -- 滑鼠瞄準的距離 (m)
 
 local function tip_of(r) return {x = 0, y = PIVOT.y + math.sqrt(BOOM_L ^ 2 - (r - PIVOT.z) ^ 2), z = r} end
 
-local def = {desc = S("Diaphragm wall grab"), short = S("Diaphragm wall grab"), color = "#c8a020", cap = 3 * NLEV, speed = 1.0,
+local def = {desc = S("Diaphragm wall grab"), short = S("Diaphragm wall grab"), color = "#c8a020", cap = 3 * BITE_LAYERS * NLEV, speed = 1.0,
 	half = 1.5, rear = 2.4, lat = {-1, 0, 1}, eye_up = 1.75, eye_fwd = 0.6, eye_side = -0.3,
 	tail_lat = {-1.1, 0, 1.1}, tail_dy = {1.2, 2.2},
 	mirror = {x = 1.35, y = 1.4, z = 0.6},
 	tilt = {front = 1.3, rear = -2.0, side_z = -0.6, side_x = 1.1}, max_grade = math.rad(15),
-	item_desc = S("Right-click to get in; look around to slew; E grabs a bite 3 m long, 1 m thick and 1 m deep where you point, Space dumps it where you point")}
+	item_desc = S("Right-click to get in; look around to slew; E grabs a bite 3 m long, 1 m thick and 2 m deep where you point, Space dumps it where you point")}
 do   -- 圖示：履帶、車身、駕駛室、斜吊桿、吊索、抓斗
 	local c, r = def.color, {}
 	V.icon_track(r, 1, 24, 18, 7)
@@ -253,22 +254,35 @@ local function next_bite(self, cols)
 		top = math.max(top or y, y)
 	end
 	if y0 - top > CABLE then return nil, S("The trench is as deep as the cable reaches (@1 m)", CABLE) end
-	local cells = {}
-	for _, c in ipairs(cols) do
-		local p = {x = c.x, y = top, z = c.z}
-		if not open(core.get_node(p).name) then
-			if core.is_protected(p, self.owner or "") then return nil, S("Something in the way of the grab") end
-			local ok, why = biteable(p, self.owner)
-			if not ok then return nil, why end
-			cells[#cells + 1] = p
+	-- 第一層咬不動就不咬；下面的層咬不動（或超過吊索）就只咬到上一層
+	local cells, bottom = {}, top
+	for layer = 0, BITE_LAYERS - 1 do
+		local y = top - layer
+		if y0 - y > CABLE then break end
+		local these = {}
+		for _, c in ipairs(cols) do
+			local p = {x = c.x, y = y, z = c.z}
+			if not open(core.get_node(p).name) then
+				local ok, why = not core.is_protected(p, self.owner or "") and biteable(p, self.owner)
+				if not ok then
+					if layer == 0 then return nil, why or S("Something in the way of the grab") end
+					these = nil
+					break
+				end
+				these[#these + 1] = p
+			end
 		end
+		if not these then break end
+		for _, p in ipairs(these) do cells[#cells + 1] = p end
+		bottom = y
 	end
-	return {cells = cells, y = top, y0 = y0}
+	return {cells = cells, y = bottom, y0 = y0}
 end
 
 -- 咬下來：岩石、土先鬆成原地的碎石（跟手挖一樣），再整格抓進抓斗；上面的穩定液馬上補下去
 local function bite(self, b)
 	local want = def.cap - V.load_total(self)
+	local emptied = {}
 	for _, p in ipairs(b.cells) do
 		local n = core.get_node(p).name
 		local kind = biteable(p, self.owner)
@@ -283,8 +297,13 @@ local function bite(self, b)
 		if core.get_node(p).name == "air" then
 			collapse.mark_excavated(p)
 			collapse.queue_stability_check(p, n)
-			if rockmech.slurry_settle then rockmech.slurry_settle(p) end
+			emptied[#emptied + 1] = p
 		end
+	end
+	-- 全部咬完再讓上面的穩定液補下來：先補上層、再補下層（整欄往下掉兩格）
+	table.sort(emptied, function(u, v) return u.y > v.y end)
+	if rockmech.slurry_settle then
+		for _, p in ipairs(emptied) do rockmech.slurry_settle(p) end
 	end
 end
 
