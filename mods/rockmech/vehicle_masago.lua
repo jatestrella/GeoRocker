@@ -357,7 +357,8 @@ function def.hud(self)
 	return s
 end
 function def.keys(self)
-	return {{"E", S("Grab (where the cursor points)"), on = self.grabbing ~= nil}, {S("Space"), S("Dump (point at a truck to load it)")}}
+	return {{"E", S("Grab (where the cursor points)"), on = self.grabbing ~= nil}, {S("Space"), S("Dump (point at a truck to load it)")},
+		{S("Left-click"), S("Dig guide"), on = self.guide ~= false}}
 end
 
 function def.can_turn(self, pos, yaw, yaw2)
@@ -393,7 +394,45 @@ end
 
 local function angle(a) return (a + math.pi) % (2 * math.pi) - math.pi end
 -- 一口的流程：轉過去、吊桿俯仰到目標上方 → 放下（離地面的深度 / WINCH）→ 咬（BITE_T）→ 收回。倒土：轉過去 → 倒
+-- 挖掘指示：駕駛看得到下一口會咬的三格（綠色；搆不到、咬不動是橘色）；作業中標這一口。左鍵開關
+local GUIDE_DT = 0.2
+local function guide(self, ctx)
+	local d = ctx.d
+	local name = d and d:get_player_name()
+	if self.guide_name and self.guide_name ~= name then
+		if rockmech.grid_clear then rockmech.grid_clear(self.guide_name, "masago") end
+		self.guide_name = nil
+	end
+	if not name or self.guide == false or not rockmech.grid_show then
+		if name and rockmech.grid_clear then rockmech.grid_clear(name, "masago") end
+		return
+	end
+	self.guide_t = (self.guide_t or 0) - ctx.dtime
+	if self.guide_t > 0 then return end
+	self.guide_t = GUIDE_DT
+	local cols, ok
+	local g = self.grabbing
+	if g then
+		cols, ok = g.cols, true
+	else
+		local t = aim(self, d, false)
+		local p = t and t.under
+		if p then
+			local psi = reach_to(self, p.x, p.z)
+			cols = cols_at(self, p.x, p.z, psi or self.swing or 0)
+			ok = psi ~= nil and V.load_total(self) < def.cap and next_bite(self, cols) ~= nil
+		end
+	end
+	if not cols then rockmech.grid_clear(name, "masago"); return end
+	local y0 = V.ground_y(self.object:get_pos(), def.half)
+	local cells = {}
+	for _, c in ipairs(cols) do cells[#cells + 1] = {c.x, c.z} end
+	rockmech.grid_show(name, "masago", cells, y0 + 1, ok, CABLE + 2)
+	self.guide_name = name
+end
+
 function def.step(self, ctx)
+	guide(self, ctx)
 	local g = self.grabbing
 	if not g then
 		-- 駕駛：上部結構轉向視線的水平方向（車身座標的迴轉角 ψ 往右為正，實體 yaw 往左為正）
@@ -471,6 +510,12 @@ end
 -- ctx.target（測試用）：{x, y, z} 方塊或 {truck = 車}，取代滑鼠瞄準
 function def.action(self, ctx)
 	local ctrl, d = ctx.ctrl, ctx.d
+	if ctrl.dig or ctrl.LMB then
+		self.t_act = 0.4
+		self.guide = self.guide == false
+		update_hud(self)
+		return
+	end
 	if ctrl.aux1 and not self.grabbing then
 		self.t_act = 0.5
 		if V.load_total(self) >= def.cap then
@@ -502,8 +547,8 @@ function def.action(self, ctx)
 	end
 end
 
-function def.on_load(self, data) self.swing, self.r = data.swing, data.r end
-function def.on_save(self, data) data.swing, data.r = self.swing, self.r end
+function def.on_load(self, data) self.swing, self.r, self.guide = data.swing, data.r, data.guide end
+function def.on_save(self, data) data.swing, data.r, data.guide = self.swing, self.r, self.guide end
 
 V.MASS.masago = 50
 V.register("masago", def)

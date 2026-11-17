@@ -2007,3 +2007,5 @@ Connect a slurry pipe to the valve on the blue side=
 Put in all slurry=
 Take 1 m³=
 Take 10 m³=
+Left-click=
+Dig guide=
