@@ -198,15 +198,57 @@ core.register_craftitem(ITEM, {
 		end
 		local name = placer and placer:get_player_name() or ""
 		local p = level_at(pointed.under) and pointed.under or pointed.above
-		local ymax = p.y          -- 最多倒到對準的高度（液面已經到了就倒不進去，等它流開）
 		if core.is_protected(p, name) or not level_at(p) then return itemstack end
 		-- 倒進已經有的穩定液裡：沉到那一欄液體的底，從第一個不滿的格往上加（液面上升），不會疊成一根柱子
 		while level_at({x = p.x, y = p.y - 1, z = p.z}) do p.y = p.y - 1 end
+		-- 最多倒到溝槽的頂：這一欄往上，旁邊還有溝壁（實心）的最高那格；平地上就是一層（穩定液指不到，
+		-- 準心會穿過液面指到溝底，所以不能用指到的高度）
+		local function walled(q)
+			for _, d in ipairs(DIRS) do
+				if not level_at({x = q.x + d[1], y = q.y, z = q.z + d[2]}) then return true end
+			end
+		end
+		local ymax, w = p.y, vector.copy(p)
+		for _ = 1, 48 do
+			if not level_at(w) or not walled(w) then break end
+			ymax = w.y
+			w.y = w.y + 1
+		end
 		-- 整份 1 m³ 放得下才倒（守恆：不倒一半丟一半）
 		local room, q = 0, vector.copy(p)
 		while q.y <= ymax and level_at(q) do room = room + NL - level_at(q); q.y = q.y + 1 end
+		-- 這一欄放不下（液面還沒流平）：分給同一層、溝槽裡相連的格子（底下撐著的才算）
+		local spill = {}
+		if room < NL then
+			local s = vector.copy(p)
+			while level_at(s) == NL and s.y < ymax do s.y = s.y + 1 end
+			local seen, queue = {[core.hash_node_position(s)] = true}, {s}
+			local i = 1
+			while queue[i] and #queue < 64 and room < NL do
+				local c = queue[i]; i = i + 1
+				for _, d in ipairs(DIRS) do
+					local n = {x = c.x + d[1], y = c.y, z = c.z + d[2]}
+					local h = core.hash_node_position(n)
+					local kn = level_at(n)
+					local kb = level_at({x = n.x, y = n.y - 1, z = n.z})
+					if not seen[h] and kn and walled(n) and (kb == nil or kb == NL) then
+						seen[h] = true
+						queue[#queue + 1] = n
+						if kn < NL then spill[#spill + 1] = n; room = room + NL - kn end
+					end
+				end
+			end
+		end
 		if room < NL then return itemstack end
-		add_up(p, NL, ymax)
+		local left = add_up(p, NL, ymax)
+		for _, n in ipairs(spill) do
+			if left <= 0 then break end
+			local kn = level_at(n)
+			local put = math.min(NL - kn, left)
+			set_level(n, kn + put)
+			left = left - put
+			schedule(n)
+		end
 		wake_around(p)
 		schedule(p)
 		for y = p.y, p.y + 16 do
