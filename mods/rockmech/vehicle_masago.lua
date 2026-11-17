@@ -1,11 +1,12 @@
 -- rockmech/vehicle_masago.lua
 -- 連續壁抓斗（MASAGO：履帶吊車吊一個鋼製的蚌殼抓斗，靠自重落下、閉合咬土）。由 vehicles.lua 載入。
--- 3 寬履帶底盤，左前方駕駛室，車尾配重；格狀吊桿從車身斜伸到車頭前方，吊索垂下抓斗。
---   抓斗長 3 m、厚 1 m，橫在車頭正前方（車頭前第 2 格），長邊跟溝槽同方向（溝槽在車頭前、橫向延伸）。
---   E：抓一斗。抓斗沿吊索放下去（穿過空氣、穩定液），咬下最上面那一層（3 格 × 1 m），收回地面。
+-- 3 寬履帶底盤；上部結構（駕駛室、機房、配重、格狀吊桿、吊索、抓斗）像挖土機一樣迴轉，跟著駕駛的視線轉。
+--   抓斗長 3 m、厚 1 m，吊在吊桿前方 GZ m（迴轉軸算起），長邊橫向（溝槽順著抓斗的長邊延伸）。
+--   E：抓一斗。上部結構先自動轉到對齊格線（東西南北），抓斗沿吊索放下去（穿過空氣、穩定液），
+--      咬下最上面那一層（3 格 × 1 m），收回地面。
 --      咬得動：碎石、土、岩體強度 σcm ≤ 可裂性門檻的軟岩（跟推土機松土同一個門檻，研發「推土機推力」一起提高）。
 --      吊索 40 m：溝深到 40 m 就不能再往下。抓斗滿了（3 m³）要先倒掉。
---   空白鍵：倒掉抓斗（吊車右側有卡車就倒進車斗，沒有就倒在吊車右側地上）。
+--   空白鍵：倒掉抓斗：轉到哪裡倒哪裡（底下有卡車就倒進車斗，沒有就倒在地上）；抓斗還在溝槽上方不能倒。
 -- 咬掉的格子上面的穩定液馬上補下去（液面跟著降），要再補液。
 
 local S = rockmech.S
@@ -22,14 +23,13 @@ local PIVOT = {x = 0, y = 0.6, z = 0.9}          -- 吊桿腳
 local TIP = {x = 0, y = 11.5, z = GZ}            -- 吊桿頭（吊索從這裡垂下）
 local GRAB_H = 1.6           -- 抓斗高
 local GRAB_IDLE = 1.2        -- 收起來時抓斗底在車身座標的高度（地面約 −1.5）
-local DUMP_X = 4             -- 倒土的位置：吊車右後方（車身座標 x；z 在 −2..0，離溝槽遠一點，土堆攤開才不會滾進溝裡）
 
 local def = {desc = S("Diaphragm wall grab"), short = S("Diaphragm wall grab"), color = "#c8a020", cap = 3 * NLEV, speed = 1.0,
-	half = 1.5, rear = 2.4, lat = {-1, 0, 1}, eye_up = 1.75, eye_fwd = 0.9, eye_side = -0.6,
+	half = 1.5, rear = 2.4, lat = {-1, 0, 1}, eye_up = 1.75, eye_fwd = 0.6, eye_side = -0.3,
 	tail_lat = {-1.1, 0, 1.1}, tail_dy = {1.2, 2.2},
 	mirror = {x = 1.35, y = 1.4, z = 0.6},
 	tilt = {front = 1.3, rear = -2.0, side_z = -0.6, side_x = 1.1}, max_grade = math.rad(15),
-	item_desc = S("Right-click to get in; E grabs a bite 3 m long, 1 m thick and 1 m deep in front of the crane, Space dumps it")}
+	item_desc = S("Right-click to get in; look around to slew; E grabs a bite 3 m long, 1 m thick and 1 m deep, Space dumps it")}
 do   -- 圖示：履帶、車身、駕駛室、斜吊桿、吊索、抓斗
 	local c, r = def.color, {}
 	V.icon_track(r, 1, 24, 18, 7)
@@ -41,6 +41,12 @@ do   -- 圖示：履帶、車身、駕駛室、斜吊桿、吊索、抓斗
 	def.inv_image = V.icon(r)
 end
 
+local h2v = V.h2v
+local SWING_RATE = 0.6       -- 迴轉速度 (rad/s)
+local SEAT = {x = -0.45, y = 0.1, z = 0.3}          -- 駕駛室裡（上部結構座標，靠近迴轉軸）
+def.seat = SEAT
+-- 上部結構（跟著迴轉）：pos 是上部結構座標；boom、cable、grab 另外擺
+local UPPER = {}
 do
 	local c = def.color
 	local o = ("[fill:16x16:%s"):format(c)
@@ -53,53 +59,108 @@ do
 	local grab = "[fill:16x16:#3c3c3c^[fill:16x3:0,0:" .. c .. "^[fill:1x13:7,3:#202020^[fill:16x2:0,14:#5a5a5a"
 	local TRACK = V.TRACK
 	local trk = {TRACK, TRACK, TRACK, TRACK, TRACK, TRACK}
+	UPPER = {
+		{id = "turntable", pos = {x = 0, y = -0.05, z = 0}, size = {x = 2.4, y = 0.1, z = 2.4}, tex = box_tex("#4a4a4a")},   -- 迴轉盤
+		{id = "cab", pos = {x = -0.45, y = 0.65, z = 0.3}, size = {x = 1.0, y = 1.4, z = 1.3}, alpha = true, tex = {o, "[fill:16x16:#2a2a2a", side, side_l, win, o}},   -- 駕駛室
+		{id = "cabwall", pos = {x = -0.45, y = 0.65, z = -0.33}, size = {x = 0.96, y = 1.36, z = 0.04}, tex = box_tex(c)},   -- 駕駛室後牆
+		{id = "mach", pos = {x = 0.55, y = 0.5, z = -0.5}, size = {x = 1.3, y = 1.2, z = 2.0}, tex = {o, o, grille, grille, o, o}},   -- 機房（捲揚機）
+		{id = "cw", pos = {x = 0, y = 0.4, z = -1.9}, size = {x = 2.4, y = 1.0, z = 0.8}, tex = box_tex("#4a4a4a")},   -- 配重
+	}
 	def.parts = {
 		{pos = {x = -1.1, y = -1.0, z = -0.4}, size = {x = 0.7, y = 1.0, z = 3.8}, tex = trk},
 		{pos = {x = 1.1, y = -1.0, z = -0.4}, size = {x = 0.7, y = 1.0, z = 3.8}, tex = trk},
-		{pos = {x = 0, y = -0.35, z = -0.4}, size = {x = 2.2, y = 0.5, z = 3.8}, tex = box_tex("#3a3a3a")},   -- 甲板
-		{pos = {x = -0.6, y = 0.6, z = 0.4}, size = {x = 1.1, y = 1.5, z = 1.4}, alpha = true, tex = {o, "[fill:16x16:#2a2a2a", side, side_l, win, o}},   -- 駕駛室
-		{pos = {x = -0.6, y = 0.6, z = -0.26}, size = {x = 1.06, y = 1.46, z = 0.04}, tex = box_tex(c)},   -- 駕駛室後牆
-		{pos = {x = 0.5, y = 0.45, z = -0.6}, size = {x = 1.6, y = 1.4, z = 2.2}, tex = {o, o, grille, grille, o, o}},   -- 機房（捲揚機）
-		{pos = {x = 0, y = 0.3, z = -2.0}, size = {x = 2.6, y = 1.0, z = 0.8}, tex = box_tex("#4a4a4a")},   -- 配重
+		{pos = {x = 0, y = -0.4, z = -0.4}, size = {x = 1.6, y = 0.5, z = 3.6}, tex = box_tex("#3a3a3a")},   -- 下車架
 		{id = "boom", pos = {x = 0, y = 5, z = 2}, size = {x = 0.7, y = 1, z = 0.7}, alpha = true,
-			tex = {lattice, lattice, lattice, lattice, lattice, lattice}},   -- 格狀吊桿（on_spawn 擺到吊桿腳 → 吊桿頭）
+			tex = {lattice, lattice, lattice, lattice, lattice, lattice}},   -- 格狀吊桿（吊桿腳 → 吊桿頭）
 		{id = "cable", pos = {x = 0, y = 8, z = GZ}, size = {x = 0.06, y = 1, z = 0.06}, tex = box_tex("#151515")},   -- 吊索
 		{id = "grab", pos = {x = 0, y = GRAB_IDLE + GRAB_H / 2, z = GZ}, size = {x = 2.9, y = GRAB_H, z = 0.9},
 			tex = {o, "[fill:16x16:#2a2a2a", grab, grab, grab, grab}},   -- 抓斗
 	}
+	for _, p in ipairs(UPPER) do def.parts[#def.parts + 1] = p end
 end
--- 擋人：車頭前的抓斗、車尾配重
-def.overhangs = {
-	{x0 = -1.5, x1 = 1.5, z0 = GZ - 0.5, z1 = GZ + 0.5, y0 = GRAB_IDLE, y1 = GRAB_IDLE + GRAB_H},
-	{x0 = -1.3, x1 = 1.3, z0 = -2.4, z1 = -1.5, y0 = -0.2, y1 = 0.8, body = "z1"},
-}
+function def.figure_pos(self) return h2v(SEAT, self.swing or 0) end
+function def.figure_yaw(self) return self.swing or 0 end
 
--- 抓斗底在車身座標的高度 → 擺抓斗、拉長吊索
-local function place_grab(self, ybot)
+-- 上部結構座標的長方體（迴轉 ψ 後）在車身座標的外框
+local function rot_box(x0, x1, z0, z1, psi)
+	local ax, az, bx, bz = math.huge, math.huge, -math.huge, -math.huge
+	for _, q in ipairs({{x0, z0}, {x0, z1}, {x1, z0}, {x1, z1}}) do
+		local v = h2v({x = q[1], y = 0, z = q[2]}, psi)
+		ax, az, bx, bz = math.min(ax, v.x), math.min(az, v.z), math.max(bx, v.x), math.max(bz, v.z)
+	end
+	return ax, bx, az, bz
+end
+-- 擋人：抓斗（收起來的高度）、配重，跟著迴轉
+function def.overhangs_now(self)
+	local psi = self.swing or 0
+	local out = {}
+	if not self.grabbing then
+		local x0, x1, z0, z1 = rot_box(-1.5, 1.5, GZ - 0.5, GZ + 0.5, psi)
+		out[#out + 1] = {x0 = x0, x1 = x1, z0 = z0, z1 = z1, y0 = GRAB_IDLE, y1 = GRAB_IDLE + GRAB_H}
+	end
+	local x0, x1, z0, z1 = rot_box(-1.2, 1.2, -2.3, -1.5, psi)
+	out[#out + 1] = {x0 = x0, x1 = x1, z0 = z0, z1 = z1, y0 = -0.1, y1 = 0.9}
+	return out
+end
+
+-- 擺上部結構：迴轉 self.swing、抓斗底在車身座標 self.grab_y（拉長吊索）
+local function place_upper(self)
 	local ps = self.parts
 	if not ps then return end
-	if ps.grab then ps.grab:set_attach(self.object, "", {x = 0, y = (ybot + GRAB_H / 2) * 10, z = GZ * 10}, {x = 0, y = 0, z = 0}) end
+	local psi = self.swing or 0
+	local rot = {x = 0, y = math.deg(psi), z = 0}
+	for _, hp in ipairs(UPPER) do
+		local o = ps[hp.id]
+		if o then
+			local c = h2v(hp.pos, psi)
+			o:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, rot)
+		end
+	end
+	if ps.boom then seg_attach(self, ps.boom, h2v(PIVOT, psi), h2v(TIP, psi)) end
+	local ybot = self.grab_y or GRAB_IDLE
+	if ps.grab then
+		local c = h2v({x = 0, y = ybot + GRAB_H / 2, z = GZ}, psi)
+		ps.grab:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, rot)
+	end
 	if ps.cable then
 		local top = ybot + GRAB_H
 		local len = math.max(0.05, TIP.y - top)
-		ps.cable:set_properties({visual_size = {x = 0.06, y = len, z = 0.06}})
-		ps.cable:set_attach(self.object, "", {x = 0, y = (TIP.y + top) * 5, z = GZ * 10}, {x = 0, y = 0, z = 0})
+		if self.cable_len ~= len then
+			ps.cable:set_properties({visual_size = {x = 0.06, y = len, z = 0.06}})
+			self.cable_len = len
+		end
+		local c = h2v({x = 0, y = (TIP.y + top) / 2, z = GZ}, psi)
+		ps.cable:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, rot)
 	end
 end
+local function place_grab(self, ybot) self.grab_y = ybot; place_upper(self) end
 function def.on_spawn(self)
 	if self.parts and self.parts.boom then
-		local len = vector.distance(PIVOT, TIP)
-		self.parts.boom:set_properties({visual_size = {x = 0.7, y = len, z = 0.7}})
-		seg_attach(self, self.parts.boom, PIVOT, TIP)
+		self.parts.boom:set_properties({visual_size = {x = 0.7, y = vector.distance(PIVOT, TIP), z = 0.7}})
 	end
+	self.cable_len = nil
 	place_grab(self, GRAB_IDLE)
 end
 
--- 抓斗下的三格（世界座標，對齊格線）：抓斗長邊是車身的 x 方向，取最接近的世界軸
+-- 上部結構的前方、長邊方向（世界座標的水平單位向量）
+local function upper_dirs(self)
+	local o = V.to_world(self, {x = 0, y = 0, z = 0})
+	local f = vector.subtract(V.to_world(self, h2v({x = 0, y = 0, z = 1}, self.swing or 0)), o)
+	local r = vector.subtract(V.to_world(self, h2v({x = 1, y = 0, z = 0}, self.swing or 0)), o)
+	return f, r
+end
+-- 對齊格線要的迴轉角：上部結構朝向轉到最近的東西南北
+local function aligned_swing(self)
+	local f = upper_dirs(self)
+	local theta = math.atan2(-f.x, f.z)
+	local snap = math.floor(theta / (math.pi / 2) + 0.5) * (math.pi / 2)
+	return (self.swing or 0) + (theta - snap)
+end
+-- 抓斗下的三格（世界座標，對齊格線）：長邊取最接近的世界軸
 local function grab_cells(self)
-	local c = V.to_world(self, {x = 0, y = 0, z = GZ})
-	local yaw = self.object:get_yaw()
-	local ax = math.abs(math.cos(yaw)) >= math.abs(math.sin(yaw)) and {x = 1, z = 0} or {x = 0, z = 1}
+	local c = V.to_world(self, h2v({x = 0, y = 0, z = GZ}, self.swing or 0))
+	local _, r = upper_dirs(self)
+	local ax = math.abs(r.x) >= math.abs(r.z) and {x = 1, z = 0} or {x = 0, z = 1}
 	local cx, cz = math.floor(c.x + 0.5), math.floor(c.z + 0.5)
 	return {{x = cx - ax.x, z = cz - ax.z}, {x = cx, z = cz}, {x = cx + ax.x, z = cz + ax.z}}
 end
@@ -185,7 +246,7 @@ function def.hud(self)
 	local s = "\n" .. S("Grab @1", V.volume_text(V.load_total(self), def.cap))
 	local g = self.grabbing
 	if g then
-		s = s .. "  " .. (g.phase == "bite" and S("Biting at @1 m", ("%d"):format(g.depth)) or g.phase == "down" and S("Lowering the grab")
+		s = s .. "  " .. (g.phase == "align" and S("Slewing to line up") or g.phase == "bite" and S("Biting at @1 m", ("%d"):format(g.depth)) or g.phase == "down" and S("Lowering the grab")
 			or S("Raising the grab"))
 	else
 		s = s .. "  " .. S("Trench depth @1 m (cable @2 m)", ("%d"):format(trench_depth(self)), CABLE)
@@ -193,7 +254,7 @@ function def.hud(self)
 	return s
 end
 function def.keys(self)
-	return {{"E", S("Grab a bite"), on = self.grabbing ~= nil}, {S("Space"), S("Dump the grab (truck or ground on the right)")}}
+	return {{"E", S("Grab a bite"), on = self.grabbing ~= nil}, {S("Space"), S("Dump the grab (where it hangs)")}}
 end
 
 function def.can_turn(self, pos, yaw, yaw2)
@@ -201,19 +262,42 @@ function def.can_turn(self, pos, yaw, yaw2)
 end
 function def.move(self, ctx)
 	if self.grabbing then ctx.speed = 0; return end
-	if ctx.speed > 0 then
-		local la = ctx.speed * 0.1
-		local p2 = {x = ctx.pos.x + ctx.dir.x * la, y = ctx.pos.y, z = ctx.pos.z + ctx.dir.z * la}
-		if V.objects_in(self, p2, ctx.yaw, -1.5, 1.5, def.half, GZ + 0.5) then ctx.speed = 0 end
-		return
-	end
-	V.tail_guard(self, def, ctx)
+	if ctx.speed < 0 then V.tail_guard(self, def, ctx) end
 end
 
 -- 一口的流程：放下（離地面的深度 / WINCH）→ 咬（BITE_T）→ 收回
+local function angle(a) return (a + math.pi) % (2 * math.pi) - math.pi end
 function def.step(self, ctx)
 	local g = self.grabbing
-	if not g then return end
+	if not g then
+		-- 駕駛：上部結構轉向視線的水平方向（車身座標的迴轉角 ψ 往右為正，實體 yaw 往左為正）
+		local d = ctx.d
+		if d and self.parts then
+			local diff = angle(ctx.yaw - d:get_look_horizontal() - (self.swing or 0))
+			if math.abs(diff) > 1e-3 then
+				local st = SWING_RATE * ctx.dtime
+				self.swing = angle((self.swing or 0) + math.max(-st, math.min(st, diff)))
+				place_upper(self)
+			end
+		end
+		return
+	end
+	if g.phase == "align" then
+		-- 轉到對齊格線，再找這一口
+		local diff = angle(g.psi - (self.swing or 0))
+		local st = SWING_RATE * ctx.dtime
+		self.swing = (self.swing or 0) + math.max(-st, math.min(st, diff))
+		place_upper(self)
+		if math.abs(diff) <= st then
+			self.swing = g.psi
+			place_upper(self)
+			local b, why = next_bite(self)
+			if not b then self.grabbing, self.msg = nil, why
+			else self.grabbing = {phase = "down", t = 0, depth = b.y0 - b.y, bite = b} end
+			update_hud(self)
+		end
+		return
+	end
 	g.t = g.t + ctx.dtime * rockmech.eff_dig_mult(self.owner)
 	local ground = -def.half                         -- 地面在車身座標的高度
 	local bottom = ground - g.depth                  -- 這一口的底（抓斗底）
@@ -240,10 +324,11 @@ function def.step(self, ctx)
 	end
 end
 
--- 倒掉抓斗：吊車右側有卡車就倒進車斗，沒有就倒在右側地上（之後照殘餘摩擦角攤開）
+-- 倒掉抓斗：抓斗吊在哪裡就倒在哪裡。底下（2.5 m 內）有卡車就倒進車斗，沒有就倒在抓斗下的三欄（之後照殘餘摩擦角攤開）。
+-- 抓斗底下的地面是空的（溝槽、坑，或有穩定液）：不倒，要先轉開（回填用怪手）
 local TYPES = V.TYPES
 local function dump(self)
-	local spot = V.to_world(self, {x = DUMP_X, y = 0, z = -1})
+	local spot = V.to_world(self, h2v({x = 0, y = -def.half, z = GZ}, self.swing or 0))
 	for _, obj in ipairs(core.get_objects_inside_radius(spot, 2.5)) do
 		local e = obj:get_luaentity()
 		local td = e and e ~= self and e.vkind and TYPES[e.vkind]
@@ -264,14 +349,17 @@ local function dump(self)
 		end
 	end
 	local y0 = V.ground_y(self.object:get_pos(), def.half)
-	local cells = {}
-	for _, lz in ipairs({-2, -1, 0}) do
-		for _, lx in ipairs({DUMP_X - 0.5, DUMP_X + 0.5}) do
-			local w = V.to_world(self, {x = lx, y = 0, z = lz})
-			cells[#cells + 1] = {x = math.floor(w.x + 0.5), z = math.floor(w.z + 0.5)}
+	local cells = grab_cells(self)
+	for _, c in ipairs(cells) do
+		-- 抓斗底下的地面（履帶那層下面一格）是空的：坑、溝槽（或有穩定液）
+		for y = y0 + 1, y0 - 1, -1 do
+			local n = core.get_node({x = c.x, y = y, z = c.z}).name
+			if rockmech.slurry_level[n] or (y == y0 - 1 and n ~= "air" and open(n)) or (y == y0 - 1 and n == "air") then
+				self.msg = S("Slew the grab away from the trench before dumping"); return
+			end
 		end
 	end
-	V.dump_to_ground(self, cells, y0 + 1)
+	V.dump_to_ground(self, cells, y0 + 2)
 end
 
 function def.action(self, ctx)
@@ -281,12 +369,8 @@ function def.action(self, ctx)
 		if V.load_total(self) >= def.cap then
 			self.msg = S("The grab is full: Space to dump it")
 		else
-			local b, why = next_bite(self)
-			if not b then self.msg = why
-			else
-				self.grabbing = {phase = "down", t = 0, depth = b.y0 - b.y, bite = b}
-				self.msg = nil
-			end
+			self.grabbing = {phase = "align", psi = aligned_swing(self)}
+			self.msg = nil
 		end
 		update_hud(self)
 	elseif ctrl.jump and not self.grabbing then
@@ -295,6 +379,9 @@ function def.action(self, ctx)
 		update_hud(self)
 	end
 end
+
+function def.on_load(self, data) self.swing = data.swing end
+function def.on_save(self, data) data.swing = self.swing end
 
 V.MASS.masago = 50
 V.register("masago", def)
