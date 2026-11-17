@@ -29,6 +29,7 @@ local OFF = 0.004                   -- 往外偏移 (m)
 local RANGE = jt.mesh_range          -- 玩家周圍幾個區塊（水平）
 local VRANGE = math.max(1, RANGE - 1)
 local PER_STEP = 4                   -- 新進入範圍的區塊：每 0.5 s 最多建幾個
+local PUSH_STEP = 64                 -- 補推給後來的玩家：每 0.5 s 最多幾個
 local DIRTY_STEP = 8                 -- 地形改變的區塊：每 0.05 s 最多重建幾個（優先）
 local DEBUG = jt.mesh_debug   -- 記錄改變到送達的延遲（rockmech_jointtex_mesh_debug）
 local MIN_GAP = 0.2                  -- 同一區塊兩次重建的最短間隔 (s)：崩落過程中不一直重做
@@ -193,6 +194,7 @@ end
 
 local function remove_block(key)
 	local b = blocks[key]
+	if b and b.path then os.remove(b.path) end
 	if b and b.obj then
 		local le = b.obj:get_luaentity()
 		if le then le.rm_key = nil end
@@ -200,6 +202,23 @@ local function remove_block(key)
 	end
 	if b and b.q then for _, e in pairs(b.q) do e.obj:remove() end end
 	blocks[key] = nil
+end
+
+-- 網格送達某位玩家：掛上（或更新）實體。每收到一位就再設一次，讓後收到的人也重新載入模型
+local function show(b, key, name)
+	if blocks[key] ~= b or b.pending ~= name then return end
+	local pos = {x = b.bx * 16, y = b.by * 16, z = b.bz * 16}
+	if not (b.obj and b.obj:get_pos()) then
+		b.obj = core.add_entity(pos, ENT)
+		if not b.obj then return end
+		b.obj:get_luaentity().rm_key = key
+	end
+	b.obj:set_properties({mesh = name, is_visible = true})
+	if DEBUG and b.dirty_at then
+		core.log("action", ("[rockmech] 節理網格 %s：改變 → 送達 %.0f ms"):format(key,
+			(core.get_us_time() - b.dirty_at) / 1000))
+	end
+	b.dirty_at = nil
 end
 
 local function rebuild(bx, by, bz)
@@ -214,33 +233,44 @@ local function rebuild(bx, by, bz)
 	if not MESH then return end
 	if not obj_text then
 		if b.obj then b.obj:remove(); b.obj = nil end
+		if b.path then os.remove(b.path); b.path = nil end
+		b.pending = nil
 		return
 	end
 	serial = serial + 1
 	local name = ("rockmech_jm_%s_%d.obj"):format(key:gsub("-", "m"):gsub(",", "_"), serial)
 	b.pending = name
-	-- 寫到世界資料夾的暫存目錄，再以檔案路徑加入（非 ephemeral：伺服器執行期間檔案不可刪，下次啟動時清掉）
+	-- 暫時媒體（ephemeral）：只推給現在在線的人，伺服器送完就忘。不能用一般的動態媒體：那會一直記著，
+	-- 新登入的人要全部下載，挖一整天累積超過 65535 個，新玩家讀取時用戶端直接當掉（Unsupported number of file requests）。
+	-- 之後才走到這附近、或剛登入的人，由下面的 globalstep 單獨補推目前這一份（檔案留著到下次重建）
 	local path = media_dir .. DIR_DELIM .. name
 	local fh = io.open(path, "wb")
 	if not fh then core.log("warning", "[rockmech] 節理網格無法寫入 " .. path); return end
 	fh:write(obj_text)
 	fh:close()
-	local ok = core.dynamic_add_media({filepath = path}, function()
-		if blocks[key] ~= b or b.pending ~= name then return end
-		local pos = {x = bx * 16, y = by * 16, z = bz * 16}
-		if not (b.obj and b.obj:get_pos()) then
-			b.obj = core.add_entity(pos, ENT)
-			if not b.obj then return end
-			b.obj:get_luaentity().rm_key = key
-		end
-		b.obj:set_properties({mesh = name, is_visible = true})
-		if DEBUG and b.dirty_at then
-			core.log("action", ("[rockmech] 節理網格 %s：改變 → 送達 %.0f ms"):format(key,
-				(core.get_us_time() - b.dirty_at) / 1000))
-		end
-		b.dirty_at = nil
+	if b.path then os.remove(b.path) end
+	b.path = path
+	b.sent = {}
+	for _, pl in ipairs(core.get_connected_players()) do b.sent[pl:get_player_name()] = true end
+	local ok = core.dynamic_add_media({filepath = path, ephemeral = true}, function()
+		show(b, key, name)
 	end)
 	if not ok then core.log("warning", "[rockmech] 節理網格無法加入媒體 " .. name) end
+end
+
+-- 補推：玩家附近的區塊，他沒收過目前這一份網格就單獨送（剛登入、或從遠處走過來）。
+-- 同名的暫時媒體還在送給別人時加不進去（回傳 false），下一輪再試
+local function push_to(b, key, pname)
+	if not (b.path and b.pending) or (b.sent and b.sent[pname]) then return true end
+	local now = core.get_us_time()
+	if b.retry and now < b.retry then return false end
+	local name = b.pending
+	local ok = core.dynamic_add_media({filepath = b.path, filename = name, ephemeral = true, to_player = pname}, function()
+		show(b, key, name)
+	end)
+	if ok then b.sent = b.sent or {}; b.sent[pname] = true; b.retry = nil
+	else b.retry = now + 2e6 end              -- 同名的還沒送完：2 秒後再試
+	return ok
 end
 
 -- 標記某位置所在的區塊（以及位在區塊邊界時的相鄰區塊）需要重建
@@ -301,7 +331,9 @@ core.register_globalstep(function(dtime)
 	timer = 0
 	local want = {}
 	local todo = {}
+	local pushes = 0
 	for _, player in ipairs(core.get_connected_players()) do
+		local pname = player:get_player_name()
 		local pp = player:get_pos()
 		local pb = {x = math.floor(pp.x / 16), y = math.floor(pp.y / 16), z = math.floor(pp.z / 16)}
 		for bx = pb.x - RANGE, pb.x + RANGE do
@@ -315,6 +347,11 @@ core.register_globalstep(function(dtime)
 							local d = (bx - pb.x) ^ 2 + (by - pb.y) ^ 2 + (bz - pb.z) ^ 2
 							todo[#todo + 1] = {bx, by, bz, d}
 						end
+					end
+					local b = blocks[key]
+					if b and b.path and pushes < PUSH_STEP and not (b.sent and b.sent[pname]) then
+						push_to(b, key, pname)
+						pushes = pushes + 1
 					end
 				end
 			end
@@ -330,10 +367,14 @@ core.register_globalstep(function(dtime)
 	end
 end)
 
-core.register_on_leaveplayer(function()
+core.register_on_leaveplayer(function(player)
 	if #core.get_connected_players() <= 1 then
 		for key in pairs(blocks) do remove_block(key) end
+		return
 	end
+	-- 離線後用戶端的暫時媒體就沒了，重新登入要再補推
+	local pname = player:get_player_name()
+	for _, b in pairs(blocks) do if b.sent then b.sent[pname] = nil end end
 end)
 
 api.build_mesh = build_mesh
