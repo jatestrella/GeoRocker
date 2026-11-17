@@ -752,7 +752,7 @@ end)
 
 -- 機身在 pos、受料倉朝 (dx, dz)：挖階梯漏斗（每往下一層四邊各內縮 1 m）、放格柵、記到機身的 meta。
 -- 受料倉的護坡：倉壁是 45° 的台階，留著原來的岩石就會被節理切成岩塊掉進倉裡（倉壁不是開挖面，是設施）。
--- 貼著倉的那一層岩石（六個面任一面接到倉的格子）換成鋼筋混凝土護坡：不是岩石、不帶節理、不參與破壞判定，
+-- 貼著倉的那一層岩石、土、碎石（六個面任一面接到倉的格子）換成鋼筋混凝土護坡：不是岩石、不帶節理、不參與破壞判定，
 -- 但是實心、會承力，後面的岩石就沒有臨空面。爆破只炸岩石和碎石，護坡炸不壞；工具挖不動
 local LINING = "rockmech:hopper_lining"
 core.register_node(LINING, {
@@ -784,7 +784,9 @@ local function line_hopper(meta)
 				local p = {x = x, y = y, z = z}
 				local name = core.get_node(p).name
 				if name == "ignore" then missing = true
-				elseif rockmech.lith_of_node[name] then
+				elseif rockmech.lith_of_node[name] or core.get_item_group(name, "rockmech_topsoil") > 0
+						or (rockmech.rubble_level[name] and y <= top and not cavity(x, y - 1, z)) then
+					-- 岩石、土換成護坡；碎石、鬆土只換倉壁裡的（倉口上面堆著的料不算）
 					core.swap_node(p, {name = LINING})
 					n = n + 1
 				end
@@ -805,6 +807,7 @@ function rockmech.in_hopper(x, z, y)
 end
 
 -- 倉裡原有的碎石不挖，之後逐欄疊到新的倉底（舊倉擴建）
+local LINED = 2          -- meta "lined"：1 = 只襯了岩石（舊版），2 = 岩石、土都襯了
 local function dig_hopper(pos, dx, dz, size)
 	size = size or size_for(core.get_node(pos).name)
 	local depth = depth_of(size)
@@ -846,7 +849,7 @@ local function dig_hopper(pos, dx, dz, size)
 	meta:set_int("gz", cz - r)
 	meta:set_int("size", size)
 	local _, missing = line_hopper(meta)
-	meta:set_int("lined", missing and 0 or 1)
+	meta:set_int("lined", missing and 0 or LINED)
 end
 
 -- 已經蓋好的受料倉（破碎站、大型破碎站、選礦場）補上護坡，每座一次
@@ -857,9 +860,9 @@ core.register_lbm({
 	run_at_every_load = true,
 	action = function(pos)
 		local meta = core.get_meta(pos)
-		if meta:get_int("lined") == 1 or meta:get_int("size") == 0 then return end
+		if meta:get_int("lined") >= LINED or meta:get_int("size") == 0 then return end
 		local n, missing = line_hopper(meta)
-		if not missing then meta:set_int("lined", 1) end
+		if not missing then meta:set_int("lined", LINED) end
 		core.log("action", ("[rockmech] %s 的受料倉補上護坡 %d 格"):format(core.pos_to_string(pos), n))
 	end,
 })
