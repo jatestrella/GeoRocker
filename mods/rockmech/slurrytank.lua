@@ -50,20 +50,29 @@ local function tank_cells(pos, param2)
 	end end end
 	return out
 end
--- 液位計：接管口正上方兩格（靠放的人那一端的中間）是透明的玻璃管，裡面的穩定液高度 = 存量比例（2 格共 32 像素）
+-- 液位計：四面各有一條 2 格高的透明玻璃管，裡面的穩定液高度 = 存量比例（2 格共 32 像素）
 local GAUGE = "rockmech:slurry_tank_gauge_"
 local IS_SHELL = {[SHELL] = true}
 for k = 0, 16 do IS_SHELL[GAUGE .. k] = true end
+-- 四面都有：近端（接管口上方）、遠端正中、左右兩側長邊的中間。{沿長邊第幾格, 橫向 −1/0/1, 正面轉幾個 90°}
+-- （液位計的正面是方塊的 −z；控制格的 param2 讓 −z 朝放的人，遠端轉 2、右側轉 3、左側轉 1）
+local GAUGES = {{0, 0, 0}, {L - 1, 0, 2}, {2, 1, 3}, {2, -1, 1}}
 local function update_gauge(pos)
 	local p2 = core.get_node(pos).param2 % 4
+	local d = core.facedir_to_dir(p2)
+	local r = {x = d.z, z = -d.x}
 	local f = math.max(0, math.min(1, core.get_meta(pos):get_int("stock") / CAP))
 	local px = math.floor(f * 32 + 0.5)
-	for i, fill in ipairs({math.min(16, px), math.max(0, px - 16)}) do
-		local g = {x = pos.x, y = pos.y + i, z = pos.z}
-		local n = core.get_node(g)
-		local want = GAUGE .. fill
-		if IS_SHELL[n.name] and (n.name ~= want or n.param2 ~= p2) then
-			core.swap_node(g, {name = want, param2 = p2})       -- swap_node 保留 meta（所屬的儲槽）
+	for _, g in ipairs(GAUGES) do
+		local gx, gz = pos.x + d.x * g[1] + r.x * g[2], pos.z + d.z * g[1] + r.z * g[2]
+		local gp2 = (p2 + g[3]) % 4
+		for i, fill in ipairs({math.min(16, px), math.max(0, px - 16)}) do
+			local c = {x = gx, y = pos.y + i, z = gz}
+			local n = core.get_node(c)
+			local want = GAUGE .. fill
+			if IS_SHELL[n.name] and (n.name ~= want or n.param2 ~= gp2) then
+				core.swap_node(c, {name = want, param2 = gp2})       -- swap_node 保留 meta（所屬的儲槽）
+			end
 		end
 	end
 end
