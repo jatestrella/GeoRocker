@@ -1,10 +1,11 @@
 -- rockmech/slurrytank.lua
--- 穩定液儲槽（含泵）：放在溝槽旁的地面上，把買來的穩定液存進去，自動把附近溝槽的液面補到設定高度。
+-- 穩定液儲槽（含泵）：放在溝槽旁的地面上，管子朝放的人那一側伸出來、管口垂在那一格（溝槽上方）。
+-- 把買來的穩定液存進去，泵從管口把穩定液打進底下的溝槽，液面補到設定高度。
 --   實務：拌合廠的儲槽用泵一直把穩定液打進溝裡，液面保持在導溝頂下約 0.5 m（而且比地下水位高 1 m 以上），
 --   抓斗挖走土、液面一降就補，不然溝壁會塌。
 --   目標液面 = 儲槽底（放儲槽那一格的地面）往下 off m（0–3 m，每 0.5 m 一段，預設 0.5 m）。
---   每 TICK 秒：範圍內（水平 ±R 格）露出液面的穩定液，液面低於目標的，從液面最低的那欄開始補，
---   每次最多 RATE 級（泵的能力），補多少扣多少存量（守恆）。溝裡要先有一點穩定液，儲槽才找得到要補哪裡。
+--   每 TICK 秒：量管口那一欄的液面（空溝槽就從溝底開始灌），低於目標就補，每次最多 RATE 級（泵的能力），
+--   補多少扣多少存量（守恆）；補進去的會慢慢流到整條溝槽。
 --   拿著穩定液對儲槽按右鍵：整疊存進去。拆掉儲槽：存量照整 m³ 退回背包（不滿 1 m³ 的沒了）。
 
 local S = rockmech.S
@@ -12,8 +13,7 @@ local NL = 8
 local TANK = "rockmech:slurry_tank"
 local TICK = 2                -- 幾秒檢查一次 (s)
 local RATE = 16               -- 每次最多補幾級（2 m³ / 2 s）
-local R = 10                  -- 水平範圍 (格)
-local DEPTH = 42              -- 往下找多深 (格)
+local DEPTH = 42              -- 管口往下找多深 (格)
 local CAP = 200 * NL          -- 存量上限（200 m³）
 local OFF_DEFAULT = 0.5
 
@@ -36,52 +36,49 @@ local function may(pos, name)
 	return rockmech.owner_ok and rockmech.owner_ok(owner, name) or owner == "" or owner == name
 end
 
--- 範圍內露出液面的穩定液欄：{p = 液面那格, s = 液面高度 (m)}
-local function surfaces(pos, H)
-	local lvl = rockmech.slurry_level
-	local p1 = {x = pos.x - R, y = math.floor(H) - DEPTH, z = pos.z - R}
-	local p2 = {x = pos.x + R, y = math.floor(H + 0.5), z = pos.z + R}
-	local out = {}
-	for _, q in ipairs(core.find_nodes_in_area(p1, p2, {"group:rockmech_slurry"})) do
-		local k = lvl[core.get_node(q).name]
-		local above = core.get_node({x = q.x, y = q.y + 1, z = q.z}).name
-		if k and (above == "air" or (k < NL and not lvl[above])) then
-			out[#out + 1] = {p = q, s = q.y - 0.5 + k / NL}
-		end
-	end
-	table.sort(out, function(a, b) return a.s < b.s end)
-	return out
+-- 管口：儲槽前方那一格（照 param2 的方向）
+local function outlet(pos)
+	local d = core.facedir_to_dir(core.get_node(pos).param2 % 32)
+	return {x = pos.x + d.x, y = pos.y, z = pos.z + d.z}
 end
 
 local function pump(pos)
 	local meta = core.get_meta(pos)
 	local st = meta:get_int("stock")
 	local H = pos.y - 0.5 - off_of(meta)
-	local list = surfaces(pos, H)
-	local budget = math.min(RATE, st)
-	local used, low = 0, false
-	local owner = meta:get_string("owner")
-	for _, c in ipairs(list) do
-		local need = math.floor((H - c.s) * NL + 0.5)
+	local lvl = rockmech.slurry_level
+	local o = outlet(pos)
+	local used, msg = 0, ""
+	local function at(p) local n = core.get_node(p).name; return n == "air" and 0 or lvl[n] end
+	if not at(o) then
+		msg = S("The pipe outlet is blocked")
+	elseif not at({x = o.x, y = o.y - 1, z = o.z}) then
+		msg = S("The pipe is not over a trench")
+	else
+		-- 管口那一欄：往下穿過空氣到液面（或溝底）
+		local q = {x = o.x, y = o.y, z = o.z}
+		for _ = 1, DEPTH do
+			local below = {x = q.x, y = q.y - 1, z = q.z}
+			local kb = at(below)
+			if not kb or (at(q) or 0) > 0 then break end
+			q = below
+		end
+		local k = at(q) or 0
+		while k == NL and at({x = q.x, y = q.y + 1, z = q.z}) and at({x = q.x, y = q.y + 1, z = q.z}) > 0 do
+			q.y = q.y + 1; k = at(q)
+		end
+		local surface = q.y - 0.5 + k / NL
+		local need = math.floor((H - surface) * NL + 0.5)
 		if need > 0 then
-			low = true
-			if budget <= 0 then break end
-			if not core.is_protected(c.p, owner) then
-				local put = math.min(need, budget)
-				local left = rockmech.slurry_add_up(c.p, put, math.floor(H + 0.5))
-				local done = put - left
-				budget, used = budget - done, used + done
-				if done > 0 then
-					rockmech.slurry_schedule(c.p)
-					rockmech.slurry_wake(c.p)
-				end
+			local owner = meta:get_string("owner")
+			if st <= 0 then msg = S("Out of slurry: the level is dropping")
+			elseif core.is_protected(q, owner) then msg = S("The pipe outlet is blocked")
+			else
+				used = rockmech.slurry_pour(q, math.min(need, RATE, st), math.floor(H + 0.5), true)
+				msg = S("Pumping")
 			end
 		end
 	end
-	local msg = ""
-	if #list == 0 then msg = S("No slurry within @1 m: pour some into the trench first", R)
-	elseif low and st - used <= 0 then msg = S("Out of slurry: the level is dropping")
-	elseif low then msg = S("Pumping") end
 	meta:set_int("stock", st - used)
 	if meta:get_string("msg") ~= msg or used > 0 then meta:set_string("msg", msg); info(pos) end
 end
@@ -89,23 +86,35 @@ end
 local function formspec(pos)
 	local meta = core.get_meta(pos)
 	local F = core.formspec_escape
-	return ("formspec_version[6]size[7,3.6]label[0.5,0.6;%s]label[0.5,1.2;%s]"
-		.. "button[0.5,1.8;1.2,0.8;dec;−]button[1.9,1.8;1.2,0.8;inc;+]button_exit[4.5,2.6;2,0.7;ok;%s]"):format(
+	return ("formspec_version[6]size[7,3.8]label[0.5,0.6;%s]label[0.5,1.2;%s]"
+		.. "button[0.5,1.8;1.2,0.8;dec;−]button[1.9,1.8;1.2,0.8;inc;+]button[3.5,1.8;2.2,0.8;turn;%s]button_exit[4.5,2.8;2,0.7;ok;%s]"):format(
 		F(S("Stock @1 m³ (hold slurry and right-click to add)", m3(meta:get_int("stock")))),
 		F(S("Target level: @1 m below the ground at the tank", ("%.1f"):format(off_of(meta)))),
-		F(S("Done")))
+		F(S("Turn the pipe")), F(S("Done")))
 end
 local editing = {}
 
 core.register_node(TANK, {
-	description = S("Slurry tank\nPlace beside the trench; keeps the slurry level topped up. Right-click with slurry to fill it"),
+	description = S("Slurry tank\nThe pipe points back at you: stand at the trench edge and place it on the far side; it keeps the level topped up. Shift + right-click turns it. Right-click with slurry to fill it"),
 	short_description = S("Slurry tank"),
 	tiles = {
-		"[fill:16x16:#7a7f84^[fill:12x12:2,2:#8a7a5c",
+		"[fill:16x16:#7a7f84^[fill:10x10:3,3:#8a7a5c",
 		"[fill:16x16:#5a5f64",
 		"[fill:16x16:#8c9196^[fill:16x1:0,4:#6a6f74^[fill:16x1:0,11:#6a6f74^[fill:3x5:11,10:#3a6ea8",
 	},
+	drawtype = "nodebox",
+	-- 槽身＋泵＋管子（從前面伸出去、到前方那一格中央往下彎，管口垂在溝槽上方）
+	node_box = {type = "fixed", fixed = {
+		{-0.45, -0.5, -0.45, 0.45, 0.45, 0.45},          -- 槽身
+		{-0.2, -0.5, 0.45, 0.2, -0.1, 0.62},             -- 泵
+		{-0.07, 0.15, 0.45, 0.07, 0.29, 1.07},           -- 水平管
+		{-0.07, -0.4, 0.93, 0.07, 0.29, 1.07},           -- 往下彎的管
+		{-0.1, -0.45, 0.9, 0.1, -0.4, 1.1},              -- 管口
+	}},
+	selection_box = {type = "fixed", fixed = {{-0.5, -0.5, -0.5, 0.5, 0.5, 0.5}, {-0.1, -0.45, 0.45, 0.1, 0.3, 1.1}}},
+	collision_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0.5, 0.5}},
 	paramtype = "light",
+	paramtype2 = "facedir",
 	is_ground_content = false,
 	groups = {cracky = 2, not_in_creative_inventory = 1},
 	drop = "",
@@ -113,6 +122,11 @@ core.register_node(TANK, {
 		core.get_node_timer(pos):start(TICK)
 	end,
 	after_place_node = function(pos, placer)
+		-- 管子朝放的人那一側伸出來（站在溝邊、面向外放，管口就垂在溝槽上方）
+		if placer and placer.get_look_dir then
+			local d = placer:get_look_dir()
+			core.swap_node(pos, {name = TANK, param2 = core.dir_to_facedir({x = -d.x, y = 0, z = -d.z})})
+		end
 		local meta = core.get_meta(pos)
 		local acc = placer and rockmech.account_of and rockmech.account_of(placer:get_player_name()) or (placer and placer:get_player_name()) or ""
 		meta:set_string("owner", acc)
@@ -135,6 +149,11 @@ core.register_node(TANK, {
 				itemstack:take_item(n)
 				info(pos)
 			end
+			return itemstack
+		end
+		if clicker:get_player_control().sneak then
+			local node2 = core.get_node(pos)
+			core.swap_node(pos, {name = TANK, param2 = (node2.param2 % 4 + 1) % 4})
 			return itemstack
 		end
 		editing[name] = pos
@@ -169,6 +188,10 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local pos = editing[name]
 	if not pos or core.get_node(pos).name ~= TANK or not may(pos, name) then return true end
 	local meta = core.get_meta(pos)
+	if fields.turn then
+		local nd = core.get_node(pos)
+		core.swap_node(pos, {name = TANK, param2 = (nd.param2 % 4 + 1) % 4})
+	end
 	if fields.dec then meta:set_string("off", tostring(math.max(0, off_of(meta) - 0.5))) end
 	if fields.inc then meta:set_string("off", tostring(math.min(3, off_of(meta) + 0.5))) end
 	info(pos)
