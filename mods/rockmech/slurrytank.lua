@@ -79,6 +79,14 @@ local function tank_formspec(pos)
 		F(S("Put in all slurry")), F(S("Take 1 m³")), F(S("Take 10 m³")), F(S("Done")))
 end
 local tank_editing = {}
+-- 手上拿著方塊（穩定液管…）：照常放下去，不開面板（右鍵點設施時放東西）
+local function place_held(itemstack, clicker, pointed)
+	-- 儲槽本身（多格，有自己的 on_place）不在這裡放：按 Shift 放
+	if pointed and core.registered_nodes[itemstack:get_name()] and itemstack:get_name() ~= TANK then
+		return core.item_place_node(itemstack, clicker, pointed) or itemstack, true
+	end
+	return itemstack, false
+end
 
 local function store(pos, clicker, itemstack)
 	local c = tank_of(pos)
@@ -101,10 +109,12 @@ core.register_node(SHELL, {
 	tiles = {STEEL_TOP, STEEL, STEEL},
 	is_ground_content = false, diggable = false, drop = "",
 	groups = {not_in_creative_inventory = 1},
-	on_rightclick = function(pos, node, clicker, itemstack)
+	on_rightclick = function(pos, node, clicker, itemstack, pointed)
 		local c = tank_of(pos)
 		if not (c and clicker and clicker:is_player() and may(c, clicker:get_player_name())) then return itemstack end
 		if itemstack:get_name() == rockmech.SLURRY_ITEM then return store(pos, clicker, itemstack) end
+		local st, placed = place_held(itemstack, clicker, pointed)
+		if placed then return st end
 		tank_editing[clicker:get_player_name()] = c
 		core.show_formspec(clicker:get_player_name(), "rockmech:slurry_tank", tank_formspec(c))
 		return itemstack
@@ -171,9 +181,11 @@ core.register_node(TANK, {
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack
 	end,
-	on_rightclick = function(pos, node, clicker, itemstack)
+	on_rightclick = function(pos, node, clicker, itemstack, pointed)
 		if not (clicker and clicker:is_player() and may(pos, clicker:get_player_name())) then return itemstack end
 		if itemstack:get_name() == rockmech.SLURRY_ITEM then return store(pos, clicker, itemstack) end
+		local st, placed = place_held(itemstack, clicker, pointed)
+		if placed then return st end
 		tank_editing[clicker:get_player_name()] = pos
 		core.show_formspec(clicker:get_player_name(), "rockmech:slurry_tank", tank_formspec(pos))
 		return itemstack
@@ -420,9 +432,11 @@ core.register_node(OUTLET, {
 		pump(pos)
 		return true
 	end,
-	on_rightclick = function(pos, node, clicker, itemstack)
+	on_rightclick = function(pos, node, clicker, itemstack, pointed)
 		if not (clicker and clicker:is_player()) then return itemstack end
 		local name = clicker:get_player_name()
+		local st, placed = place_held(itemstack, clicker, pointed)
+		if placed then return st end
 		if not may(pos, name) then return itemstack end
 		if clicker:get_player_control().sneak then turn(pos); return itemstack end
 		editing[name] = pos
