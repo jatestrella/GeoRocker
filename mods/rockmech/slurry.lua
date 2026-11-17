@@ -14,7 +14,7 @@ local cfg = rockmech.cfg
 local NL = 8
 local BASE = "rockmech:slurry"
 local GAMMA = 11                     -- kN/m³（皂土泥漿，比重約 1.05–1.1）
-local STEP = tonumber(core.settings:get("rockmech_slurry_step") or "") or 0.5
+local STEP = tonumber(core.settings:get("rockmech_slurry_step") or "") or 0.25
 rockmech.SLURRY = BASE
 rockmech.SLURRY_GAMMA = GAMMA
 rockmech.slurry_level = {}           -- 方塊名稱 → 級數（滿格 8）
@@ -42,7 +42,7 @@ for k = 1, NL do
 		paramtype = "light",
 		sunlight_propagates = true,
 		walkable = false, pointable = false, diggable = false, buildable_to = true,
-		liquid_move_physics = true, move_resistance = 4,
+		liquid_move_physics = true, move_resistance = 1,
 		post_effect_color = {a = 200, r = 0x6a, g = 0x5c, b = 0x44},
 		drowning = 1,
 		drop = "",
@@ -167,12 +167,13 @@ step = function(p)
 		return
 	end
 	-- 旁邊都只差 1 級（一格一格差 1/8 m 的階梯，長溝槽兩端差很多、遠端流不到）：連通管——
-	-- 同一層連通的液面（含底下撐著的空格）裡最低的那一格比這格低 2 級以上，就搬 1 級過去。慢慢流平，最後整片差不到 1 級
+	-- 同一層連通的液面（含底下撐著的空格）裡最低的那一格比這格低 2 級以上，就搬差距的一半過去。流平，最後整片差不到 1 級
 	if k >= 2 then
 		local low, lk = level_low(p, k)
 		if low then
-			set_level(low, lk + 1)
-			set_level(p, k - 1)
+			local t = math.floor((k - lk) / 2)       -- 搬差距的一半
+			set_level(low, lk + t)
+			set_level(p, k - t)
 			schedule(low)
 			wake_around(p)
 			schedule(p)
@@ -215,7 +216,7 @@ core.register_abm({
 	label = "rockmech: 穩定液流動",
 	nodenames = {"group:rockmech_slurry"},
 	neighbors = {"air", "group:rockmech_slurry"},
-	interval = 3, chance = 3, catch_up = false,
+	interval = 2, chance = 1, catch_up = false,
 	action = function(pos) schedule(pos) end,
 })
 
