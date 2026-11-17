@@ -50,15 +50,33 @@ local function tank_cells(pos, param2)
 	end end end
 	return out
 end
+-- 液位計：接管口正上方兩格（靠放的人那一端的中間）是透明的玻璃管，裡面的穩定液高度 = 存量比例（2 格共 32 像素）
+local GAUGE = "rockmech:slurry_tank_gauge_"
+local IS_SHELL = {[SHELL] = true}
+for k = 0, 16 do IS_SHELL[GAUGE .. k] = true end
+local function update_gauge(pos)
+	local p2 = core.get_node(pos).param2 % 4
+	local f = math.max(0, math.min(1, core.get_meta(pos):get_int("stock") / CAP))
+	local px = math.floor(f * 32 + 0.5)
+	for i, fill in ipairs({math.min(16, px), math.max(0, px - 16)}) do
+		local g = {x = pos.x, y = pos.y + i, z = pos.z}
+		local n = core.get_node(g)
+		local want = GAUGE .. fill
+		if IS_SHELL[n.name] and (n.name ~= want or n.param2 ~= p2) then
+			core.swap_node(g, {name = want, param2 = p2})       -- swap_node 保留 meta（所屬的儲槽）
+		end
+	end
+end
 local function tank_info(pos)
 	local meta = core.get_meta(pos)
 	meta:set_string("infotext", S("Slurry tank") .. "\n" .. S("Stock @1 / @2 m³", m3(meta:get_int("stock")), CAP / NL))
+	update_gauge(pos)
 end
 -- 這一格屬於哪個儲槽（控制格的位置）
 local function tank_of(p)
 	local n = core.get_node(p).name
 	if n == TANK then return p end
-	if n == SHELL then
+	if IS_SHELL[n] then
 		local s = core.get_meta(p):get_string("tank")
 		local c = s ~= "" and core.string_to_pos(s)
 		if c and core.get_node(c).name == TANK then return c end
@@ -120,6 +138,21 @@ core.register_node(SHELL, {
 		return itemstack
 	end,
 })
+
+-- 液位計的格子：跟槽壁一樣，只是正面（朝放的人）有一條玻璃管，刻度每 1/4
+do
+	local base = table.copy(core.registered_nodes[SHELL])
+	for k = 0, 16 do
+		local front = STEEL .. "^[fill:6x16:5,0:#3a3f44^[fill:4x16:6,0:#b8ccd6"
+			.. (k > 0 and ("^[fill:4x" .. k .. ":6," .. (16 - k) .. ":#8a7a5c") or "")
+			.. "^[fill:2x1:2,0:#3a3f44^[fill:2x1:2,8:#3a3f44"
+		local d = table.copy(base)
+		d.tiles = {STEEL_TOP, STEEL, STEEL, STEEL, STEEL, front}
+		d.paramtype2 = "facedir"
+		d.on_rightclick = base.on_rightclick
+		core.register_node(GAUGE .. k, d)
+	end
+end
 
 core.register_node(TANK, {
 	description = S("Slurry tank\n40 m³ steel tank, 3 × 6 × 3 m, built in the direction you look. Connect it to a slurry outlet with slurry pipes. Right-click with slurry to fill it"),
@@ -203,7 +236,7 @@ core.register_node(TANK, {
 			n = n - k
 		end
 		for _, c in ipairs(tank_cells(pos, node.param2)) do
-			if core.get_node(c).name == SHELL then core.remove_node(c) end
+			if IS_SHELL[core.get_node(c).name] then core.remove_node(c) end
 		end
 		core.remove_node(pos)
 		local inv = digger:get_inventory()
@@ -466,7 +499,7 @@ core.register_lbm({
 	label = "rockmech: 穩定液出液口計時器", name = "rockmech:slurry_outlet_timer", nodenames = {OUTLET, TANK}, run_at_every_load = true,
 	action = function(pos, node)
 		if node.name == TANK then
-			if core.get_meta(pos):get_int("built") == 1 then return end
+			if core.get_meta(pos):get_int("built") == 1 then update_gauge(pos); return end
 			core.swap_node(pos, {name = OUTLET, param2 = node.param2})
 		end
 		if not core.get_node_timer(pos):is_started() then core.get_node_timer(pos):start(TICK) end
