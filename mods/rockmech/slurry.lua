@@ -142,6 +142,8 @@ step = function(p)
 	end
 end
 rockmech.slurry_step = step
+rockmech.slurry_add_up = add_up            -- (p, 級數, 最高到哪一格) → 加不進去的級數
+rockmech.slurry_schedule = function(p) schedule(p) end
 
 -- p 剛被挖空（抓斗咬走）：上面那一欄穩定液馬上往下補（由下往上一格一格掉一層），液面跟著降。
 -- 不等慢慢流：泥漿裡挖出來的空洞不會撐著不動，不然應力解會把空洞當成臨空面
