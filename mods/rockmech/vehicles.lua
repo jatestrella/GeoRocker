@@ -2076,3 +2076,4 @@ dofile(rockmech.modpath .. "/vehicle_miner.lua")
 dofile(rockmech.modpath .. "/vehicle_lowboy.lua")
 dofile(rockmech.modpath .. "/vehicle_corerig.lua")
 dofile(rockmech.modpath .. "/vehicle_lift.lua")      -- 高空作業車、吊車（作業籠）
+dofile(rockmech.modpath .. "/vehicle_masago.lua")    -- 連續壁抓斗

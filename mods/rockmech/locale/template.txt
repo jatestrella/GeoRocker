@@ -1969,3 +1969,17 @@ Heavy H-beam@nRight-click the floor: a post up to the roof; a wall: a strut acro
 [H-beam] An unsupported H-beam fell down=
 Bentonite slurry=
 Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=
+Diaphragm wall grab=
+Right-click to get in; E grabs a bite 3 m long, 1 m thick and 1 m deep in front of the crane, Space dumps it=
+Rock too hard for the grab (rock mass strength @1 MPa > @2 MPa)=
+Something in the way of the grab=
+The trench is as deep as the cable reaches (@1 m)=
+Grab @1=
+Biting at @1 m=
+Lowering the grab=
+Raising the grab=
+Trench depth @1 m (cable @2 m)=
+Grab a bite=
+Dump the grab (truck or ground on the right)=
+The grab is full: Space to dump it=
+The grab is empty=

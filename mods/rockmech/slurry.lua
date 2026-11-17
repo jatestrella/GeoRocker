@@ -143,6 +143,26 @@ step = function(p)
 end
 rockmech.slurry_step = step
 
+-- p 剛被挖空（抓斗咬走）：上面那一欄穩定液馬上往下補（由下往上一格一格掉一層），液面跟著降。
+-- 不等慢慢流：泥漿裡挖出來的空洞不會撐著不動，不然應力解會把空洞當成臨空面
+function rockmech.slurry_settle(p)
+	if level_at(p) ~= 0 then return end
+	local q = {x = p.x, y = p.y + 1, z = p.z}
+	for _ = 1, 64 do
+		local k = level_at(q)
+		if not k or k <= 0 then break end
+		local below = {x = q.x, y = q.y - 1, z = q.z}
+		local kb = level_at(below)
+		if not kb or kb >= NL then break end
+		local put = math.min(NL - kb, k)
+		set_level(below, kb + put)
+		set_level(q, k - put)
+		schedule(below)
+		q.y = q.y + 1
+	end
+	wake_around({x = q.x, y = q.y - 1, z = q.z})
+end
+
 -- 旁邊、底下的方塊被挖掉：穩定液往那裡流
 core.register_on_dignode(function(pos)
 	for _, v in ipairs({{x = 0, y = 1, z = 0}, {x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do

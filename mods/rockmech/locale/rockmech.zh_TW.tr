@@ -2181,3 +2181,17 @@ Heavy H-beam@nRight-click the floor: a post up to the roof; a wall: a strut acro
 [H-beam] An unsupported H-beam fell down=[H 型鋼] 懸空的 H 型鋼掉下來了
 Bentonite slurry=穩定液
 Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=穩定液@n每單位 1 m³。按右鍵倒進去；會慢慢流，頂住溝壁不讓它塌
+Diaphragm wall grab=連續壁抓斗
+Right-click to get in; E grabs a bite 3 m long, 1 m thick and 1 m deep in front of the crane, Space dumps it=按右鍵上車；E 在車頭前抓一斗（長 3 m、厚 1 m、深 1 m），空白鍵倒掉
+Rock too hard for the grab (rock mass strength @1 MPa > @2 MPa)=岩石太硬抓不動（岩體強度 @1 MPa > @2 MPa）
+Something in the way of the grab=抓斗被東西擋住
+The trench is as deep as the cable reaches (@1 m)=已經挖到吊索的極限（@1 m）
+Grab @1=抓斗 @1
+Biting at @1 m=在 @1 m 深處抓土
+Lowering the grab=抓斗下降中
+Raising the grab=抓斗上升中
+Trench depth @1 m (cable @2 m)=溝深 @1 m（吊索 @2 m）
+Grab a bite=抓一斗
+Dump the grab (truck or ground on the right)=倒掉（右側的卡車或地上）
+The grab is full: Space to dump it=抓斗滿了：按空白鍵倒掉
+The grab is empty=抓斗是空的

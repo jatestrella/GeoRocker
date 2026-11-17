@@ -213,6 +213,7 @@ config.shop = {
 	{key = "corerig", shop = "vehicle", item = "rockmech:corerig_item", label = TR("Core drill rig"), price = 45000},
 	{key = "aerial", shop = "vehicle", item = "rockmech:aerial_item", label = TR("Aerial work platform"), price = 60000},
 	{key = "crane", shop = "vehicle", item = "rockmech:crane_item", label = TR("Crane"), price = 80000},
+	{key = "masago", shop = "vehicle", item = "rockmech:masago_item", label = TR("Diaphragm wall grab"), price = 90000},
 	{key = "drillrig", shop = "blast", item = "rockmech:drillrig_item", label = TR("Surface drill rig"), price = 50000},
 	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = TR("Drill jumbo"), price = 60000},
 	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = TR("Haul truck"), price = 150000},
@@ -272,7 +273,7 @@ config.shop = {
 -- 引擎額定功率（kW，fuel.lua 算油耗）：沒列的車不耗油（手推車靠人推）
 config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, anfotruck = 250, lowboy = 400, dozer = 250,
 	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500,
-	aerial = 150, crane = 250, heavyhaul = 500}
+	aerial = 150, crane = 250, heavyhaul = 500, masago = 250}
 
 -- 化學成分（碎石的 metadata：assay.lua，質量比例 0..1）。有 chem 的岩性（褐鐵礦）挖下來就帶著這些成分，
 -- 混到廢石照體積稀釋。破碎站照成分計價（config.element_value）：
