@@ -190,6 +190,12 @@ core.register_craftitem(ITEM, {
 	stack_max = 99,
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
+		-- 指著有右鍵功能的方塊（穩定液儲槽：存進去）：交給它；按住 Shift 才倒
+		local un = core.get_node(pointed.under)
+		local udef = core.registered_nodes[un.name]
+		if udef and udef.on_rightclick and not (placer and placer.get_player_control and placer:get_player_control().sneak) then
+			return udef.on_rightclick(pointed.under, un, placer, itemstack, pointed) or itemstack
+		end
 		local name = placer and placer:get_player_name() or ""
 		local p = level_at(pointed.under) and pointed.under or pointed.above
 		local ymax = p.y          -- 最多倒到對準的高度（液面已經到了就倒不進去，等它流開）
