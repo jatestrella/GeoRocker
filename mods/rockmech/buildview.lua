@@ -197,6 +197,11 @@ core.register_globalstep(function()
 				local ox, oz = pos.x - v.home.x, pos.z - v.home.z
 				local dist = math.sqrt(ox * ox + oz * oz)
 				if dist >= cfg.build_view_range then
+					-- 沿著邊界橫移時切線方向會讓距離一直變大（慢慢滑出去）：超過就拉回邊界上
+					if dist > cfg.build_view_range then
+						local k2 = cfg.build_view_range / dist
+						v.cam:set_pos({x = v.home.x + ox * k2, y = pos.y, z = v.home.z + oz * k2})
+					end
 					local out = (vx * ox + vz * oz) / dist
 					if out > 0 then vx, vz = vx - out * ox / dist, vz - out * oz / dist end
 				end

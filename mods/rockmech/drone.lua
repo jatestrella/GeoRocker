@@ -256,6 +256,11 @@ core.register_globalstep(function(dtime)
 			local dist = math.sqrt(ox * ox + oz * oz)
 			f.out = dist >= cfg.drone_range
 			if f.out then
+				-- 沿著邊界橫飛時切線方向會讓距離一直變大（慢慢滑出去）：超過就拉回邊界上
+				if dist > cfg.drone_range then
+					local k2 = cfg.drone_range / dist
+					d:set_pos({x = f.home.x + ox * k2, y = pos.y, z = f.home.z + oz * k2})
+				end
 				local out = (vx * ox + vz * oz) / dist
 				if out > 0 then vx, vz = vx - out * ox / dist, vz - out * oz / dist end
 			end
