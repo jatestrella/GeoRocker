@@ -194,7 +194,6 @@ end
 
 local function remove_block(key)
 	local b = blocks[key]
-	if b and b.path then os.remove(b.path) end
 	if b and b.obj then
 		local le = b.obj:get_luaentity()
 		if le then le.rm_key = nil end
@@ -221,6 +220,7 @@ local function show(b, key, name)
 	b.dirty_at = nil
 end
 
+local push_to             -- 下面定義
 local function rebuild(bx, by, bz)
 	local key = bkey(bx, by, bz)
 	local b = blocks[key] or {}
@@ -233,43 +233,36 @@ local function rebuild(bx, by, bz)
 	if not MESH then return end
 	if not obj_text then
 		if b.obj then b.obj:remove(); b.obj = nil end
-		if b.path then os.remove(b.path); b.path = nil end
-		b.pending = nil
+		b.path, b.pending = nil, nil
 		return
 	end
 	serial = serial + 1
 	local name = ("rockmech_jm_%s_%d.obj"):format(key:gsub("-", "m"):gsub(",", "_"), serial)
 	b.pending = name
-	-- 暫時媒體（ephemeral）：只推給現在在線的人，伺服器送完就忘。不能用一般的動態媒體：那會一直記著，
+	-- 只送給指定的玩家（to_player、非 ephemeral）：不會列進新玩家登入時要下載的清單。不帶 to_player 的話伺服器會一直記著，
 	-- 新登入的人要全部下載，挖一整天累積超過 65535 個，新玩家讀取時用戶端直接當掉（Unsupported number of file requests）。
-	-- 之後才走到這附近、或剛登入的人，由下面的 globalstep 單獨補推目前這一份（檔案留著到下次重建）
+	-- 也不用 ephemeral：那要先把檔案複製到系統暫存資料夾，有的電腦會失敗（failed creating a copy of media file）。
+	-- 非 ephemeral 的檔案伺服器執行期間不能刪，下次啟動時清掉。之後才走到這附近、或剛登入的人，由下面的 globalstep 補送
 	local path = media_dir .. DIR_DELIM .. name
 	local fh = io.open(path, "wb")
 	if not fh then core.log("warning", "[rockmech] 節理網格無法寫入 " .. path); return end
 	fh:write(obj_text)
 	fh:close()
-	if b.path then os.remove(b.path) end
 	b.path = path
 	b.sent = {}
-	for _, pl in ipairs(core.get_connected_players()) do b.sent[pl:get_player_name()] = true end
-	local ok = core.dynamic_add_media({filepath = path, ephemeral = true}, function()
-		show(b, key, name)
-	end)
-	if not ok then core.log("warning", "[rockmech] 節理網格無法加入媒體 " .. name) end
+	for _, pl in ipairs(core.get_connected_players()) do push_to(b, key, pl:get_player_name()) end
 end
 
--- 補推：玩家附近的區塊，他沒收過目前這一份網格就單獨送（剛登入、或從遠處走過來）。
--- 同名的暫時媒體還在送給別人時加不進去（回傳 false），下一輪再試
-local function push_to(b, key, pname)
+-- 送一位玩家（同一個檔案可以重複送給不同人）。送達就掛上網格
+push_to = function(b, key, pname)
 	if not (b.path and b.pending) or (b.sent and b.sent[pname]) then return true end
-	local now = core.get_us_time()
-	if b.retry and now < b.retry then return false end
 	local name = b.pending
-	local ok = core.dynamic_add_media({filepath = b.path, filename = name, ephemeral = true, to_player = pname}, function()
+	local ok = core.dynamic_add_media({filepath = b.path, filename = name, to_player = pname}, function()
 		show(b, key, name)
 	end)
-	if ok then b.sent = b.sent or {}; b.sent[pname] = true; b.retry = nil
-	else b.retry = now + 2e6 end              -- 同名的還沒送完：2 秒後再試
+	b.sent = b.sent or {}
+	b.sent[pname] = true            -- 失敗也不重試（避免每 0.5 s 洗 log），下次重建再送
+	if not ok then core.log("warning", "[rockmech] 節理網格無法加入媒體 " .. name) end
 	return ok
 end
 
