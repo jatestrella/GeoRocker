@@ -108,6 +108,31 @@ end
 rockmech.slurry_wake = wake_around
 
 local DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+local LAYER_MAX = 256        -- 連通管：同一層最多找幾格
+-- p 這一層連通的格子（穩定液或空氣，底下是實心或滿格的穩定液）裡，級數最低、比 k 低 2 級以上的那一格
+local function level_low(p, k)
+	local seen, queue = {[core.hash_node_position(p)] = true}, {p}
+	local best, bk
+	local i = 1
+	while queue[i] and #queue < LAYER_MAX do
+		local c = queue[i]; i = i + 1
+		for _, d in ipairs(DIRS) do
+			local n = {x = c.x + d[1], y = c.y, z = c.z + d[2]}
+			local h = core.hash_node_position(n)
+			if not seen[h] then
+				seen[h] = true
+				local kn = level_at(n)
+				local kb = kn and level_at({x = n.x, y = n.y - 1, z = n.z})
+				-- 連通：這格有液（或是空的、但旁邊有液接過來），底下撐著
+				if kn and (kb == nil or kb == NL) and (kn > 0 or (level_at(c) or 0) > 0) then
+					queue[#queue + 1] = n
+					if k - kn >= 2 and (not bk or kn < bk) then best, bk = n, kn end
+				end
+			end
+		end
+	end
+	return best, bk
+end
 step = function(p)
 	local k = level_at(p)
 	if not k or k <= 0 then return end
@@ -139,6 +164,19 @@ step = function(p)
 		schedule(best)
 		wake_around(p)
 		schedule(p)
+		return
+	end
+	-- 旁邊都只差 1 級（一格一格差 1/8 m 的階梯，長溝槽兩端差很多、遠端流不到）：連通管——
+	-- 同一層連通的液面（含底下撐著的空格）裡最低的那一格比這格低 2 級以上，就搬 1 級過去。慢慢流平，最後整片差不到 1 級
+	if k >= 2 then
+		local low, lk = level_low(p, k)
+		if low then
+			set_level(low, lk + 1)
+			set_level(p, k - 1)
+			schedule(low)
+			wake_around(p)
+			schedule(p)
+		end
 	end
 end
 rockmech.slurry_step = step
@@ -205,26 +243,32 @@ local function pour(p, k, cap, partial)
 	if ymax < p.y then return 0 end
 	local room, q = 0, vector.copy(p)
 	while q.y <= ymax and level_at(q) do room = room + NL - level_at(q); q.y = q.y + 1 end
-	-- 這一欄放不下（液面還沒流平）：分給同一層、溝槽裡相連的格子（底下撐著的才算）
+	-- 這一欄放不下（液面還沒流平）：分給溝槽裡連通、底下撐著的格子（同一層往旁邊、也往下找，低的先填；
+	-- 不往上找，最高到 ymax）
 	local spill = {}
 	if room < k then
-		local s = vector.copy(p)
-		while level_at(s) == NL and s.y < ymax do s.y = s.y + 1 end
-		local seen, queue = {[core.hash_node_position(s)] = true}, {s}
+		local seen, queue = {[core.hash_node_position(p)] = true}, {vector.copy(p)}
+		local cand = {}
 		local i = 1
-		while queue[i] and #queue < 64 and room < k do
+		while queue[i] and #queue < 256 do
 			local c = queue[i]; i = i + 1
-			for _, d in ipairs(DIRS) do
-				local n = {x = c.x + d[1], y = c.y, z = c.z + d[2]}
+			for _, d in ipairs({{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, 1, 0}}) do
+				local n = {x = c.x + d[1], y = c.y + d[2], z = c.z + d[3]}
 				local h = core.hash_node_position(n)
-				local kn = level_at(n)
-				local kb = level_at({x = n.x, y = n.y - 1, z = n.z})
-				if not seen[h] and kn and walled(n) and (kb == nil or kb == NL) then
+				local kn = not seen[h] and n.y <= ymax and level_at(n)
+				if kn and walled(n) and not (n.x == p.x and n.z == p.z) then
 					seen[h] = true
 					queue[#queue + 1] = n
-					if kn < NL then spill[#spill + 1] = n; room = room + NL - kn end
+					local kb = level_at({x = n.x, y = n.y - 1, z = n.z})
+					if kn < NL and (kb == nil or kb == NL) then cand[#cand + 1] = {n = n, k = kn} end
 				end
 			end
+		end
+		table.sort(cand, function(u, v) if u.n.y ~= v.n.y then return u.n.y < v.n.y end return u.k < v.k end)
+		for _, c in ipairs(cand) do
+			if room >= k then break end
+			spill[#spill + 1] = c.n
+			room = room + NL - c.k
 		end
 	end
 	if room <= 0 or (room < k and not partial) then return 0 end

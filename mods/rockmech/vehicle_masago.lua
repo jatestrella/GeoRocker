@@ -24,8 +24,8 @@ local PIVOT = {x = 0, y = 0.6, z = 0.9}          -- 吊桿腳（上部結構座�
 local BOOM_L = 15            -- 吊桿長 (m)
 local R_MIN, R_MAX = 2.5, 8   -- 抓斗中心離迴轉軸 (m)：吊桿俯仰的範圍
 local R0 = 4                 -- 預設
-local LUFF_RATE = 1.0        -- 吊桿俯仰（抓斗水平移動）速度 (m/s)
-local SWING_RATE = 0.6       -- 迴轉速度 (rad/s)
+local LUFF_RATE = 3.0        -- 吊桿俯仰（抓斗水平移動）速度 (m/s)
+local SWING_RATE = 1.5       -- 迴轉速度 (rad/s，跟挖土機一樣)
 local GRAB_H = 6             -- 抓斗高
 local GRAB_W = 2.9           -- 抓斗長（外觀，挖 3 格）
 local GRAB_IDLE = -1.0       -- 收起來時抓斗底在車身座標的高度（地面約 −1.5）
