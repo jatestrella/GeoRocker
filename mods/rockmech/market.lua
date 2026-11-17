@@ -32,7 +32,7 @@ local SHOP_INDEX = {}
 for _, k in ipairs({"detonator", "emulsion", "anfo", "ammonium_nitrate"}) do SHOP_INDEX[k] = "explosive" end
 SHOP_INDEX.diesel = "diesel"
 for _, k in ipairs({"cart", "suv", "truck", "excavator", "lowboy", "heavyhaul", "dozer", "bulktruck", "anfotruck", "charger", "corerig",
-		"aerial", "crane", "masago", "drillrig", "jumbo", "haul", "excavator_big", "miner", "breaker_kit",
+		"aerial", "crane", "masago", "slurry_tank", "slurry_pipe", "slurry_outlet", "drillrig", "jumbo", "haul", "excavator_big", "miner", "breaker_kit",
 		"crusher", "crusher_big", "plant", "belt", "belt_switch", "loadout", "dump_hopper", "dump_hopper_big",
 		"vent_fan", "vent_duct", "bolt", "drill", "mix_trough", "steel_set"}) do SHOP_INDEX[k] = "steel" end
 
