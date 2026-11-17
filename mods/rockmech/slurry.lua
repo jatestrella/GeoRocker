@@ -108,6 +108,7 @@ end
 rockmech.slurry_wake = wake_around
 
 local DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
+local equalize            -- 連通管（靜水平衡），下面定義
 local LAYER_MAX = 256        -- 連通管：同一層最多找幾格
 -- p 這一層連通的格子（穩定液或空氣，底下是實心或滿格的穩定液）裡，級數最低、比 k 低 2 級以上的那一格
 local function level_low(p, k)
@@ -177,10 +178,93 @@ step = function(p)
 			schedule(low)
 			wake_around(p)
 			schedule(p)
+			return
 		end
 	end
+	-- 局部都平了：整片做一次靜水平衡（不同層之間的落差）
+	if equalize then equalize(p) end
 end
 rockmech.slurry_step = step
+
+-- 連通管（靜水平衡）：p 所在的整片連通穩定液，加上片內比最高液面低的空格（溝槽裡還沒流到的地方、新挖的槽段），
+-- 總級數不變，從最低層往上填滿，最上面那層平均分（差不到 1 級）。兩段液面落在不同層時，局部的流動要靠邊緣
+-- 那一格慢慢往下倒、量少了會卡住，液面一段高一段低，低的那段溝壁就沒撐住。
+-- 整片超過 EQ_MAX 格（溢到地面上攤開）就不算，交給局部的流動。同一片（約 16 m 範圍）每 EQ_DT 秒最多算一次
+local EQ_MAX, EQ_DT = 3000, 1.0
+local eq_last = {}
+local NB6 = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, 1, 0}}
+equalize = function(p)
+	local key = math.floor(p.x / 16) .. "," .. math.floor(p.y / 16) .. "," .. math.floor(p.z / 16)
+	local now = core.get_us_time() / 1e6
+	if eq_last[key] and now - eq_last[key] < EQ_DT then return end
+	eq_last[key] = now
+	-- 第一遍：連通的穩定液（有液的格）
+	local seen, cells, total, ymax = {}, {}, 0, -math.huge
+	local queue = {p}
+	seen[core.hash_node_position(p)] = true
+	local i = 1
+	while queue[i] do
+		local c = queue[i]; i = i + 1
+		local k = level_at(c)
+		cells[#cells + 1] = {p = c, k = k}
+		total = total + k
+		if c.y > ymax then ymax = c.y end
+		if #cells > EQ_MAX then return end
+		for _, d in ipairs(NB6) do
+			local n = {x = c.x + d[1], y = c.y + d[2], z = c.z + d[3]}
+			local h = core.hash_node_position(n)
+			if not seen[h] then
+				local kn = level_at(n)
+				if kn and kn > 0 then seen[h] = true; queue[#queue + 1] = n end
+			end
+		end
+	end
+	-- 第二遍：片內比最高液面低（或同一層）的空格，從有液的格往外、往下找
+	i = 1
+	local q2 = {}
+	for _, c in ipairs(cells) do q2[#q2 + 1] = c.p end
+	while q2[i] do
+		local c = q2[i]; i = i + 1
+		for _, d in ipairs(NB6) do
+			local n = {x = c.x + d[1], y = c.y + d[2], z = c.z + d[3]}
+			local h = core.hash_node_position(n)
+			if not seen[h] and n.y <= ymax then
+				seen[h] = true
+				if level_at(n) == 0 then
+					cells[#cells + 1] = {p = n, k = 0}
+					q2[#q2 + 1] = n
+					if #cells > EQ_MAX then return end
+				end
+			end
+		end
+	end
+	-- 由下往上填
+	table.sort(cells, function(a, b) return a.p.y < b.p.y end)
+	local want = {}
+	local j = 1
+	local left = total
+	while j <= #cells do
+		local y = cells[j].p.y
+		local layer = {}
+		while j <= #cells and cells[j].p.y == y do layer[#layer + 1] = cells[j]; j = j + 1 end
+		local n = #layer
+		if left >= NL * n then
+			for _, c in ipairs(layer) do want[c] = NL end
+			left = left - NL * n
+		else
+			-- 最上面那層：平均分，原本比較多的先多拿 1 級（少搬一點）
+			table.sort(layer, function(a, b) return a.k > b.k end)
+			local base, extra = math.floor(left / n), left % n
+			for idx, c in ipairs(layer) do want[c] = base + (idx <= extra and 1 or 0) end
+			left = 0
+		end
+	end
+	for _, c in ipairs(cells) do
+		local w = want[c] or 0
+		if w ~= c.k then set_level(c.p, w); schedule(c.p) end
+	end
+end
+rockmech.slurry_equalize = equalize
 rockmech.slurry_add_up = add_up            -- (p, 級數, 最高到哪一格) → 加不進去的級數
 rockmech.slurry_schedule = function(p) schedule(p) end
 
