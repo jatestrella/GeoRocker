@@ -2003,3 +2003,7 @@ Target level: @1 m below the ground here=
 Connected tanks: @1, stock @2 m³=
 Not connected to a slurry tank=
 Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=
+Connect a slurry pipe to the valve on the blue side=
+Put in all slurry=
+Take 1 m³=
+Take 10 m³=

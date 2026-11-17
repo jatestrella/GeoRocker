@@ -3,9 +3,11 @@
 --   實務：拌合廠的鋼製儲槽（約一個貨櫃大，30–40 m³）好幾個並排，泵浦經管線把穩定液打進溝裡，
 --   液面保持在導溝頂下約 0.5 m（而且比地下水位高 1 m 以上）；抓斗挖走土、液面一降就補，不然溝壁會塌。
 --
---   儲槽：3 寬 × 6 長 × 3 高的鋼槽，裝 40 m³。往放的人看的方向延伸；靠放的人那一端的底層中央是控制格（接管口）。
---         拿著穩定液對儲槽（任何一格）按右鍵：存進去。挖控制格：拆掉整個儲槽，存量照整 m³ 退回背包。
---   穩定液管：一格一格鋪，自動跟旁邊的管、儲槽、出液口接起來（上下也接，地形有高低差時往上接）。
+--   儲槽：3 寬 × 6 長 × 3 高的鋼槽，裝 40 m³。往放的人看的方向延伸；靠放的人那一端的底層中央是控制格，
+--         槽壁伸出一段帶法蘭的短管（接管口），穩定液管只接這裡。
+--         右鍵：拿著穩定液 → 存進去；空手 → 面板（存量、把背包裡的穩定液全部存入、取出 1／10 m³）。
+--         挖控制格：拆掉整個儲槽，存量照整 m³ 退回背包。
+--   穩定液管：一格一格鋪，自動跟旁邊的管、儲槽的接管口、出液口接起來（上下也接，地形有高低差時往上接）。
 --   出液口：放在溝邊，管子朝放的人那一側伸出來、往下彎，管口垂在那一格（溝槽）上方。Shift＋右鍵、面板按鈕轉向。
 --         目標液面 = 出液口那一格的地面往下 off m（0–3 m，每 0.5 m 一段，預設 0.5 m）。
 --         每 TICK 秒：量管口那一欄的液面（空溝槽就從溝底開始灌），低於目標就補，每次最多 RATE 級（泵的能力），
@@ -65,7 +67,18 @@ end
 
 local STEEL = "[fill:16x16:#8c9196^[fill:16x1:0,0:#6a6f74^[fill:1x16:0,0:#6a6f74"
 local STEEL_TOP = "[fill:16x16:#7a7f84^[fill:16x1:0,0:#6a6f74^[fill:1x16:0,0:#6a6f74^[fill:6x6:5,5:#5a5f64"
-local PORT = STEEL .. "^[fill:6x6:5,5:#3a3f44^[fill:4x4:6,6:#8a7a5c^[fill:3x3:12,1:#3a6ea8"
+local PORT = STEEL .. "^[fill:16x3:0,13:#3a6ea8"
+
+local function tank_formspec(pos)
+	local F = core.formspec_escape
+	local st = core.get_meta(pos):get_int("stock")
+	return ("formspec_version[6]size[8,3.6]label[0.5,0.6;%s]label[0.5,1.1;%s]"
+		.. "button[0.5,1.6;3.4,0.8;put;%s]button[4.1,1.6;1.6,0.8;take1;%s]button[5.9,1.6;1.6,0.8;take10;%s]button_exit[5.5,2.6;2,0.7;ok;%s]"):format(
+		F(S("Stock @1 / @2 m³", m3(st), CAP / NL)),
+		F(S("Connect a slurry pipe to the valve on the blue side")),
+		F(S("Put in all slurry")), F(S("Take 1 m³")), F(S("Take 10 m³")), F(S("Done")))
+end
+local tank_editing = {}
 
 local function store(pos, clicker, itemstack)
 	local c = tank_of(pos)
@@ -89,10 +102,11 @@ core.register_node(SHELL, {
 	is_ground_content = false, diggable = false, drop = "",
 	groups = {not_in_creative_inventory = 1},
 	on_rightclick = function(pos, node, clicker, itemstack)
-		if clicker and clicker:is_player() and itemstack:get_name() == rockmech.SLURRY_ITEM then
-			local c = tank_of(pos)
-			if c and may(c, clicker:get_player_name()) then return store(pos, clicker, itemstack) end
-		end
+		local c = tank_of(pos)
+		if not (c and clicker and clicker:is_player() and may(c, clicker:get_player_name())) then return itemstack end
+		if itemstack:get_name() == rockmech.SLURRY_ITEM then return store(pos, clicker, itemstack) end
+		tank_editing[clicker:get_player_name()] = c
+		core.show_formspec(clicker:get_player_name(), "rockmech:slurry_tank", tank_formspec(c))
 		return itemstack
 	end,
 })
@@ -101,6 +115,18 @@ core.register_node(TANK, {
 	description = S("Slurry tank\n40 m³ steel tank, 3 × 6 × 3 m, built in the direction you look. Connect it to a slurry outlet with slurry pipes. Right-click with slurry to fill it"),
 	short_description = S("Slurry tank"),
 	tiles = {STEEL_TOP, STEEL, STEEL, STEEL, STEEL, PORT},
+	drawtype = "nodebox",
+	-- 槽身這一格＋往放的人那側（−z）伸出來的接管口：短管、法蘭
+	node_box = {type = "fixed", fixed = {
+		{-0.5, -0.5, -0.5, 0.5, 0.5, 0.5},
+		{-0.1, -0.5, -0.85, 0.1, -0.28, -0.5},          -- 短管（跟穩定液管同高）
+		{-0.2, -0.5, -0.62, 0.2, -0.1, -0.56},          -- 法蘭
+		{-0.04, -0.28, -0.75, 0.04, -0.12, -0.67},      -- 閥桿
+		{-0.16, -0.12, -0.78, 0.16, -0.08, -0.64},      -- 閥輪
+	}},
+	selection_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0.5, 0.5}},
+	collision_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0.5, 0.5}},
+	paramtype = "light",
 	paramtype2 = "facedir",
 	is_ground_content = false,
 	groups = {cracky = 2, not_in_creative_inventory = 1},
@@ -118,7 +144,8 @@ core.register_node(TANK, {
 		local cells = tank_cells(pos, p2)
 		local passable = rockmech.vehicles.passable
 		for _, c in ipairs(cells) do
-			local free = passable(core.get_node(c).name) and not core.is_protected(c, name)
+			local cn = core.get_node(c).name
+			local free = passable(cn) and not (rockmech.slurry_level and rockmech.slurry_level[cn]) and not core.is_protected(c, name)
 			local ground = c.y ~= pos.y or not passable(core.get_node({x = c.x, y = c.y - 1, z = c.z}).name)
 			if not free or not ground then
 				rockmech.notify(name, S("[Slurry tank] Needs 3 × 6 m of level, clear ground (3 m high)"))
@@ -145,9 +172,10 @@ core.register_node(TANK, {
 		return itemstack
 	end,
 	on_rightclick = function(pos, node, clicker, itemstack)
-		if clicker and clicker:is_player() and itemstack:get_name() == rockmech.SLURRY_ITEM and may(pos, clicker:get_player_name()) then
-			return store(pos, clicker, itemstack)
-		end
+		if not (clicker and clicker:is_player() and may(pos, clicker:get_player_name())) then return itemstack end
+		if itemstack:get_name() == rockmech.SLURRY_ITEM then return store(pos, clicker, itemstack) end
+		tank_editing[clicker:get_player_name()] = pos
+		core.show_formspec(clicker:get_player_name(), "rockmech:slurry_tank", tank_formspec(pos))
 		return itemstack
 	end,
 	can_dig = function(pos, player)
@@ -175,6 +203,41 @@ core.register_node(TANK, {
 	end,
 })
 
+core.register_on_player_receive_fields(function(player, formname, fields)
+	if formname ~= "rockmech:slurry_tank" then return end
+	local name = player:get_player_name()
+	local pos = tank_editing[name]
+	if not pos or core.get_node(pos).name ~= TANK or not may(pos, name) then return true end
+	local meta = core.get_meta(pos)
+	local inv = player:get_inventory()
+	local ITEM = rockmech.SLURRY_ITEM
+	if fields.put and inv then
+		local st = meta:get_int("stock")
+		local have = 0
+		for _, s in ipairs(inv:get_list("main")) do if s:get_name() == ITEM then have = have + s:get_count() end end
+		local n = math.min(have, math.floor((CAP - st) / NL))
+		if n > 0 then
+			inv:remove_item("main", ItemStack(ITEM .. " " .. n))
+			meta:set_int("stock", st + n * NL)
+		end
+	end
+	for key, want in pairs({take1 = 1, take10 = 10}) do
+		if fields[key] and inv then
+			local st = meta:get_int("stock")
+			local n = math.min(want, math.floor(st / NL))
+			if n > 0 then
+				local left = inv:add_item("main", ItemStack(ITEM .. " " .. n))
+				n = n - left:get_count()
+				meta:set_int("stock", st - n * NL)
+			end
+		end
+	end
+	tank_info(pos)
+	if fields.quit or fields.ok then tank_editing[name] = nil
+	else core.show_formspec(name, "rockmech:slurry_tank", tank_formspec(pos)) end
+	return true
+end)
+
 ---------------------------------------------------------------------------
 -- 穩定液管
 ---------------------------------------------------------------------------
@@ -198,7 +261,7 @@ do
 			connect_right = {r, lo, -r, 0.5, hi, r},
 			connect_top = {-r, lo, -r, r, 0.5, r},
 		},
-		connects_to = {PIPE, TANK, SHELL, OUTLET},
+		connects_to = {PIPE, TANK, OUTLET},
 		is_ground_content = false,
 		walkable = false,
 		groups = {cracky = 3, oddly_breakable_by_hand = 2, not_in_creative_inventory = 1},
@@ -228,7 +291,7 @@ local function tanks_of(pos)
 				if name == PIPE then
 					queue[#queue + 1] = n
 				else
-					local t = (name == TANK or name == SHELL) and tank_of(n)
+					local t = name == TANK and n
 					if t then
 						local k = core.hash_node_position(t)
 						if not got[k] then got[k] = true; tanks[#tanks + 1] = t end
