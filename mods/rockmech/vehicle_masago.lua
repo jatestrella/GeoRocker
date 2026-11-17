@@ -153,7 +153,11 @@ local function place_upper(self)
 	local ybot = self.grab_y or GRAB_IDLE
 	if ps.grab then
 		local c = h2v({x = 0, y = ybot + GRAB_H / 2, z = r}, psi)
-		ps.grab:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, {x = 0, y = math.deg((grab_head(self))), z = 0})
+		-- 抓斗頭：作業中照這一口的方向（順著溝槽），沒在作業就照上部結構的橫向對齊格線
+		local gp, ax0 = grab_head(self)
+		local ax = self.grabbing and self.grabbing.ax
+		if ax and ax.x ~= ax0.x then gp = gp + math.pi / 2 end
+		ps.grab:set_attach(self.object, "", {x = c.x * 10, y = c.y * 10, z = c.z * 10}, {x = 0, y = math.deg(gp), z = 0})
 	end
 	if ps.cable then
 		local top = ybot + GRAB_H
@@ -239,9 +243,27 @@ local function reach_to(self, x, z)
 	return math.atan2(tl.x, tl.z), r
 end
 -- 目標欄與抓斗頭（迴轉到 psi 時）的長邊方向 → 抓斗下的三欄
-local function cols_at(self, x, z, psi)
+-- 抓斗頭轉向：指的那一欄旁邊已經有溝槽（地面下一、兩層是空的或有穩定液），長邊就順著溝槽；
+-- 兩個方向都沒有（或一樣多）就照上部結構的橫向。回傳世界軸
+local function grab_axis(self, x, z, psi)
 	local _, ax = grab_head(self, psi)
-	return {{x = x - ax.x, z = z - ax.z}, {x = x, z = z}, {x = x + ax.x, z = z + ax.z}}
+	local y0 = V.ground_y(self.object:get_pos(), def.half)
+	local function n_open(dx, dz)
+		local n = 0
+		for _, k in ipairs({-2, -1, 1, 2}) do
+			for _, y in ipairs({y0 - 1, y0 - 2}) do
+				if open(core.get_node({x = x + dx * k, y = y, z = z + dz * k}).name) then n = n + 1 end
+			end
+		end
+		return n
+	end
+	local nx, nz = n_open(1, 0), n_open(0, 1)
+	if nx > nz then return {x = 1, z = 0} elseif nz > nx then return {x = 0, z = 1} end
+	return ax
+end
+local function cols_at(self, x, z, psi)
+	local ax = grab_axis(self, x, z, psi)
+	return {{x = x - ax.x, z = z - ax.z}, {x = x, z = z}, {x = x + ax.x, z = z + ax.z}}, ax
 end
 
 -- 找下一口：三欄各自從地面往下穿過空氣、穩定液，找到的最高那層實心就是這一口。回傳 {cells, y, y0} 或 nil, 原因
@@ -403,7 +425,7 @@ function def.step(self, ctx)
 			else
 				local b, why = next_bite(self, g.cols)
 				if not b then self.grabbing, self.msg = nil, why
-				else self.grabbing = {phase = "down", t = 0, depth = b.y0 - b.y, bite = b, cols = g.cols} end
+				else self.grabbing = {phase = "down", t = 0, depth = b.y0 - b.y, bite = b, cols = g.cols, ax = g.ax} end
 			end
 			update_hud(self)
 		end
@@ -439,7 +461,8 @@ end
 local function start(self, act, x, z, extra)
 	local psi, r = reach_to(self, x, z)
 	if not psi then self.msg = r; return end
-	local g = {phase = "align", act = act, psi = psi, r = r, cols = cols_at(self, x, z, psi)}
+	local cols, ax = cols_at(self, x, z, psi)
+	local g = {phase = "align", act = act, psi = psi, r = r, cols = cols, ax = ax}
 	for k, v in pairs(extra or {}) do g[k] = v end
 	self.grabbing = g
 	self.msg = nil
