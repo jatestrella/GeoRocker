@@ -754,7 +754,20 @@ function stress.free_terrain(cfg, x, z)
 		local w = x * S.cos_dd - z * S.sin_dd
 		local tan = math.max(math.tan(math.rad(2)), S.tan_dip)
 		local top = stress.strata_ref_y(S, x, z) - cap.top / S.cos_dip - (cfg.surface_y or 0)     -- 蓋層頂離平地多高
-		local us = (top - H) / tan + u + T.scale * 0.15 * (fbm(w / T.scale, 0.5, 71) - 0.5) * 2   -- 陡崖頂線（沿傾向的位置）
+		-- 順向河：每 ~130 m 一條順著傾向往下流的溪谷（沿走向蜿蜒），切進順向坡，往上游把陡崖切出凹口
+		local vf = 0
+		local VS = 130
+		local k0 = math.floor(w / VS + 0.5)
+		for k = k0 - 1, k0 + 1 do
+			if vnoise(k * 3.1, 0.5, 91) > 0.25 then            -- 有的位置沒有溪
+				local wc = k * VS + 45 * (fbm(u / 110, k * 1.7, 93) - 0.5) * 2
+				local hw = 28 + 14 * vnoise(k * 2.3, u / 200, 95)
+				local r = math.abs(w - wc) / hw
+				if r < 1 then vf = math.max(vf, (1 - r) ^ 1.6) end
+			end
+		end
+		local us = (top - H) / tan + u + T.scale * 0.3 * (fbm(w / T.scale, 0.5, 71) - 0.5) * 2   -- 陡崖頂線（沿傾向的位置）
+		us = us + 55 * vf                                     -- 溪谷讓陡崖往山裡退
 		local d = us - u
 		if d <= 0 then h = top
 		else
@@ -764,7 +777,11 @@ function stress.free_terrain(cfg, x, z)
 			if d < wc then h = ts - d * CUESTA_SCARP
 			else h = ts - cv - (d - wc) * math.tan(math.rad(25)) end
 		end
-		h = h + 1.5 * (fbm(x / 9, z / 9, 75) - 0.5)
+		h = h - 14 * vf * smooth(math.max(0, h) / 15)          -- 溪谷下切（越高切越深，到平地就沒了）
+		-- 頁岩低地的丘陵：跟地圖產生器的 hills 一樣（約一半平地、一半起伏到 20 m，尺度 80 m）；陡崖前的溪谷經過的地方低下去
+		local n = fbm(x / 80, z / 80, 61)
+		local plain = 20 * smooth((n - 0.3) / 0.5) * (1 - 0.8 * vf * smooth(1 - d / 120))
+		h = math.max(h, plain) + 1.5 * (fbm(x / 9, z / 9, 75) - 0.5)
 	elseif T.mode == "cuesta" and cfg.strata then
 		local S = domain_of(cfg.strata, x, z) or cfg.strata      -- 每個地質區照自己的傾角（跨過斷層地形就變了）
 		local u = x * S.sin_dd + z * S.cos_dd              -- 沿傾向
