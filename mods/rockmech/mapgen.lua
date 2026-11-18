@@ -98,6 +98,22 @@ if cfg.strip_soil then
 end
 
 local data, p2data = {}, {}
+
+-- 鐵路（cfg.railway，railline.lua）：線形和這裡要用的方塊
+local railline = dofile(modpath .. "/railline.lua")
+local rail_line = railline.for_cfg(cfg, stress)
+local rail_ids, rail_x1, rail_x2
+if rail_line and core.registered_nodes["rockmech:railbed"] then
+	rail_ids = {air = c_air, bed = core.get_content_id("rockmech:railbed"), lining = core.get_content_id("rockmech:tunnel_lining"),
+		post = core.get_content_id("rockmech:rail_post"), rail = {}}
+	for k = 0, 7 do rail_ids.rail[k] = core.get_content_id("rockmech:rail_seg_" .. k) end
+	rail_x1, rail_x2 = math.huge, -math.huge
+	for _, row in pairs(rail_line.rows) do
+		rail_x1, rail_x2 = math.min(rail_x1, row.xc - 80), math.max(rail_x2, row.xc + 80)
+	end
+else
+	rail_line = nil
+end
 local seam, pit = cfg.coal_seam, cfg.open_pit
 local strata = cfg.strata          -- 地層柱狀圖（地圖產生器）：有它就照柱狀圖，不看 coal_seam
 if strata then seam = nil end
@@ -251,7 +267,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 	local emin, emax = vm:get_emerged_area()
 	local area = VoxelArea(emin, emax)
 	vm:get_data(data)
-	if seam or pit or strata then vm:get_param2_data(p2data) end
+	if seam or pit or strata or rail_line then vm:get_param2_data(p2data) end
 
 	-- 每個 y 的目標 content id
 	local layer = stress.layer_table(cfg, minp.y, maxp.y)
@@ -384,6 +400,14 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 		end
 	end
 
+	-- 鐵路：路塹、路堤、隧道、道床、鋼軌、裝車點標示柱（岩性、表土都弄好之後）
+	if rail_line and minp.x <= rail_x2 and maxp.x >= rail_x1 then
+		if railline.carve(rail_line, function(x, z) return stress.terrain_rise(cfg, x, z) end, data, p2data, area, minp, maxp, rail_ids) then
+			changed = true
+			stripped = stripped + 1      -- 要重算光照
+		end
+	end
+
 	if logged < 3 and n > 0 then
 		logged = logged + 1
 		core.log("action", ("[rockmech] mapgen 岩性＋節理遮罩：%d 格、剝除土壤 %d 格，%.0f ms"):format(
@@ -392,7 +416,7 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 
 	if changed then
 		vm:set_data(data)
-		if seam or pit or strata then vm:set_param2_data(p2data) end      -- 柱狀圖的礦層也有品位（以前漏寫，全用預設品位）
+		if seam or pit or strata or rail_line then vm:set_param2_data(p2data) end      -- 柱狀圖的礦層也有品位（以前漏寫，全用預設品位）
 		-- stone → 岩性 光照不變；剝除土壤會改變光照與水的流動
 		if stripped > 0 then
 			vm:calc_lighting()

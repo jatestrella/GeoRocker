@@ -874,6 +874,12 @@ function config.load(get, opts)
 	cfg.weathered_depth = tonumber(get("rockmech_weathered_depth") or "")
 	if cfg.weathered_depth and cfg.weathered_depth <= 0 then cfg.weathered_depth = nil end
 	-- 村莊（rockmech_village = true，新的隨機、自訂世界）：營地是沿著道路分散的店家（village.lua），不是一整片地坪
+	-- 鐵路（單機地圖）rockmech_railway = x,z;x,z;…：中線的控制點（由北到南，大致南北向），railline.lua 連成曲線；
+	-- rockmech_railway_load = 裝車點的 z。地圖產生時就挖好路塹、填路堤、開隧道（mapgen.lua），列車在 trainline.lua
+	local rw = get("rockmech_railway")
+	if rw and rw ~= "" then
+		cfg.railway = {pts = rw, load_z = tonumber(get("rockmech_railway_load") or "") or 0}
+	end
 	cfg.village = get("rockmech_village") == "true"
 	-- 礦體規模 rockmech_ore_scale（2 = 真實規模，0.5–3；新世界預設 1）：斑岩銅礦的半徑、富集帶、氧化帶、品位遞減深度、
 	-- 鐵帽山丘，煤層透鏡的大小都乘 ore_scale / 2。沒寫（舊世界）= 2（不縮）

@@ -1331,6 +1331,8 @@ My assumption (tell me which face doesn't match):=
 ### train.lua
 Railway track=
 Track ballast=
+Tunnel lining=
+Railway: nothing can be built or dug here=
 Loading point=
 [Train] Loading point: wagons stop here=
 Rail wagon=

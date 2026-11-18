@@ -1331,6 +1331,8 @@ My assumption (tell me which face doesn't match):=我的假設（請告訴我哪
 ### train.lua
 Railway track=鐵軌
 Track ballast=道碴
+Tunnel lining=隧道襯砌
+Railway: nothing can be built or dug here=鐵路：不能挖、不能蓋
 Loading point=裝車點
 [Train] Loading point: wagons stop here=【火車】裝車點：車廂停在這裡裝
 Rail wagon=貨車廂
