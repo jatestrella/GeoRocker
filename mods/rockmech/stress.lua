@@ -433,7 +433,13 @@ strata_column_raw = function(S, x, z, dmax)
 		local m = 1
 		if v then m = math.max(0, 1 + v.f * (2 * fbm(x / v.scale + i * 3.7, z / v.scale, 50 + i) - 1)) end
 		if b.lens then m = m * smooth((fbm(x / b.lens + i * 7.3, z / b.lens - i * 3.1, 300 + i) - (b.lens_c and stress.lens_threshold(b.lens_c) or 0.45)) / 0.15) end
-		d = d + b.t * m * tm
+		local t = b.t
+		local tp = b.taper
+		if tp then      -- 沿傾向變厚（config 的 rockmech_strata_taper）
+			local u = x * S.sin_dd + z * S.cos_dd
+			t = tp.t0 + (t - tp.t0) * smooth((u - tp.u0) / (tp.u1 - tp.u0))
+		end
+		d = d + t * m * tm
 		out[i] = d
 		if dmax and d > dmax then past = past + 1; if past > 2 then break end end
 	end

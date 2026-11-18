@@ -841,6 +841,19 @@ function config.load(get, opts)
 		end
 		local v = numbers("rockmech_strata_var" .. sfx, 2)
 		if v and v[1] > 0 then S.var = {f = math.min(0.95, v[1]), scale = math.max(10, v[2])} end
+		-- 礦層沿傾向變厚 rockmech_strata_taper = 第幾個礦層,薄端厚度,u0,u1（u = 沿傾向的水平座標 m）：
+		-- u ≤ u0 是薄端厚度，u ≥ u1 是柱狀圖的厚度，中間平滑變化（煤層往盆地邊緣尖薄，露頭薄、深處厚）
+		local tp = numbers("rockmech_strata_taper" .. sfx, 4)
+		if tp and tp[4] ~= tp[3] then
+			local n = 0
+			for _, b in ipairs(beds) do
+				local L = cfg.lithologies[b.lith]
+				if L and L.ore then
+					n = n + 1
+					if n == tp[1] then b.taper = {t0 = math.max(0, tp[2]), u0 = tp[3], u1 = tp[4]} end
+				end
+			end
+		end
 		-- rockmech_copper = x0,z0,半徑,地下水位深,富集帶厚,氧化帶厚,富集倍率,中心品位（param2）[,品位遞減深度[,鐵帽山丘高]]：
 		-- 這一區有一根斑岩銅礦（stress.copper_at）。後兩個可省（舊世界：品位不隨深度變、沒有山丘）
 		local b = numbers("rockmech_copper" .. sfx, 8)
