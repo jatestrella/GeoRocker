@@ -182,16 +182,24 @@ function V.plan(ground, seed, cx, cz)
 	local s2 = #main
 	for i = 2, #p1 do main[#main + 1] = p1[i] end
 	roads[1] = {points = main, main = true}
-	-- 岔路：主街以外的主路上 2–3 個點，往左或右（不從主街分出去，街屋才排得整齊）
-	local outside = {}
-	for i = 2, #main - 1 do if i < s1 - 1 or i > s2 + 1 then outside[#outside + 1] = i end end
-	local nb = #outside > 0 and (2 + math.floor(hash(3, 4, seed) * 2)) or 0
-	for b = 1, nb do
-		local i = outside[math.floor(#outside * hash(b, 5, seed)) + 1]
-		local p, q = main[i], main[math.min(#main, i + 1)]
-		local ang = math.atan2(q[1] - p[1], q[2] - p[2]) + (hash(b, 6, seed) < 0.5 and 1 or -1) * math.pi / 2
-		local pts = grow_road(ground, p[1], p[2], ang, 10 + math.floor(hash(b, 7, seed) * 10), seed, 10 + b, cx, cz)
-		roads[#roads + 1] = {points = pts}
+	-- 橫街：從主街兩端垂直分出去（十字或丁字路口），先直走 CROSS m，再順著地形往外長。
+	-- 一端兩側都有（十字），另一端只有一側（丁字）。主街中段不分岔，街屋才排得整齊
+	local CROSS = 32
+	local b = 0
+	local both = hash(3, 4, seed) < 0.5 and 1 or -1
+	for _, e in ipairs({1, -1}) do
+		local ex, ez = cx + sx * e * STREET_HALF, cz + sz * e * STREET_HALF
+		local sides = (e == both) and {1, -1} or {hash(e, 6, seed) < 0.5 and 1 or -1}
+		for _, sd in ipairs(sides) do
+			b = b + 1
+			local nx, nz = sd * sz, -sd * sx
+			local pts = {}
+			for t = 0, CROSS, STEP do pts[#pts + 1] = {ex + nx * t, ez + nz * t} end
+			local last = pts[#pts]
+			local tail = grow_road(ground, last[1], last[2], math.atan2(nx, nz), 6 + math.floor(hash(b, 7, seed) * 8), seed, 10 + b, cx, cz)
+			for i = 2, #tail do pts[#pts + 1] = tail[i] end
+			roads[#roads + 1] = {points = pts}
+		end
 	end
 	-- 地塊
 	local cells = road_cells(roads)

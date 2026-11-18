@@ -206,6 +206,25 @@ function stress.edge_rise(cfg, x, z)
 	elseif not (E and s and s.lane_w) then return 0, -math.huge
 	else xw, xe = (s.lane_min - 0.5) * s.lane_w, (s.lane_max + 0.5) * s.lane_w end
 	local h, far = 0, -math.huge
+	if cfg.map_edge then
+		-- 自然的山脈：山腳線彎曲（±35 m）、爬升長和山高沿邊緣變化，脊狀雜訊做出山脊和山谷
+		local function side2(c, along, seed)
+			local foot = E.foot + 27 * (fbm(along / 130, 0.5, seed) - 0.5) * 2 + 8 * (fbm(along / 37, 1.5, seed + 1) - 0.5) * 2
+			local beyond = c - foot
+			if beyond > far then far = beyond end
+			if beyond <= 0 then return end
+			local ramp = E.ramp * (0.6 + 1.0 * fbm(along / 90, 2.5, seed + 2))
+			local ridge = 1 - math.abs(2 * fbm(x / 60, z / 60, seed + 3) - 1)
+			local H = E.h * (0.7 + 0.55 * fbm(along / 160, 3.5, seed + 4)) * (0.65 + 0.55 * ridge)
+			local r = H * smooth(beyond / ramp) + 5 * (fbm(x / 15, z / 15, seed + 5) - 0.5)
+			if r > h then h = r end
+		end
+		side2(-z, x, 41)
+		side2(z, x, 45)
+		side2(-x, z, 49)
+		side2(x, z, 53)
+		return math.max(0, h), far
+	end
 	local function side(beyond, along, seed)
 		if beyond > far then far = beyond end
 		if beyond <= 0 then return end
