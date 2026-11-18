@@ -457,6 +457,7 @@ local function loosen(p)
 	core.after(0, function() rockmech.collapse.check_cell(p) end)     -- 底下空了就掉、陡了就流
 	return true
 end
+rockmech.topsoil_loosen = loosen      -- 推土機的鏟刀刮表土（vehicle_dozer.lua）
 ---------------------------------------------------------------------------
 -- 蓋東西時的地面整理：不滿一格的土石（薄的表土、不滿格的碎石／鬆土）上面放東西會架空（看起來浮著）。分兩類：
 --   建築物（破碎站、選礦場、裝車料斗）：範圍內的土石直接清掉。地面那一層的薄片清掉，整片都是薄片

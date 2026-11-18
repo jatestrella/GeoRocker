@@ -140,6 +140,15 @@ local function cut_cell(c, node, k, keep, got, grade)
 	rockmech.shotcrete_uncover(c)
 end
 
+-- 表土、底土：鏟刀直接刮鬆（變成同樣多的鬆土）再推，不用松土（保護範圍裡的不動）
+local function scrape(p, name)
+	if rockmech.topsoil_loosen and core.get_item_group(core.get_node(p).name, "rockmech_topsoil") > 0
+			and not core.is_protected(p, name or "") then
+		return rockmech.topsoil_loosen(p)
+	end
+	return false
+end
+
 -- 設計坡度：鏟刀那一排每一欄，高過設計面的碎石削掉，低於設計面的用削下來的碎石補到設計面。
 -- 剩下的照樣推到前面那堆（下一排削到那堆時再拿來填）。設計面以上有岩石 → 回傳原因
 local function grade_cut(self, pos, s, lat, y0, got, grade)
@@ -151,6 +160,7 @@ local function grade_cut(self, pos, s, lat, y0, got, grade)
 		local t = design_at(d, c.x, c.z)
 		for y = y0 + 2, y0 - 3, -1 do
 			local p = {x = c.x, y = y, z = c.z}
+			if y + 0.5 > t + 0.5 / NLEV then scrape(p, self.driver) end      -- 設計面以上的表土刮鬆
 			local node = core.get_node(p)
 			local k = rockmech.rubble_level[node.name] or rockmech.road_level[node.name]
 			if k then
@@ -205,6 +215,7 @@ local function push(self, pos, s)
 		src = face_cells(pos, s, 1, 2, y0, 3, lat)
 		local rocks = {}
 		for _, c in ipairs(src) do
+			scrape(c, self.driver)
 			local n = core.get_node(c).name
 			if not rockmech.rubble_level[n] and not passable(n) then rocks[#rocks + 1] = c end
 		end
