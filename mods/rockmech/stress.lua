@@ -781,6 +781,29 @@ function stress.free_terrain(cfg, x, z)
 		-- 頁岩低地的丘陵：跟地圖產生器的 hills 一樣（約一半平地、一半起伏到 20 m，尺度 80 m）；陡崖前的溪谷經過的地方低下去
 		local n = fbm(x / 80, z / 80, 61)
 		local plain = 20 * smooth((n - 0.3) / 0.5) * (1 - 0.8 * vf * smooth(1 - d / 120))
+		-- 差異侵蝕：丘陵照地層削成一階一階。砂岩層（蓋層以外）原樣留著；它上面的頁岩被削掉大半，在砂岩頂面留下順著層面的平台，
+		-- 平台往上一層砂岩的底下才陡起來（朝上傾方向的小崖）。只改丘陵，不改單面山
+		if plain > 0.5 then
+			local col = stress.strata_column(S, x, z, cap.top + 200)
+			local ref = stress.strata_ref_y(S, x, z) - (cfg.surface_y or 0)
+			local below, above = -math.huge, nil       -- 丘陵高度以下最近的砂岩頂、以上最近的砂岩底（高出平地幾公尺）
+			for i, b in ipairs(S.beds) do
+				if not col[i] then break end
+				if b.lith == "sandstone" and (col[i - 1] or 0) > cap.top + 1 then
+					local top = ref - (col[i - 1] or 0) / S.cos_dip
+					local bot = ref - col[i] / S.cos_dip
+					if bot <= plain and plain <= top then below = nil; break end      -- 在砂岩裡：不動
+					if top < plain and top > below then below = top end
+					if bot > plain and (not above or bot < above) then above = bot end
+				end
+			end
+			if below then
+				local lo = math.max(0, below)        -- 底下沒有砂岩：平地本身當平台
+				local hi = above or (lo + 12)
+				local u2 = math.max(0, math.min(1, (plain - lo) / math.max(1, hi - lo)))
+				plain = lo + (hi - lo) * u2 * u2 * u2
+			end
+		end
 		h = math.max(h, plain) + 1.5 * (fbm(x / 9, z / 9, 75) - 0.5)
 	elseif T.mode == "cuesta" and cfg.strata then
 		local S = domain_of(cfg.strata, x, z) or cfg.strata      -- 每個地質區照自己的傾角（跨過斷層地形就變了）
