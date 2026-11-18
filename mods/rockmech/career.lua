@@ -1375,7 +1375,8 @@ local function village_prepare(done, progress)
 		local function ground(x, z)
 			return (cfg.surface_y or 0) + rockmech.stress.terrain_rise(cfg, math.floor(x + 0.5), math.floor(z + 0.5))
 		end
-		local vx, vz = V.site(ground, 500)          -- 出生點 500 m 內最平的地點
+		-- 出生點 500 m 內最平的地點（有地圖邊緣的山就留在山腳內 100 m）
+		local vx, vz = V.site(ground, cfg.map_edge and math.min(500, cfg.map_edge.foot - 100) or 500)
 		P = V.plan(ground, cfg.strata and cfg.strata.prov and cfg.strata.prov.seed or 0, vx, vz)
 		V.store(P)
 	end

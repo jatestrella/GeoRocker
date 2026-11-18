@@ -37,6 +37,16 @@ local function hash(a, b, seed)
 	local v = math.sin(a * 127.1 + b * 311.7 + seed * 74.7) * 43758.5453
 	return v - math.floor(v)
 end
+-- 平滑雜訊 0..1（格點間距 L m 的雙線性內插）：整地邊界彎彎曲曲，不要一條直線
+local function vnoise(x, z, L, seed)
+	local fx, fz = x / L, z / L
+	local ix, iz = math.floor(fx), math.floor(fz)
+	local tx, tz = fx - ix, fz - iz
+	tx, tz = tx * tx * (3 - 2 * tx), tz * tz * (3 - 2 * tz)
+	local a, b = hash(ix, iz, seed), hash(ix + 1, iz, seed)
+	local c, d = hash(ix, iz + 1, seed), hash(ix + 1, iz + 1, seed)
+	return (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * tz
+end
 
 -- ground(x, z)：地面高度（公式地形）。路照地形自由彎曲；只有建築正前方那一段是正方向（V.plan 的門前路）
 local CORE = 0
@@ -373,28 +383,38 @@ function V.build_ground(plan, done, progress)
 			local n = "rockmech:topsoil_" .. k
 			if core.registered_nodes[n] then thin[core.get_content_id(n)] = true end
 		end
-		local function top_at(x, z)
+		-- strip：順便把薄表土、樹拿掉（只在村莊範圍 margin 裡做；其他地方薄表土算地面，整地範圍的外框才不會留一圈直線的台階）
+		local function top_at(x, z, strip)
 			if not area:contains(x, pmin.y, z) then return nil end
 			for y = pmax.y, pmin.y, -1 do
 				local i = area:index(x, y, z)
 				local c = data[i]
-				if thin[c] or skip[c] then data[i] = c_air
-				elseif solid(c) then return y end
+				if strip and (thin[c] or skip[c]) then data[i] = c_air
+				elseif not skip[c] and (thin[c] or solid(c)) then return y end
 			end
 		end
+		-- 範圍的外緣照雜訊彎曲（離路 2–6 m、離地塊 3–7 m）：薄表土拿掉的邊界不會是一條直線
 		local margin = {}
+		local function edge_r(x, z, base) return base + 4 * vnoise(x, z, 9, 17) end
 		for k in pairs(cells) do
 			local x, z = k:match("^(%-?%d+),(%-?%d+)$")
 			x, z = tonumber(x), tonumber(z)
-			for dx = -2, 2 do for dz = -2, 2 do margin[(x + dx) .. "," .. (z + dz)] = true end end
+			for dx = -6, 6 do for dz = -6, 6 do
+				local r = edge_r(x + dx, z + dz, 2)
+				if dx * dx + dz * dz <= r * r then margin[(x + dx) .. "," .. (z + dz)] = true end
+			end end
 		end
 		for _, L in ipairs(plan.lots) do
 			local a, b, c, d = lot_rect(L)
-			for x = math.floor(a) - 3, math.ceil(c) + 3 do for z = math.floor(b) - 3, math.ceil(d) + 3 do margin[x .. "," .. z] = true end end
+			for x = math.floor(a) - 7, math.ceil(c) + 7 do for z = math.floor(b) - 7, math.ceil(d) + 7 do
+				local ex, ez = math.max(a - x, 0, x - c), math.max(b - z, 0, z - d)
+				local r = edge_r(x, z, 3)
+				if ex * ex + ez * ez <= r * r then margin[x .. "," .. z] = true end
+			end end
 		end
 		for k in pairs(margin) do
 			local x, z = k:match("^(%-?%d+),(%-?%d+)$")
-			top_at(tonumber(x), tonumber(z))
+			top_at(tonumber(x), tonumber(z), true)
 		end
 		-- 村莊範圍（道路、地塊外推 8 m）的地表：裸露的岩石表面一層換成表土（郊外照舊有露頭）
 		local bonded = {}
@@ -444,12 +464,14 @@ function V.build_ground(plan, done, progress)
 				if t and n == 4 and t > hi then data[area:index(x, t, z)] = c_air end
 			end
 		end
-		-- 地塊外圍 10 m 做 1:1 的緩坡（不要垂直切壁）：離地塊 d m 的地面限制在 L.y ± d 之間，高的削、低的填，表面是表土
+		-- 地塊外圍 10 m 做 1:1 的緩坡（不要垂直切壁）：離地塊 d m 的地面限制在 L.y ± d 之間，高的削、低的填，表面是表土。
+		-- 距離用圓角（歐氏）再乘上雜訊，坡腳是彎曲的線，不是一圈方框
 		for _, L in ipairs(plan.lots) do
 			local a, b, c, d = lot_rect(L)
 			local xa, za, xb, zb = math.floor(a) - 1, math.floor(b) - 1, math.ceil(c) + 1, math.ceil(d) + 1
 			for x = xa - 10, xb + 10 do for z = za - 10, zb + 10 do
-				local dd = math.max(xa - x, x - xb, za - z, z - zb)
+				local ex, ez = math.max(xa - x, 0, x - xb), math.max(za - z, 0, z - zb)
+				local dd = math.floor(math.sqrt(ex * ex + ez * ez) * (0.7 + 0.6 * vnoise(x, z, 7, 23)) + 0.5)
 				if dd >= 1 and area:contains(x, pmin.y, z) then
 					local t = top_at(x, z)
 					if t then
@@ -458,7 +480,7 @@ function V.build_ground(plan, done, progress)
 							for y = hi + 1, t do data[area:index(x, y, z)] = c_air end
 							data[area:index(x, hi, z)] = c_soil
 						elseif t < lo then
-							for y = t + 1, lo do data[area:index(x, y, z)] = c_soil end
+							for y = t, lo do data[area:index(x, y, z)] = c_soil end
 						end
 					end
 				end
