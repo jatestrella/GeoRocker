@@ -197,8 +197,10 @@ config.shop = {
 	{key = "suv", shop = "vehicle", item = "rockmech:suv_item", label = TR("SUV"), price = 3000},
 	{key = "truck", shop = "vehicle", item = "rockmech:truck_item", label = TR("Dump truck"), price = 10000},
 	{key = "excavator", shop = "vehicle", item = "rockmech:excavator_item", label = TR("Excavator"), price = 15000},
-	{key = "crusher", shop = "civil", item = "rockmech:crusher", label = TR("Crusher"), price = 20000},
-	{key = "crusher_big", shop = "civil", item = "rockmech:crusher_big", label = TR("Large crusher"), price = 300000},
+	-- 破碎站只在 rockmech_sell_crusher 的地圖賣（sell_crusher）：破碎站不是買家，玩家自己蓋會直接蓋在礦旁邊收錢。
+	--   單機地圖預設不賣，買家只有營地的收煤站、豎井底的破碎站和火車；教學地圖（class）預設照賣。
+	{key = "crusher", shop = "civil", item = "rockmech:crusher", label = TR("Crusher"), price = 20000, sell_crusher = true},
+	{key = "crusher_big", shop = "civil", item = "rockmech:crusher_big", label = TR("Large crusher"), price = 300000, sell_crusher = true},
 	{key = "plant", shop = "civil", item = "rockmech:plant", label = TR("Pre-sorting plant"), price = 30000},
 	-- 提金廠：先關掉（2026-11-14，鐵帽的金直接在破碎站算錢；以後改做堆浸場）。要開回來：取消註解，並把 goldplant.lua 的 ENABLED 設成 true
 	-- {key = "gold_plant", shop = "civil", item = "rockmech:gold_plant", label = TR("Gold plant"), price = 120000, needs_gold = true},
@@ -1267,6 +1269,10 @@ function config.load(get, opts)
 	local tv = parse_bool(get("rockmech_teacher"))
 	if tv == nil then tv = (not cfg.solo) and cfg.coal_seam ~= nil and cfg.coal_seam.lane_w ~= nil end
 	cfg.teacher = tv
+	-- 商店賣不賣破碎站（career.lua）：沒寫時教學地圖賣、其他地圖不賣（買家是營地的收煤站和火車）
+	local sc = parse_bool(get("rockmech_sell_crusher"))
+	if sc == nil then sc = cfg.teacher end
+	cfg.sell_crusher = sc
 	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 23000)
 	-- 單機地圖開放連線時：coop 合作（共用營地主人的帳戶）、compete 競爭（每人自己的帳戶，收煤站的錢給蓋的人）
 	cfg.multiplayer = get("rockmech_multiplayer") == "compete" and "compete" or "coop"

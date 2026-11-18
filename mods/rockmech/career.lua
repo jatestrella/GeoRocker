@@ -550,7 +550,7 @@ local function shop_form(name, kind)
 	local out = {"formspec_version[6]size[13.5,13.2]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local col, row = 0, 0
 	for i, it in ipairs(cfg.shop) do
-		if (not kind or it.shop == kind) and not (it.needs_gold and not (cfg.strata and (cfg.strata.body or cfg.strata.cu))) then
+		if (not kind or it.shop == kind) and not (it.sell_crusher and not cfg.sell_crusher) and not (it.needs_gold and not (cfg.strata and (cfg.strata.body or cfg.strata.cu))) then
 			local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
 			local p = rockmech.shop_price(it)      -- 炸藥、鋼材跟著市場走（market.lua）
 			local price = p == 0 and S("Free") or ("$%d"):format(p)
@@ -570,7 +570,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local kind = shop_kind[name]
 	for key in pairs(fields) do
 		local it = cfg.shop[tonumber(key:match("^buy_(%d+)$"))]
-		if it and (not kind or it.shop == kind) then
+		if it and (not kind or it.shop == kind) and not (it.sell_crusher and not cfg.sell_crusher) then
 			-- 大東西不進背包（delivery.lua）：車停到營地的交車區，設施給施工單
 			local vkind = rockmech.vehicle_kind_of_item and rockmech.vehicle_kind_of_item(it.item)
 			local order = rockmech.order_of_item and rockmech.order_of_item(it.item)

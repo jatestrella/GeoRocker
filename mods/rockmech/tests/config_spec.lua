@@ -38,6 +38,12 @@ describe("config.load", function()
 		assert.are.equal("coal", cfg.main_ore.lith)      -- 沒設定 rockmech_ores 就是煤
 	end)
 
+	it("破碎站：教學地圖預設賣、單機地圖預設不賣、可以設定", function()
+		assert.is_false(config.load(getter({rockmech_solo = "true", rockmech_teacher = "false"})).sell_crusher)
+		assert.is_true(config.load(getter({rockmech_teacher = "true"})).sell_crusher)
+		assert.is_true(config.load(getter({rockmech_solo = "true", rockmech_sell_crusher = "true"})).sell_crusher)
+		assert.is_false(config.load(getter({rockmech_teacher = "true", rockmech_sell_crusher = "false"})).sell_crusher)
+	end)
 	it("rockmech_ores 選這張地圖的礦", function()
 		local cfg, warn = config.load(getter({rockmech_ores = "marble"}))
 		assert.are.equal("marble", cfg.main_ore.lith)

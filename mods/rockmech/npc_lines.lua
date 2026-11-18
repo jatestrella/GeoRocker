@@ -37,7 +37,7 @@ local own = {
 
 local LINES = {
 	["rockmech:vendor_vehicle"] = {
-		S("What do you need? Trucks, excavators, crushers, all here."),
+		S("What do you need? Trucks, excavators, dozers, all here."),
 		S("Every machine burns diesel. Count the fuel bill."),
 		S("Keep loaded trucks off steep ramps."),
 	},
@@ -62,7 +62,7 @@ local LINES = {
 		S("A prism tells you a slope is moving long before you see it."),
 	},
 	["rockmech:vendor_civil"] = {
-		S("Crushers, plants, belts, ventilation: I design them all."),
+		S("Plants, belts, ventilation: I design them all."),
 		S("A hopper needs flat ground."),
 		S("Dig deeper and you will need a fan."),
 	},
