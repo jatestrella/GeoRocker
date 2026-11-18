@@ -153,7 +153,8 @@ function V.site(ground, R)
 	return bx or 0, bz or 0
 end
 
-function V.plan(ground, seed, cx, cz)
+-- strike：地層走向的方位角（度），有的話主街沿走向（小鎮沿著走向的谷地發展）
+function V.plan(ground, seed, cx, cz, strike)
 	cx, cz = cx or 0, cz or 0
 	seed = (seed or 0) % 997
 	local roads = {}
@@ -168,7 +169,10 @@ function V.plan(ground, seed, cx, cz)
 		return hi - lo
 	end
 	local sx, sz = 1, 0
-	if line_relief(0, 1) < line_relief(1, 0) then sx, sz = 0, 1 end
+	if strike then
+		local a = math.rad(strike)
+		if math.abs(math.cos(a)) > math.abs(math.sin(a)) then sx, sz = 0, 1 end
+	elseif line_relief(0, 1) < line_relief(1, 0) then sx, sz = 0, 1 end
 	local street = {}
 	for t = -STREET_HALF, STREET_HALF, STEP do street[#street + 1] = {cx + sx * t, cz + sz * t} end
 	local a0 = math.atan2(sx, sz)      -- grow_road：x += sin(a)、z += cos(a)

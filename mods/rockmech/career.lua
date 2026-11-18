@@ -1377,7 +1377,9 @@ local function village_prepare(done, progress)
 		end
 		-- 出生點 500 m 內最平的地點（有地圖邊緣的山就留在山腳內 100 m）
 		local vx, vz = V.site(ground, cfg.map_edge and math.min(500, cfg.map_edge.foot - 100) or 500)
-		P = V.plan(ground, cfg.strata and cfg.strata.prov and cfg.strata.prov.seed or 0, vx, vz)
+		-- 單面山地形：主街沿地層走向（小鎮沿走向的谷地發展）；其他地形照起伏小的方向
+		local strike = cfg.terrain and cfg.terrain.mode == "cap" and cfg.strata and cfg.strata.dipdir_deg and (cfg.strata.dipdir_deg + 90) or nil
+		P = V.plan(ground, cfg.strata and cfg.strata.prov and cfg.strata.prov.seed or 0, vx, vz, strike)
 		V.store(P)
 	end
 	V.build_ground(P, function()
