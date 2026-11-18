@@ -416,9 +416,12 @@ core.register_globalstep(function(dtime)
 		-- 車頭前面 3 m 的軌道上有東西（碎石…）：停下來
 		local blocked
 		for ds = 0.5, 3, 0.5 do
-			local x, z, y = at(st.head + ds)
+			-- 用那一排實際的軌面高（道床一格一格升降，平滑的縱斷面會差半格，會把高一階的道碴當成障礙）
+			local x, z = at(st.head + ds)
+			local zr = math.floor(z + 0.5)
+			local yr = R.rail_y(L(), zr)
 			for dy = 1, 2 do
-				local n = core.get_node({x = math.floor(x + 0.5), y = math.floor(y + dy - 0.5 + 0.5), z = math.floor(z + 0.5)}).name
+				local n = yr and core.get_node({x = math.floor(x + 0.5), y = yr + dy, z = zr}).name or "ignore"
 				if not RAIL_SET[n] and not rockmech.air_like(n) and n ~= "ignore" and n ~= POST then blocked = n; break end
 			end
 			if blocked then break end
