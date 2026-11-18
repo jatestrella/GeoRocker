@@ -37,6 +37,13 @@ local viewing_box = {}                     -- 玩家名稱 → 方塊位置
 local LOG_SEC_PER_M, LOG_STAY, BOOK_MAX = 0.5, 3, 20
 
 local box_spot             -- 下面定義（岩芯箱那段）
+-- 薄的表土（幾分之一格高的草皮）：孔口、岩芯箱放在它上面那格會懸空，改成直接取代它那一格
+local function thin_soil(p) return core.get_node(p).name:find("^" .. rockmech.modname .. ":topsoil_%d+$") ~= nil end
+local function sink(p)
+	local b = {x = p.x, y = p.y - 1, z = p.z}
+	if thin_soil(b) then return b end
+	return p
+end
 local function see(name, ab) return not rockmech.can_see or rockmech.can_see(name, ab) end
 local function logs_of(acc) return core.deserialize(storage:get_string(LOG .. acc)) or {} end
 local function save_logs(acc, list) storage:set_string(LOG .. acc, core.serialize(list)) end
@@ -768,7 +775,9 @@ box_spot = function(c)
 					local below = core.registered_nodes[core.get_node({x = p.x, y = p.y - 1, z = p.z}).name]
 					if nd and nd.buildable_to and below and below.walkable
 							and not (rockmech.cells_blocked and rockmech.cells_blocked({{p.x, p.z}}, p.y, p.y + 1)) then
-						return p
+						local q = sink(p)
+						if q ~= p then core.remove_node(q) end      -- 薄表土那格讓給岩芯箱
+						return q
 					end
 				end
 			end
@@ -1237,8 +1246,9 @@ local function finish(name, d, why)
 	list[n] = bh
 	save_logs(acc, list)
 	-- 孔口：混凝土墊＋套管（空的才放）
-	local cp = d.collar
+	local cp = d.dir.y < 0 and sink(d.collar) or d.collar
 	local cn = core.get_node(cp)
+	if thin_soil(cp) then cn = {name = "air"} end
 	if cn.name == "air" or (core.registered_nodes[cn.name] or {}).buildable_to then
 		core.set_node(cp, {name = CASING})
 		local meta = core.get_meta(cp)
