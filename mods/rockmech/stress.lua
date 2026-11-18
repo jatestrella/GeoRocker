@@ -491,6 +491,19 @@ function stress.strata_grade(x, z, frac)
 	local g = 228 - 75 * d * d + 7 * math.sin(x / 37) + 7 * math.sin(z / 29)
 	return math.max(1, math.min(255, math.floor(g + 0.5)))
 end
+-- 柱狀圖礦層的品位（param2），再乘上這一層的品質（b.gmul）和地表風化（cfg.weathered_depth）
+-- i、key：strata_at 回傳的第幾層、岩性（多區的柱狀圖層號對不上就不乘品質）
+function stress.ore_grade(cfg, x, y, z, i, frac, key)
+	local g = stress.strata_grade(x, z, frac)
+	local b = cfg.strata and cfg.strata.beds and cfg.strata.beds[i]
+	local m = b and b.lith == key and b.gmul or 1
+	local W = cfg.weathered_depth
+	if W then
+		local d = cfg.surface_y + stress.terrain_rise(cfg, x, z) - y
+		m = m * (0.35 + 0.65 * smooth(d / W))
+	end
+	return math.max(1, math.min(255, math.floor(g * m + 0.5)))
+end
 
 -- 斑岩銅礦（S.body，地圖產生器的 copper）：中心 (x0, z0)、半徑約 R 的直立圓柱，邊界有起伏。
 -- 品位（param2）中心最高（g0），往外降到三成五左右，再加上下左右緩慢的變化。從地表往下的風化分帶看古地下水位 wt：

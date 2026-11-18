@@ -855,8 +855,24 @@ function config.load(get, opts)
 				table.insert(cfg.body_hills, S.body)
 			end
 		end
+		-- 各礦層的品質 rockmech_strata_grade = 倍率,倍率,…（由上往下第 1、2…個礦層；灰分高的煤 < 1、乾淨的 > 1）
+		local gm = get("rockmech_strata_grade" .. sfx)
+		if gm and gm ~= "" then
+			local k = 0
+			for v in tostring(gm):gmatch("[%d.]+") do
+				k = k + 1
+				local n = 0
+				for _, b in ipairs(beds) do
+					local L = cfg.lithologies[b.lith]
+					if L and L.ore then n = n + 1; if n == k then b.gmul = tonumber(v) end end
+				end
+			end
+		end
 		return S
 	end
+	-- 地表風化 rockmech_weathered_depth（m）：礦層離地面這麼深以內品位變差（地表 35%，到這個深度恢復）
+	cfg.weathered_depth = tonumber(get("rockmech_weathered_depth") or "")
+	if cfg.weathered_depth and cfg.weathered_depth <= 0 then cfg.weathered_depth = nil end
 	-- 村莊（rockmech_village = true，新的隨機、自訂世界）：營地是沿著道路分散的店家（village.lua），不是一整片地坪
 	cfg.village = get("rockmech_village") == "true"
 	-- 礦體規模 rockmech_ore_scale（2 = 真實規模，0.5–3；新世界預設 1）：斑岩銅礦的半徑、富集帶、氧化帶、品位遞減深度、

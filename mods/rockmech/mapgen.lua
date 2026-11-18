@@ -303,10 +303,10 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 					local coal = seam and stress.in_seam(seam, x, y, z)
 					local sfrac, sp2
 					if strata then
-						local key, _, fr, p2 = stress.strata_at(strata, x, y, z, cols[x .. "," .. z])
+						local key, si, fr, p2 = stress.strata_at(strata, x, y, z, cols[x .. "," .. z])
 						cv, pv = c_var[key], c_plane[key]
 						if p2 then sp2 = p2                                 -- 斑岩銅礦：品位直接算好
-						elseif cfg.lithologies[key].ore then sfrac = fr end      -- 礦層（煤、大理岩）：品位照在層裡的位置
+						elseif cfg.lithologies[key].ore then sp2 = stress.ore_grade(cfg, x, y, z, si, fr, key) end      -- 礦層（煤、大理岩）：在層裡的位置、品質、風化
 					end
 					if plane then
 						data[vi] = (coal and c_plane.coal or pv)[suffix(cell_traces(joints, sets, x, y, z, MAXL))]
@@ -338,8 +338,8 @@ core.register_on_generated(function(vm, minp, maxp, blockseed)
 				local key = stress.lith_key_at(cfg, p.x, p.y, p.z)
 				if cfg.lithologies[key].ore then
 					if strata then
-						local _, _, fr, p2 = stress.strata_at(strata, p.x, p.y, p.z)
-						p2data[i] = p2 or stress.strata_grade(p.x, p.z, fr)
+						local k2, si, fr, p2 = stress.strata_at(strata, p.x, p.y, p.z)
+						p2data[i] = p2 or stress.ore_grade(cfg, p.x, p.y, p.z, si, fr, k2)
 					else
 						p2data[i] = stress.seam_grade(seam, p.x, p.y, p.z)
 					end
