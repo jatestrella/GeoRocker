@@ -285,7 +285,7 @@ end
 rockmech.pad_protected = pad_protected
 -- 地圖四邊的山（礦帶地圖，stress.edge_rise）：山腳以外整片不能挖、不能放（碎石可以清）
 local function edge_protected(pos, name)
-	if not (cfg.lane_terrain and cfg.lane_terrain.edge) then return false end
+	if not (cfg.map_edge or (cfg.lane_terrain and cfg.lane_terrain.edge)) then return false end
 	local _, far = rockmech.stress.edge_rise(cfg, pos.x, pos.z)
 	if far <= 0 then return false end
 	if name and name ~= "" and core.check_player_privs(name, {rockmech = true}) then return false end

@@ -195,11 +195,16 @@ local HILL_PHASE = -60      -- 山丘段從這個 z 開始：營地（z ≈ 0）
 
 -- 地圖四邊的山（cfg.lane_terrain.edge）：南（鐵路外）、北、東西（最外側礦帶的外緣）。
 -- 山腳以外 beyond > 0；回傳 (高度, 離山腳最遠的那一邊超過幾公尺)
+-- 一般地圖（cfg.map_edge）：正方形，四邊山腳離中心 foot m
 function stress.edge_rise(cfg, x, z)
 	local T, s = cfg.lane_terrain, cfg.coal_seam
 	local E = T and T.edge
-	if not (E and s and s.lane_w) then return 0, -math.huge end
-	local xw, xe = (s.lane_min - 0.5) * s.lane_w, (s.lane_max + 0.5) * s.lane_w
+	local xw, xe
+	if cfg.map_edge then
+		E = cfg.map_edge
+		xw, xe = -E.foot, E.foot
+	elseif not (E and s and s.lane_w) then return 0, -math.huge
+	else xw, xe = (s.lane_min - 0.5) * s.lane_w, (s.lane_max + 0.5) * s.lane_w end
 	local h, far = 0, -math.huge
 	local function side(beyond, along, seed)
 		if beyond > far then far = beyond end
@@ -730,7 +735,37 @@ function stress.free_terrain(cfg, x, z)
 		return h, h
 	end
 	local h
-	if T.mode == "cuesta" and cfg.strata then
+	if T.mode == "cap" and cfg.strata then
+		-- 單一座單面山，地形照地質：柱狀圖裡第一層砂岩是抗風化的蓋層。順向坡 = 蓋層的頂面（往傾向一路降到平地），
+		-- 上傾方向在蓋層頂高出平地 H 公尺的地方斷成陡崖：砂岩段 55°，底下軟的頁岩被侵蝕成 25° 的緩坡一直到平地。
+		-- 蓋層上面比較年輕的地層只在順向坡腳以外（平地底下）。陡崖線沿走向蜿蜒 ±0.15·尺度
+		local S = cfg.strata
+		local cap = S.cap_info
+		if not cap then
+			local d = 0
+			for _, b in ipairs(S.beds) do
+				if b.lith == "sandstone" then cap = {top = d, t = b.t}; break end
+				d = d + b.t
+			end
+			cap = cap or {top = 0, t = S.beds[1].t}
+			S.cap_info = cap
+		end
+		local u = x * S.sin_dd + z * S.cos_dd
+		local w = x * S.cos_dd - z * S.sin_dd
+		local tan = math.max(math.tan(math.rad(2)), S.tan_dip)
+		local top = stress.strata_ref_y(S, x, z) - cap.top / S.cos_dip - (cfg.surface_y or 0)     -- 蓋層頂離平地多高
+		local us = (top - H) / tan + u + T.scale * 0.15 * (fbm(w / T.scale, 0.5, 71) - 0.5) * 2   -- 陡崖頂線（沿傾向的位置）
+		local d = us - u
+		if d <= 0 then h = top
+		else
+			local ts = top - tan * d                         -- 陡崖頂的高度
+			local cv = cap.t / S.cos_dip                     -- 蓋層的鉛直厚度
+			local wc = cv / CUESTA_SCARP
+			if d < wc then h = ts - d * CUESTA_SCARP
+			else h = ts - cv - (d - wc) * math.tan(math.rad(25)) end
+		end
+		h = h + 1.5 * (fbm(x / 9, z / 9, 75) - 0.5)
+	elseif T.mode == "cuesta" and cfg.strata then
 		local S = domain_of(cfg.strata, x, z) or cfg.strata      -- 每個地質區照自己的傾角（跨過斷層地形就變了）
 		local u = x * S.sin_dd + z * S.cos_dd              -- 沿傾向
 		local w = x * S.cos_dd - z * S.sin_dd              -- 沿走向
@@ -777,11 +812,12 @@ function stress.body_hill(cfg, x, z)
 	return h
 end
 -- 有沒有公式地形（礦帶、自由地形或鐵帽山丘）；有的話 (x, z) 比 surface_y 高幾公尺
-function stress.has_terrain(cfg) return cfg.lane_terrain ~= nil or cfg.terrain ~= nil or cfg.body_hills ~= nil end
+function stress.has_terrain(cfg) return cfg.lane_terrain ~= nil or cfg.terrain ~= nil or cfg.body_hills ~= nil or cfg.map_edge ~= nil end
 local function terrain_raw(cfg, x, z)
 	if cfg.lane_terrain then return stress.lane_terrain(cfg, x, z) end
 	local t, hill = 0, 0
 	if cfg.terrain then t, hill = stress.free_terrain(cfg, x, z) end
+	if cfg.map_edge then t = math.max(t, (stress.edge_rise(cfg, x, z))) end
 	if cfg.body_hills then
 		local b = stress.body_hill(cfg, x, z)
 		if b > 0 then t, hill = t + b, (hill or 0) + b end

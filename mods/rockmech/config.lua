@@ -940,6 +940,7 @@ function config.load(get, opts)
 		cfg.body_hills = cfg.body_hills or {}       -- 有公式地形（鐵帽山丘照礦區算，stress.body_hill）
 	end
 	-- 自由地形（非礦帶世界）：rockmech_terrain = 樣式,高度,尺度；樣式 hills（丘陵）或 cuesta（單面山，要有柱狀圖）
+	--   或 cap（單一座單面山：柱狀圖第一層砂岩是坡頂的蓋層，高度 = 陡崖頂高出平地幾公尺，尺度 = 陡崖蜿蜒的尺度）
 	--   或 dem,檔名[,平台半徑]：真實地形的高程網格（世界資料夾裡的檔案，tools/dem_extract.py 產生）。
 	--   高度是相對 surface_y 的（地圖產生器把 surface_y 設成出生點高度的負值，出生點就在 y ≈ 0）；
 	--   平台半徑：出生點附近整平成一塊作業平台（給營地），外面 40 m 漸變回原地形；
@@ -1002,6 +1003,14 @@ function config.load(get, opts)
 		else
 			local mode, h, sc = tostring(tr):match("^%s*(%a+)%s*,%s*([%d.]+)%s*,%s*([%d.]+)")
 			if mode and tonumber(h) > 0 then cfg.terrain = {mode = mode, h = tonumber(h), scale = math.max(10, tonumber(sc))} end
+		end
+	end
+	-- 地圖邊緣的山 rockmech_map_edge = 山腳離中心,山高,爬升長（m；正方形地圖，配合 mapgen_limit）：
+	-- 山腳以外不能挖、不能放東西（camp.lua），不會走到地圖盡頭看不見的牆
+	if not cfg.lane_terrain then
+		local me = numbers("rockmech_map_edge", 3)
+		if me and me[1] > 0 and me[2] > 0 then
+			cfg.map_edge = {south = -me[1], north = me[1], foot = me[1], h = me[2], ramp = math.max(1, me[3])}
 		end
 	end
 	local pit = numbers("rockmech_open_pit", 6)
