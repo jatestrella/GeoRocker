@@ -43,7 +43,7 @@ local WARN_HOLD = 4          -- self.msg 顯示幾秒後自動消失
 -- 儀表板上的按鍵列：每個鍵一個按鈕，上面寫鍵名和功能；開著的功能（def.keys 回傳 on = true）按鈕亮起來。
 -- 各車的 def.keys(self) 回傳 {{鍵名, 功能, on = 開著嗎}, ...}，後面再接共用的 Z（追蹤相機）、Shift（下車）。
 -- HUD 只能看不能點：還是用鍵盤按
-local KEY_W, KEY_H, KEY_GAP, KEY_Y = 11.5, 5.6, 0.8, 0.875     -- 按鈕寬、高、間距（螢幕的 %）、中心高度（螢幕比例）
+local KEY_W, KEY_H, KEY_GAP, KEY_Y = 11.5, 5.6, 0.8, 0.835     -- 按鈕寬、高、間距（螢幕的 %）、中心高度（螢幕比例）：儀表板（0.8 以下）的上半
 local KEY_OFF = "[fill:16x8:#0c0c0c^[fill:14x6:1,1:#34383c"
 local KEY_ON = "[fill:16x8:#0c0c0c^[fill:14x6:1,1:#b07a10"
 local function keys_of(self)
@@ -441,8 +441,8 @@ function V.update_hud(self)
 	end
 	if self.hud then d:hud_change(self.hud, "text", hud_text(self))
 	else
-		-- 說明文字在按鍵列上方，往上長
-		self.hud = d:hud_add({type = "text", position = {x = 0.5, y = KEY_Y - KEY_H / 200 - 0.01}, alignment = {x = 0, y = -1},
+		-- 說明文字在按鍵列下方，往下長（整段在深色的儀表板上；往上長會疊到窗框和前窗）
+		self.hud = d:hud_add({type = "text", position = {x = 0.5, y = KEY_Y + KEY_H / 200 + 0.012}, alignment = {x = 0, y = 1},
 			text = hud_text(self), number = 0xFFE080, z_index = 100})
 	end
 	local warn = warn_text(self)
