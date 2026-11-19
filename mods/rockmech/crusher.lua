@@ -272,6 +272,7 @@ local function show_money(player)
 		text = text
 			.. (rockmech.market_hud and ("\n" .. rockmech.market_hud()) or "")
 	end
+	if rockmech.power_text then text = text .. "\n" .. rockmech.power_text() end      -- 電廠存煤（powerplant.lua）
 	if money_hud[name] then
 		player:hud_change(money_hud[name], "text", text)
 	else
@@ -657,6 +658,7 @@ local function crush(pos, dtime)
 	crush_fx(pos, core.get_meta(pos))
 	local t = tons_of(eaten)
 	if income ~= 0 then rockmech.add_money(owner, income) end
+	if not dump and ore_t > 0 and rockmech.power_add then rockmech.power_add(ore_t, "crusher") end   -- 賣出的煤進電廠存煤（powerplant.lua）
 	-- 剝採比（全組累計）：送來的料裡，礦石（照品位折算）和廢石各幾噸
 	local acc = rockmech.account_of and rockmech.account_of(owner) or owner
 	storage:set_float("strip_o:" .. acc, storage:get_float("strip_o:" .. acc) + ore_t)

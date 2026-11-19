@@ -310,7 +310,7 @@ local function depart()
 	if not st then return end
 	sync()
 	local acc = payer()
-	local rows, net, total_t = {}, 0, 0
+	local rows, net, total_t, coal_t = {}, 0, 0, 0
 	for i = 1, N do
 		local ld = st.loads[i] or {}
 		local wagon = {load = ld.load or {}, loadq = ld.loadq or {}, loada = ld.loada or {}}
@@ -324,13 +324,14 @@ local function depart()
 		if lv > 0 then
 			local t = tons_of(lv)
 			local m = math.floor(t * g * rec * price - t * (1 - g) * rockmech.gangue_fee(ore) + 0.5)
-			net, total_t = net + m, total_t + t
+			net, total_t, coal_t = net + m, total_t + t, coal_t + t * g
 			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)), t1(t), ("$%.0f × %.0f%%"):format(price, rec * 100),
 				money_text(m), m >= 0 and 0x80ff80 or 0xff8080}
 		end
 	end
 	if #rows > 0 and acc then
 		rockmech.add_money(acc, net)
+		if rockmech.power_add then rockmech.power_add(coal_t, "train") end     -- 火車的煤進電廠存煤（powerplant.lua）
 		rows[#rows + 1] = {S("Total"), t1(total_t), "", money_text(net), net >= 0 and 0x80ff80 or 0xff8080}
 		for _, m in ipairs(rockmech.account_members(acc)) do
 			core.sound_play("rockmech_coin", {to_player = m, gain = 0.8}, true)

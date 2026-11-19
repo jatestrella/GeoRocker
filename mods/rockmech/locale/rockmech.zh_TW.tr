@@ -2223,3 +2223,6 @@ Take 1 m³=取出 1 m³
 Take 10 m³=取出 10 m³
 Left-click=左鍵
 Dig guide=挖掘指示
+Power plant coal @1 t=電廠存煤 @1 t
+Power plant coal: tons received each day and the daily average=電廠存煤：每天進煤噸數和日平均
+Stock @1 t, @2 days: average @3 t/day (since first delivery @4 t/day)=存煤 @1 t，經過 @2 天：平均每天 @3 t（從第一次進煤算 @4 t/天）

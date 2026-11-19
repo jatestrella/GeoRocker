@@ -2011,3 +2011,6 @@ Take 1 m³=
 Take 10 m³=
 Left-click=
 Dig guide=
+Power plant coal @1 t=
+Power plant coal: tons received each day and the daily average=
+Stock @1 t, @2 days: average @3 t/day (since first delivery @4 t/day)=
