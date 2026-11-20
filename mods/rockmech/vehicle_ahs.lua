@@ -58,6 +58,7 @@ local PHASE = {wait = S("Waiting at the loading point to be filled"), to_dump = 
 	back_in = S("Backing into the dump spot"), dumping = S("Dumping"), pull_out = S("Pulling out of the dump spot"),
 	to_route = S("Dumped, returning to the route"),
 	to_load = S("Returning to the loading point"), full = S("Dump area full (doze it flat, then reset it in the settings screen)"),
+	gate = S("At the weighbridge, waiting to be sent to the power plant"),
 	to_exc = S("Heading to the excavator"), exc_align = S("Turning to line up with the excavator"),
 	exc_back = S("Backing up to the excavator")}
 
@@ -622,6 +623,8 @@ function AHS.step(self, def, ctx)
 		elseif fwd then
 			if a.hopper and hopper_busy(self, a) then
 				say(self, a, S("Waiting for the truck ahead to finish dumping"))
+			elseif rockmech.haul_gate_at and rockmech.haul_gate_at(a.dump) then
+				set_phase(self, "gate")        -- 傾倒點在往電廠的地磅站：停著等派車（haulroad.lua）
 			else
 				-- 到了傾倒點：找這一趟的傾倒位置
 				if a.hopper then a.hopper = find_hopper(a) or a.hopper end
@@ -763,6 +766,8 @@ function AHS.step(self, def, ctx)
 		else
 			drive_to(self, def, ctx, a, ap, sp)
 		end
+	elseif a.phase == "gate" then
+		-- 停在往電廠的地磅上：haulroad.lua 派車（車子會從地圖上拿掉，回來時接著開回裝載點）
 	elseif a.phase == "full" then
 		-- 等重設；重設後找得到位置就繼續
 		a.target = next_spot(a, def)

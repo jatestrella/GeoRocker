@@ -174,17 +174,19 @@ local function profile(line, end_y)
 	return y
 end
 
--- 路面的每一格：key → {x, z, y = 路面高程, w = 離中線}
-local function stamp(cells, line, ys)
+-- 路面的每一格：key → {x, z, y = 路面高程, w = 離中線}。skip(x, z)：不鋪的格（預設：營地平台裡面）；width：路寬
+local function stamp(cells, line, ys, skip, width)
+	skip = skip or function(x, z) return x * x + z * z <= PAD * PAD end
+	local W = width or WIDTH
 	for i, p in ipairs(line) do
 		local a, b = line[math.max(1, i - 2)], line[math.min(#line, i + 2)]
 		local tx, tz = b.x - a.x, b.z - a.z
 		local L = math.sqrt(tx * tx + tz * tz)
 		if L > 0 then
 			local nx, nz = -tz / L, tx / L
-			for w = -WIDTH / 2, WIDTH / 2, 0.5 do
+			for w = -W / 2, W / 2, 0.5 do
 				local x, z = math.floor(p.x + nx * w + 0.5), math.floor(p.z + nz * w + 0.5)
-				if x * x + z * z > PAD * PAD then
+				if not skip(x, z) then
 					local k = x .. "," .. z
 					local c = cells[k]
 					if not c or math.abs(w) < c.w then cells[k] = {x = x, z = z, y = ys[i], w = math.abs(w)} end
@@ -200,9 +202,10 @@ local function natural(name)
 	if name == "rockmech:shaft_marble" then return false end
 	if rockmech.lith_of_node[name] or rockmech.rubble_level[name] then return true end
 	if core.get_item_group(name, "rockmech_topsoil") > 0 then return true end      -- 表土（草）
+	if core.get_item_group(name, "water") > 0 then return true end      -- 水（池塘、河）：路堤填過去
 	return name == "default:tree" or name == "default:leaves" or name == "default:apple"
 end
-local function is_air(name) return name == "air" end
+local function is_air(name) return name == "air" or core.get_item_group(name, "water") > 0 end
 
 local function pave(c)
 	local S = c.y
@@ -244,6 +247,52 @@ local function pave(c)
 			core.swap_node(p, {name = "air"})
 		end
 	end
+end
+
+-- 鋪 stamp 出來的路面格：按 80 m 一塊分組，一塊一塊載入後鋪；label：記錄用的名稱；done：鋪完呼叫
+local function pave_cells(cells, label, done)
+	-- 按 80 m 一塊分組，一塊一塊載入後鋪
+	local tiles, order = {}, {}
+	for _, c in pairs(cells) do
+		local tk = math.floor(c.x / 80) .. "," .. math.floor(c.z / 80)
+		local t = tiles[tk]
+		if not t then t = {cells = {}, lo = math.huge, hi = -math.huge}; tiles[tk] = t; order[#order + 1] = tk end
+		t.cells[#t.cells + 1] = c
+		t.lo, t.hi = math.min(t.lo, c.y), math.max(t.hi, c.y)
+	end
+	local ncell, high, maxd, flush = 0, 0, 0, 0
+	for _, c in pairs(cells) do
+		ncell = ncell + 1
+		local d = c.y - (cfg.surface_y + rockmech.stress.terrain_rise(cfg, c.x, c.z) + 1)      -- 正：填，負：挖
+		if d > 5 then high = high + 1 end
+		if math.abs(d) <= 0.6 then flush = flush + 1 end
+		if math.abs(d) > math.abs(maxd) then maxd = d end
+	end
+	core.log("action", ("[rockmech] %s：跟地面齊高（±0.6 m）%d%%、填超過 5 m 的格 %d、最大挖填 %.1f m")
+		:format(label, math.floor(100 * flush / math.max(1, ncell) + 0.5), high, maxd))
+	local idx, skipped = 0, 0
+	local function next_tile()
+		idx = idx + 1
+		local tk = order[idx]
+		if not tk then
+			core.log("action", ("[rockmech] %s鋪好了（%d 格，有建築跳過 %d 格）"):format(label, ncell, skipped))
+			if done then done() end
+			return
+		end
+		local t = tiles[tk]
+		local tx, tz = tk:match("^(%-?%d+),(%-?%d+)$")
+		tx, tz = tonumber(tx) * 80, tonumber(tz) * 80
+		core.emerge_area({x = tx - 1, y = math.floor(t.lo) - 45, z = tz - 1}, {x = tx + 81, y = math.ceil(t.hi) + 85, z = tz + 81}, function(_, _, rem)
+			if rem > 0 then return end
+			local C = rockmech.collapse
+			C.quiet = C.quiet + 1
+			local ok, err = pcall(function() for _, c in ipairs(t.cells) do if pave(c) == false then skipped = skipped + 1 end end end)
+			C.quiet = C.quiet - 1
+			if not ok then core.log("error", "[rockmech] " .. label .. "：" .. tostring(err)) end
+			core.after(0, next_tile)
+		end)
+	end
+	next_tile()
 end
 
 local building = false
@@ -296,48 +345,12 @@ function rockmech.shaft_roads(owner)
 			core.log("warning", ("[rockmech] 豎井道路：(%d, %d) 找不到路線"):format(d.x, d.z))
 		end
 	end
-	-- 按 80 m 一塊分組，一塊一塊載入後鋪
-	local tiles, order = {}, {}
-	for _, c in pairs(cells) do
-		local tk = math.floor(c.x / 80) .. "," .. math.floor(c.z / 80)
-		local t = tiles[tk]
-		if not t then t = {cells = {}, lo = math.huge, hi = -math.huge}; tiles[tk] = t; order[#order + 1] = tk end
-		t.cells[#t.cells + 1] = c
-		t.lo, t.hi = math.min(t.lo, c.y), math.max(t.hi, c.y)
-	end
-	local ncell, high, maxd, flush = 0, 0, 0, 0
-	for _, c in pairs(cells) do
-		ncell = ncell + 1
-		local d = c.y - (cfg.surface_y + rockmech.stress.terrain_rise(cfg, c.x, c.z) + 1)      -- 正：填，負：挖
-		if d > 5 then high = high + 1 end
-		if math.abs(d) <= 0.6 then flush = flush + 1 end
-		if math.abs(d) > math.abs(maxd) then maxd = d end
-	end
-	core.log("action", ("[rockmech] 豎井道路：跟地面齊高（±0.6 m）%d%%、填超過 5 m 的格 %d、最大挖填 %.1f m")
-		:format(math.floor(100 * flush / math.max(1, ncell) + 0.5), high, maxd))
-	core.log("action", ("[rockmech] 豎井道路：%d 條、%d 格，路線 %.0f ms"):format(n_ok, ncell, (core.get_us_time() - t0) / 1000))
-	local idx, skipped = 0, 0
-	local function next_tile()
-		idx = idx + 1
-		local tk = order[idx]
-		if not tk then
-			storage:set_string("shaft_roads", "1")
-			building = false
-			core.log("action", ("[rockmech] 豎井道路鋪好了（有建築跳過 %d 格）"):format(skipped))
-			return
-		end
-		local t = tiles[tk]
-		local tx, tz = tk:match("^(%-?%d+),(%-?%d+)$")
-		tx, tz = tonumber(tx) * 80, tonumber(tz) * 80
-		core.emerge_area({x = tx - 1, y = math.floor(t.lo) - 45, z = tz - 1}, {x = tx + 81, y = math.ceil(t.hi) + 85, z = tz + 81}, function(_, _, rem)
-			if rem > 0 then return end
-			local C = rockmech.collapse
-			C.quiet = C.quiet + 1
-			local ok, err = pcall(function() for _, c in ipairs(t.cells) do if pave(c) == false then skipped = skipped + 1 end end end)
-			C.quiet = C.quiet - 1
-			if not ok then core.log("error", "[rockmech] 豎井道路：" .. tostring(err)) end
-			core.after(0, next_tile)
-		end)
-	end
-	next_tile()
+	core.log("action", ("[rockmech] 豎井道路：%d 條，路線 %.0f ms"):format(n_ok, (core.get_us_time() - t0) / 1000))
+	pave_cells(cells, "豎井道路", function()
+		storage:set_string("shaft_roads", "1")
+		building = false
+	end)
 end
+
+-- 給其他道路用（haulroad.lua）
+rockmech.roadlib = {route = route, smooth_line = smooth_line, profile = profile, stamp = stamp, pave_cells = pave_cells, surface = surface}

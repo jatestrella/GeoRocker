@@ -897,6 +897,20 @@ function config.load(get, opts)
 	if rw and rw ~= "" then
 		cfg.railway = {pts = rw, load_z = tonumber(get("rockmech_railway_load") or "") or 0}
 	end
+	-- 往電廠的道路（haulroad.lua）：rockmech_haul_gate = x,z 地磅站（出廠管制站）的位置，路從小鎮接過去，卡車在這裡換手開去電廠；
+	-- rockmech_power_plants = 名稱:單程秒:消化係數（每秒卸幾噸）;…（可以有好幾座：遠的路程久、消化快慢不同）；
+	-- rockmech_haul_rain：下雨時路程變長的比例（降雨程度 1 時 × (1 + 這個)）；rockmech_haul_fee：每趟的運費（外包司機、油錢）
+	local hgx, hgz = (get("rockmech_haul_gate") or ""):match("^%s*(%-?[%d%.]+)%s*,%s*(%-?[%d%.]+)%s*$")
+	if hgx then cfg.haul_gate = {x = math.floor(tonumber(hgx) + 0.5), z = math.floor(tonumber(hgz) + 0.5)} end
+	cfg.plants = {}
+	for item in (get("rockmech_power_plants") or ""):gmatch("[^;]+") do
+		local name, trip, rate = item:match("^%s*(.-)%s*:%s*([%d%.]+)%s*:%s*([%d%.]+)%s*$")
+		if name and name ~= "" then
+			cfg.plants[#cfg.plants + 1] = {name = name, trip = math.max(10, tonumber(trip)), rate = math.max(0.05, tonumber(rate))}
+		end
+	end
+	cfg.haul_rain = math.max(0, tonumber(get("rockmech_haul_rain") or "") or 0.6)
+	cfg.haul_fee = math.max(0, tonumber(get("rockmech_haul_fee") or "") or 300)
 	cfg.village = get("rockmech_village") == "true"
 	-- 礦體規模 rockmech_ore_scale（2 = 真實規模，0.5–3；新世界預設 1）：斑岩銅礦的半徑、富集帶、氧化帶、品位遞減深度、
 	-- 鐵帽山丘，煤層透鏡的大小都乘 ore_scale / 2。沒寫（舊世界）= 2（不縮）
