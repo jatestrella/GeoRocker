@@ -28,7 +28,7 @@ local HOURS = {7, 20}
 local SPEED = 7                     -- 買家的車速 (m/s)
 local SHOW_R = 48                   -- 堆置處這麼近有人，才放出買家的車和人（不然直接成交）
 local ACTIVE = 44                   -- 車在離最近的玩家這麼遠的路上出現、開到這麼遠就收掉（引擎只讓玩家附近約 64 m 的區塊在跑）
-local MIN_COAL = 3                  -- 煤堆至少要有幾噸純煤，買家才會來
+local MIN_COAL = 3                  -- 煤堆少於幾噸純煤就當作沒煤（買家還是會來，看一看就走）
 local LOW_G = 0.4                   -- 平均品位低於這個，買家意願打折
 local DY = 16                       -- 煤堆在告示牌上下幾公尺內都算（斜坡上的堆置處、碎石往低處流）
 local TRUCK = "rockmech:receiver"   -- orders.lua 的小貨車
@@ -311,6 +311,9 @@ local LINES = {
 	S("Morning. Business is slow lately."), S("The road from the plant is full of potholes."),
 	S("Your pile looks decent."), S("The power plant pays late again."), S("Rain makes the coal heavy."),
 }
+local EMPTY_LINES = {                -- 堆置處沒煤
+	S("Hello? Anyone selling coal?"), S("Where's the coal? I drove all the way here."), S("Empty again?"),
+}
 core.register_entity(BUYER, {
 	initial_properties = {
 		physical = false, collisionbox = {-0.3, 0, -0.3, 0.3, 1.7, 0.3},
@@ -399,13 +402,15 @@ local function start_visit(acc, y)
 	local avg = coal_rock > 0 and coal / coal_rock or 0
 	local want = cfg.stockyard_tmin + math.random() * (cfg.stockyard_tmax - cfg.stockyard_tmin)
 	local p, why = willing(y, avg)
+	if coal < MIN_COAL then p, why = 0, "empty" end      -- 沒煤：還是會來，看一看就走
 	local buy = math.random() < p
 	local sp = sign_pos(y)
 	local path = route_to(y)
 	local show = path and #path >= 2 and (rockmech.stockyard_debug.force_show or players_near(sp, SHOW_R)) and core.get_node(sp).name ~= "ignore"
 	if not show then
 		if buy then close_deal(acc, y, want)
-		else tell(acc, why == "grade" and S("A coal trader came by: too much rock in the pile, no deal") or S("A coal trader came by: too expensive, no deal")) end
+		else tell(acc, why == "empty" and S("A coal trader came by: no coal in the pile")
+			or why == "grade" and S("A coal trader came by: too much rock in the pile, no deal") or S("A coal trader came by: too expensive, no deal")) end
 		return
 	end
 	-- 出現的位置：從煤堆沿路往回找，第一個離最近的玩家超過 ACTIVE 的點
@@ -489,7 +494,8 @@ local function step_visit(acc, v, dt)
 	elseif v.phase == "talk" then
 		v.t = v.t + dt
 		local function line(k, text) if not v["said" .. k] and v.t >= k then v["said" .. k] = true; say_near(v.npc, text) end end
-		line(1, LINES[math.random(#LINES)])
+		local talk = v.why == "empty" and EMPTY_LINES or LINES
+		line(1, talk[math.random(#talk)])
 		if v.buy then
 			line(6, S("I'll take some. Loading now."))
 			-- 6–14 秒：裝車（煤堆變小、車斗滿起來），14 秒成交
@@ -509,7 +515,8 @@ local function step_visit(acc, v, dt)
 				v.phase = "out"
 			end
 		else
-			line(6, v.why == "grade" and S("Too much rock in this pile. Not today.") or S("At that price? Not today."))
+			line(6, v.why == "empty" and S("No coal. I'll come back another day.")
+				or v.why == "grade" and S("Too much rock in this pile. Not today.") or S("At that price? Not today."))
 			if v.t >= 10 then
 				if v.npc and v.npc:get_pos() then v.npc:remove() end
 				v.phase = "out"
@@ -532,10 +539,7 @@ core.register_globalstep(function(dtime)
 			elseif now >= y.next_t then
 				y.next_t = now + next_gap()
 				set_yard(acc, y)
-				if daytime() then
-					local _, _, coal = stats(y)
-					if coal >= MIN_COAL then start_visit(acc, y) end
-				end
+				if daytime() and not y.closed then start_visit(acc, y) end   -- 關閉了就不來；沒煤也會來（看一看就走）
 			end
 		end
 	end
@@ -569,6 +573,8 @@ local function form(name, acc)
 	local items, sel = {}, 2
 	for i, s in ipairs(SIZES) do items[i] = s .. " × " .. s; if s == y.size then sel = i end end
 	out[#out + 1] = ("dropdown[2,3.15;2.5,0.7;size;%s;%d;true]"):format(table.concat(items, ","), sel)
+	out[#out + 1] = ("button[7.7,3.15;2.8,0.7;toggle;%s]"):format(F(y.closed and S("Reopen") or S("Close")))
+	if y.closed then out[#out + 1] = ("label[5,3.5;%s]"):format(F(S("Closed"))) end
 	out[#out + 1] = ("label[0.5,4.5;%s]"):format(F(S("Recent sales")))
 	local yy = 5
 	for _, s in ipairs(y.sales or {}) do
@@ -599,6 +605,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 		y.ask = math.max(0, math.floor(tonumber(fields.ask) + 0.5))
 		set_yard(acc, y)
 		rockmech.notify(name, S("[Stockyard] Price set to $@1/t", y.ask))
+	end
+	if fields.toggle then
+		y.closed = not y.closed or nil
+		set_yard(acc, y)
+		rockmech.notify(name, y.closed and S("[Stockyard] Closed: no traders will come") or S("[Stockyard] Open again"))
 	end
 	if fields.size then
 		local s = SIZES[tonumber(fields.size) or 0]
