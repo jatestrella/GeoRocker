@@ -218,7 +218,7 @@ dofile(modpath .. "/orders.lua")           -- 訂單：採購員、收料車
 dofile(modpath .. "/traincore.lua")        -- 火車的共用部分：車廂、機車、班次、結帳、視窗（教學地圖、單機鐵路共用）
 class_file("train.lua")                    -- 火車出貨（教學地圖原型）：鐵路、裝車點、列車
 class_file("commands.lua")                 -- 老師的指令：全班同一張訂單、指定市場事件
-dofile(modpath .. "/powerplant.lua")        -- 坑口電廠的存煤（rockmech_power_plant）
+dofile(modpath .. "/powerplant.lua")        -- 燃煤電廠的存煤（rockmech_power_plant）
 dofile(modpath .. "/trainline.lua")        -- 單機地圖的鐵路（rockmech_railway）：曲線、路塹、隧道、列車
 dofile(modpath .. "/airq.lua")         -- 空氣品質：柴油廢氣、炮煙、通風、氣體偵測器
 dofile(modpath .. "/knowledge.lua")

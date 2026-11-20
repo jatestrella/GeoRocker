@@ -1,5 +1,5 @@
 -- rockmech/powerplant.lua
--- 坑口電廠的存煤（rockmech_power_plant = true 的地圖）：測試階段，只累加、不燒煤、不限電。
+-- 燃煤電廠的存煤（rockmech_power_plant = true 的地圖）：測試階段，只累加、不燒煤、不限電。
 --   賣出的煤（收煤站的煤噸 crusher.lua、火車的煤噸 trainline.lua）都進電廠存煤。
 --   每個交易日（rockmech.market_day）的進煤噸數記在 mod storage，世界資料夾的 powerplant.csv 每筆進煤一行（調參數用）。
 --   右上角資金下面一行「電廠存煤 N t」；/powerstats 顯示每日進煤和日平均。

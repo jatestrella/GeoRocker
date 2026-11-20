@@ -886,7 +886,7 @@ function config.load(get, opts)
 		return S
 	end
 	-- 地表風化 rockmech_weathered_depth（m）：礦層離地面這麼深以內品位變差（地表 35%，到這個深度恢復）
-	-- 坑口電廠的存煤（powerplant.lua）：賣出的煤進電廠存煤（測試中，只累加）
+	-- 燃煤電廠的存煤（powerplant.lua）：賣出的煤進電廠存煤（測試中，只累加）
 	cfg.power_plant = parse_bool(get("rockmech_power_plant")) == true
 	cfg.weathered_depth = tonumber(get("rockmech_weathered_depth") or "")
 	if cfg.weathered_depth and cfg.weathered_depth <= 0 then cfg.weathered_depth = nil end
