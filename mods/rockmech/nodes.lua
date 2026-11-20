@@ -287,6 +287,13 @@ function rockmech.air_like(name)
 	local d = core.registered_nodes[name]
 	return d ~= nil and d.buildable_to == true and d.walkable == false and (d.liquidtype or "none") == "none"
 end
+-- 地面高度：(x, z) 從 hi 往下到 lo，第一個已載入、不像空氣的方塊（營地、研究帳篷、休息長椅蓋房子用）；找不到回傳 nil
+function rockmech.ground_y(x, z, hi, lo)
+	for y = hi or 40, lo or -30, -1 do
+		local n = core.get_node({x = x, y = y, z = z}).name
+		if n ~= "ignore" and not rockmech.air_like(n) then return y end
+	end
+end
 
 rockmech.RUBBLE = rockmech.modname .. ":rubble"
 core.register_node(rockmech.RUBBLE, {

@@ -34,7 +34,7 @@ local TOWER_OFF = 4         -- 塔中心離機身中心（左右）
 local SIDES = {{key = "p", s = 1, label = rockmech.multi_ore() and S("Product") or S(cfg.main_ore.product or "Clean coal")},
 	{key = "r", s = -1, label = S("Rejects")}}
 
--- 選礦場選的礦（meta 的 ore，沒選過是這張地圖的主要礦，見 crusher.lua）；別種礦跟廢石一起進廢料塔
+-- 選礦場選的礦（meta 的 ore，沒選過是這張地圖的主要礦，見 economy.lua）；別種礦跟廢石一起進廢料塔
 local function main_ore()
 	return cfg.main_ore      -- 這張地圖的主要礦（config.lua 的 rockmech_ores）：塔的顏色
 end

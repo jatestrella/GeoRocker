@@ -3,8 +3,8 @@
 --   右鍵研究員打開研發清單（像商店，之後可以改成天賦樹）：每個項目有等級，第 n 級要 基準價 × n、基準時間 × n。
 --   研發用整組的錢、效果整組共用；每位研究員一次一項（不同研究員可以同時研發）。研發中的那一列有進度條和倒數。
 --   進度只在該組有組員在線上時才走（每秒）；完成時通知全組。
---   等級存在 mod storage 的 research:<帳戶>:<項目>（crusher.lua 的 rockmech.research_level），
---   各項的效果由 crusher.lua 的 rockmech.eff_* 算：選礦場、破碎站、輸送帶照放置那一組的等級。
+--   等級存在 mod storage 的 research:<帳戶>:<項目>（economy.lua 的 rockmech.research_level），
+--   各項的效果由 economy.lua 的 rockmech.eff_* 算：選礦場、破碎站、輸送帶照放置那一組的等級。
 --   進行中的研發存在 research_job:<研究員>:<帳戶> = {key, level, left（剩幾秒）, total}。
 
 local S = rockmech.S
@@ -17,7 +17,7 @@ local storage = rockmech.collapse.storage
 local FORM = "rockmech:research"
 local JOB = "research_job:"
 
--- 研發項目。per：每級的效果（顯示用，實際算在 crusher.lua 的 rockmech.eff_*）
+-- 研發項目。per：每級的效果（顯示用，實際算在 economy.lua 的 rockmech.eff_*）
 local ITEMS = {
 	{key = "plant_recovery", who = "mechanic", label = TR("Plant recovery"), max = 5, base = 20000, minutes = 10,
 		desc = TR("Share of coal recovered into clean coal at the pre-sorting plant +1%"),
@@ -292,9 +292,7 @@ local function open(player, who)
 	core.show_formspec(name, FORM, form(name, who))
 end
 
-local function tell(acc, msg)
-	for _, m in ipairs(rockmech.account_members(acc)) do rockmech.notify(m, S("[Research lab] @1", msg)) end
-end
+local function tell(acc, msg) rockmech.notify_account(acc, S("[Research lab] @1", msg)) end
 
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= FORM then return end
@@ -476,12 +474,7 @@ local PROPS = {
 	{3, -2, 1, "shelf"}, {3, -2, 2, "shelf"}, {2, -2, 1, "crate"}, {1, 1, 2, "helmets"},
 }
 
-local function ground_y(x, z)
-	for y = 40, -30, -1 do
-		local n = core.get_node({x = x, y = y, z = z}).name
-		if not rockmech.air_like(n) and n ~= "ignore" then return y end
-	end
-end
+local ground_y = rockmech.ground_y      -- nodes.lua
 
 local function flag_of(x0) return "research_site:" .. x0 end
 function rockmech.career_build_research(x0)

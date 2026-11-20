@@ -170,6 +170,7 @@ dofile(modpath .. "/vehicle_lights.lua")   -- 車燈：引擎發動時照亮車�
 dofile(modpath .. "/worklight.lua")        -- 工作照明燈（像火把一樣放）
 dofile(modpath .. "/nocraft.lua")          -- 拿掉內建合成（只靠商店、鋸木台、木工桌）
 dofile(modpath .. "/impact.lua")
+dofile(modpath .. "/economy.lua")          -- 錢和市場：帳戶、資金、礦價、賣礦計價、研究係數
 dofile(modpath .. "/crusher.lua")
 dofile(modpath .. "/plant.lua")
 dofile(modpath .. "/goldplant.lua")       -- 提金廠（褐鐵礦的金：碳浸法），營地的貴金屬商

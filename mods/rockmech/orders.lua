@@ -26,8 +26,7 @@ local CAP_M3 = 8                  -- 收料車一車幾 m³
 local SECS_NEXT = 60              -- 一車開走後下一台多久來
 local PENALTY = 0.3               -- 違約金：沒交的 × 單價 × 這個比例
 local REJECT_FEE = 20             -- 退貨運費（每噸）
-local DENSITY = function() return cfg.rubble_density or 2.5 end
-local function tons_of(lv) return lv / NLEV * DENSITY() end
+local tons_of = rockmech.tons_of      -- economy.lua
 local CAP_T = function() return tons_of(CAP_M3 * NLEV) end
 local money_text = function(v) return rockmech.money_text and rockmech.money_text(v) or ("$%.0f"):format(v) end
 
@@ -37,9 +36,7 @@ local function get_order(acc)
 end
 local function set_order(acc, o) storage:set_string(ORDER .. acc, o and core.serialize(o) or "") end
 local function today() return rockmech.market_day() end
-local function tell(acc, msg)
-	for _, m in ipairs(rockmech.account_members(acc)) do rockmech.notify(m, S("[Order] @1", msg)) end
-end
+local function tell(acc, msg) rockmech.notify_account(acc, S("[Order] @1", msg)) end
 local function pct(g) return ("%.0f%%"):format(g * 100) end
 -- 採購員的頭銜：只有一種礦是那種礦的收購商（電廠、水泥廠），多種礦是「礦產採購」
 local function BUYER_TITLE() return rockmech.multi_ore() and S("Ore Buyer") or S(cfg.main_ore.buyer or "Power Plant Buyer") end

@@ -45,6 +45,10 @@ end
 function rockmech.notify_all(text)
 	for _, p in ipairs(core.get_connected_players()) do rockmech.notify(p:get_player_name(), text) end
 end
+-- 通知一個帳戶（自己或整組）在線上的成員
+function rockmech.notify_account(acc, text)
+	for _, m in ipairs(rockmech.account_members(acc)) do rockmech.notify(m, text) end
+end
 
 -- 聊天改到左下角
 local MAX_LINES = 8

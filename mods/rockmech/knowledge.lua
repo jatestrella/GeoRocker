@@ -175,9 +175,7 @@ core.register_craftitem(Q_CHART, {
 -- 雇用地質學家（全組、在線上才倒數）
 ---------------------------------------------------------------------------
 
-local function tell(acc, msg)
-	for _, m in ipairs(rockmech.account_members(acc)) do rockmech.notify(m, S("[Geologist] @1", msg)) end
-end
+local function tell(acc, msg) rockmech.notify_account(acc, S("[Geologist] @1", msg)) end
 
 function rockmech.knowledge_hire(name)
 	local acc = rockmech.account_of(name)

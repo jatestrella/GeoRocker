@@ -21,7 +21,7 @@ local TAIL_H = 6                    -- 尾礦堆最高幾格
 local SLOTS = 4                     -- 存金的格數（每格 1000 g）
 
 ---------------------------------------------------------------------------
--- 金價：每個交易日開盤走一步（均值回歸，跟 crusher.lua 的礦價同一組參數）
+-- 金價：每個交易日開盤走一步（均值回歸，跟 economy.lua 的礦價同一組參數）
 ---------------------------------------------------------------------------
 local GP, GP_PREV, GP_DAY = "price:gold", "price_prev:gold", "price_day:gold"
 local function gold_factor() return storage:contains(GP) and storage:get_float(GP) or 1 end

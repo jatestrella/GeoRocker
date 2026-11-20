@@ -39,7 +39,7 @@ local V = rockmech.vehicles
 local function ground_top(x, z)
 	return math.floor(cfg.surface_y) + math.floor(rockmech.stress.terrain_rise(cfg, x, z) + 0.5)
 end
-local function tons_of(levels) return levels / V.NLEV * cfg.rubble_density end
+local tons_of = rockmech.tons_of      -- economy.lua
 
 -- 井口平台往上清多高；可以清的方塊：天然岩石、碎石、表土、樹
 local PAD_UP = 60
@@ -131,7 +131,7 @@ local sums = {}      -- 井 → {t, money, last}
 local function pay(i, d, levels, base, p2, ca)
 	local t = tons_of(levels)
 	local ore = cfg.main_ore
-	local _, gross, fee = rockmech.sale_value(t, base, p2, ore, d.owner, ca)      -- 跟破碎站同一條（crusher.lua）
+	local _, gross, fee = rockmech.sale_value(t, base, p2, ore, d.owner, ca)      -- 跟破碎站同一條（economy.lua）
 	rockmech.add_money(d.owner, gross - fee)
 	local s = sums[i] or {t = 0, money = 0}
 	s.t, s.money, s.last = s.t + t, s.money + gross - fee, core.get_us_time() / 1e6

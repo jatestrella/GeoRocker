@@ -7,7 +7,7 @@
 --   z：柴油自己的亂數；煤價、炸藥有一部分跟著柴油的亂數走（能源互相替代；炸藥的硝酸銨用天然氣做）
 -- 事件：每個交易日有 EVENT_P 的機率發生一件（同時最多 MAX_ACTIVE 件）；發生當天價格先跳 JUMP 倍的影響，
 --   持續期間往 m 拉；結束後慢慢回到基準。
--- 煤價的那一步在 crusher.lua 的 open_market（每天先呼叫 rockmech.market_day_step，再用 market_target("coal")）。
+-- 煤價的那一步在 economy.lua 的 open_market（每天先呼叫 rockmech.market_day_step，再用 market_target("coal")）。
 -- 用到價格的地方：柴油 → fuel.lua（rockmech.diesel_price）；炸藥、鋼材 → 商店（rockmech.shop_price，career.lua）
 
 local S = rockmech.S
@@ -18,7 +18,7 @@ local EVENT_P = 1 / 12          -- 每個交易日發生事件的機率（平均
 local MAX_ACTIVE = 2
 local JUMP = 0.6                -- 發生當天先跳到影響的幾成
 
--- 三種新指數（煤價在 crusher.lua）：σ 每天波動、θ 拉回比例、oil 跟柴油亂數的相關、上下限（倍）
+-- 三種新指數（煤價在 economy.lua）：σ 每天波動、θ 拉回比例、oil 跟柴油亂數的相關、上下限（倍）
 local INDEX = {
 	diesel = {label = S("Diesel"), vol = 0.10, revert = 0.15, oil = 1, lo = 0.5, hi = 3},
 	explosive = {label = S("Explosives"), vol = 0.06, revert = 0.12, oil = 0.6, lo = 0.5, hi = 2.5},
@@ -159,14 +159,14 @@ function rockmech.news_card(player, e)
 end
 core.register_on_leaveplayer(function(player) news_hud[player:get_player_name()] = nil end)
 
--- 開始一個事件：煤價先跳一下（crusher.lua 存的倍率），其他指數也跳
+-- 開始一個事件：煤價先跳一下（economy.lua 存的倍率），其他指數也跳
 local function start_event(e, today)
 	local list = active()
 	for _, a in ipairs(list) do if a.id == e.id then return false end end
 	list[#list + 1] = {id = e.id, from = today, to = today + e.days}
 	set_active(list)
 	for key, v in pairs(e.fx) do
-		local k = cfg.ores[key] and ("price:" .. key) or (IDX .. key)      -- 礦價存在 crusher.lua
+		local k = cfg.ores[key] and ("price:" .. key) or (IDX .. key)      -- 礦價存在 economy.lua
 		local f = storage:contains(k) and storage:get_float(k) or 1
 		storage:set_float(k, f * math.exp(JUMP * v))
 	end
@@ -181,7 +181,7 @@ rockmech.market_start_event = function(id)
 	return start_event(e, rockmech.market_day())
 end
 
--- 每過一個交易日呼叫一次（crusher.lua 的 open_market）：結束到期的事件、擲骰子看有沒有新事件、三種指數走一步。
+-- 每過一個交易日呼叫一次（economy.lua 的 open_market）：結束到期的事件、擲骰子看有沒有新事件、三種指數走一步。
 -- 回傳柴油的亂數（煤價那一步拿去用）
 function rockmech.market_day_step(today)
 	local list, keep = active(), {}
@@ -234,7 +234,7 @@ local function change(key)
 	return factor(key) / prev - 1
 end
 local function pct(c) return (c >= 0 and "▲" or "▼") .. ("%.0f%%"):format(math.abs(c) * 100) end
--- 右上角資金下面的幾行（crusher.lua 的 show_money）：柴油、炸藥、鋼材，有事件就加事件名稱
+-- 右上角資金下面的幾行（economy.lua 的 show_money）：柴油、炸藥、鋼材，有事件就加事件名稱
 function rockmech.market_hud()
 	local out = {S("Diesel $@1/L (@2)", ("%.0f"):format(rockmech.diesel_price()), pct(change("diesel"))),
 		S("Explosives @1%  Steel @2%", ("%.0f"):format(factor("explosive") * 100), ("%.0f"):format(factor("steel") * 100))}

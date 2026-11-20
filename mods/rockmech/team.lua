@@ -1,6 +1,6 @@
 -- rockmech/team.lua
 -- 經營模式的全班伺服器：分組共用資金、各組各自的營地、預先建好的帳號。
---   分組：每組一個帳戶 "team:<組>"（crusher.lua 的 rockmech.account_of），組員買東西、破碎站入帳都用這筆錢。
+--   分組：每組一個帳戶 "team:<組>"（economy.lua 的 rockmech.account_of），組員買東西、破碎站入帳都用這筆錢。
 --   組別是數字 1..rockmech_career_teams（跟成績單的組別一樣）。
 --   營地：第 i 組各有一條礦帶，沿 x 排開：第 1 組在第 −1 帶、第 2 組在 +1、第 3 組在 −2、第 4 組在 +2 …（第 0 帶是出生點，
 --     給老師示範）。設了 rockmech_coal_seam_lanes 時，每帶有一條一模一樣的煤層，帶寬就是營地間距；

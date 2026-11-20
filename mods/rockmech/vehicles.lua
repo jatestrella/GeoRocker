@@ -16,7 +16,7 @@ local A = rockmech.assay      -- 碎石的成分（assay.lua）
 local V = {NLEV = NLEV}
 rockmech.vehicles = V
 
--- 經營模式：車子記下放置者的帳戶（分組時是整組，見 crusher.lua 的 rockmech.account_of），
+-- 經營模式：車子記下放置者的帳戶（分組時是整組，見 economy.lua 的 rockmech.account_of），
 -- 別組的人不能上車、收車、用對講機指揮；老師（server 權限）都可以。沒有記錄的舊車誰都能開
 function V.may_use(self, name)
 	if not self.owner or self.owner == "" or not rockmech.account_of then return true end

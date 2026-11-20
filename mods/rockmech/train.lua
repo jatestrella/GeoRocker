@@ -360,10 +360,11 @@ local function depart(acc)
 			if og > g then ore, lv, g = o, l, og end
 		end
 		local price = rockmech.ore_price(ore)
-		local rec = rockmech.eff_ore_recovery and rockmech.eff_ore_recovery(acc, ore) or ore.recovery
+		local rec = rockmech.eff_ore_recovery(acc, ore)
 		if lv > 0 then
 			local t = tons_of(lv)
-			local m = math.floor(t * g * rec * price - t * (1 - g) * rockmech.gangue_fee(ore) + 0.5)
+			local gross, fee = rockmech.coal_value(t, g, ore, acc)      -- economy.lua，跟收煤站同一條（照原價）
+			local m = math.floor(gross - fee + 0.5)
 			net, total_t = net + m, total_t + t
 			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)) .. (rockmech.multi_ore() and ("  " .. S(ore.label)) or ""), t1(t), ("$%.0f × %.0f%%"):format(price, rec * 100),
 				money_text(m), m >= 0 and 0x80ff80 or 0xff8080}

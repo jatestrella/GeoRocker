@@ -760,12 +760,7 @@ prop("helmets", {description = S("Hard hats"), tiles = {"[fill:16x16:#f0c020"},
 	node_box = {type = "fixed", fixed = {{-0.4, -0.5, -0.15, -0.05, -0.3, 0.15}, {-0.32, -0.3, -0.1, -0.13, -0.22, 0.1},
 		{0.05, -0.5, -0.15, 0.4, -0.3, 0.15}, {0.13, -0.3, -0.1, 0.32, -0.22, 0.1}}}})
 
-local function ground_y(x, z)
-	for y = 40, -30, -1 do
-		local n = core.get_node({x = x, y = y, z = z}).name
-		if not rockmech.air_like(n) and n ~= "ignore" then return y end
-	end
-end
+local ground_y = rockmech.ground_y      -- nodes.lua
 
 -- 帳篷（四根柱子撐三層布）和供應商。x0：營地中心（出生點是 0，各組的礦帶見 team.lua）
 local function build_tent(x0)
