@@ -82,6 +82,11 @@ core.register_globalstep(function(dtime)
 		end
 	end
 end)
+-- NPC 的名字（名牌搬到名牌物件上了也找得到）
+function rockmech.npc_name(o)
+	local e = o and o:get_luaentity()
+	return e and e.rm_tag_text or (o and o:get_properties() or {}).nametag or ""
+end
 -- NPC 改名牌用這個：已經有名牌物件就直接改它（不要先出現在 NPC 身上讓遠處的人看到一下）
 function rockmech.npc_set_tag(o, text)
 	local tag = npc_tags[o]

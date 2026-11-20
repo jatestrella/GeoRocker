@@ -1,6 +1,6 @@
 -- rockmech/notify.lua
 -- 遊戲訊息顯示在畫面左下角：
---   rockmech.notify(玩家, 訊息)、rockmech.notify_all(訊息)。訊息可以是翻譯過的字串（S(...)）、可以有 core.colorize。
+--   rockmech.notify(玩家, 訊息)、rockmech.notify_all(訊息)；有人說話用 rockmech.notify_say(玩家, 名字, 話)（「名字：話」）。訊息可以是翻譯過的字串（S(...)）、可以有 core.colorize。
 --   每則一行 HUD 文字，新的在最下面，最多 MAX 則；每則顯示 BASE 秒，字多的多留一點，到時間自己消失。
 -- 聊天也放到這裡：client 自己畫的聊天區在左上、伺服器移不動，所以關掉它（HUD 旗標 chat = false），
 --   玩家說的話、chat_send_player／chat_send_all（指令的回覆、長的報告）都改用 notify 顯示；完整的紀錄還是在 F10 主控台。
@@ -42,6 +42,14 @@ function rockmech.notify(name, text)
 	relayout(player, list)
 end
 
+-- 有人說話（NPC、玩家）：「名字：話」，名字上色；沒名字就只有話
+function rockmech.say_text(speaker, text)
+	speaker = tostring(speaker or ""):gsub("\n", " ")
+	if speaker == "" then return tostring(text or "") end
+	return core.colorize("#ffd080", speaker) .. "：" .. tostring(text or "")
+end
+function rockmech.notify_say(name, speaker, text) rockmech.notify(name, rockmech.say_text(speaker, text)) end
+
 function rockmech.notify_all(text)
 	for _, p in ipairs(core.get_connected_players()) do rockmech.notify(p:get_player_name(), text) end
 end
@@ -77,7 +85,7 @@ end
 -- 玩家說的話（不是指令）：引擎照樣送進主控台，左下角另外顯示
 core.register_on_chat_message(function(name, message)
 	if message:sub(1, 1) == "/" then return false end
-	rockmech.notify_all("<" .. name .. "> " .. message)
+	rockmech.notify_all(rockmech.say_text(name, message))
 	return false
 end)
 core.register_on_joinplayer(function(player) player:hud_set_flags({chat = false}) end)
