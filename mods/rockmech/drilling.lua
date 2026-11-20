@@ -547,7 +547,7 @@ end)
 core.register_on_leaveplayer(function(player) drilling[player:get_player_name()] = nil end)
 
 -- 裝藥：pointed 是鑽孔 → 裝進去；已裝藥 → 加一條；沒有鑽孔的實心面 → 貼面裝藥。回傳 true 表示用掉一條
--- 在別組的礦帶：炸藥無效（team.lua）
+-- 在別組的礦帶：炸藥無效（class/team.lua）
 local function forbidden(player, pos)
 	if rockmech.edge_protected and player and player.is_player and player:is_player()
 		and rockmech.edge_protected(pos, player:get_player_name()) then

@@ -183,13 +183,24 @@ dofile(modpath .. "/npc_skins.lua")
 dofile(modpath .. "/village.lua")          -- 村莊配置（新世界：道路、店家的地塊）
 dofile(modpath .. "/career.lua")
 dofile(modpath .. "/buildwaste.lua")       -- 磚、石材、玻璃、貨櫃牆板拆了變建築廢棄物
-dofile(modpath .. "/team.lua")
-dofile(modpath .. "/nametag.lua")
+-- 教學地圖（rockmech_teacher）才有的東西都在 class/：分組、名單、老師分頁和指令、玩家名牌、每日重開、營地炸不壞、教學地圖的火車。
+-- 單機地圖完全不載入；其他檔案用到的幾個函式在這裡給空的版本
+local function class_file(f) if cfg.teacher then dofile(modpath .. "/class/" .. f) end end
+if not cfg.teacher then
+	function rockmech.lane_team() return nil end
+	function rockmech.blast_forbidden() return nil end
+	function rockmech.nametag_hide() end
+end
+dofile(modpath .. "/solo.lua")             -- 單機版的權限、開發者電腦的時鐘
+dofile(modpath .. "/campflag.lua")         -- 「回營地」旗子
+class_file("team.lua")
+dofile(modpath .. "/npctag.lua")           -- NPC 的名牌
+class_file("nametag.lua")                  -- 玩家的名牌（暱稱、老師看到真名）
 dofile(modpath .. "/npc_talk.lua")      -- NPC 對話泡泡（台詞在 npc_lines.lua）
 dofile(modpath .. "/preview.lua")
 dofile(modpath .. "/locker.lua")
 dofile(modpath .. "/delivery.lua")
-dofile(modpath .. "/restart.lua")
+class_file("restart.lua")
 dofile(modpath .. "/memwatch.lua")
 dofile(modpath .. "/drone.lua")
 dofile(modpath .. "/research.lua")
@@ -204,7 +215,8 @@ dofile(modpath .. "/fuel.lua")
 dofile(modpath .. "/market.lua")           -- 市場：柴油、炸藥、鋼材價格波動、偶發事件、經濟分析師
 dofile(modpath .. "/camp.lua")             -- 營地的位置、混凝土地坪、收料區、保護
 dofile(modpath .. "/orders.lua")           -- 訂單：採購員、收料車
-dofile(modpath .. "/train.lua")            -- 火車出貨（教學地圖原型）：鐵路、裝車點、列車
+class_file("train.lua")                    -- 火車出貨（教學地圖原型）：鐵路、裝車點、列車
+class_file("commands.lua")                 -- 老師的指令：全班同一張訂單、指定市場事件
 dofile(modpath .. "/powerplant.lua")        -- 坑口電廠的存煤（rockmech_power_plant）
 dofile(modpath .. "/trainline.lua")        -- 單機地圖的鐵路（rockmech_railway）：曲線、路塹、隧道、列車
 dofile(modpath .. "/airq.lua")         -- 空氣品質：柴油廢氣、炮煙、通風、氣體偵測器
@@ -232,7 +244,7 @@ if not core.get_modpath("flowers") then
 end
 
 -- 營地炸不壞：要在所有方塊註冊完之後（最後載入）
-dofile(modpath .. "/campguard.lua")
+class_file("campguard.lua")
 dofile(modpath .. "/slurry.lua")           -- 穩定液：連續壁溝槽的護壁液（守恆流體、液壓進應力解）
 dofile(modpath .. "/slurrytank.lua")       -- 穩定液儲槽：自動補液到設定的液面
 dofile(modpath .. "/retain.lua")           -- 擋土：鋼板樁、內支撐（應力解的元素）

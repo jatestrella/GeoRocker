@@ -762,7 +762,7 @@ prop("helmets", {description = S("Hard hats"), tiles = {"[fill:16x16:#f0c020"},
 
 local ground_y = rockmech.ground_y      -- nodes.lua
 
--- 帳篷（四根柱子撐三層布）和供應商。x0：營地中心（出生點是 0，各組的礦帶見 team.lua）
+-- 帳篷（四根柱子撐三層布）和供應商。x0：營地中心（出生點是 0，各組的礦帶見 class/team.lua）
 local function build_tent(x0)
 	x0 = x0 or 0
 	local y = ground_y(x0, TENT_Z) or 0
@@ -1469,7 +1469,7 @@ core.register_on_joinplayer(function(player)
 	local site = storage:get_string(SITE_KEY)
 	local a, b = camp_area(0)
 	if site == "" then
-		-- 世界第一次有人進來：出生點的營地。分了組的玩家另有自己組的營地（team.lua），這座歸第一個進來的人
+		-- 世界第一次有人進來：出生點的營地。分了組的玩家另有自己組的營地（class/team.lua），這座歸第一個進來的人
 		local owner = rockmech.team_of(name) and "camp:spawn" or name
 		rockmech.add_money(owner, rockmech.team_of(name) and 0 or cfg.career_start)
 		if cfg.village then

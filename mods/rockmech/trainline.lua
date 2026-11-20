@@ -6,7 +6,7 @@
 -- 出發時每節結帳：煤噸 × 回收率 × 當天煤價 − 廢石噸 × 廢石處理費（跟收煤站同一套，但照原價；收煤站只付 coal_yard_ratio）。
 -- 鐵路、道床、隧道是路權：不能挖、不能蓋（碎石可以清）；路塹的邊坡可以挖，挖垮了碎石掉到軌道上會擋住火車。
 -- 列車是畫面：狀態存在 mod storage，附近有人才放出來。
--- 教學地圖的火車是 train.lua（直線、分組礦帶），兩個不會同時開。
+-- 教學地圖的火車是 class/train.lua（直線、分組礦帶），兩個不會同時開。
 
 local S = rockmech.S
 local cfg = rockmech.cfg
@@ -227,7 +227,7 @@ local function despawn()
 	if st then save() end
 end
 
-local WAGON_DY = 1.5          -- 車廂中心比軌面高（跟 train.lua 一樣）
+local WAGON_DY = 1.5          -- 車廂中心比軌面高（跟 class/train.lua 一樣）
 local function place()
 	if not (train and st) then return end
 	local h = st.head

@@ -3,7 +3,7 @@
 -- 地坪：建築區（講堂、研究帳篷、貨櫃辦公室、長椅的外框）、交車區、收料區鋪混凝土，交車區和收料區畫黃線外框；
 --   地坪上不能放東西、建築和地面挖不掉，往下 UNDER m 內也不能挖（碎石、自己放的置物櫃這類還是拿得走）；
 --   有 rockmech 權限（老師）的人不受限。新蓋的營地整地完先鋪（career.lua 呼叫 rockmech.camp_pave），舊的營地補鋪。
--- 其他受保護的長條（鐵路，train.lua）用 rockmech.camp.protect 加。
+-- 其他受保護的長條（鐵路，class/train.lua）用 rockmech.camp.protect 加。
 
 local S = rockmech.S
 local cfg = rockmech.cfg
@@ -49,7 +49,7 @@ local function site_of(acc)
 end
 local function sy() return cfg.camp_y or math.floor(cfg.surface_y or 0) end      -- 營地的地面高度
 local function in_rect(x0, r, x, z) return x >= x0 + r.x1 and x <= x0 + r.x2 and z >= r.z1 and z <= r.z2 end
-local EXTRA = {}             -- 其他受保護的長條（鐵路，train.lua 用 rockmech.camp.protect 加）
+local EXTRA = {}             -- 其他受保護的長條（鐵路，class/train.lua 用 rockmech.camp.protect 加）
 local function in_pad(x0, pos)
 	for _, r in ipairs(PADS) do if in_rect(x0, r, pos.x, pos.z) then return true end end
 	for _, r in ipairs(EXTRA) do if in_rect(x0, r, pos.x, pos.z) then return true end end

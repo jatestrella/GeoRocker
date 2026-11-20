@@ -246,26 +246,6 @@ function rockmech.market_hud()
 	return table.concat(out, "\n")
 end
 
--- 老師（教學地圖）可以指定事件：/rockmech_event 列出、/rockmech_event <代號> 觸發
-if cfg.teacher then
-	core.register_chatcommand("rockmech_event", {
-		params = "[id]", privs = {rockmech = true},
-		description = S("List market events, or start one"),
-		func = function(_, param)
-			param = (param or ""):match("^%s*(.-)%s*$")
-			if param == "" then
-				local ids = {}
-				for _, e in ipairs(EVENTS) do ids[#ids + 1] = e.id .. " " .. e.label end
-				return true, table.concat(ids, "\n")
-			end
-			if not EVENT_BY_ID[param] then return false, S("No such event: @1", param) end
-			if not rockmech.market_start_event(param) then return false, S("That event is already happening") end
-			for _, p in ipairs(core.get_connected_players()) do rockmech.show_money(p) end
-			return true, "ok"
-		end,
-	})
-end
-
 ---------------------------------------------------------------------------
 -- 經濟分析師：研究帳篷後面中間。付錢看今天的報告（同一個交易日再看不用再付）：
 --   今天的價格、截止品位（只算破碎站的處理費：品位 × 回收率 × 價格 = 處理費）、5 天後的價格預估、進行中的事件

@@ -75,7 +75,7 @@ function rockmech.sale_value(tons, base, p2, ore, owner, c)
 	return q, gross + vfe + vau, fee + hfee, w, cu, vfe, vau, hfee
 end
 -- 一般的礦（煤、大理岩）tons 噸、品位 g：貨款（礦噸 × 回收率 × 價格 × 收購比例 ratio）、廢料處理費（廢料噸 × 每噸）。
--- 收煤站（ratio = yard_ratio）和火車（ratio = 1，train.lua、trainline.lua）共用
+-- 收煤站（ratio = yard_ratio）和火車（ratio = 1，class/train.lua、trainline.lua）共用
 function rockmech.coal_value(tons, g, ore, owner, ratio)
 	return tons * g * rockmech.eff_ore_recovery(owner, ore) * rockmech.ore_price(ore) * (ratio or 1),
 		tons * (1 - g) * rockmech.gangue_fee(ore)
@@ -129,7 +129,7 @@ rockmech.market_day = market_day
 -- 資金
 ---------------------------------------------------------------------------
 
--- 帳戶：分了組的玩家（team.lua，mod storage 的 team_of:<玩家>）用整組共用的帳戶 "team:<組>"，
+-- 帳戶：分了組的玩家（class/team.lua，mod storage 的 team_of:<玩家>）用整組共用的帳戶 "team:<組>"，
 -- 沒分組就是玩家自己的帳戶（單人模式的 singleplayer）。玩家名稱不能有冒號，"team:1" 不會撞到玩家
 local TEAM_OF = "team_of:"
 function rockmech.team_of(name)

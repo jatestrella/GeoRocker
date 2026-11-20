@@ -559,32 +559,6 @@ core.register_globalstep(function(dtime)
 	end
 end)
 
----------------------------------------------------------------------------
--- 老師：全班同一張訂單
----------------------------------------------------------------------------
-
-if cfg.teacher then
-	core.register_chatcommand("rockmech_order", {
-		params = "<tons> <grade %> <days> [price/t]", privs = {rockmech = true},
-		description = S("Give every team the same order (teams with an order already are skipped)"),
-		func = function(_, param)
-			local tons, spec, days, price = (param or ""):match("^%s*(%d+)%s+(%d+)%s+(%d+)%s*(%d*)%s*$")
-			if not tons then return false, S("Usage: /rockmech_order <tons> <grade %> <days> [price/t]") end
-			spec = tonumber(spec) / 100
-			local ore = cfg.main_ore
-			price = tonumber(price) or math.floor((rockmech.ore_price(ore) * spec - (ore.metal and ore.metal.tc or 0)) * 1.25 + 0.5)
-			local n, skip = 0, 0
-			for i = 0, cfg.career_teams or 0 do
-				local acc = "team:" .. i
-				if site_of(acc) then
-					if get_order(acc) then skip = skip + 1
-					else accept(acc, {tons = tonumber(tons), spec = spec, days = tonumber(days), price = price}); n = n + 1 end
-				end
-			end
-			return true, S("Order sent to @1 teams (@2 skipped)", n, skip)
-		end,
-	})
-end
 
 rockmech.orders = {sites = sites, sy = sy, ground_y = ground_y,
 	tons_of = tons_of, pct = pct, t1 = t1, money_text = money_text, tell = tell, load_grade = load_grade, PENALTY = PENALTY,

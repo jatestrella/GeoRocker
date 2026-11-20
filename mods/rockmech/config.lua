@@ -1278,12 +1278,12 @@ function config.load(get, opts)
 	cfg.career_start = math.max(0, tonumber(get("rockmech_career_start")) or 23000)
 	-- 單機地圖開放連線時：coop 合作（共用營地主人的帳戶）、compete 競爭（每人自己的帳戶，收煤站的錢給蓋的人）
 	cfg.multiplayer = get("rockmech_multiplayer") == "compete" and "compete" or "coop"
-	-- 分組（team.lua）：組數（A, B, …）、各組營地沿 z 相隔幾公尺、名單檔（世界資料夾裡）、名單外的名稱能不能登入
+	-- 分組（class/team.lua）：組數（A, B, …）、各組營地沿 z 相隔幾公尺、名單檔（世界資料夾裡）、名單外的名稱能不能登入
 	cfg.career_teams = math.max(1, math.min(26, math.floor(tonumber(get("rockmech_career_teams")) or 8)))
 	cfg.career_site_spacing = math.max(60, tonumber(get("rockmech_career_site_spacing")) or 150)
 	-- 營地（帳篷、破碎站、落腳點）離礦帶中心往東幾公尺：礦區在西半邊，營地放東邊一點
 	cfg.career_camp_dx = tonumber(get("rockmech_career_camp_dx")) or 0
-	-- 每日定時重開（restart.lua）："HH:MM"，空字串或沒設就不重開
+	-- 每日定時重開（class/restart.lua）："HH:MM"，空字串或沒設就不重開
 	cfg.daily_restart = get("rockmech_daily_restart")
 	cfg.drone_range = math.max(20, tonumber(get("rockmech_drone_range")) or 200)   -- 無人機最大飛行距離（離起飛點水平，m）
 	-- 推土機松土（vehicle_dozer.lua）：可裂性門檻，岩體強度 σcm（MPa）以下耙得動
