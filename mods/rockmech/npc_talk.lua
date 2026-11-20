@@ -128,6 +128,11 @@ function rockmech.npc_say(o, player, text)
 		if not str then return end
 		text = translate(player, str)
 	end
+	-- 左下角訊息框也印一份：「名字：話」（名牌被 npctag.lua 搬走了就用它記下的）
+	local e = o:get_luaentity()
+	local tag = e and e.rm_tag_text or (o:get_properties() or {}).nametag or ""
+	tag = tag:gsub("\n", " ")
+	rockmech.notify(name, (tag ~= "" and core.colorize("#ffd080", tag) .. "：" or "") .. text)
 	bubbles[o] = bubbles[o] or {}
 	for _, old in ipairs(bubbles[o][name] or {}) do
 		if old:get_pos() then old:remove() end
