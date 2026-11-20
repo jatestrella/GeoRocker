@@ -226,6 +226,7 @@ dofile(modpath .. "/coredrill.lua")
 dofile(modpath .. "/oreshaft.lua")       -- 豎井：井口倒礦，井底的破碎站收料
 dofile(modpath .. "/shaftroad.lua")      -- 豎井道路：營地到每口豎井的壓碎大理岩路
 dofile(modpath .. "/haulroad.lua")       -- 往電廠的道路：地磅站換手、路程倒數、電廠排隊卸煤、結帳
+dofile(modpath .. "/stockyard.lua")      -- 煤礦堆置處：自己劃的煤堆、煤商不定期來買
 dofile(modpath .. "/mentor.lua")         -- 老礦工：單機經營模式一開始在附近晃、聊天式的小任務
 dofile(modpath .. "/mohr.lua")         -- Mohr 圓的畫圖
 dofile(modpath .. "/tablet.lua")       -- 數值分析平板：手上的螢幕畫指著那一格的 Mohr 圓

@@ -239,6 +239,7 @@ config.shop = {
 	{key = "bolt", shop = "geotech", item = "rockmech:rock_bolt", label = TR("Rock bolt"), price = 300, count = 10},
 	{key = "shotcrete", shop = "geotech", item = "rockmech:shotcrete", label = TR("Shotcrete"), price = 800, count = 10},
 	{key = "axe", shop = "tools", item = "default:axe_steel", label = TR("Axe"), price = 100},
+	{key = "yard_sign", shop = "tools", item = "rockmech:yard_sign", label = TR("Stockyard sign"), price = 0, needs_yard = true},
 	{key = "sawbench", shop = "tools", item = "rockmech:sawbench", label = TR("Saw bench"), price = 800},
 	{key = "workbench", shop = "tools", item = "rockmech:workbench", label = TR("Workbench"), price = 300},
 	{key = "camp_flag", shop = "tools", item = "rockmech:camp_flag", label = TR("Back to camp"), price = 200},
@@ -910,6 +911,15 @@ function config.load(get, opts)
 		end
 	end
 	cfg.haul_rain = math.max(0, tonumber(get("rockmech_haul_rain") or "") or 0.6)
+	-- 煤礦堆置處（stockyard.lua，取代小鎮的收煤站）：rockmech_stockyard = true；買家的行情價 = 市價 × ref；
+	-- 售價超過行情的不買機率（彈性）；平均幾秒來一位；每位要的噸數（最少,最多）
+	cfg.stockyard = parse_bool(get("rockmech_stockyard")) == true
+	cfg.stockyard_ref = math.max(0.1, math.min(1.5, tonumber(get("rockmech_stockyard_ref") or "") or 0.8))
+	cfg.stockyard_elasticity = math.max(0, tonumber(get("rockmech_stockyard_elasticity") or "") or 6)
+	cfg.stockyard_interval = math.max(20, tonumber(get("rockmech_stockyard_interval") or "") or 240)
+	local tmin, tmax = (get("rockmech_stockyard_tons") or ""):match("^%s*([%d%.]+)%s*,%s*([%d%.]+)%s*$")
+	cfg.stockyard_tmin, cfg.stockyard_tmax = tonumber(tmin) or 5, tonumber(tmax) or 40
+	if cfg.stockyard_tmax < cfg.stockyard_tmin then cfg.stockyard_tmin, cfg.stockyard_tmax = cfg.stockyard_tmax, cfg.stockyard_tmin end
 	cfg.haul_fee = math.max(0, tonumber(get("rockmech_haul_fee") or "") or 300)
 	cfg.village = get("rockmech_village") == "true"
 	-- 礦體規模 rockmech_ore_scale（2 = 真實規模，0.5–3；新世界預設 1）：斑岩銅礦的半徑、富集帶、氧化帶、品位遞減深度、
@@ -1508,7 +1518,7 @@ function config.load(get, opts)
 		end
 		if #cfg.shafts == 0 then cfg.shafts = nil; warnings[#warnings + 1] = "rockmech_shafts: 格式是 x,z;x,z（忽略）" end
 	end
-	cfg.camp_crusher = cfg.shafts == nil
+	cfg.camp_crusher = cfg.shafts == nil and not cfg.stockyard      -- 有豎井（井底有破碎站）、有堆置處的地圖營地不蓋收煤站
 	-- 豎井：圓井半徑 r（直徑 12 m，照和平礦場）和外圍一圈沒有節理的硬大理岩（厚 ring）
 	cfg.shaft_r, cfg.shaft_ring = 6, 6
 	function cfg.in_shaft_ring(x, z)

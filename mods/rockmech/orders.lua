@@ -143,6 +143,7 @@ do
 	truck.overhangs = {{x0 = -1.3, x1 = 1.3, z0 = -5.5, z1 = -1.5, y0 = -1.5, y1 = 0.8, body = "z1"}}
 	-- 不能開、不能裝東西：右鍵看這一車的狀況（可以叫它先走）
 	truck.rightclick = function(self, clicker)
+		if self.yard then return true end      -- 堆置處買家的車（stockyard.lua）
 		if rockmech.orders_truck_form then rockmech.orders_truck_form(self, clicker) end
 		return true
 	end
@@ -157,6 +158,18 @@ do
 	local on_load = truck.on_load
 	truck.on_load = function(self, data)
 		if on_load then on_load(self, data) end
+		-- 堆置處買家的車（stockyard.lua 放出來的畫面）：不是訂單的車；存檔讀回來就消失（買家的狀態在 stockyard.lua）
+		if data.yard then
+			self.yard = true
+			core.after(1, function()
+				if self.object:get_pos() and not self.yard_live then
+					core.log("action", "[rockmech] 堆置處買家的車（讀檔回來的）收掉 " .. tostring(self.uid))
+					V.registry_drop(self.uid); V.snapshot_clear(self.uid)
+					self.object:remove()
+				end
+			end)
+			return
+		end
 		core.after(0, function()
 			if not self.object:get_pos() then return end
 			local o = self.owner and get_order(self.owner)

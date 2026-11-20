@@ -140,7 +140,7 @@ more("rockmech:vendor_civil", {
 })
 -- 有火車的地圖（教學地圖 class/train.lua、單機地圖的鐵路 trainline.lua）：收煤站坑口價、火車原價、晚上沒車
 local cfg = rockmech.cfg
-if cfg.career and ((cfg.teacher and cfg.coal_seam and cfg.coal_seam.lane_w) or cfg.railway) then
+if cfg.career and not cfg.stockyard and ((cfg.teacher and cfg.coal_seam and cfg.coal_seam.lane_w) or cfg.railway) then      -- 有堆置處的地圖沒有收煤站
 	more("rockmech:npc_buyer", {S("The coal yard pays less. Load the train yourself and you get more.")})
 	more("rockmech:npc_analyst", {S("The coal yard pays a pit-head price. The train pays full price."), S("No trains at night. Stockpile your coal.")})
 	more("rockmech:vendor_civil", {S("The coal yard buys any time, but not at full price.")})

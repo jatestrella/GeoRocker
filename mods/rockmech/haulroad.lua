@@ -130,6 +130,10 @@ local function build_gate()
 	path[#path + 1] = at(-SCALE_L / 2 - 4, 0)
 	path[#path + 1] = at(SCALE_L / 2 + 4, 0)
 	local line = RL.smooth_line(path)
+	-- 道路中線（每 2 m 一點，小鎮那端 → 地磅站）：堆置處的買家照這條開（stockyard.lua）
+	local keep = {}
+	for i = 1, #line, 2 do keep[#keep + 1] = {math.floor(line[i].x * 10 + 0.5) / 10, math.floor(line[i].z * 10 + 0.5) / 10} end
+	storage:set_string("haul_line", core.serialize(keep))
 	local ys = RL.profile(line, gy + 1)
 	-- 經過池塘、河：路面不低於水面上一格（路堤填過去）
 	local wl = (tonumber(core.settings:get("water_level")) or 1) + 1
@@ -518,4 +522,11 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	return true
 end)
 
+-- 往電廠道路的中線（{{x, z}, …}，小鎮那端 → 地磅站），還沒蓋好回傳 nil
+function rockmech.haul_line()
+	if storage:get_string(BUILT) ~= "1" then return nil end
+	local s = storage:get_string("haul_line")
+	return s ~= "" and core.deserialize(s) or nil
+end
+rockmech.haul_road_width = ROAD_W
 rockmech.haul_debug = {build = build_gate, trips = load_trips, dispatch = dispatch, step = step_trips, G = G, d = d, at = at, gate_y = gate_y}

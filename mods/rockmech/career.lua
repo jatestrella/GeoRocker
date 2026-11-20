@@ -550,7 +550,7 @@ local function shop_form(name, kind)
 	local out = {"formspec_version[6]size[13.5,13.2]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
 	local col, row = 0, 0
 	for i, it in ipairs(cfg.shop) do
-		if (not kind or it.shop == kind) and not (it.sell_crusher and not cfg.sell_crusher) and not (it.needs_gold and not (cfg.strata and (cfg.strata.body or cfg.strata.cu))) then
+		if (not kind or it.shop == kind) and not (it.sell_crusher and not cfg.sell_crusher) and not (it.needs_yard and not cfg.stockyard) and not (it.needs_gold and not (cfg.strata and (cfg.strata.body or cfg.strata.cu))) then
 			local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
 			local p = rockmech.shop_price(it)      -- 炸藥、鋼材跟著市場走（market.lua）
 			local price = p == 0 and S("Free") or ("$%d"):format(p)
@@ -570,7 +570,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local kind = shop_kind[name]
 	for key in pairs(fields) do
 		local it = cfg.shop[tonumber(key:match("^buy_(%d+)$"))]
-		if it and (not kind or it.shop == kind) and not (it.sell_crusher and not cfg.sell_crusher) then
+		if it and (not kind or it.shop == kind) and not (it.sell_crusher and not cfg.sell_crusher) and not (it.needs_yard and not cfg.stockyard) then
 			-- 大東西不進背包（delivery.lua）：車停到營地的交車區，設施給施工單
 			local vkind = rockmech.vehicle_kind_of_item and rockmech.vehicle_kind_of_item(it.item)
 			local order = rockmech.order_of_item and rockmech.order_of_item(it.item)
@@ -1647,6 +1647,7 @@ end
 
 -- 新手裝備：第一次進遊戲就發十字鎬、鏟子、手推車（每張地圖都發；背包放不下的掉在腳邊）
 local STARTER = {"rockmech:pick", "rockmech:shovel", "rockmech:cart_item"}
+if cfg.stockyard then STARTER[#STARTER + 1] = "rockmech:yard_sign" end      -- 堆置處告示牌（stockyard.lua）
 -- 真實地形的地圖：引擎的出生點是平坦地圖產生器的地面（surface_y，遠在山底下），一律放到營地
 if cfg.terrain and cfg.terrain.mode == "dem" then
 	-- 先把營地那塊地圖產生好再放（還沒產生的話找不到地面，會放在半空中掉下來）
