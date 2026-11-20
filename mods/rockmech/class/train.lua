@@ -1,4 +1,5 @@
--- rockmech/train.lua
+-- rockmech/class/train.lua（教學地圖才載入）
+-- 這支只管軌道（東西向的直線、每組一段、裝車點、路權）；車廂、機車、班次、結帳、視窗是共用的 traincore.lua。
 -- 火車出貨（原型，只在教學地圖：分組礦帶）：營地南邊的走廊鋪一條東西向的鐵路（每組礦帶一段，連起來貫穿全圖）。
 -- 火車是賣礦的管道（不是訂單）：上班時間（HOURS，08:00–20:00）一直有車，晚上沒車 → 學生要自己堆料（倉儲）。
 --   一列 N 節車廂（每節 CAP_M3 m³）從礦帶西邊開進來，停在裝車點（黃黑標示柱，每節一根）不動；
@@ -13,35 +14,21 @@
 
 local S = rockmech.S
 local cfg = rockmech.cfg
-local V = rockmech.vehicles
-local NLEV = V.NLEV
 local storage = rockmech.collapse.storage
 local O = rockmech.orders
-local F = core.formspec_escape
 
 local lanes = cfg.coal_seam and cfg.coal_seam.lane_w
-if not (cfg.career and cfg.teacher and lanes and O) then
-	function rockmech.train_enabled() return false end
-	return
-end
+if not (cfg.career and cfg.teacher and lanes and O) then return end
 
 local RAIL_Z = -80                               -- 鐵路中心線的 z
 local LOAD_REL = -26                             -- 裝車點＝第 1 節（相對營地中心 x0）：收料區（x0−17..−11）的西邊，4 節的北邊都是空地
 local LINE = {x1 = -(cfg.career_camp_dx or 0) - lanes / 2, x2 = -(cfg.career_camp_dx or 0) + lanes / 2 - 1}   -- 這一組礦帶的那一段
-local N = 4                                      -- 車廂數
-local CAP_M3 = 8                                 -- 每節 m³
-local L_LOCO, PITCH = 9, 7.6                     -- 機車長、車廂間距（中心到中心）
+local T = rockmech.traincore                     -- traincore.lua：車廂、機車、班次、結帳、視窗
+local N, L_LOCO, PITCH = T.N, T.L_LOCO, T.PITCH   -- 車廂數、機車長、車廂間距（中心到中心）
 local HOURS = {8, 20}                            -- 上班時間：這段時間一直有車
-local V_MAX, ACC = 12, 1.2                       -- 最高速度 (m/s ≈ 43 km/h)、加減速 (m/s²)：進站減速停好、出站慢慢加速
 local NEAR = 96                                  -- 離裝車點多近有人才放出列車
 local YAW = -math.pi / 2                         -- 車頭朝 +x
 local RAIL, BALLAST, MARK = "rockmech:rail", "rockmech:rail_ballast", "rockmech:rail_marker"
-local KIND = "wagon"
-local ENAME = "rockmech:" .. KIND
-local LOCO = "rockmech:train_loco"
-local tons_of, pct, t1, money_text, tell = O.tons_of, O.pct, O.t1, O.money_text, O.tell
-
-function rockmech.train_enabled() return true end
 
 local function site_of(acc) return O.site_of(acc) end
 local function rail_y() return O.sy() + 1 end                -- 軌道方塊的 y
@@ -58,10 +45,6 @@ end
 local function in_hours()
 	local h = hour()
 	return h >= HOURS[1] and h < HOURS[2]
-end
-local function clock_text()
-	local h = hour()
-	return ("%02d:%02d"):format(math.floor(h), math.floor((h % 1) * 60))
 end
 local function start_head(x0) return x0 + LINE.x1 + 2 + L_LOCO + N * PITCH end
 local function end_head(x0) return x0 + LINE.x2 - 1 end
@@ -151,401 +134,54 @@ end)
 rockmech.camp.protect({x1 = LINE.x1, x2 = LINE.x2, z1 = RAIL_Z - 2, z2 = RAIL_Z + 1})
 
 ---------------------------------------------------------------------------
--- 車廂（有斗的車，不能開）、機車
+-- 列車（traincore.lua）：每組一列，車頭沿 x 往東開
 ---------------------------------------------------------------------------
 
-local trains = {}             -- 帳戶 → {loco = obj, wagons = {entity...}}
-local open_for = {}           -- 玩家 → 帳戶（打開的列車視窗）
-
-do
-	local box_tex = V.box_tex
-	local c = "#6a3a24"
-	local wagon = {desc = S("Rail wagon"), short = S("Rail wagon"), color = c, cap = CAP_M3 * NLEV, speed = 0,
-		top_speed = 0, accel = 0, tire = 1.0, no_ahs = true, no_dump_snap = true,
-		half = 1.5, lat = {-1, 0, 1}, eye_up = 1.9, eye_fwd = 1.6, eye_side = -0.55, rear = 3.5, mirror = {x = 1.35, y = 1.3, z = 1.2},
-		seat = {x = 0, y = 0.1, z = 0}, tilt = {front = 3, rear = -3, side_z = -1.6, side_x = 1.1},
-		max_grade = math.rad(17), item_desc = ""}
-	local r = {}
-	r[#r + 1] = {2, 10, 28, 12, c}; V.icon_wheel(r, 8, 26, 3); V.icon_wheel(r, 24, 26, 3)
-	wagon.inv_image = V.icon(r)
-	local wheel = {V.TREAD, V.TREAD, V.WHEEL, V.WHEEL, V.TREAD, V.TREAD}
-	local body = {{pos = {x = 0, y = -0.75, z = 0}, size = {x = 2.0, y = 0.3, z = 7.0}, tex = box_tex("#2a2a2a")}}
-	for _, z in ipairs({-2.6, -1.8, 1.8, 2.6}) do
-		for _, x in ipairs({-0.75, 0.75}) do
-			body[#body + 1] = {pos = {x = x, y = -1.15, z = z}, size = {x = 0.2, y = 0.7, z = 0.7}, tex = wheel}
-		end
-	end
-	V.hauler(wagon, {
-		hinge = {x = 0, y = -0.6, z = -3.4}, size = {x = 2.8, y = 1.6, z = 6.8}, body = body,
-		floor_tex = "[fill:16x16:#3a2216",
-		side_tex = ("[fill:16x16:%s^[fill:16x2:0,0:#4a2a18^[fill:1x16:3,0:#4a2a18^[fill:1x16:8,0:#4a2a18^[fill:1x16:12,0:#4a2a18"):format(c),
-		overlap_lat = {-1.25, 0, 1.25}, overlap_dy = {1.2, 2.2}, aim_top = 1.0,
-	})
-	local refresh = wagon.refresh
-	wagon.refresh = function(self)
-		refresh(self)
-		V.nametag(self, S("Wagon @1  @2 / @3", self.train_i or "?", t1(tons_of(V.load_total(self))), t1(tons_of(CAP_M3 * NLEV))),
-			V.load_total(self) >= wagon.cap and "#ff8060" or "#ffe0a0")
-	end
-	wagon.rightclick = function(self, clicker)
-		if rockmech.train_form then rockmech.train_form(self.owner, clicker) end
-		return true
-	end
-	-- 不存進地圖：狀態在 mod storage，列車是附近有人時才放出來的畫面
-	local on_load = wagon.on_load
-	wagon.on_load = function(self, data)
-		if on_load then on_load(self, data) end
-		self.object:set_properties({static_save = false})
-	end
-	V.register(KIND, wagon)
-	core.override_item(ENAME .. "_item", {groups = {not_in_creative_inventory = 1}})
-end
-
--- 機車：一個方盒（藍色車身、黃色腰帶、前面車窗和頭燈）
-local LB = "#28466e"
-core.register_entity(LOCO, {
-	initial_properties = {
-		visual = "cube", visual_size = {x = 2.8, y = 3.2, z = L_LOCO}, physical = false, static_save = false,
-		collisionbox = {-1.4, -1.6, -1.4, 1.4, 1.6, 1.4}, selectionbox = {-1.4, -1.6, -4.5, 1.4, 1.6, 4.5, rotate = true},
-		textures = {
-			("[fill:16x16:%s^[fill:4x4:6,6:#1a2a40"):format(LB),
-			"[fill:16x16:#202020",
-			("[fill:16x16:%s^[fill:16x2:0,10:#e0b428^[fill:3x3:12,2:#9fd0ff^[fill:16x2:0,14:#202020"):format(LB),
-			("[fill:16x16:%s^[fill:16x2:0,10:#e0b428^[fill:3x3:1,2:#9fd0ff^[fill:16x2:0,14:#202020"):format(LB),
-			("[fill:16x16:%s^[fill:12x4:2,2:#9fd0ff^[fill:2x2:2,11:#fff4b0^[fill:2x2:12,11:#fff4b0^[fill:16x2:0,8:#e0b428"):format(LB),
-			("[fill:16x16:%s^[fill:16x2:0,10:#e0b428"):format(LB),
-		},
-		nametag = S("Freight train"), nametag_color = "#e0e0ff",
-	},
-	on_activate = function(self) self.object:set_armor_groups({immortal = 1}) end,
-	on_punch = function() return true end,
-	on_rightclick = function(self, clicker)
-		if self.acc and rockmech.train_form then rockmech.train_form(self.acc, clicker) end
-	end,
-	on_step = function(self)
-		if not (self.acc and trains[self.acc] and trains[self.acc].loco == self.object) then self.object:remove() end
-	end,
-})
-
----------------------------------------------------------------------------
--- 狀態：存在 mod storage
----------------------------------------------------------------------------
-
-local KEY = "train:"
-local function get_state(acc)
-	local s = storage:get_string(KEY .. acc)
-	return s ~= "" and core.deserialize(s) or nil
-end
-local function set_state(acc, st) storage:set_string(KEY .. acc, st and core.serialize(st) or "") end
-local states = {}             -- 帳戶 → 狀態（記憶體裡的，定期寫回）
-local function state(acc)
-	if not states[acc] then states[acc] = get_state(acc) end
-	return states[acc]
-end
-local function save(acc) set_state(acc, states[acc]) end
-
-local function uid_of(acc, i) return ("train-%s-%d"):format(acc, i) end
-
--- 收掉畫面（先把車廂的料寫回狀態）
-local function sync(acc)
-	local tr, st = trains[acc], states[acc]
-	if not (tr and st) then return end
-	for i, e in ipairs(tr.wagons) do
-		if e.object:get_pos() then st.loads[i] = {load = table.copy(e.load), loadq = table.copy(e.loadq), loada = table.copy(e.loada or {})} end
-	end
-end
-local function despawn(acc)
-	local tr = trains[acc]
-	if not tr then return end
-	sync(acc)
-	if tr.loco and tr.loco:get_pos() then tr.loco:remove() end
-	for i, e in ipairs(tr.wagons) do
-		V.registry_drop(uid_of(acc, i)); V.snapshot_clear(uid_of(acc, i))
-		if e.object:get_pos() then e.object:remove() end
-	end
-	trains[acc] = nil
-	if states[acc] then save(acc) end
-end
-
-local function place(acc)
-	local tr, st = trains[acc], states[acc]
-	local y = rail_y() + 0.5 + 1.5
-	local head = st.head
-	if tr.loco and tr.loco:get_pos() then tr.loco:move_to({x = head - L_LOCO / 2, y = y + 0.1, z = RAIL_Z + 0.5}, true) end
-	for i, e in ipairs(tr.wagons) do
-		if e.object:get_pos() then
-			e.object:move_to({x = head - L_LOCO - (i - 1) * PITCH - PITCH / 2, y = y, z = RAIL_Z + 0.5}, true)
-		end
-	end
-end
-
-local function spawn(acc)
-	local st = states[acc]
-	local y = rail_y() + 0.5 + 1.5
-	local tr = {wagons = {}}
-	trains[acc] = tr
-	local loco = core.add_entity({x = st.head - L_LOCO / 2, y = y + 0.1, z = RAIL_Z + 0.5}, LOCO)
-	if loco then
-		loco:set_yaw(YAW)
-		local le = loco:get_luaentity()
-		if le then le.acc = acc end
-		tr.loco = loco
-	end
-	for i = 1, N do
-		local ld = st.loads[i] or {}
-		local data = core.serialize({uid = uid_of(acc, i), owner = acc, load = ld.load or {}, loadq = ld.loadq or {}, loada = ld.loada or {}, wall = os.time() + 1,
-			yaw = YAW})
-		local obj = core.add_entity({x = st.head - L_LOCO - (i - 1) * PITCH - PITCH / 2, y = y, z = RAIL_Z + 0.5}, ENAME, data)
-		local e = obj and obj:get_luaentity()
-		if e then
-			obj:set_yaw(YAW)
-			e.train_i = i
-			obj:set_acceleration({x = 0, y = 0, z = 0})
-			V.refresh(e)
-			tr.wagons[#tr.wagons + 1] = e
-		end
-	end
-end
-
--- 給 orders.lua：卡車倒料對準車廂
-function rockmech.train_wagons()
-	local out = {}
-	for _, tr in pairs(trains) do
-		for _, e in ipairs(tr.wagons) do if e.object:get_pos() then out[#out + 1] = e end end
-	end
-	return out
-end
-
--- 下一班從西邊開進來
-local function start(acc)
-	local x0 = site_of(acc)
-	if not x0 then return end
-	states[acc] = {phase = "in", head = start_head(x0), loads = {}}
-	save(acc)
-end
-function rockmech.train_remove(acc)
-	despawn(acc)
-	states[acc] = nil
-	set_state(acc, nil)
-end
-
-local function wagon_total(st, i)
-	local t = 0
-	for _, lv in pairs((st.loads[i] or {}).load or {}) do t = t + lv end
-	return t
-end
-local function all_full(st)
-	for i = 1, N do if wagon_total(st, i) < CAP_M3 * NLEV then return false end end
-	return true
-end
-local function train_total(st)
-	local t = 0
-	for i = 1, N do t = t + wagon_total(st, i) end
-	return t
-end
-
--- 出發：每節照市價結帳
-local function depart(acc)
-	local st = states[acc]
-	if not st then return end
-	sync(acc)
-	local rows, net, total_t = {}, 0, 0
-	for i = 1, N do
-		local ld = st.loads[i] or {}
-		local wagon = {load = ld.load or {}, loadq = ld.loadq or {}, loada = ld.loada or {}}
-		-- 每節照車上最多的那種礦計價，別種礦算廢石（多種礦的地圖要分開裝）
-		local ore, lv, g = cfg.main_ore, 0, -1
-		for _, o in ipairs(cfg.active_ores) do
-			local l, og = O.load_grade(wagon, o)
-			if og > g then ore, lv, g = o, l, og end
-		end
-		local price = rockmech.ore_price(ore)
-		local rec = rockmech.eff_ore_recovery(acc, ore)
-		if lv > 0 then
-			local t = tons_of(lv)
-			local gross, fee = rockmech.coal_value(t, g, ore, acc)      -- economy.lua，跟收煤站同一條（照原價）
-			local m = math.floor(gross - fee + 0.5)
-			net, total_t = net + m, total_t + t
-			rows[#rows + 1] = {S("Wagon @1  grade @2", i, pct(g)) .. (rockmech.multi_ore() and ("  " .. S(ore.label)) or ""), t1(t), ("$%.0f × %.0f%%"):format(price, rec * 100),
-				money_text(m), m >= 0 and 0x80ff80 or 0xff8080}
-		end
-	end
-	if #rows > 0 then
-		rockmech.add_money(acc, net)
-		rows[#rows + 1] = {S("Total"), t1(total_t), "", money_text(net), net >= 0 and 0x80ff80 or 0xff8080}
-		for _, m in ipairs(rockmech.account_members(acc)) do
-			core.sound_play("rockmech_coin", {to_player = m, gain = 0.8}, true)
-			if rockmech.show_bill then rockmech.show_bill(m, S("Train shipment"), rows) end
-		end
-		tell(acc, S("The train left with @1, income @2", t1(total_t), money_text(net)))
-	else
-		tell(acc, S("The train left empty"))
-	end
-	-- 車廂的料跟著火車走了：畫面上清空
-	st.loads = {}
-	local tr = trains[acc]
-	if tr then for _, e in ipairs(tr.wagons) do e.load, e.loadq, e.loada = {}, {}, {}; V.refresh(e) end end
-	st.phase = "leaving"
-	save(acc)
-end
-
----------------------------------------------------------------------------
--- 每秒（orders.lua 呼叫）：進站、裝車、挪節、出發、結案；畫面放出／收掉
----------------------------------------------------------------------------
-
+local KEYS = {}
+for i = 0, cfg.career_teams or 0 do KEYS[#KEYS + 1] = "team:" .. i end   -- 0 = 老師組（出生點的營地）
 local function players_near(p)
 	for _, pl in ipairs(core.get_connected_players()) do
 		if vector.distance(pl:get_pos(), p) < NEAR then return true end
 	end
 	return false
 end
-
-local function step(acc)
-	local x0 = site_of(acc)
-	if not x0 or storage:get_string("rail:" .. x0) ~= "1" or not rockmech.has_account(acc) then return end
-	local st = state(acc)
-	if not st then
-		-- 上班時間一直有車；晚上沒車
-		if in_hours() then start(acc) end
-		st = states[acc]
-		if not st then return end
-	end
-	local lp = {x = load_x(x0), y = rail_y(), z = RAIL_Z}
-	local active = (rockmech.train_debug.force or players_near(lp)) and core.get_node(lp).name ~= "ignore"   -- force：測試用
-	if st.phase == "coming" then st.phase = "in" end   -- 舊版的狀態
-	-- 畫面：附近有人才放
-	if active and not trains[acc] then spawn(acc)
-	elseif not active and trains[acc] then despawn(acc) end
-	sync(acc)
-	if st.phase == "load" then
-		-- 都裝滿就走；下班（20:00）還沒滿也帶著已經裝的走
-		if all_full(st) or not in_hours() then depart(acc) end
-	end
-	-- 沒人在附近時也照樣「開」：直接跳到目標（畫面不在）
-	if not trains[acc] then
-		if st.phase == "in" then st.head = stop_head(x0); st.phase = "load"
-		elseif st.phase == "leaving" then st.head = end_head(x0) end
-	end
-	if st.phase == "leaving" and st.head >= end_head(x0) - 0.01 then
-		despawn(acc)
-		states[acc] = nil
-		set_state(acc, nil)
-		-- 下一班馬上來（上班時間內）
-		if in_hours() then start(acc) end
-		return
-	end
-	save(acc)
-end
--- 每秒：各組的火車（組員不在線也照樣跑班次）
-local tick = 0
-core.register_globalstep(function(dtime)
-	tick = tick + dtime
-	if tick < 1 then return end
-	tick = 0
-	core.set_timeofday(hour() / 24)
-	for i = 0, cfg.career_teams or 0 do step("team:" .. i) end   -- 0 = 老師組（出生點的營地）
-end)
-
--- 移動（0.1 秒）：畫面在的列車往目標開；前面軌道上有東西就停
-local BLOCK_WARN = 10
-local mt = 0
-core.register_globalstep(function(dtime)
-	mt = mt + dtime
-	if mt < 0.1 then return end
-	local dt = mt
-	mt = 0
-	for acc, tr in pairs(trains) do
-		local st = states[acc]
+local debug = {}
+local line = T.line({
+	id = "class",
+	keys = function() return KEYS end,
+	skey = function(acc) return "train:" .. acc end,
+	uid = function(acc, i) return ("train-%s-%d"):format(acc, i) end,
+	-- 組員不在線也照樣跑班次；鐵路還沒鋪、帳戶還沒開就不跑
+	ready = function(acc)
 		local x0 = site_of(acc)
-		if st and x0 then
-			local target, speed
-			if st.phase == "in" then
-				target = stop_head(x0)
-				speed = math.max(1, math.min(V_MAX, math.sqrt(2 * ACC * math.max(0, target - st.head))))
-			elseif st.phase == "leaving" then
-				target = end_head(x0)
-				speed = math.max(1.5, math.min(V_MAX, math.sqrt(2 * ACC * math.max(0, st.head - stop_head(x0)))))
-			end
-			if target and st.head < target - 0.01 then
-				-- 車頭前面 2 m 的軌道上方有東西（碎石…）：停下來
-				local y = rail_y() + 1
-				local blocked
-				for dx = 0, 2 do
-					local n = core.get_node({x = math.floor(st.head + dx + 0.5), y = y, z = RAIL_Z}).name
-					if not rockmech.air_like(n) and n ~= "ignore" then blocked = n; break end
-				end
-				if blocked then
-					local now = core.get_gametime()
-					if not st.warned or now - st.warned > BLOCK_WARN then
-						st.warned = now
-						tell(acc, S("The track is blocked in front of the train. Clear it"))
-					end
-				else
-					st.head = math.min(target, st.head + speed * dt)
-					place(acc)
-				end
-			elseif target then
-				if st.phase == "in" then
-					st.phase = "load"
-					save(acc)
-				end
-			end
+		return x0 ~= nil and storage:get_string("rail:" .. x0) == "1" and rockmech.has_account(acc)
+	end,
+	pose = function(acc, s) return s, RAIL_Z + 0.5, rail_y() + 0.5, YAW end,
+	s_start = function(acc) return start_head(site_of(acc)) end,
+	s_stop = function(acc) return stop_head(site_of(acc)) end,
+	s_end = function(acc) return end_head(site_of(acc)) end,
+	-- 裝車點附近有人才放出畫面（force：測試用）
+	active = function(acc)
+		local lp = {x = load_x(site_of(acc)), y = rail_y(), z = RAIL_Z}
+		return (debug.force or players_near(lp)) and core.get_node(lp).name ~= "ignore"
+	end,
+	-- 車頭前面 2 m 的軌道上方有東西（碎石…）
+	blocked = function(acc, st)
+		local y = rail_y() + 1
+		for dx = 0, 2 do
+			local n = core.get_node({x = math.floor(st.head + dx + 0.5), y = y, z = RAIL_Z}).name
+			if not rockmech.air_like(n) and n ~= "ignore" then return n end
 		end
-	end
-end)
-
----------------------------------------------------------------------------
--- 視窗：列車狀態、挪下一節、出發
----------------------------------------------------------------------------
-
-local FORM = "rockmech:train"
-function rockmech.train_status(acc)
-	local st = state(acc)
-	if not st then
-		if in_hours() then return S("Train: arriving") end
-		return S("Train: no trains at night; the first one comes at @1:00", ("%02d"):format(HOURS[1]))
-	end
-	if st.phase ~= "load" and st.phase ~= "leaving" then return S("Train: arriving") end
-	if st.phase == "load" then
-		return S("Train: loading @1 / @2, leaves when all wagons are full", t1(tons_of(train_total(st))), t1(tons_of(N * CAP_M3 * NLEV)))
-	end
-	return S("Train: leaving")
-end
-local function form(acc)
-	local st = state(acc)
-	local out = {"formspec_version[6]size[9,6.4]", ("label[0.5,0.6;%s]"):format(F(S("Freight train") .. "   " .. clock_text())),
-		("label[0.5,1.2;%s]"):format(F(rockmech.train_status(acc)))}
-	if st then
-		for i = 1, N do
-			out[#out + 1] = ("label[0.5,%g;%s]"):format(1.6 + i * 0.5, F(S("Wagon @1  @2 / @3", i, t1(tons_of(wagon_total(st, i))),
-				t1(tons_of(CAP_M3 * NLEV)))))
-		end
-		if st.phase == "load" then
-			out[#out + 1] = ("button[4.7,5.2;3.8,0.8;go;%s]"):format(F(S("Depart now")))
-		end
-	end
-	return table.concat(out)
-end
-function rockmech.train_form(acc, clicker)
-	if not (acc and clicker and clicker:is_player()) then return end
-	local name = clicker:get_player_name()
-	if rockmech.account_of(name) ~= acc then return end
-	open_for[name] = acc
-	core.show_formspec(name, FORM, form(acc))
-end
-core.register_on_player_receive_fields(function(player, formname, fields)
-	if formname ~= FORM then return end
-	local name = player:get_player_name()
-	local acc = open_for[name]
-	if fields.quit then open_for[name] = nil; return true end
-	local st = acc and state(acc)
-	if not (st and st.phase == "load" and rockmech.account_of(name) == acc) then return true end
-	if fields.go then
-		depart(acc)
-	end
-	core.close_formspec(name, FORM)
-	return true
-end)
-
-rockmech.train_debug = {spawn = spawn, despawn = despawn, states = states, trains = trains, stop_head = stop_head,
-	load_x = load_x, RAIL_Z = RAIL_Z, LINE = LINE, hour = hour, in_hours = in_hours, N = N}
+	end,
+	payer = function(acc) return acc end,
+	wagon_owner = function(acc) return acc end,
+	owns = function(acc, a) return acc == a end,
+	hours = HOURS, hour = hour,
+	tick = function() core.set_timeofday(hour() / 24) end,    -- 天色跟教學地圖的時鐘走
+	migrate = function(st) if st.phase == "coming" then st.phase = "in" end end,   -- 舊版的狀態
+})
+function rockmech.train_remove(acc) line.remove(acc) end
+debug.spawn, debug.despawn, debug.states, debug.stop_head, debug.load_x = line.spawn, line.despawn, line.states, stop_head, load_x
+debug.RAIL_Z, debug.LINE, debug.hour, debug.in_hours, debug.N = RAIL_Z, LINE, hour, line.in_hours, N
+debug.depart = line.depart
+rockmech.train_debug = debug

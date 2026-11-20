@@ -215,6 +215,7 @@ dofile(modpath .. "/fuel.lua")
 dofile(modpath .. "/market.lua")           -- 市場：柴油、炸藥、鋼材價格波動、偶發事件、經濟分析師
 dofile(modpath .. "/camp.lua")             -- 營地的位置、混凝土地坪、收料區、保護
 dofile(modpath .. "/orders.lua")           -- 訂單：採購員、收料車
+dofile(modpath .. "/traincore.lua")        -- 火車的共用部分：車廂、機車、班次、結帳、視窗（教學地圖、單機鐵路共用）
 class_file("train.lua")                    -- 火車出貨（教學地圖原型）：鐵路、裝車點、列車
 class_file("commands.lua")                 -- 老師的指令：全班同一張訂單、指定市場事件
 dofile(modpath .. "/powerplant.lua")        -- 坑口電廠的存煤（rockmech_power_plant）
