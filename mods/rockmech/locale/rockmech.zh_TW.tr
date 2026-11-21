@@ -1514,7 +1514,7 @@ Deep σc,m / σt,m=深部 σc,m / σt,m
 L_max for 1 / 4 m thickness (surface)=L_max 1 / 4 m 厚（地表）
 Breakage h_ref (m)=破碎 h_ref (m)
 σci and σt are intact rock (laboratory) values; rock mass strength follows Hoek-Brown (GSI, mi, D) and is divided by the scale factor N@=@1.=σci、σt 為完整岩石（實驗室）值；岩體強度依 Hoek-Brown（GSI、mi、D）並 ÷ 相似比 N@=@1。
-σc,m @= σci·s^a (unconfined, at a free face); σt,m @= σt·s^a; L_max @= √(σt,m·t / (3γ)); the roof span is about twice that.=σc,m @= σci·s^a（臨空面單軸）；σt,m @= σt·s·mi/mb；L_max @= √(σt,m·t / (3γ))，頂板跨度約為其 2 倍。
+σc,m @= σci·s^a (unconfined, at a free face); σt,m @= σt·s^a; L_max @= √(σt,m·t / (3γ)); the roof span is about twice that.=σc,m @= σci·s^a（臨空面單軸）；σt,m @= σt·s^a；L_max @= √(σt,m·t / (3γ))，頂板跨度約為其 2 倍。
 Joint set=組
 Input dip / dip direction=輸入 傾角/傾向
 Aligned dip / dip direction=對齊後 傾角/傾向
