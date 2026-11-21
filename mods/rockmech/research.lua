@@ -56,7 +56,7 @@ local ITEMS = {
 		desc = TR("Blast breakage radius +5%"),
 		value = function(acc) return ("×%.2f"):format(rockmech.eff_blast_mult(acc)) end},
 	{key = "smooth_blast", who = "geologist", label = TR("Smooth blasting"), max = 1, base = 30000, minutes = 10,
-		desc = TR("Jumbo rounds blast to the design floor: level floors and decline tunnels"),
+		desc = TR("Jumbo rounds blast to the design floor; perimeter holes take smooth-blasting cartridges"),
 		value = function(acc) return rockmech.eff_smooth_blast(acc) and "✓" or "—" end},
 	{key = "support_method", who = "geologist", label = TR("Support method"), max = 5, base = 25000, minutes = 10,
 		desc = TR("Rock bolt and shotcrete strength +10%"),

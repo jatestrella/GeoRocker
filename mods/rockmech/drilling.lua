@@ -25,6 +25,7 @@ local HOLE = "rockmech:drill_hole"
 local CHARGED = "rockmech:charged_hole"
 local SURFACE = "rockmech:surface_charge"
 local EMULSION = "rockmech:emulsion"
+local SMOOTH = "rockmech:smooth_cartridge"   -- 勻滑開炸藥包：細藥包、不耦合裝藥，一孔一條（meta sb = 1），半徑小、擾動 D 小
 local ANFO = "rockmech:anfo"
 local ANFO_HOLE = "rockmech:anfo_hole"       -- 倒了 ANFO、還沒有起爆藥包
 local ANFO_PRIMED = "rockmech:anfo_primed"   -- ANFO ＋ 起爆藥包（meta n 條乳膠炸藥）
@@ -106,6 +107,8 @@ local function set_info(pos)
 	elseif kind == ANFO_HOLE then
 		meta:set_string("infotext", S("ANFO column charge (hole depth @1 m)\nNo primer yet: add one emulsion cartridge, otherwise it will misfire", ("%.0f"):format(hole_len(pos)))
 			.. "\n" .. S("ANFO @1 / @2 kg", ("%.0f"):format(anfo_have(pos)), tostring(anfo_need(pos))))
+	elseif kind == CHARGED and meta:get_int("sb") == 1 then
+		meta:set_string("infotext", S("Charged hole: smooth-blasting cartridge\nLight it with flint and steel, or use the blasting machine"))
 	elseif kind == CHARGED then
 		meta:set_string("infotext", S("Charged hole: @1 emulsion cartridge(s) (max @2)\nLight it with flint and steel, or use the blasting machine", tostring(n), tostring(bcfg.max_cartridges)))
 	elseif kind == SURFACE then
@@ -241,7 +244,8 @@ local function detonate(pos)
 		return
 	end
 	local n = math.max(1, meta:get_int("n"))
-	local R = bcfg.charge_radius * n ^ (1 / 3) * bm
+	local sb = kind == CHARGED and meta:get_int("sb") == 1           -- 勻滑開炸藥包
+	local R = bcfg.charge_radius * (sb and bcfg.smooth_factor or n ^ (1 / 3)) * bm
 	-- wallmounted 的方向指向貼著的岩面。孔內：孔底（從岩面往裡孔深 depth 格）；貼面：岩面上（半格）
 	local center
 	if kind == CHARGED then
@@ -261,8 +265,8 @@ local function detonate(pos)
 	local fl = kind == CHARGED and tonumber(meta:get_string("floor")) or nil
 	core.remove_node(pos)
 	if rockmech.airq_blast then rockmech.airq_blast(center, n * rockmech.airq_kg.emulsion) end   -- 炮煙（airq.lua）
-	-- 擾動 D：每孔 1 條（控制爆破、平滑爆破）0.5；2 條以上或貼面裝藥 0.8（Hoek 2002）
-	rockmech.blast_charge(center, R, fl, (kind == CHARGED and n <= 1) and 0.5 or 0.8)
+	-- 擾動 D0：勻滑開炸藥包 smooth_d（0.1）；每孔 1 條乳膠炸藥 0.5；2 條以上或貼面裝藥 0.8（Hoek 2002）
+	rockmech.blast_charge(center, R, fl, sb and bcfg.smooth_d or (kind == CHARGED and n <= 1) and 0.5 or 0.8)
 	-- 設計底板比孔低（下坡坑道降一格的那一輪，底排孔當底孔 lifter）：孔下方沿孔長的岩石破碎到設計底板，
 	-- 只碎上面那格已經炸開的（不往沒開挖的地方挖）。爆破圈是球形，只靠它底板會坑坑疤疤。
 	-- 等整輪炸完（同一輪的孔先後起爆）再碎
@@ -315,9 +319,10 @@ end
 -- 拆掉裝藥：還給乳膠炸藥
 local function dig_charge(pos, node, digger)
 	local n = math.max(1, core.get_meta(pos):get_int("n"))
+	local item = core.get_meta(pos):get_int("sb") == 1 and SMOOTH or EMULSION
 	core.remove_node(pos)
 	if digger and digger:is_player() then
-		local left = digger:get_inventory():add_item("main", ItemStack(EMULSION .. " " .. n))
+		local left = digger:get_inventory():add_item("main", ItemStack(item .. " " .. n))
 		if not left:is_empty() then core.add_item(pos, left) end
 	end
 	return true
@@ -583,6 +588,7 @@ function rockmech.load_charge(under, above, player)
 			tell(player, S("Full (max @1 cartridges)", tostring(bcfg.max_cartridges)))
 			return false
 		end
+		meta:set_int("sb", 0)           -- 勻滑開炸藥包的孔再加乳膠炸藥：就是一般的裝藥了
 		meta:set_int("n", n + 1)
 		set_info(under)
 		return true
@@ -594,6 +600,25 @@ function rockmech.load_charge(under, above, player)
 	mark(above, player)
 	set_info(above)
 	tell(player, S("No drill hole: surface charge, power only ×@1 (drill a hole with the rock drill first)", ("%.1f"):format(bcfg.surface_factor)))
+	return true
+end
+
+-- 勻滑開炸藥包：只能裝進空的鑽孔，一孔一條
+function rockmech.load_smooth(under, player)
+	if forbidden(player, under) then return false end
+	local node = core.get_node(under)
+	local kind = kind_of(node.name)
+	if kind ~= HOLE then
+		tell(player, kind == CHARGED and S("This hole is already charged")
+			or S("Smooth-blasting cartridges go into an empty drill hole"))
+		return false
+	end
+	mark(under, player)
+	become(under, node, CHARGED)
+	local meta = core.get_meta(under)
+	meta:set_int("n", 1)
+	meta:set_int("sb", 1)
+	set_info(under)
 	return true
 end
 
@@ -713,6 +738,19 @@ core.register_craftitem(EMULSION, {
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
 		if rockmech.load_charge(pointed.under, pointed.above, placer)
+			and not core.is_creative_enabled(placer and placer:get_player_name() or "") then
+			itemstack:take_item()
+		end
+		return itemstack
+	end,
+})
+core.register_craftitem(SMOOTH, {
+	description = S("Smooth-blasting cartridge\nOne per empty drill hole: small charge, little damage to the rock left behind"),
+	short_description = S("Smooth-blasting cartridge"),
+	inventory_image = "[fill:16x16:#00000000^[fill:2x12:7,2:" .. CART .. "^[fill:2x1:7,2:#c09040^[fill:2x1:7,13:#c09040^[fill:1x3:8,0:" .. WIRE,
+	on_place = function(itemstack, placer, pointed)
+		if pointed.type ~= "node" then return itemstack end
+		if rockmech.load_smooth(pointed.under, placer)
 			and not core.is_creative_enabled(placer and placer:get_player_name() or "") then
 			itemstack:take_item()
 		end

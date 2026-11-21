@@ -59,9 +59,11 @@ end
 
 -- 處理以 center 為中心、爆炸半徑 R 的岩石破碎。回傳 炸飛格數, 碎石化格數
 -- floor_y：只破碎這一層以上（台階爆破的底板 = 孔底）；nil 不限
--- D：爆破擾動帶（破碎區外 damage_t 公尺）的 Hoek-Brown 擾動係數，依裝藥方式（Hoek 2002 的表）：
---   每孔 1 條乳膠炸藥（控制爆破、平滑爆破）0.5；每孔 2 條以上、貼面裝藥、一般 TNT 0.8；ANFO 台階生產爆破 1.0
-local DAMAGE_T = math.max(0, bcfg.damage_t or 1)
+-- D：爆破擾動帶的 Hoek-Brown 擾動係數。破碎區邊緣是 D0（依裝藥方式，Hoek 2002 的表），往外指數衰減：
+--   D = D0·exp(−d/λ)，d = 離破碎區邊緣的距離，λ = damage_k × 這種岩石的破碎半徑；D < D_MIN 不記。
+--   D0：勻滑開炸藥包 smooth_d（0.1）；每孔 1 條乳膠炸藥 0.5；每孔 2 條以上、貼面裝藥、一般 TNT 0.8；ANFO 台階生產爆破 1.0
+local DAMAGE_K = math.max(0, bcfg.damage_k or 0.5)
+local D_MIN = 0.05
 function rockmech.blast_rock(center, R, floor_y, D)
 	build_maps()
 	D = D or 0.8
@@ -70,7 +72,8 @@ function rockmech.blast_rock(center, R, floor_y, D)
 		local f = blast.factor(l.ucs, bcfg.ucs_ref, bcfg.ucs_exp)
 		if f > fmax then fmax = f end
 	end
-	local rr = math.ceil(R * fmax + DAMAGE_T)
+	local reach = D > D_MIN and DAMAGE_K * math.log(D / D_MIN) or 0     -- 擾動帶最遠（破碎半徑的倍數）
+	local rr = math.ceil(R * fmax * (1 + reach))
 	local damaged = {}
 	local c0 = vector.round(center)   -- 掃描用整數格點（爆心可以不在格點上，距離照實際爆心算）
 	local p1, p2 = vector.subtract(c0, rr), vector.add(c0, rr)
@@ -99,9 +102,11 @@ function rockmech.blast_rock(center, R, floor_y, D)
 				local p = {x = x, y = y, z = z}
 				if li then
 					local zone = blast.zone(d, R, li.lith.ucs, bcfg.ucs_ref, bcfg.inner, bcfg.ucs_exp)
-					-- 破碎區外一圈：岩石還在，但被爆破擾動（D）
-					if not zone and D > 0 and d <= R * blast.factor(li.lith.ucs, bcfg.ucs_ref, bcfg.ucs_exp) + DAMAGE_T then
-						damaged[#damaged + 1] = p
+					-- 破碎區外：岩石還在，但被爆破擾動（D 往外指數衰減）
+					if not zone and reach > 0 then
+						local r_out = R * blast.factor(li.lith.ucs, bcfg.ucs_ref, bcfg.ucs_exp)
+						local Dp = D * math.exp(-(d - r_out) / math.max(0.1, DAMAGE_K * r_out))
+						if Dp >= D_MIN then damaged[#damaged + 1] = {p = p, D = math.floor(Dp * 100 + 0.5) / 100} end
 					end
 					local rname = rockmech.rubble_for(li.name)
 					if zone then changes[#changes + 1] = {pos = p, name = li.name} end
@@ -145,7 +150,8 @@ function rockmech.blast_rock(center, R, floor_y, D)
 	-- VoxelManip 不管 metadata：新的碎石寫上成分，炸飛的格子清掉舊的
 	for _, e in ipairs(made) do rockmech.assay.set(e.p, e.name, e.c) end
 	for _, p in ipairs(removed) do rockmech.assay.set(p, "air") end
-	for _, p in ipairs(damaged) do rockmech.collapse.mark_damage(p, D) end
+	for _, e in ipairs(damaged) do rockmech.collapse.mark_damage(e.p, e.D) end
+	if #damaged > 0 and rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end   -- 爆破裂紋要重畫（jointmesh.lua）
 	-- 級數 → 個數（四捨五入）
 	for name, lv in pairs(ejected) do ejected[name] = math.floor(lv / rockmech.RUBBLE_LEVELS + 0.5) end
 	if cfg.career then

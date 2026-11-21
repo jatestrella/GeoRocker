@@ -58,10 +58,11 @@ local serial = 0
 local function bkey(bx, by, bz) return bx .. "," .. by .. "," .. bz end
 
 -- 會把岩面完全蓋住的鄰格：完整的不透明方塊（半格碎石、植物等蓋不住）
-local solid_cid, rock_cid
+local solid_cid, rock_cid, lith_cid
 local function build_cids()
 	if solid_cid then return end
-	solid_cid, rock_cid = {}, {}
+	solid_cid, rock_cid, lith_cid = {}, {}, {}
+	for _, n in ipairs(rockmech.lith_nodes) do lith_cid[core.get_content_id(n)] = true end   -- 爆破裂紋：煤也畫
 	for name, def in pairs(core.registered_nodes) do
 		solid_cid[core.get_content_id(name)] = (def.drawtype == nil or def.drawtype == "normal")
 			and def.walkable ~= false
@@ -135,9 +136,24 @@ local function build_mesh(bx, by, bz)
 			faces[#faces + 1] = ("f %d/1 %d/1 %d/1 %d/1"):format(i1, i2, i3, i4)
 		end
 	end
+	local damage_at = QE and rockmech.collapse and rockmech.collapse.damage_at_xyz
 	for z = minp.z, maxp.z do for y = minp.y, maxp.y do
 		local vi = area:index(minp.x, y, z)
 		for x = minp.x, maxp.x do
+			-- 爆破裂紋（量化模式）：被爆破擾動的岩石（D，blasting.lua）露出的面疊一張裂紋貼圖，D 越大越密
+			local dmg = damage_at and lith_cid[data[vi]] and damage_at(x, y, z)
+			local crack_lv = dmg and api.q_crack_level(dmg)
+			if crack_lv then
+				for di, d in ipairs(DIRS) do
+					if not solid_cid[data[area:index(x + d[1], y + d[2], z + d[3])]] then
+						local k = x .. "," .. y .. "," .. z
+						local cell = qcells[k]
+						if not cell then cell = {x = x, y = y, z = z, f = {}}; qcells[k] = cell end
+						cell.f[di] = cell.f[di] or {}
+						cell.f[di][api.q_crack(crack_lv, x, y, z, di)] = true
+					end
+				end
+			end
 			if rock_cid[data[vi]] then
 				local c = {x, y, z}
 				for di, d in ipairs(DIRS) do
@@ -252,6 +268,8 @@ local function rebuild(bx, by, bz)
 	b.sent = {}
 	for _, pl in ipairs(core.get_connected_players()) do push_to(b, key, pl:get_player_name()) end
 end
+
+api.rebuild = rebuild      -- 測試用
 
 -- 送一位玩家（同一個檔案可以重複送給不同人）。送達就掛上網格
 push_to = function(b, key, pname)
@@ -466,6 +484,61 @@ if QE then
 		end
 	end
 	core.log("action", ("[rockmech] 量化跡線：每邊 %d 點、%d 張線段貼圖"):format(D + 1, n_png))
+
+	-- 爆破裂紋貼圖：D 0.0～1.0 每 0.1 一級（0 級 = 沒有裂紋，不畫），1～10 級各 3 種花樣，
+	-- 透明底、跟節理跡線同色的細碎裂紋（短、彎、會分岔），級數越高越多條、越深。啟動時用固定的亂數種子畫一次
+	local CRACK_VAR = 3
+	function api.q_crack_level(dmg)
+		local lv = math.min(10, math.floor(dmg * 10 + 0.5))
+		return lv > 0 and lv or nil
+	end
+	function api.q_crack(lv, x, y, z, di)
+		local h = (x * 73856093 + y * 19349663 + z * 83492791 + di * 2654435) % CRACK_VAR
+		return ("rockmech_bdc%d_%d.png"):format(lv, h + 1)
+	end
+	local seed = 12345
+	local function rnd(n)      -- 固定種子的 LCG：每次啟動畫出來一樣
+		seed = (seed * 1103515245 + 12345) % 2147483648
+		return math.floor(seed / 65536) % n         -- 用高位元（LCG 的低位元週期很短，會擠成一團）
+	end
+	local CR = 32               -- 裂紋貼圖解析度（比線段小圖細，裂紋才細碎）
+	for lv = 1, 10 do
+		for var = 1, CRACK_VAR do
+			local on = {}
+			for _ = 1, 1 + lv do                  -- 幾條裂紋：1 級 2 條 … 10 級 11 條
+				local px, py = rnd(CR), rnd(CR)
+				local ang = rnd(360) * math.pi / 180
+				for _ = 1, 3 + rnd(3 + math.ceil(lv / 2)) do    -- 一條幾小段，每段 2～3 像素，方向一直小轉彎
+					local len = 2 + rnd(2)
+					for _ = 1, len do
+						px, py = px + math.cos(ang), py + math.sin(ang)
+						local ix, iy = math.floor(px + 0.5), math.floor(py + 0.5)
+						if ix >= 0 and ix < CR and iy >= 0 and iy < CR then on[iy * CR + ix] = true end
+					end
+					ang = ang + (rnd(81) - 40) * math.pi / 180
+					if rnd(6) == 0 then                   -- 偶爾分岔：短短一小枝
+						local bx, by, ba = px, py, ang + (rnd(2) == 0 and 1 or -1) * (0.6 + rnd(50) / 100)
+						for _ = 1, 2 + rnd(3) do
+							bx, by = bx + math.cos(ba), by + math.sin(ba)
+							local ix, iy = math.floor(bx + 0.5), math.floor(by + 0.5)
+							if ix >= 0 and ix < CR and iy >= 0 and iy < CR then on[iy * CR + ix] = true end
+						end
+					end
+				end
+			end
+			local px = {}
+			local a = string.char(lr, lg, lb, math.floor(jt.line_alpha * (0.4 + 0.06 * lv)))
+			for k = 0, CR * CR - 1 do px[k + 1] = on[k] and a or "\0\0\0\0" end
+			local name = ("rockmech_bdc%d_%d.png"):format(lv, var)
+			local path = dir .. DIR_DELIM .. name
+			local fh = io.open(path, "wb")
+			if fh then
+				fh:write(core.encode_png(CR, CR, table.concat(px)))
+				fh:close()
+				core.dynamic_add_media({filepath = path})
+			end
+		end
+	end
 
 	local QENT = "rockmech:jointq"
 	local BLANK = "blank.png"

@@ -192,9 +192,13 @@ do
 	local function hole_list(self, pos, s)
 		local plan = pattern(self)
 		local list = {}
+		-- 研發「勻滑開炸」：周邊孔（頂拱、兩側的裝藥孔，底排不算）記成 p，裝藥台車裝勻滑開炸藥包
+		local smooth = rockmech.eff_smooth_blast and rockmech.eff_smooth_blast(self.owner)
+		local function outside(i, j) return i < 0 or i >= plan.w or j >= plan.h or cell(plan, i, j) == "n" end
 		scan_face(pos, s, def.half, plan.w, plan.h, function(i, j, p, prev, n)
 			local k = cell(plan, i, j)
 			if k == "n" then return true end
+			if smooth and k == "c" and j > 0 and (outside(i - 1, j) or outside(i + 1, j) or outside(i, j + 1)) then k = "p" end
 			if rockmech.lith_of_node[n] then
 				if prev and core.get_node(prev).name == "air" then list[#list + 1] = {under = p, above = prev, plan = k} end
 				return true
@@ -250,7 +254,8 @@ do
 						local meta = core.get_meta(h.above)
 						meta:set_string("plan", h.plan)
 						if h.floor then meta:set_string("floor", tostring(h.floor)) end
-						meta:set_string("infotext", h.plan == "r" and S("Drill hole (design: relief hole, do not charge)") or S("Drill hole (design: charged hole)"))
+						meta:set_string("infotext", h.plan == "r" and S("Drill hole (design: relief hole, do not charge)")
+							or h.plan == "p" and S("Drill hole (design: perimeter hole, smooth-blasting cartridge)") or S("Drill hole (design: charged hole)"))
 					end
 					dr.done = dr.done + 1
 					b.hole = nil
@@ -438,13 +443,14 @@ do
 	end
 	rockmech.vehicle_charger_holes = hole_list   -- 測試用
 
-	-- 駕駛的物品欄裡的乳膠炸藥（創造模式不限）
-	local function stock(d)
+	-- 駕駛的物品欄裡的乳膠炸藥（item：別的炸藥，例如勻滑開炸藥包；創造模式不限）
+	local SMOOTH = "rockmech:smooth_cartridge"
+	local function stock(d, item)
 		if not d then return math.huge end
 		if core.is_creative_enabled(d:get_player_name()) then return math.huge end
 		local n = 0
 		for _, st in ipairs(d:get_inventory():get_list("main") or {}) do
-			if st:get_name() == EMULSION then n = n + st:get_count() end
+			if st:get_name() == (item or EMULSION) then n = n + st:get_count() end
 		end
 		return n
 	end
@@ -454,6 +460,8 @@ do
 		local d = self.driver and core.get_player_by_name(self.driver)
 		local n = stock(d)
 		s = s .. "  " .. (n == math.huge and S("(not used up in creative mode)") or S("@1 sticks in inventory", ("%d"):format(n)))
+		local sm = stock(d, SMOOTH)
+		if sm ~= math.huge and sm > 0 then s = s .. "  " .. S("Smooth-blasting cartridges @1", ("%d"):format(sm)) end
 		if self.charging then s = s .. "  " .. S("Charging @1 / @2", ("%d"):format(self.charging.done), ("%d"):format(#self.charging.list)) end
 		return s
 	end
@@ -482,6 +490,15 @@ do
 		if cg.t >= CHARGE_TIME then
 			cg.t = 0
 			local d = ctx.d
+			-- 周邊孔（鑽堡研發「勻滑開炸」時設計成 p）：裝一條勻滑開炸藥包；身上沒有就照一般裝乳膠炸藥
+			if core.get_meta(p):get_string("plan") == "p" and rockmech.hole_kind(core.get_node(p).name) == HOLE and stock(d, SMOOTH) > 0 then
+				if rockmech.load_smooth(p, self.driver and core.get_player_by_name(self.driver))
+					and d and stock(d, SMOOTH) ~= math.huge then d:get_inventory():remove_item("main", ItemStack(SMOOTH)) end
+				cg.done = cg.done + 1
+				if cg.done >= #cg.list then self.msg = S("Charged @1 holes", ("%d"):format(cg.done)) end
+				update_hud(self)
+				return
+			end
 			local n = math.min(per_hole(self), stock(d))
 			if n <= 0 then
 				self.msg = S("Out of emulsion (charged @1 holes)", ("%d"):format(cg.done))

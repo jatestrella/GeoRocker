@@ -232,6 +232,7 @@ config.shop = {
 	{key = "drill", shop = "blast", item = "rockmech:rock_drill", label = TR("Rock drill"), price = 500},
 	{key = "detonator", shop = "blast", item = "rockmech:detonator", label = TR("Blasting machine"), price = 500},
 	{key = "emulsion", shop = "blast", item = "rockmech:emulsion", label = TR("Emulsion explosive"), price = 500, count = 10},
+	{key = "smooth_cartridge", shop = "blast", item = "rockmech:smooth_cartridge", label = TR("Smooth-blasting cartridge"), price = 700, count = 10},
 	-- ANFO 不賣成品：買硝酸銨和柴油，裝藥車現場混、或在拌和槽手拌（mixtrough.lua）
 	{key = "ammonium_nitrate", shop = "blast", item = "rockmech:ammonium_nitrate", label = TR("Ammonium nitrate"), price = 400, count = 250},
 	{key = "diesel", shop = "blast", item = "rockmech:diesel", label = TR("Diesel"), price = 1000, count = 20},
@@ -485,7 +486,11 @@ config.blast_defaults = {
 	ucs_ref = 60,             -- 破碎半徑 = 爆炸半徑 × (ucs_ref / UCS)^ucs_exp
 	ucs_exp = 0.167,          -- 強度指數：1/6 = 單位炸藥量 ∝ √UCS（花崗岩約頁岩的 2.4 倍）；1/3 = 單位炸藥量 ∝ UCS
 	inner = 0.5,              -- 破碎半徑的這個比例以內炸飛，其餘原地變碎石
-	damage_t = 1,             -- 爆破擾動帶厚度 (m)：破碎區外面這一圈的岩石用 Hoek-Brown 的 D 打折（D 依裝藥方式，見 blasting.lua）
+	-- 爆破擾動帶：破碎區外的岩石用 Hoek-Brown 的 D 打折，D = D0·exp(−d/λ)，d = 離破碎區邊緣的距離，
+	--   λ = damage_k × 破碎半徑（炸得越大震得越遠）；D < 0.05 不記。D0 依裝藥方式（見 blasting.lua）
+	damage_k = 0.5,
+	smooth_factor = 0.7,      -- 勻滑開炸藥包（細藥包、不耦合裝藥）的半徑 = 一條乳膠炸藥 × 這個
+	smooth_d = 0.1,           -- 勻滑開炸藥包的擾動 D0
 	-- 鑽孔爆破（drilling.lua）
 	charge_radius = 2.0,      -- 一條乳膠炸藥的爆炸半徑 R0 (m)；n 條 R = R0·n^(1/3)（再依岩石強度縮放）
 	max_cartridges = 4,       -- 一個鑽孔最多裝幾條
