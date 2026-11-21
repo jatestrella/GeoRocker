@@ -32,7 +32,14 @@ local ANFO_PRIMED = "rockmech:anfo_primed"   -- ANFO ＋ 起爆藥包（meta n �
 -- 噴過凝土的孔：每種狀態、每個層數一個方塊，功能同一般的孔、外觀是同樣的圖案疊在噴凝土上，這格也算噴凝土
 local VAR = {}          -- 狀態 → {[層數] = 方塊}
 local PLAIN, LAYERS = {}, {}
-for _, kind in ipairs({HOLE, CHARGED, ANFO_HOLE, ANFO_PRIMED}) do
+-- 裝藥孔的外觀：裝幾條乳膠炸藥（2～4）、勻滑開炸藥包（sb）各一個方塊，功能都是 CHARGED（kind_of 換回 CHARGED）
+local LOOK = {}         -- 外觀鍵（2、3、4、"sb"）→ 方塊
+local LOOK_BASE = {}    -- 外觀方塊 → CHARGED
+for _, k in ipairs({2, 3, 4, "sb"}) do
+	LOOK[k] = CHARGED .. "_" .. k
+	LOOK_BASE[LOOK[k]] = CHARGED
+end
+for _, kind in ipairs({HOLE, CHARGED, LOOK[2], LOOK[3], LOOK[4], LOOK.sb, ANFO_HOLE, ANFO_PRIMED}) do
 	VAR[kind] = {}
 	for n = 1, rockmech.SHOTCRETE_LAYERS do
 		local name = kind .. "_sprayed" .. (n > 1 and ("_" .. n) or "")
@@ -41,19 +48,37 @@ for _, kind in ipairs({HOLE, CHARGED, ANFO_HOLE, ANFO_PRIMED}) do
 		rockmech.spray_next[n > 1 and VAR[kind][n - 1] or kind] = name
 	end
 end
-local function kind_of(name) return PLAIN[name] or name end
+local function kind_of(name)
+	local k = PLAIN[name] or name
+	return LOOK_BASE[k] or k
+end
 local function is_hole(name) return kind_of(name) == HOLE end
 -- 換成狀態 kind，層數不變
 local function become(pos, node, kind)
 	local n = LAYERS[node.name]
 	core.swap_node(pos, {name = n and VAR[kind][n] or kind, param2 = node.param2})
 end
--- list 加上每個狀態噴過凝土的方塊
+-- 裝藥孔的外觀照 meta（n 條、sb）換，層數不變
+local function show_look(pos)
+	local node = core.get_node(pos)
+	if kind_of(node.name) ~= CHARGED then return end
+	local meta = core.get_meta(pos)
+	local n = meta:get_int("n")
+	local look = meta:get_int("sb") == 1 and LOOK.sb or n >= 2 and LOOK[math.min(4, n)] or CHARGED
+	local layers = LAYERS[node.name]
+	local want = layers and VAR[look][layers] or look
+	if want ~= node.name then core.swap_node(pos, {name = want, param2 = node.param2}) end
+end
+-- list 加上每個狀態噴過凝土的方塊（CHARGED 再加上各種外觀）
 local function with_sprayed(list)
 	local all = {}
-	for _, kind in ipairs(list) do
+	local function add(kind)
 		all[#all + 1] = kind
 		for _, name in ipairs(VAR[kind] or {}) do all[#all + 1] = name end
+	end
+	for _, kind in ipairs(list) do
+		add(kind)
+		if kind == CHARGED then for _, k in ipairs({2, 3, 4, "sb"}) do add(LOOK[k]) end end
 	end
 	return all
 end
@@ -97,6 +122,7 @@ local function node_base(desc)
 end
 
 local function set_info(pos)
+	show_look(pos)
 	local node = core.get_node(pos)
 	local n = core.get_meta(pos):get_int("n")
 	local meta = core.get_meta(pos)
@@ -352,6 +378,29 @@ do
 	def.on_ignite = ignite
 	def.on_blast = function(pos) core.after(0.05, detonate, pos) end   -- 殉爆
 	core.register_node(CHARGED, def)
+	-- 2～4 條：孔口露出幾截藥卷（排成一圈），勻滑開炸藥包：細細一截、顏色淡一點
+	local SPOTS = {{0, 0}, {-0.11, 0.06}, {0.11, 0.06}, {0, -0.12}}
+	local PIX = {{7, 7}, {4, 5}, {10, 5}, {7, 10}}       -- 頂面貼圖上的位置（16 像素）
+	local function look_def(n, w, color, desc)
+		local d = table.copy(def)
+		d.description = desc
+		d.groups.not_in_creative_inventory = 1
+		local boxes = {RING}
+		local t, sd = RING_TOP, RING_SIDE
+		for i = 1, n do
+			local s = SPOTS[i]
+			boxes[#boxes + 1] = {s[1] - w, -0.45, s[2] - w, s[1] + w, -0.15 - 0.03 * (i - 1), s[2] + w}
+			t = t .. ("^[fill:3x3:%d,%d:"):format(PIX[i][1], PIX[i][2]) .. color
+		end
+		boxes[#boxes + 1] = {0.08, -0.45, -0.03, 0.4, -0.42, 0.03}
+		d.node_box = {type = "fixed", fixed = boxes}
+		t = t .. "^[fill:6x2:9,7:" .. WIRE
+		sd = sd .. "^[fill:" .. (n > 1 and 8 or 4) .. "x5:" .. (n > 1 and 4 or 6) .. ",10:" .. color .. "^[fill:6x1:9,14:" .. WIRE
+		d.tiles = {t, RING_SIDE, sd, sd, sd, sd}
+		return d
+	end
+	for n = 2, 4 do core.register_node(LOOK[n], look_def(n, 0.07, CART, S("Charged hole"))) end
+	core.register_node(LOOK.sb, look_def(1, 0.04, "#f4e0b0", S("Charged hole")))
 end
 -- 倒了 ANFO 的鑽孔：孔裡是粉紅色顆粒（和乳膠炸藥的黃色藥卷分得出來）；有起爆藥包的多一條起爆線
 local ANFO_TOP = RING_TOP .. "^[fill:6x4:5,6:" .. PINK .. "^[fill:4x6:6,5:" .. PINK
