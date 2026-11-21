@@ -37,39 +37,66 @@ local TEX = "[fill:16x16:#6c737a^[fill:16x2:0,2:#4f555b^[fill:16x2:0,12:#4f555b"
 local TEX_BENT = "[fill:16x16:#6e5440^[fill:16x2:0,2:#4e3a2c^[fill:16x2:0,12:#4e3a2c"
 local ICON = "[fill:16x16:#00000000^[fill:14x4:1,2:#6c737a^[fill:4x12:1,2:#6c737a^[fill:4x12:11,2:#6c737a"
 
--- 方塊：axis = 隧道方向（x 或 z），鋼條在跟它垂直的斷面裡；bent = 降伏過
-local INFO = {}               -- 方塊名稱 → {axis, bent}
+-- 噴凝土包住的鋼拱（groundsupport.lua 的噴凝土）：同一格，貼岩面的噴凝土層（每層 0.06 m）＋被包在裡面的鋼條。
+-- 一個 nodebox 只能有一組貼圖，所以整格都是噴凝土的顏色：鋼條的地方看起來是凸出來的一條（現實裡噴凝土包住鋼拱也是這樣）
+local SC_TEX = "[fill:16x16:#a4a29c^[fill:2x2:3,4:#8e8c86^[fill:2x2:10,2:#b4b2ac^[fill:2x2:6,11:#8e8c86^[fill:2x2:12,9:#b4b2ac"
+local SC_TEX_BENT = SC_TEX .. "^[fill:1x12:5,2:#5a5650^[fill:8x1:4,9:#5a5650^[fill:1x5:11,4:#5a5650"     -- 裂縫
+local MAX_LAYERS = rockmech.SHOTCRETE_LAYERS or 3
+
+-- 方塊：axis = 隧道方向（x 或 z），鋼條在跟它垂直的斷面裡；bent = 降伏過；layers = 噴凝土層數（0 = 沒噴）
+local INFO = {}               -- 方塊名稱 → {axis, bent, layers}
 local NODES = {}
-local function arch_name(axis, bent) return "rockmech:steel_arch_" .. axis .. (bent and "_bent" or "") end
+local function arch_name(axis, bent, layers)
+	return "rockmech:steel_arch_" .. axis .. (bent and "_bent" or "") .. ((layers or 0) > 0 and ("_sc" .. layers) or "")
+end
 -- 貼著這些東西就畫一片鋼條（岩石、土、碎石）
 local CONNECT = {"group:rockmech_rock", "group:stone", "group:crumbly", "group:rockmech_rubble"}
 local sounds = default and default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil
+local function add(t, b) t[#t + 1] = b; return t end
+rockmech.spray_next = rockmech.spray_next or {}
 for _, axis in ipairs({"x", "z"}) do
 	for _, bent in ipairs({false, true}) do
-		local nb = {type = "connected"}
-		if axis == "z" then        -- 斷面 = x-y，沿 z 寬 2W
-			nb.disconnected = {{-0.5, -0.25, -W, 0.5, 0.25, W}}
-			nb.connect_top = {{-0.5, 0, -W, 0.5, 0.5, W}}
-			nb.connect_bottom = {{-0.5, -0.5, -W, 0.5, 0, W}}
-			nb.connect_left = {{-0.5, -0.5, -W, 0, 0.5, W}}
-			nb.connect_right = {{0, -0.5, -W, 0.5, 0.5, W}}
-		else                       -- 斷面 = z-y，沿 x 寬 2W
-			nb.disconnected = {{-W, -0.25, -0.5, W, 0.25, 0.5}}
-			nb.connect_top = {{-W, 0, -0.5, W, 0.5, 0.5}}
-			nb.connect_bottom = {{-W, -0.5, -0.5, W, 0, 0.5}}
-			nb.connect_front = {{-W, -0.5, -0.5, W, 0.5, 0}}
-			nb.connect_back = {{-W, -0.5, 0, W, 0.5, 0.5}}
+		for layers = 0, MAX_LAYERS do
+			local T = 0.06 * layers
+			local nb = {type = "connected"}
+			if axis == "z" then        -- 斷面 = x-y，沿 z 寬 2W
+				nb.disconnected = {{-0.5, -0.25, -W, 0.5, 0.25, W}}
+				nb.connect_top = {{-0.5, 0, -W, 0.5, 0.5, W}}
+				nb.connect_bottom = {{-0.5, -0.5, -W, 0.5, 0, W}}
+				nb.connect_left = {{-0.5, -0.5, -W, 0, 0.5, W}}
+				nb.connect_right = {{0, -0.5, -W, 0.5, 0.5, W}}
+			else                       -- 斷面 = z-y，沿 x 寬 2W
+				nb.disconnected = {{-W, -0.25, -0.5, W, 0.25, 0.5}}
+				nb.connect_top = {{-W, 0, -0.5, W, 0.5, 0.5}}
+				nb.connect_bottom = {{-W, -0.5, -0.5, W, 0, 0.5}}
+				nb.connect_front = {{-W, -0.5, -0.5, W, 0.5, 0}}
+				nb.connect_back = {{-W, -0.5, 0, W, 0.5, 0.5}}
+			end
+			if layers > 0 then         -- 噴凝土層：貼著每一個岩面（六個方向都有，沿隧道的端面也算）
+				nb.connect_top = add(nb.connect_top or {}, {-0.5, 0.5 - T, -0.5, 0.5, 0.5, 0.5})
+				nb.connect_bottom = add(nb.connect_bottom or {}, {-0.5, -0.5, -0.5, 0.5, -0.5 + T, 0.5})
+				nb.connect_front = add(nb.connect_front or {}, {-0.5, -0.5, -0.5, 0.5, 0.5, -0.5 + T})
+				nb.connect_back = add(nb.connect_back or {}, {-0.5, -0.5, 0.5 - T, 0.5, 0.5, 0.5})
+				nb.connect_left = add(nb.connect_left or {}, {-0.5, -0.5, -0.5, -0.5 + T, 0.5, 0.5})
+				nb.connect_right = add(nb.connect_right or {}, {0.5 - T, -0.5, -0.5, 0.5, 0.5, 0.5})
+			end
+			local name = arch_name(axis, bent, layers)
+			local desc = bent and S("Steel arch (yielded)") or S("Steel arch")
+			if layers > 0 then desc = desc .. " + " .. S("Shotcrete lining (@1 layers)", tostring(layers)) end
+			core.register_node(name, {
+				description = desc,
+				drawtype = "nodebox", paramtype = "light", sunlight_propagates = true, is_ground_content = false,
+				tiles = {layers > 0 and (bent and SC_TEX_BENT or SC_TEX) or (bent and TEX_BENT or TEX)},
+				node_box = nb, connects_to = CONNECT,
+				-- group shotcrete = 層數：支護判定（support.scan）照噴凝土給後面的岩面 層數 × p_sc
+				groups = {cracky = 2, rockmech_steelarch = 1, not_in_creative_inventory = 1, shotcrete = layers > 0 and layers or nil},
+				sounds = sounds, drop = bent and "" or ITEM,
+			})
+			INFO[name] = {axis = axis, bent = bent, layers = layers}
+			NODES[#NODES + 1] = name
+			-- 對鋼拱噴凝土：加一層（groundsupport.lua 的噴凝土照 spray_next 換方塊）
+			if layers > 0 then rockmech.spray_next[arch_name(axis, bent, layers - 1)] = name end
 		end
-		local name = arch_name(axis, bent)
-		core.register_node(name, {
-			description = bent and S("Steel arch (yielded)") or S("Steel arch"),
-			drawtype = "nodebox", paramtype = "light", sunlight_propagates = true, is_ground_content = false,
-			tiles = {bent and TEX_BENT or TEX}, node_box = nb, connects_to = CONNECT,
-			groups = {cracky = 2, rockmech_steelarch = 1, not_in_creative_inventory = 1},
-			sounds = sounds, drop = bent and "" or ITEM,
-		})
-		INFO[name] = {axis = axis, bent = bent}
-		NODES[#NODES + 1] = name
 	end
 end
 
@@ -132,7 +159,9 @@ core.register_craftitem(ITEM, {
 		if nm ~= "air" and not (def and def.buildable_to) then return itemstack end
 		if core.is_protected(p, name) then return itemstack end
 		local axis = pick_axis(p, vector.subtract(pointed.above, pointed.under), placer)
-		core.set_node(p, {name = arch_name(axis, false)})
+		-- 放在噴凝土層上：噴凝土留著（鋼拱貼著噴凝土，之後再噴就包起來）
+		local layers = core.get_item_group(nm, "shotcrete_lining")
+		core.set_node(p, {name = arch_name(axis, false, math.min(layers, MAX_LAYERS))})
 		core.get_meta(p):set_string("infotext", S("Steel arch"))
 		if rockmech.fem_queue then rockmech.fem_queue(p, 1, false, false) end
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
@@ -277,7 +306,8 @@ function rockmech.steelarch_fem_check(job, res, meta)
 		end
 	end
 	for _, p in ipairs(yielded) do
-		core.swap_node(p, {name = arch_name(INFO[core.get_node(p).name].axis, true)})
+		local i = INFO[core.get_node(p).name]
+		core.swap_node(p, {name = arch_name(i.axis, true, i.layers)})
 	end
 	if #yielded > 0 then
 		core.sound_play("default_dug_metal", {pos = yielded[1], gain = 1.0, max_hear_distance = 32}, true)

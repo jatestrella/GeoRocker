@@ -9,6 +9,8 @@
 --     可以挖掉（不退還）；鑿岩機對著噴凝土鑽就是鑽後面的岩面（那格噴凝土會被孔取代）。
 --     噴在碎石上：表層 3×3 格直接壓實（不流動、沒有車轍），不必讓車壓好幾趟。
 --   噴凝土岩栓：同一格同時是岩栓與噴凝土。對岩栓噴凝土、或把岩栓裝進噴凝土鑽孔就是這個方塊。
+--   鋼拱（steelarch.lua）：對鋼拱噴凝土就包起來（鋼拱＋噴凝土 1～3 層，同一格）；鋼拱放在噴凝土上，層數保留。
+--     岩栓不能跟鋼拱同一格（那格不能鑽孔），打在兩支鋼拱之間。
 --   噴過凝土的孔（drilling.lua）：鑽孔、裝藥鑽孔、ANFO 鑽孔都有，功能同一般的孔，這格也算噴凝土。
 --     對孔噴凝土、或鑽穿噴凝土就是這些方塊；之後裝藥、裝岩栓都維持噴過凝土。
 --   支護後面的岩石沒了（挖掉、爆破、坍塌）就跟著消失；爆炸會直接炸掉。
@@ -295,8 +297,8 @@ core.register_craftitem(SHOTCRETE, {
 		-- 岩面 rock 與往外的法向 n：指著岩石就是那一面；指著鑽孔、岩栓就是它貼著的岩面
 		local rock, n = pointed.under, vector.subtract(pointed.above, pointed.under)
 		local un = core.get_node(rock)
-		if core.get_item_group(un.name, "shotcrete_lining") > 0 then
-			-- 指著已經噴過的那層：噴它後面的岩面
+		if core.get_item_group(un.name, "shotcrete_lining") > 0 or core.get_item_group(un.name, "rockmech_steelarch") > 0 then
+			-- 指著已經噴過的那層、鋼拱（steelarch.lua）：噴它後面的岩面
 			rock = vector.subtract(rock, n)
 		elseif not is_rock(un.name) then
 			local def = core.registered_nodes[un.name]
@@ -318,6 +320,7 @@ core.register_craftitem(SHOTCRETE, {
 			-- 空氣格：第一層；噴過的格、這一面的岩栓、鑽孔、裝藥：再加一層（已經滿了就跳過）
 			local nxt = rockmech.spray_next[an.name]
 			local here = core.get_item_group(an.name, "shotcrete_lining") > 0
+				or core.get_item_group(an.name, "rockmech_steelarch") > 0          -- 鋼拱：噴凝土把它包起來
 				or vector.equals(core.wallmounted_to_dir(an.param2), vector.multiply(n, -1))
 			if is_rock(core.get_node(r).name) then
 				if an.name == "air" then
