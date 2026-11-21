@@ -26,12 +26,21 @@ Run at or above $/t=
 Set price=
 Conveyor control box@nPlace it next to a belt; right-click to set run, stop or run by ore price=
 
+### buildview.lua
+Build view   E to exit=
+
 ### camp.lua
 Concrete slab=
 Painted line=
 Weighbridge=
 Concrete slab: nothing can be built or dug here=
 Edge of the map: nothing can be built or dug here=
+
+### campflag.lua
+[Back to camp] Camp of team @1=
+[Back to camp] Spawn=
+Back to camp@nClick to go back to your team's camp=
+Back to camp=
 
 ### career.lua
 Holding: core box @1 (depth @2 m)   right-click to put down=
@@ -103,6 +112,8 @@ Awning=
 Sign board=
 Sign digit=
 Sign back=
+Glass pane=
+Generating the map @1%=
 
 ### collapse.lua
 falling=
@@ -155,6 +166,7 @@ Charging unit=
 Core drill rig=
 Aerial work platform=
 Crane=
+Diaphragm wall grab=
 Surface drill rig=
 Drill jumbo=
 Haul truck=
@@ -170,15 +182,16 @@ Radio=
 Rock drill=
 Blasting machine=
 Emulsion explosive=
+Smooth-blasting cartridge=
 Ammonium nitrate=
 Diesel=
 Mixing trough=
 Rock bolt=
 Shotcrete=
 Axe=
+Stockyard sign=
 Saw bench=
 Workbench=
-Back to camp=
 Work light=
 Weather station=
 Survey prism=
@@ -188,7 +201,14 @@ Flat jack=
 Numerical analysis tablet=
 Borehole stress cell=
 Timber post=
-Steel set=
+Light H-beam=
+Sheet pile=
+Bentonite slurry=
+Slurry tank=
+Slurry pipe=
+Slurry outlet=
+Heavy H-beam=
+Steel arch=
 Timber plank=
 Timber slab=
 Drone=
@@ -306,14 +326,6 @@ Hand-held core drill@nHold right-click on the ground to drill down=
 Hand-held core drill=
 
 ### crusher.lua
-@1 price @2 (@3 @4%)=
-Spawn camp (shared)=
-Teacher team=
-Team @1=
-This facility belongs to @1; other teams cannot touch it=
-Team @1   Funds @2=
-Funds @1=
-[Market] Today's @1 price $@2/t (yesterday $@3, @4 @5%)=
 Item=
 Quantity=
 Unit price=
@@ -382,6 +394,7 @@ the hopper is dug on your side; check the preview frame on the ground first=
 ANFO column charge (hole depth @1 m) + @2 primer cartridge(s)@nLight it with flint and steel, or use the blasting machine=
 ANFO @1 / @2 kg=
 ANFO column charge (hole depth @1 m)@nNo primer yet: add one emulsion cartridge, otherwise it will misfire=
+Charged hole: smooth-blasting cartridge@nLight it with flint and steel, or use the blasting machine=
 Charged hole: @1 emulsion cartridge(s) (max @2)@nLight it with flint and steel, or use the blasting machine=
 Surface charge: @1 cartridge(s) (no drill hole, power ×@2)@nLight it with flint and steel, or use the blasting machine=
 Orange fumes: too little diesel (@1% diesel, power @2; best 5.7%)=
@@ -407,6 +420,8 @@ This is team @1's area: explosives have no effect here=
 This ANFO hole already has a primer=
 Full (max @1 cartridges)=
 No drill hole: surface charge, power only ×@1 (drill a hole with the rock drill first)=
+This hole is already charged=
+Smooth-blasting cartridges go into an empty drill hole=
 This hole is already full of ANFO=
 ANFO goes into drill holes (downward holes drilled by the surface drill rig)=
 ANFO can only be poured into downward drill holes=
@@ -416,6 +431,7 @@ No charges within @1 m=
 Rock drill@nHold left-click on a rock face=
 Rock drill: hold left-click on a rock face to drill a hole=
 Emulsion explosive@nRight-click a drill hole=
+Smooth-blasting cartridge@nOne per empty drill hole: small charge, little damage to the rock left behind=
 1 kg ANFO@nRight-click a downward hole=
 1 kg ANFO=
 Blasting machine@nRight-click to fire=
@@ -442,10 +458,21 @@ Command drone@nRight-click to take off / come back; left-click to command=
 ### dumphopper.lua
 [Dump hopper]=
 (@1)=
+Stock @1 / @2 m³=
 No conveyor belt connected=
 Dump hopper grate=
 Build it on flat ground: @1×@1 m of level ground=
 There is @1 in the construction area: move it first=
+
+### economy.lua
+@1 price @2 (@3 @4%)=
+Spawn camp (shared)=
+Teacher team=
+Team @1=
+This facility belongs to @1; other teams cannot touch it=
+Team @1   Funds @2=
+Funds @1=
+[Market] Today's @1 price $@2/t (yesterday $@3, @4 @5%)=
 
 ### facilitydamage.lua
 @1 collapsed: its foundation gave way=
@@ -526,6 +553,39 @@ The rubble here is already compacted=
 Shotcrete must be sprayed on a rock face=
 This is already sprayed to @1 layers (or the space in front of the rock face is not empty)=
 
+### haulroad.lua
+Weighbridge office=
+Barrier=
+To the power plant=
+[To the power plant] @1=
+Haul trucks cannot use public roads=
+Get out first=
+Unload it from the trailer first=
+Send the operator off first=
+Empty=
+@1 left for @2 with @3=
+@1  grade @2=
+Haulage=
+Total=
+@1 unloaded at @2, income @3=
+@1 is back at the weighbridge=
+To @1  @2=
+Queuing at @1 (@2 ahead)=
+Unloading  @1=
+Coming back  @1=
+Arriving=
+Weighbridge  (to the power plant)=
+@1: @2 one way, unloads @3 t/s=
+Raining: the trip takes @1% longer=
+Haulage per trip @1=
+Send to=
+On the weighbridge=
+No truck. Park on the weighbridge and get out=
+Send=
+On the road=
+None=
+Not on the weighbridge=
+
 ### impact.lua
 [Rockfall] You were hit (@1 kJ) and lost @2 HP=
 
@@ -540,7 +600,6 @@ Nothing to read here=
 Handheld XRF analyzer@nRight-click rock, rubble or a truck bed=
 Handheld XRF analyzer=
 No ore in the load=
-Empty=
 GSI chart@nRight-click a rock face=
 Discontinuous: the joint ends inside the rock=
 Feels rough or irregular; the surface undulates=
@@ -679,9 +738,6 @@ Breaking=
 Diesel $@1/L (@2)=
 Explosives @1%  Steel @2%=
 @1 (day @2)=
-List market events, or start one=
-No such event: @1=
-That event is already happening=
 @1 today: @2=
 Cut-off grade at the crusher: @1%=
   Below this the copper sold does not pay the tailings fee of $@1 per tonne=
@@ -718,7 +774,6 @@ Broadcast radio@nKeep it on you to see prices and news at the top right=
 
 ### materials.lua
 Topsoil=
-Grass=
 Loose soil=
 Compacted rubble=
 Construction waste=
@@ -763,18 +818,6 @@ mm (vertical axis) / one reading per stress solve (horizontal axis). Be careful 
 Reset to zero=
 Survey prism@nPlace it on a rock face; right-click to read=
 [Monitor] Must be attached to a rock face=
-
-### nametag.lua
-[Name tag] You have not set a nickname, so classmates see your account name. Press I → "Profile" to set a nickname=
-A nickname can have at most @1 characters=
-A nickname cannot contain parentheses=
-This nickname is already taken=
-A nickname cannot be someone else's account name=
-Nickname (the name classmates see above your head, at most @1 characters; blank @= use your account name)=
-Set nickname=
-Save=
-Cancel=
-Set: classmates see "@1"=
 
 ### nocraft.lua
 Backpack=
@@ -936,7 +979,6 @@ Ore Buyer=
 Accepted: @1 t, grade ≥ @2, @3 days, $@4/t. The pickup truck is on its way to the receiving area=
 Delivered=
 Penalty=
-Total=
 Order complete: @1 delivered, received @2=
 Order expired: @1 short, penalty @2=
 Order cancelled: @1 short, penalty @2=
@@ -966,9 +1008,6 @@ Accept=
 Loaded @1 / @2=
 Weigh and send now=
 Ore contracts=
-Give every team the same order (teams with an order already are skipped)=
-Usage: /rockmech_order <tons> <grade %> <days> [price/t]=
-Order sent to @1 teams (@2 skipped)=
 
 ### oreshaft.lua
 [Ore pass @1] @2 t, @3=
@@ -998,6 +1037,11 @@ Pre-sorting plant chute=
 Pre-sorting plant@nRight-click on flat ground to build=
 [Pre-sorting plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above=
 
+### powerplant.lua
+Power plant coal @1 t=
+Power plant coal: tons received each day and the daily average=
+Stock @1 t, @2 days: average @3 t/day (since first delivery @4 t/day)=
+
 ### research.lua
 Plant recovery=
 Share of coal recovered into clean coal at the pre-sorting plant +1%=
@@ -1013,10 +1057,14 @@ Regular maintenance=
 The team's vehicles move 5% faster=
 Eco driving=
 The team's vehicles use 5% less fuel=
+Dozer thrust=
+Bulldozer can rip rock 20% stronger=
 Grade control=
 Recovery of ore sold at the crushing station +1%=
 Blast design=
 Blast breakage radius +5%=
+Smooth blasting=
+Jumbo rounds blast to the design floor; perimeter holes take smooth-blasting cartridges=
 Support method=
 Rock bolt and shotcrete strength +10%=
 Skilled miner=
@@ -1051,8 +1099,25 @@ Repair=
 @1 reached Lv@2 (@3 → @4)=
 @1 repaired; condition back to 100%=
 
-### restart.lua
-[Server] Restarting for maintenance in @1 min (takes about 1 minute); please park your vehicles and put down the rubble you are holding=
+### retain.lua
+Sheet pile@nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig=
+Sheet pile (yielded)=
+Strut (H-beam)@nRight-click a sheet pile face: lays a horizontal strut across to the opposite side (1 per metre)=
+Strut=
+[Sheet pile] Already driven here=
+Rock too hard to drive into (rock mass strength @1 MPa > @2 MPa)=
+Can't drive here: only soil, rubble and soft rock=
+[Sheet pile] Driven @1 m=
+[H-beam] This span needs @1 (1 per metre), you have @2=
+[H-beam] @1 m placed=
+Heavy H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=
+Light H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=
+[H-beam] An unsupported H-beam fell down=
+[Sheet pile] The sheet pile at @1 lost its embedment and fell into the pit=
+[Sheet pile] The sheet pile at @1 yielded and bent: the soil behind it now takes the load; add struts=
+[Strut] The strut at @1 buckled=
+Bending moment @1 kN·m/m / yield @2 kN·m/m (@3%)=
+Axial force @1 kN / capacity @2 kN (@3%)=
 
 ### rubble_tool.lua
 @1 ×@2 (@3 didn't fit, dropped at your feet)=
@@ -1070,6 +1135,39 @@ Blast wand=
 Dig wand@nLeft-click: remove 3×3×3; right-click: muck out=
 Dig wand=
 
+### slurry.lua
+Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=
+
+### slurrytank.lua
+Connect a slurry pipe to the valve on the blue side=
+Put in all slurry=
+Take 1 m³=
+Take 10 m³=
+Done=
+The slurry tank is full=
+Slurry tank@n40 m³ steel tank, 3 × 6 × 3 m, built in the direction you look. Connect it to a slurry outlet with slurry pipes. Right-click with slurry to fill it=
+[Slurry tank] Needs 3 × 6 m of level, clear ground (3 m high)=
+[Slurry tank] There is @1 in the way: move it first=
+Slurry pipe@nConnects slurry tanks to a slurry outlet=
+Target level: @1 m below the ground here=
+Connected tanks: @1, stock @2 m³=
+Not connected to a slurry tank=
+The pipe outlet is blocked=
+The pipe is not over a trench=
+Out of slurry: the level is dropping=
+Pumping=
+Turn the pipe=
+Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=
+
+### steelarch.lua
+Steel arch (yielded)=
+Steel arch (H150)@nRight-click a rock face: places 1 m of steel arch against it. Build a full ring and it works in compression=
+[Steel arch] Steel arch with nothing to hold it fell down=
+Axial force @1 kN, bending moment @2 kN·m=
+Utilisation @1%=
+[Steel arch] @1 m of steel arch yielded and bent=
+[Steel arch] @1 m of steel arch was crushed=
+
 ### stereonet.lua
 [Stereonet]=
 @1: planar sliding possible=
@@ -1085,6 +1183,46 @@ Measure something first (right-click a rock face)=
 You need a field notebook (the readings are kept in it)=
 Slope written into the field notebook=
 Written into the field notebook (@1 joint readings; see the stereonet tab)=
+
+### stockyard.lua
+[Stockyard] @1=
+Stockyard sign@nPlace it at the edge of the stockyard, facing into it=
+[Stockyard] You already have one. Take the old sign out first=
+[Stockyard] The stockyard must touch a road, so the buyers' trucks can reach it=
+Stockyard (right-click)=
+[Stockyard] Set up @1 × @2 m. Dump coal inside the outline; buyers come in the daytime=
+Morning. Business is slow lately.=
+The road from the plant is full of potholes.=
+Your pile looks decent.=
+The power plant pays late again.=
+Rain makes the coal heavy.=
+Hello? Anyone selling coal?=
+Where's the coal? I drove all the way here.=
+Empty again?=
+Coal trader=
+A coal trader took @1 (@2 of coal) and paid @3=
+A coal trader came by: no coal in the pile=
+A coal trader came by: too much rock in the pile, no deal=
+A coal trader came by: too expensive, no deal=
+I'll take some. Loading now.=
+See you next time.=
+No coal. I'll come back another day.=
+Too much rock in this pile. Not today.=
+At that price? Not today.=
+Stockyard  @1 × @2 m=
+Pile @1, coal-bearing @2, pure coal @3=
+Market price $@1/t, traders' price about $@2/t=
+Your price ($ per t of coal)=
+Size=
+Reopen=
+Close=
+Closed=
+Recent sales=
+@1 (@2 of coal) at $@3/t: @4=
+None yet=
+[Stockyard] Price set to $@1/t=
+[Stockyard] Closed: no traders will come=
+[Stockyard] Open again=
 
 ### stressmeter.lua
 Flat jack@nRight-click a rock wall to measure, E to write it into the field notebook; Shift + E switches between a vertical slot (horizontal stress) and a horizontal slot (vertical stress)=
@@ -1113,63 +1251,6 @@ Intact rock: σ1 at failure @1 MPa=
 Learn "Mohr circle analysis" from the professor to see the Mohr circle=
 Numerical analysis tablet@nHold it to see the stress of the rock you point at; hold right-click to look at it up close=
 
-### team.lua
-[Back to camp] Camp of team @1=
-[Back to camp] Spawn=
-Back to camp@nClick to go back to your team's camp=
-[Teams] You are in team @1. The whole team shares one fund; your camp is at x @= @2 (hold the "Back to camp" flag and left-click to return to camp)=
-[Teams] You are no longer in any team=
-[Teams] Welcome! You are in team @1; the whole team shares one fund. The funds are shown at the top right of the screen; hold the "Back to camp" flag and left-click to return to camp=
-[Teams] You are not in a team yet, so you cannot buy equipment. Please ask the teacher to assign you to a team=
-Line @1: account "@2" may only use English letters, digits, - and _, at most 20 characters=
-Line @1: team "@2" is not between 1 and @3=
-| list | set <account> <team|none> | money <team> <amount> | reload=
-Teams: show your own team; the teacher can list the teams, assign teams, adjust funds and reload the roster=
-You are not in a team yet=
-You are in team @1, funds @2, camp at x @= @3. Members: @4=
-This command is for the teacher only (@1 privilege)=
-Team @1 (x @= @2) @3   @4 players: @5=
-not opened=
-Usage: /team set <account> <team|none>=
-No such account: @1=
-@1 is no longer in a team=
-The team must be between 1 and @1=
-@1 → team @2=
-Usage: /team money <team> <amount> (negative to deduct)=
-[Team @1] The teacher adjusted the funds by @2@3=
-Team @1 funds are now @2=
-Roster file not found: @1=
-Roster: @1 accounts created, @2 players changed teams@3=
-Usage: /team [list | set <account> <team|none> | money <team> <amount> | reload]=
-[team]=
-Go back to your team's camp (the teacher can specify a team)=
-You can only go back to your own team's camp: /site=
-Heading to the camp of team @1 (x @= @2)=
-@1 (online)=
-Teacher=
-   Loan owed $@1=
-Members:=
-Back to team @1's camp=
-Teacher (not in a team)=
-You are not in a team yet; please ask the teacher to assign you to a team=
-Back to spawn=
-Teleport to the team camps:=
-[Teacher] Funds of each team:=
-Team @1 @2 (@3 players)=
- owes $@1=
-Amount (negative to deduct)=
-Add/deduct=
-Reload student roster=
-Teacher test play:=
-Join this team=
-Leave my team=
-[Teacher] Camp of team @1=
-[Teacher] The amount must be a number=
-[Teacher] Team @1 funds are now @2=
-[Teacher] Roster file not found: @1=
-[Teacher] Roster: @1 accounts created, @2 players changed teams@3=
-[Tip] Hold the "Back to camp" flag and left-click to return to camp; your team's funds are at the top right of the screen=
-
 ### testing.lua
 Schmidt hammer@nRight-click a rock face=
 [Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=
@@ -1193,6 +1274,7 @@ Timber post (top)=
 Timber beam=
 Timber beam (old)=
 Steel set@nRight-click the floor to stand it up, a wall to lay it as a beam=
+Steel set=
 Steel set (top)=
 Steel set (yielded)=
 Steel beam=
@@ -1201,7 +1283,6 @@ Wooden half slab=
 [Steel set] The bent steel set at @1 gave way: it could not hold the roof above=
 [Timber post] The timber post at @1 was crushed: it could not hold the roof above=
 [Steel set] The steel set at @1 yielded and bent: capacity down to @2%, add support=
-Axial force @1 kN / capacity @2 kN (@3%)=
 Roof above: FS @1=
 [Wooden block] The wooden block at @1 was crushed: it could not hold the load=
 Wooden block=
@@ -1328,13 +1409,7 @@ My assumption (tell me which face doesn't match):=
 ・Dark gray (bottom face): standing below, facing north and looking up, a normal 'F'=
 (The HUD at the top right shows your heading)=
 
-### train.lua
-Railway track=
-Track ballast=
-Tunnel lining=
-Railway: nothing can be built or dug here=
-Loading point=
-[Train] Loading point: wagons stop here=
+### traincore.lua
 Rail wagon=
 Wagon @1  @2 / @3=
 Freight train=
@@ -1348,6 +1423,13 @@ Train: no trains at night; the first one comes at @1:00=
 Train: loading @1 / @2, leaves when all wagons are full=
 Train: leaving=
 Depart now=
+
+### trainline.lua
+Track ballast=
+Tunnel lining=
+Railway track=
+Loading point=
+Railway: nothing can be built or dug here=
 
 ### ui.lua
 on=
@@ -1501,6 +1583,7 @@ Pulling out of the dump spot=
 Dumped, returning to the route=
 Returning to the loading point=
 Dump area full (doze it flat, then reset it in the settings screen)=
+At the weighbridge, waiting to be sent to the power plant=
 Heading to the excavator=
 Turning to line up with the excavator=
 Backing up to the excavator=
@@ -1623,6 +1706,8 @@ Rubble in front of the blade: @1=
 Can't push: @1; back up and change direction, or clear the way first=
 Blade down (push rubble)=
 Design grade=
+Ripping the rock in front of the blade (@1 s)=
+Rock too hard to rip (rock mass strength @1 MPa > @2 MPa): blast it first=
 
 ### vehicle_drillrig.lua
 Right-click to get in; E drills, Space sets the depth=
@@ -1637,7 +1722,6 @@ Vertical hole (@1 m deep)@nFill with ANFO and add one emulsion stick as a primer
 Drilled a @1 m hole=
 The hole position is blocked=
 Hole depth (bench height + subdrill): @1 m=
-Done=
 Only @1 m of rock below: drilling to the bottom of the rock=
 drill a hole=
 Drilling=
@@ -1708,31 +1792,38 @@ Right-click to get in; Space tips the bed=
 
 ### vehicle_jumbo.lua
 Right-click to get in; E drills, Space edits the pattern=
+Level=
+Decline 1:@1 (@2%)=
 Blast hole pattern @1 × @2=
+Tunnel: @1=
 Drilling @1 / @2=
 Drill to pattern=
 Edit pattern=
 Drill hole (design: relief hole, do not charge)=
+Drill hole (design: perimeter hole, smooth-blasting cartridge)=
 Drill hole (design: charged hole)=
 Drilled @1 holes=
 Blast hole pattern (looking at the face; the bottom row is at floor level)=
 Click a cell to toggle: ● charged hole  ○ relief hole  · not drilled=
 Width @1=
 Height @1=
+Decline: research @1 first=
 Charge all=
 Center relief-hole cut=
 Cross relief-hole cut=
 Clear=
 No rock face to drill within @1 m ahead (point the front at the rock wall)=
+This round lowers the floor by 1 m=
 Right-click to get in; E charges, Space sets sticks per hole=
 @1 emulsion sticks per hole=
 (not used up in creative mode)=
 @1 sticks in inventory=
+Smooth-blasting cartridges @1=
 Charging @1 / @2=
 Charge (face ahead)=
 Sticks per hole=
-Out of emulsion (charged @1 holes)=
 Charged @1 holes=
+Out of emulsion (charged @1 holes)=
 Emulsion sticks per hole=
 No holes to charge within @1 m ahead=
 
@@ -1791,6 +1882,26 @@ Trailer=
 Right-click to get in; E loads / unloads a vehicle=
 Heavy trailer=
 
+### vehicle_masago.lua
+Right-click to get in; look around to slew; E grabs a bite 3 m long, 1 m thick and 2 m deep where you point, Space dumps it where you point=
+Rock too hard for the grab (rock mass strength @1 MPa > @2 MPa)=
+Something in the way of the grab=
+Out of reach (@1–@2 m from the crane)=
+The trench is as deep as the cable reaches (@1 m)=
+Grab @1=
+Slewing to the target=
+Biting at @1 m=
+Lowering the grab=
+Raising the grab=
+Trench depth @1 m (cable @2 m)=
+Grab (where the cursor points)=
+Left-click=
+Dig guide=
+The grab is full: Space to dump it=
+Point at the ground where to grab=
+The grab is empty=
+Point at the ground or a truck to dump=
+
 ### vehicle_miner.lua
 Miner=
 Right-click to get in; E turns the drum on/off, Space sets the cut=
@@ -1833,6 +1944,7 @@ Recording route=
 AHS settings=
 
 ### vehicle_views.lua
+Grade @1%=
 [WRECKED] Cannot be driven; get a mechanic to repair it=
 Durability @1%=
 Let go=
@@ -1908,6 +2020,7 @@ Come closer=
 Workbench@nRight-click: make wall panels, stairs, doors, fences, ladders… from planks=
 Saw bench@nRight-click: saw a log into posts, planks or slabs=
 [Site work] Soil removed @1 m³, filled @2 m³: $@3=
+Grass=
 Topsoil (@1/8 m)=
 
 ### worklight.lua
@@ -1929,164 +2042,3 @@ Build a rock hill in front of you (its face toward you) that you can tunnel stra
 Rock hill built in front of you: height @1 m, width @2 m, depth @3 m, face angle @4°; dig toward @5 to go into the hill. @6=
 Warning: the face has daylighting joints @1, so the face may slide.=
 The face has no daylighting joints.=
-Generating the map @1%=
-Glass pane=
-Build view   E to exit=
-Ripping the rock in front of the blade (@1 s)=
-Rock too hard to rip (rock mass strength @1 MPa > @2 MPa): blast it first=
-Grade @1%=
-Level=
-Decline 1:@1 (@2%)=
-Tunnel: @1=
-This round lowers the floor by 1 m=
-Dozer thrust=
-Bulldozer can rip rock 20% stronger=
-Smooth blasting=
-Jumbo rounds blast to the design floor: level floors and decline tunnels=
-Decline: research @1 first=
-Sheet pile@nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig=
-Sheet pile=
-Sheet pile (yielded)=
-Strut (H-beam)@nRight-click a sheet pile face: lays a horizontal strut across to the opposite side (1 per metre)=
-Strut=
-[Sheet pile] Already driven here=
-Rock too hard to drive into (rock mass strength @1 MPa > @2 MPa)=
-Can't drive here: only soil, rubble and soft rock=
-[Sheet pile] Driven @1 m=
-[Strut] Point at the side face of a sheet pile=
-[Strut] Nothing to brace against within @1 m=
-[Strut] This span needs @1 struts (1 per metre), you have @2=
-[Strut] Protected area=
-[Strut] Strut @1 m placed=
-[Sheet pile] The sheet pile at @1 yielded and bent: the soil behind it now takes the load; add struts=
-[Strut] The strut at @1 buckled=
-Bending moment @1 kN·m/m / yield @2 kN·m/m (@3%)=
-Light H-beam=
-Heavy H-beam=
-Light H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=
-Heavy H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=
-[H-beam] This span needs @1 (1 per metre), you have @2=
-[H-beam] @1 m placed=
-[H-beam] An unsupported H-beam fell down=
-Bentonite slurry=
-Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=
-Diaphragm wall grab=
-Rock too hard for the grab (rock mass strength @1 MPa > @2 MPa)=
-Something in the way of the grab=
-The trench is as deep as the cable reaches (@1 m)=
-Grab @1=
-Biting at @1 m=
-Lowering the grab=
-Raising the grab=
-Trench depth @1 m (cable @2 m)=
-The grab is full: Space to dump it=
-The grab is empty=
-Slurry tank=
-Out of slurry: the level is dropping=
-Pumping=
-Right-click to get in; look around to slew; E grabs a bite 3 m long, 1 m thick and 2 m deep where you point, Space dumps it where you point=
-Slewing to the target=
-Out of reach (@1–@2 m from the crane)=
-Grab (where the cursor points)=
-Point at the ground where to grab=
-Point at the ground or a truck to dump=
-The pipe outlet is blocked=
-The pipe is not over a trench=
-Turn the pipe=
-Slurry tank@n40 m³ steel tank, 3 × 6 × 3 m, built in the direction you look. Connect it to a slurry outlet with slurry pipes. Right-click with slurry to fill it=
-Stock @1 / @2 m³=
-The slurry tank is full=
-[Slurry tank] Needs 3 × 6 m of level, clear ground (3 m high)=
-[Slurry tank] There is @1 in the way: move it first=
-Slurry pipe@nConnects slurry tanks to a slurry outlet=
-Slurry pipe=
-Slurry outlet=
-Target level: @1 m below the ground here=
-Connected tanks: @1, stock @2 m³=
-Not connected to a slurry tank=
-Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=
-Connect a slurry pipe to the valve on the blue side=
-Put in all slurry=
-Take 1 m³=
-Take 10 m³=
-Left-click=
-Dig guide=
-Power plant coal @1 t=
-Power plant coal: tons received each day and the daily average=
-Stock @1 t, @2 days: average @3 t/day (since first delivery @4 t/day)=
-@1  grade @2=
-@1 is back at the weighbridge=
-@1 left for @2 with @3=
-@1 unloaded at @2, income @3=
-@1: @2 one way, unloads @3 t/s=
-Arriving=
-Barrier=
-Coming back  @1=
-Get out first=
-Haul trucks cannot use public roads=
-Haulage=
-Haulage per trip @1=
-No truck. Park on the weighbridge and get out=
-None=
-Not on the weighbridge=
-On the road=
-On the weighbridge=
-Queuing at @1 (@2 ahead)=
-Raining: the trip takes @1% longer=
-Send=
-Send the operator off first=
-Send to=
-To @1  @2=
-To the power plant=
-Unload it from the trailer first=
-Unloading  @1=
-Weighbridge  (to the power plant)=
-Weighbridge office=
-[To the power plant] @1=
-At the weighbridge, waiting to be sent to the power plant=
-@1 (@2 of coal) at $@3/t: @4=
-A coal trader came by: too expensive, no deal=
-A coal trader came by: too much rock in the pile, no deal=
-A coal trader took @1 (@2 of coal) and paid @3=
-At that price? Not today.=
-Coal trader=
-I'll take some. Loading now.=
-Market price $@1/t, traders' price about $@2/t=
-Morning. Business is slow lately.=
-None yet=
-Pile @1, coal-bearing @2, pure coal @3=
-Rain makes the coal heavy.=
-Recent sales=
-See you next time.=
-Size=
-Stockyard  @1 × @2 m=
-Stockyard (right-click)=
-Stockyard sign=
-The road from the plant is full of potholes.=
-Too much rock in this pile. Not today.=
-Your pile looks decent.=
-Your price ($ per t of coal)=
-[Stockyard] @1=
-[Stockyard] Price set to $@1/t=
-[Stockyard] Set up @1 × @2 m. Dump coal inside the outline; buyers come in the daytime=
-[Stockyard] The stockyard must touch a road, so the buyers' trucks can reach it=
-[Stockyard] You already have one. Take the old sign out first=
-Stockyard sign@nPlace it at the edge of the stockyard, facing into it=
-Hello? Anyone selling coal?=
-Where's the coal? I drove all the way here.=
-Empty again?=
-A coal trader came by: no coal in the pile=
-No coal. I'll come back another day.=
-Reopen=
-Close=
-Closed=
-[Stockyard] Closed: no traders will come=
-[Stockyard] Open again=
-Smooth-blasting cartridge@nOne per empty drill hole: small charge, little damage to the rock left behind=
-Smooth-blasting cartridge=
-Charged hole: smooth-blasting cartridge@nLight it with flint and steel, or use the blasting machine=
-This hole is already charged=
-Smooth-blasting cartridges go into an empty drill hole=
-Drill hole (design: perimeter hole, smooth-blasting cartridge)=
-Smooth-blasting cartridges @1=
-Jumbo rounds blast to the design floor; perimeter holes take smooth-blasting cartridges=

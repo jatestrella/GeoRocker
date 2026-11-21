@@ -662,7 +662,8 @@ local function build_cid_maps()
         local cid = core.get_content_id(name)
         -- 木柱、木板等木材（group rockmech_timber）：人撞得到，但在岩石力學裡算空格，
         -- 不能當剛性的墊支撐；木柱只透過承載力 P 換成的 pᵢ 托住頂板（support.lua）
-        local timber = def.groups and (def.groups.rockmech_timber or 0) > 0
+        -- 鋼拱（steelarch.lua，group rockmech_steelarch）也一樣：後面的岩面照樣判定，鋼拱的反力在應力解裡當圍壓
+        local timber = def.groups and ((def.groups.rockmech_timber or 0) > 0 or (def.groups.rockmech_steelarch or 0) > 0)
         solid_of[cid] = def.walkable ~= false and not timber
         if def.walkable ~= false and not timber then
             weight_of[cid] = fcfg.gamma_other

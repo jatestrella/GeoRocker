@@ -26,12 +26,21 @@ Run at or above $/t=運轉價格 $/t
 Set price=設定價格
 Conveyor control box@nPlace it next to a belt; right-click to set run, stop or run by ore price=輸送帶控制箱@n放在輸送帶旁邊；右鍵設定運轉、停止、依礦價
 
+### buildview.lua
+Build view   E to exit=施工視角　E 離開
+
 ### camp.lua
 Concrete slab=混凝土地坪
 Painted line=黃線
 Weighbridge=地磅
 Concrete slab: nothing can be built or dug here=混凝土地坪：這裡不能施工也不能挖
 Edge of the map: nothing can be built or dug here=地圖邊界：不能挖、不能蓋
+
+### campflag.lua
+[Back to camp] Camp of team @1=[回營地] 第 @1 組營地
+[Back to camp] Spawn=[回營地] 出生點
+Back to camp@nClick to go back to your team's camp=回營地@n按一下回到自己組的營地
+Back to camp=回營地
 
 ### career.lua
 Holding: core box @1 (depth @2 m)   right-click to put down=手上：岩芯箱 @1（深 @2 m）　右鍵放下
@@ -103,6 +112,8 @@ Awning=遮陽棚
 Sign board=看板
 Sign digit=看板數字
 Sign back=看板背面
+Glass pane=玻璃片
+Generating the map @1%=生成地圖中 @1%
 
 ### collapse.lua
 falling=落下
@@ -155,6 +166,7 @@ Charging unit=裝藥台車
 Core drill rig=岩芯鑽探車
 Aerial work platform=高空作業車
 Crane=吊車
+Diaphragm wall grab=連續壁抓斗
 Surface drill rig=鑽機
 Drill jumbo=鑽孔台車
 Haul truck=礦卡
@@ -170,15 +182,16 @@ Radio=對講機
 Rock drill=鑿岩機
 Blasting machine=起爆器
 Emulsion explosive=乳膠炸藥
+Smooth-blasting cartridge=勻滑開炸藥包
 Ammonium nitrate=硝酸銨
 Diesel=柴油
 Mixing trough=拌和槽
 Rock bolt=岩栓
 Shotcrete=噴凝土
 Axe=斧頭
+Stockyard sign=堆置處告示牌
 Saw bench=鋸木台
 Workbench=木工桌
-Back to camp=回營地
 Work light=工作照明燈
 Weather station=氣象站
 Survey prism=監測稜鏡
@@ -188,7 +201,14 @@ Flat jack=平板千斤頂
 Numerical analysis tablet=數值分析平板
 Borehole stress cell=孔內應力計
 Timber post=木柱
-Steel set=鋼支保
+Light H-beam=輕型 H 型鋼
+Sheet pile=鋼板樁
+Bentonite slurry=穩定液
+Slurry tank=穩定液儲槽
+Slurry pipe=穩定液管
+Slurry outlet=出液口
+Heavy H-beam=重型 H 型鋼
+Steel arch=鋼拱
 Timber plank=木板
 Timber slab=木板半格
 Drone=無人機
@@ -306,14 +326,6 @@ Hand-held core drill@nHold right-click on the ground to drill down=手持岩芯�
 Hand-held core drill=手持岩芯鑽機
 
 ### crusher.lua
-@1 price @2 (@3 @4%)=@1價 @2（@3 @4%）
-Spawn camp (shared)=出生點公用
-Teacher team=老師組
-Team @1=第 @1 組
-This facility belongs to @1; other teams cannot touch it=這是@1的設施，別組不能動
-Team @1   Funds @2=第 @1 組　　資金 @2
-Funds @1=資金 @1
-[Market] Today's @1 price $@2/t (yesterday $@3, @4 @5%)=[市場] 今日@1價 $@2/t（昨日 $@3，@4 @5%）
 Item=項目
 Quantity=數量
 Unit price=單價
@@ -382,6 +394,7 @@ the hopper is dug on your side; check the preview frame on the ground first=受�
 ANFO column charge (hole depth @1 m) + @2 primer cartridge(s)@nLight it with flint and steel, or use the blasting machine=ANFO 柱狀裝藥（孔深 @1 m）＋ 起爆藥包 @2 條@n打火石點火、或用起爆器
 ANFO @1 / @2 kg=ANFO @1 / @2 kg
 ANFO column charge (hole depth @1 m)@nNo primer yet: add one emulsion cartridge, otherwise it will misfire=ANFO 柱狀裝藥（孔深 @1 m）@n還沒有起爆藥包：放一條乳膠炸藥，否則會拒爆
+Charged hole: smooth-blasting cartridge@nLight it with flint and steel, or use the blasting machine=裝藥鑽孔：勻滑開炸藥包@n打火石點火、或用起爆器
 Charged hole: @1 emulsion cartridge(s) (max @2)@nLight it with flint and steel, or use the blasting machine=裝藥鑽孔：@1 條乳膠炸藥（最多 @2）@n打火石點火、或用起爆器
 Surface charge: @1 cartridge(s) (no drill hole, power ×@2)@nLight it with flint and steel, or use the blasting machine=貼面裝藥：@1 條（沒有鑽孔，威力 ×@2）@n打火石點火、或用起爆器
 Orange fumes: too little diesel (@1% diesel, power @2; best 5.7%)=冒橘紅煙：柴油不夠（柴油 @1%，威力 @2，最佳 5.7%）
@@ -407,6 +420,8 @@ This is team @1's area: explosives have no effect here=這裡是第 @1 組的範
 This ANFO hole already has a primer=這個 ANFO 孔已經有起爆藥包了
 Full (max @1 cartridges)=裝滿了（最多 @1 條）
 No drill hole: surface charge, power only ×@1 (drill a hole with the rock drill first)=沒有鑽孔：貼面裝藥，威力只有 ×@1（先用鑿岩機鑽孔）
+This hole is already charged=這個孔已經裝藥了
+Smooth-blasting cartridges go into an empty drill hole=勻滑開炸藥包要裝進空的鑽孔
 This hole is already full of ANFO=這個孔已經裝滿 ANFO 了
 ANFO goes into drill holes (downward holes drilled by the surface drill rig)=ANFO 要倒進鑽孔（露天鑽機鑽的往下的孔）
 ANFO can only be poured into downward drill holes=ANFO 只能倒進往下的鑽孔
@@ -416,6 +431,7 @@ No charges within @1 m=@1 m 內沒有裝藥
 Rock drill@nHold left-click on a rock face=鑿岩機@n對岩面按住左鍵
 Rock drill: hold left-click on a rock face to drill a hole=鑿岩機：對岩面按住左鍵鑽孔
 Emulsion explosive@nRight-click a drill hole=乳膠炸藥@n對鑽孔右鍵
+Smooth-blasting cartridge@nOne per empty drill hole: small charge, little damage to the rock left behind=勻滑開炸藥包@n一孔一條，裝進空的鑽孔：藥量小，留下來的岩壁比較不會被震鬆
 1 kg ANFO@nRight-click a downward hole=1公斤 ANFO@n對往下的鑽孔右鍵
 1 kg ANFO=1公斤 ANFO
 Blasting machine@nRight-click to fire=起爆器@n右鍵起爆
@@ -442,10 +458,21 @@ Command drone@nRight-click to take off / come back; left-click to command=指揮
 ### dumphopper.lua
 [Dump hopper]=[受料斗]
 (@1)=（@1）
+Stock @1 / @2 m³=存量 @1 / @2 m³
 No conveyor belt connected=沒接輸送帶
 Dump hopper grate=受料斗格柵
 Build it on flat ground: @1×@1 m of level ground=要蓋在平地上：@1×@1 m 的平整地面
 There is @1 in the construction area: move it first=施工範圍裡有@1：先移開
+
+### economy.lua
+@1 price @2 (@3 @4%)=@1價 @2（@3 @4%）
+Spawn camp (shared)=出生點公用
+Teacher team=老師組
+Team @1=第 @1 組
+This facility belongs to @1; other teams cannot touch it=這是@1的設施，別組不能動
+Team @1   Funds @2=第 @1 組　　資金 @2
+Funds @1=資金 @1
+[Market] Today's @1 price $@2/t (yesterday $@3, @4 @5%)=[市場] 今日@1價 $@2/t（昨日 $@3，@4 @5%）
 
 ### facilitydamage.lua
 @1 collapsed: its foundation gave way=@1的地基破壞，倒塌了
@@ -526,6 +553,39 @@ The rubble here is already compacted=這裡的碎石已經是夯實碎石了
 Shotcrete must be sprayed on a rock face=噴凝土要噴在岩面上
 This is already sprayed to @1 layers (or the space in front of the rock face is not empty)=這裡已經噴滿 @1 層了（或岩面前面不是空的）
 
+### haulroad.lua
+Weighbridge office=地磅站
+Barrier=柵欄
+To the power plant=往電廠
+[To the power plant] @1=[往電廠] @1
+Haul trucks cannot use public roads=礦卡不能上公路
+Get out first=先下車
+Unload it from the trailer first=先從拖車上開下來
+Send the operator off first=先讓操作員下車
+Empty=空的
+@1 left for @2 with @3=@1 載 @3 開往@2
+@1  grade @2=@1  品位 @2
+Haulage=運費
+Total=合計
+@1 unloaded at @2, income @3=@1 在@2卸完，收入 @3
+@1 is back at the weighbridge=@1 回到地磅站了
+To @1  @2=往@1  @2
+Queuing at @1 (@2 ahead)=在@1排隊（前面 @2 台）
+Unloading  @1=卸煤中  @1
+Coming back  @1=回程  @1
+Arriving=快到了
+Weighbridge  (to the power plant)=地磅站（往電廠）
+@1: @2 one way, unloads @3 t/s=@1：單程 @2，每秒卸 @3 t
+Raining: the trip takes @1% longer=下雨：路程多 @1%
+Haulage per trip @1=每趟運費 @1
+Send to=送去
+On the weighbridge=地磅上
+No truck. Park on the weighbridge and get out=沒有車。開上地磅停好、下車
+Send=派車
+On the road=路上的車
+None=沒有
+Not on the weighbridge=不在地磅上
+
 ### impact.lua
 [Rockfall] You were hit (@1 kJ) and lost @2 HP=[落石] 被砸中（@1 kJ），扣 @2 點血
 
@@ -540,7 +600,6 @@ Nothing to read here=這裡讀不到東西
 Handheld XRF analyzer@nRight-click rock, rubble or a truck bed=手持式 XRF 分析儀@n右鍵岩石、碎石或車斗
 Handheld XRF analyzer=手持式 XRF 分析儀
 No ore in the load=車上沒有礦石
-Empty=空的
 GSI chart@nRight-click a rock face=GSI 評估圖卡@n右鍵岩面
 Discontinuous: the joint ends inside the rock=不連續：節理在岩石裡就斷了
 Feels rough or irregular; the surface undulates=摸起來粗糙或不規則，面呈波狀起伏
@@ -679,9 +738,6 @@ Breaking=快訊
 Diesel $@1/L (@2)=柴油 $@1/L @2
 Explosives @1%  Steel @2%=炸藥 @1%　鋼材 @2%
 @1 (day @2)=@1 第 @2 天
-List market events, or start one=列出市場事件，或觸發一件
-No such event: @1=沒有這個事件：@1
-That event is already happening=這個事件正在進行中
 @1 today: @2=今天@1 @2
 Cut-off grade at the crusher: @1%=收煤站截止品位：@1%
   Below this the copper sold does not pay the tailings fee of $@1 per tonne=  低於這個含銅量，賣到的銅不夠付每噸 $@1 的尾礦處理費
@@ -718,7 +774,6 @@ Broadcast radio@nKeep it on you to see prices and news at the top right=廣播�
 
 ### materials.lua
 Topsoil=表土
-Grass=草
 Loose soil=鬆土
 Compacted rubble=夯實碎石
 Construction waste=建築廢棄物
@@ -763,18 +818,6 @@ mm (vertical axis) / one reading per stress solve (horizontal axis). Be careful 
 Reset to zero=重新歸零
 Survey prism@nPlace it on a rock face; right-click to read=監測稜鏡@n貼在岩面上；右鍵看紀錄
 [Monitor] Must be attached to a rock face=[監測] 要貼在岩面上
-
-### nametag.lua
-[Name tag] You have not set a nickname, so classmates see your account name. Press I → "Profile" to set a nickname=[名牌] 你還沒設定暱稱，同學現在看到的是你的帳號。按 I →「個人資料」可以設定暱稱
-A nickname can have at most @1 characters=暱稱最多 @1 個字
-A nickname cannot contain parentheses=暱稱不能有括號
-This nickname is already taken=這個暱稱已經有人用了
-A nickname cannot be someone else's account name=暱稱不能是別人的帳號
-Nickname (the name classmates see above your head, at most @1 characters; blank @= use your account name)=暱稱（同學在你頭上看到的名字，最多 @1 字；空白 @= 用帳號）
-Set nickname=設定
-Save=儲存
-Cancel=取消
-Set: classmates see "@1"=已設定：同學看到「@1」
 
 ### nocraft.lua
 Backpack=背包
@@ -936,7 +979,6 @@ Ore Buyer=礦產採購
 Accepted: @1 t, grade ≥ @2, @3 days, $@4/t. The pickup truck is on its way to the receiving area=已接單：@1 噸、品位 ≥ @2、@3 天內、每噸 $@4。收料車正開往收料區
 Delivered=已交貨
 Penalty=違約金
-Total=合計
 Order complete: @1 delivered, received @2=訂單完成：交了 @1，收入 @2
 Order expired: @1 short, penalty @2=訂單到期：還差 @1，違約金 @2
 Order cancelled: @1 short, penalty @2=訂單取消：還差 @1，違約金 @2
@@ -966,9 +1008,6 @@ Accept=接單
 Loaded @1 / @2=已裝 @1 / @2
 Weigh and send now=現在過磅出車
 Ore contracts=礦產合約
-Give every team the same order (teams with an order already are skipped)=每組發同一張訂單，已經有訂單的組跳過
-Usage: /rockmech_order <tons> <grade %> <days> [price/t]=用法：/rockmech_order <噸> <品位%> <天> [每噸價格]
-Order sent to @1 teams (@2 skipped)=已發給 @1 組，跳過 @2 組
 
 ### oreshaft.lua
 [Ore pass @1] @2 t, @3=[豎井 @1] @2 t，@3
@@ -998,6 +1037,11 @@ Pre-sorting plant chute=排矸站放料口
 Pre-sorting plant@nRight-click on flat ground to build=排矸站@n對平地右鍵蓋
 [Pre-sorting plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above=[排矸站] 要放在平地上：機身 3×3 m、前方 @1×@2 m 受料倉、左右兩座塔（各 3×3 m、高 @3 m）要平坦、地下是實心、上方淨空
 
+### powerplant.lua
+Power plant coal @1 t=電廠存煤 @1 t
+Power plant coal: tons received each day and the daily average=電廠存煤：每天進煤噸數和日平均
+Stock @1 t, @2 days: average @3 t/day (since first delivery @4 t/day)=存煤 @1 t，經過 @2 天：平均每天 @3 t（從第一次進煤算 @4 t/天）
+
 ### research.lua
 Plant recovery=選礦回收率
 Share of coal recovered into clean coal at the pre-sorting plant +1%=排矸站的煤進精煤的比例 +1%
@@ -1013,10 +1057,14 @@ Regular maintenance=定期保養
 The team's vehicles move 5% faster=全組車輛移動速度 +5%
 Eco driving=省油駕駛
 The team's vehicles use 5% less fuel=全組車輛油耗 −5%
+Dozer thrust=推土機推力
+Bulldozer can rip rock 20% stronger=推土機耙得動的岩石強度 +20%
 Grade control=品位控制
 Recovery of ore sold at the crushing station +1%=收煤站賣礦的回收率 +1%
 Blast design=爆破設計
 Blast breakage radius +5%=爆破破碎半徑 +5%
+Smooth blasting=勻滑開炸
+Jumbo rounds blast to the design floor; perimeter holes take smooth-blasting cartridges=鑽堡爆破照設計底板（地板平整，可以開下坡坑道）；周邊孔裝勻滑開炸藥包
 Support method=支撐工法
 Rock bolt and shotcrete strength +10%=岩栓和噴凝土強度 +10%
 Skilled miner=熟練礦工
@@ -1051,8 +1099,25 @@ Repair=修理
 @1 reached Lv@2 (@3 → @4)=@1 升到 Lv@2（@3 → @4）
 @1 repaired; condition back to 100%=@1修好了，耐久回到 100%
 
-### restart.lua
-[Server] Restarting for maintenance in @1 min (takes about 1 minute); please park your vehicles and put down the rubble you are holding=[伺服器] @1 分鐘後重開維護（約 1 分鐘），請先把車停好、手上的碎石放下
+### retain.lua
+Sheet pile@nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig=鋼板樁@n對地面按右鍵：往下打一片 1 m 寬的板樁（@1 m，碰到硬岩為止）；鋼板面在你這一側（要開挖的那一側）
+Sheet pile (yielded)=鋼板樁（已降伏）
+Strut (H-beam)@nRight-click a sheet pile face: lays a horizontal strut across to the opposite side (1 per metre)=內支撐（H 型鋼）@n對板樁的一面按右鍵：水平架到對面（每 1 m 一支）
+Strut=內支撐
+[Sheet pile] Already driven here=[鋼板樁] 這裡已經打過了
+Rock too hard to drive into (rock mass strength @1 MPa > @2 MPa)=岩石太硬打不進去（岩體強度 @1 MPa > @2 MPa）
+Can't drive here: only soil, rubble and soft rock=這裡打不進去：只能打進土、碎石和軟岩
+[Sheet pile] Driven @1 m=[鋼板樁] 打入 @1 m
+[H-beam] This span needs @1 (1 per metre), you have @2=[H 型鋼] 這段要 @1 支（每 1 m 一支），你只有 @2 支
+[H-beam] @1 m placed=[H 型鋼] 放好 @1 m
+Heavy H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=重型 H 型鋼@n對地板按右鍵：往上到頂板當支柱；對牆面：水平架到對面當橫撐（每 1 m 一支）
+Light H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=輕型 H 型鋼@n對地板按右鍵：往上到頂板當支柱；對牆面：水平架到對面當橫撐（每 1 m 一支）
+[H-beam] An unsupported H-beam fell down=[H 型鋼] 懸空的 H 型鋼掉下來了
+[Sheet pile] The sheet pile at @1 lost its embedment and fell into the pit=[鋼板樁] @1 的鋼板樁埋入段被掏空，倒進坑裡
+[Sheet pile] The sheet pile at @1 yielded and bent: the soil behind it now takes the load; add struts=[鋼板樁] @1 的板樁降伏變形：後面的土開始承受荷重，加支撐
+[Strut] The strut at @1 buckled=[H 型鋼] @1 的 H 型鋼挫屈
+Bending moment @1 kN·m/m / yield @2 kN·m/m (@3%)=彎矩 @1 kN·m/m／降伏 @2 kN·m/m（@3%）
+Axial force @1 kN / capacity @2 kN (@3%)=軸力 @1 kN／承載力 @2 kN（@3%）
 
 ### rubble_tool.lua
 @1 ×@2 (@3 didn't fit, dropped at your feet)=@1 ×@2（@3 個放不下，丟在腳邊）
@@ -1070,6 +1135,39 @@ Blast wand=爆破魔杖
 Dig wand@nLeft-click: remove 3×3×3; right-click: muck out=挖洞魔杖@n左鍵移除 3×3×3；右鍵清碴
 Dig wand=挖洞魔杖
 
+### slurry.lua
+Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=穩定液@n每單位 1 m³。按右鍵倒進去；會慢慢流，頂住溝壁不讓它塌
+
+### slurrytank.lua
+Connect a slurry pipe to the valve on the blue side=穩定液管接在藍色那一面的閥門
+Put in all slurry=背包裡的穩定液全部存入
+Take 1 m³=取出 1 m³
+Take 10 m³=取出 10 m³
+Done=完成
+The slurry tank is full=穩定液儲槽滿了
+Slurry tank@n40 m³ steel tank, 3 × 6 × 3 m, built in the direction you look. Connect it to a slurry outlet with slurry pipes. Right-click with slurry to fill it=穩定液儲槽@n40 m³ 鋼槽（3 × 6 × 3 m），往你看的方向蓋。用穩定液管接到出液口。拿著穩定液按右鍵存進去
+[Slurry tank] Needs 3 × 6 m of level, clear ground (3 m high)=[穩定液儲槽] 需要 3 × 6 m 平整、淨空的地面（高 3 m）
+[Slurry tank] There is @1 in the way: move it first=[穩定液儲槽] @1 擋住了：先移開
+Slurry pipe@nConnects slurry tanks to a slurry outlet=穩定液管@n把儲槽接到出液口
+Target level: @1 m below the ground here=目標液面：這裡的地面下 @1 m
+Connected tanks: @1, stock @2 m³=接到儲槽 @1 個，存量 @2 m³
+Not connected to a slurry tank=沒有接到儲槽
+The pipe outlet is blocked=管口被擋住
+The pipe is not over a trench=管口底下不是溝槽
+Out of slurry: the level is dropping=存量用完了：液面在下降
+Pumping=補液中
+Turn the pipe=轉向
+Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=出液口@n管子朝向你：站在溝邊、往外放，管口就垂在溝槽上方。用穩定液管接到儲槽，自動把液面補到設定高度。Shift＋右鍵轉向
+
+### steelarch.lua
+Steel arch (yielded)=鋼拱（已降伏）
+Steel arch (H150)@nRight-click a rock face: places 1 m of steel arch against it. Build a full ring and it works in compression=鋼拱（H150）@n對岩面按右鍵：貼著那一面放 1 m 鋼拱。蓋成一整圈就會受壓
+[Steel arch] Steel arch with nothing to hold it fell down=[鋼拱] 沒有依靠的鋼拱掉下來了
+Axial force @1 kN, bending moment @2 kN·m=軸力 @1 kN，彎矩 @2 kN·m
+Utilisation @1%=使用率 @1%
+[Steel arch] @1 m of steel arch yielded and bent=[鋼拱] @1 m 鋼拱降伏變形
+[Steel arch] @1 m of steel arch was crushed=[鋼拱] @1 m 鋼拱被壓垮
+
 ### stereonet.lua
 [Stereonet]=[赤平投影]
 @1: planar sliding possible=@1：可能平面滑動
@@ -1085,6 +1183,46 @@ Measure something first (right-click a rock face)=先量一筆（右鍵岩面）
 You need a field notebook (the readings are kept in it)=需要野帳本（量測記在野帳本上）
 Slope written into the field notebook=坡面記進野帳本了
 Written into the field notebook (@1 joint readings; see the stereonet tab)=記進野帳本了（共 @1 筆節理；在「赤平投影」分頁看圖）
+
+### stockyard.lua
+[Stockyard] @1=[堆置處] @1
+Stockyard sign@nPlace it at the edge of the stockyard, facing into it=堆置處告示牌@n插在堆置處的邊上，面向裡面
+[Stockyard] You already have one. Take the old sign out first=[堆置處] 已經有一處了，先把舊的告示牌拔掉
+[Stockyard] The stockyard must touch a road, so the buyers' trucks can reach it=[堆置處] 範圍要碰到道路，煤商的車才開得到
+Stockyard (right-click)=堆置處（右鍵）
+[Stockyard] Set up @1 × @2 m. Dump coal inside the outline; buyers come in the daytime=[堆置處] 劃好 @1 × @2 m。煤倒在框裡，白天會有煤商來
+Morning. Business is slow lately.=早啊，最近生意不好做。
+The road from the plant is full of potholes.=電廠那條路坑坑洞洞的。
+Your pile looks decent.=你這堆看起來還可以。
+The power plant pays late again.=電廠又拖款了。
+Rain makes the coal heavy.=下雨煤就變重。
+Hello? Anyone selling coal?=有人在嗎？有煤賣嗎？
+Where's the coal? I drove all the way here.=煤呢？我大老遠開過來耶。
+Empty again?=又是空的？
+Coal trader=煤商
+A coal trader took @1 (@2 of coal) and paid @3=煤商買走 @1（純煤 @2），付了 @3
+A coal trader came by: no coal in the pile=煤商來過：沒有煤
+A coal trader came by: too much rock in the pile, no deal=煤商來過：石頭太多，沒買
+A coal trader came by: too expensive, no deal=煤商來過：嫌貴，沒買
+I'll take some. Loading now.=我收一些，來裝車。
+See you next time.=下次見。
+No coal. I'll come back another day.=沒煤，改天再來。
+Too much rock in this pile. Not today.=這堆石頭太多，今天先不要。
+At that price? Not today.=這個價錢？今天先不要。
+Stockyard  @1 × @2 m=堆置處  @1 × @2 m
+Pile @1, coal-bearing @2, pure coal @3=煤堆 @1，含煤的 @2，純煤 @3
+Market price $@1/t, traders' price about $@2/t=市價 $@1/t，煤商行情約 $@2/t
+Your price ($ per t of coal)=你的售價（每噸純煤 $）
+Size=大小
+Reopen=重新開放
+Close=關閉
+Closed=已關閉
+Recent sales=最近的成交
+@1 (@2 of coal) at $@3/t: @4=@1（純煤 @2）每噸 $@3：@4
+None yet=還沒有
+[Stockyard] Price set to $@1/t=[堆置處] 售價改成 $@1/t
+[Stockyard] Closed: no traders will come=[堆置處] 已關閉：煤商不會來
+[Stockyard] Open again=[堆置處] 重新開放
 
 ### stressmeter.lua
 Flat jack@nRight-click a rock wall to measure, E to write it into the field notebook; Shift + E switches between a vertical slot (horizontal stress) and a horizontal slot (vertical stress)=平板千斤頂@n右鍵岩壁量測，E 記進野帳本；Shift＋E 切換垂直槽（量水平應力）／水平槽（量垂直應力）
@@ -1113,63 +1251,6 @@ Intact rock: σ1 at failure @1 MPa=完整岩石：破壞時 σ1 @1 MPa
 Learn "Mohr circle analysis" from the professor to see the Mohr circle=跟教授考過「Mohr 圓分析」才看得到 Mohr 圓
 Numerical analysis tablet@nHold it to see the stress of the rock you point at; hold right-click to look at it up close=數值分析平板@n拿在手上：看指著的岩石的應力；按住右鍵：舉起來正面看
 
-### team.lua
-[Back to camp] Camp of team @1=[回營地] 第 @1 組營地
-[Back to camp] Spawn=[回營地] 出生點
-Back to camp@nClick to go back to your team's camp=回營地@n按一下回到自己組的營地
-[Teams] You are in team @1. The whole team shares one fund; your camp is at x @= @2 (hold the "Back to camp" flag and left-click to return to camp)=[分組] 你在第 @1 組。全組共用一筆資金，營地在 x @= @2（拿著「回營地」旗子按左鍵回營地）
-[Teams] You are no longer in any team=[分組] 你已經不在任何一組
-[Teams] Welcome! You are in team @1; the whole team shares one fund. The funds are shown at the top right of the screen; hold the "Back to camp" flag and left-click to return to camp=[分組] 歡迎！你在第 @1 組，全組共用一筆資金。資金在畫面右上角，拿著「回營地」旗子按左鍵回營地
-[Teams] You are not in a team yet, so you cannot buy equipment. Please ask the teacher to assign you to a team=[分組] 你還沒分組，還不能買設備。請找老師分組
-Line @1: account "@2" may only use English letters, digits, - and _, at most 20 characters=第 @1 行：帳號「@2」只能用英文字母、數字、- 和 _，最多 20 字
-Line @1: team "@2" is not between 1 and @3=第 @1 行：組別「@2」不在 1–@3 之間
-| list | set <account> <team|none> | money <team> <amount> | reload=| list | set <帳號> <組|none> | money <組> <金額> | reload
-Teams: show your own team; the teacher can list the teams, assign teams, adjust funds and reload the roster=分組：看自己的組；老師可以列出各組、分組、調整資金、重讀名單
-You are not in a team yet=你還沒分組
-You are in team @1, funds @2, camp at x @= @3. Members: @4=你在第 @1 組，資金 @2，營地 x @= @3。組員：@4
-This command is for the teacher only (@1 privilege)=這個指令要老師（@1 權限）才能用
-Team @1 (x @= @2) @3   @4 players: @5=第 @1 組（x @= @2）@3　@4 人：@5
-not opened=未開
-Usage: /team set <account> <team|none>=用法：/team set <帳號> <組|none>
-No such account: @1=沒有這個帳號：@1
-@1 is no longer in a team=@1 已取消分組
-The team must be between 1 and @1=組別要在 1–@1 之間
-@1 → team @2=@1 → 第 @2 組
-Usage: /team money <team> <amount> (negative to deduct)=用法：/team money <組> <金額>（負數是扣錢）
-[Team @1] The teacher adjusted the funds by @2@3=[第 @1 組] 老師調整資金 @2@3
-Team @1 funds are now @2=第 @1 組資金現在 @2
-Roster file not found: @1=找不到名單檔：@1
-Roster: @1 accounts created, @2 players changed teams@3=名單：新建 @1 個帳號、@2 人換組@3
-Usage: /team [list | set <account> <team|none> | money <team> <amount> | reload]=用法：/team [list | set <帳號> <組|none> | money <組> <金額> | reload]
-[team]=[組]
-Go back to your team's camp (the teacher can specify a team)=回自己組的營地（老師可以指定組別）
-You can only go back to your own team's camp: /site=只能回自己組的營地：/site
-Heading to the camp of team @1 (x @= @2)=前往第 @1 組營地（x @= @2）
-@1 (online)=@1（在線）
-Teacher=老師
-   Loan owed $@1=   欠款 $@1
-Members:=組員：
-Back to team @1's camp=回第 @1 組營地
-Teacher (not in a team)=老師（沒有分組）
-You are not in a team yet; please ask the teacher to assign you to a team=你還沒分組，請找老師分組
-Back to spawn=回出生點
-Teleport to the team camps:=傳送到各組的營地：
-[Teacher] Funds of each team:=【老師】各組資金：
-Team @1 @2 (@3 players)=第 @1 組 @2（@3 人）
- owes $@1= 欠 $@1
-Amount (negative to deduct)=金額（負數扣錢）
-Add/deduct=加/扣錢
-Reload student roster=重讀學生名單
-Teacher test play:=老師試玩：
-Join this team=我加入這組
-Leave my team=我退出分組
-[Teacher] Camp of team @1=[老師] 第 @1 組的營地
-[Teacher] The amount must be a number=[老師] 金額要填數字
-[Teacher] Team @1 funds are now @2=[老師] 第 @1 組資金現在 @2
-[Teacher] Roster file not found: @1=[老師] 找不到名單檔：@1
-[Teacher] Roster: @1 accounts created, @2 players changed teams@3=[老師] 名單：新建 @1 個帳號、@2 人換組@3
-[Tip] Hold the "Back to camp" flag and left-click to return to camp; your team's funds are at the top right of the screen=[提示] 拿著「回營地」旗子按左鍵就回營地；全組的資金在畫面右上角
-
 ### testing.lua
 Schmidt hammer@nRight-click a rock face=施密特錘@n對岩面右鍵
 [Schmidt hammer] Use it on an intact rock face (rubble and soil give no reading)=[施密特錘] 要敲在完整的岩面上（碎石、土敲不出讀數）
@@ -1193,6 +1274,7 @@ Timber post (top)=木柱（柱頂）
 Timber beam=木樑
 Timber beam (old)=木樑（舊版）
 Steel set@nRight-click the floor to stand it up, a wall to lay it as a beam=鋼支保@n對地板按右鍵立起來，對牆面按右鍵橫放當樑
+Steel set=鋼支保
 Steel set (top)=鋼支保（柱頂）
 Steel set (yielded)=鋼支保（已降伏）
 Steel beam=鋼樑
@@ -1201,7 +1283,6 @@ Wooden half slab=木板半格
 [Steel set] The bent steel set at @1 gave way: it could not hold the roof above=[鋼支保] @1 彎掉的鋼支保倒了：撐不住上面的頂板
 [Timber post] The timber post at @1 was crushed: it could not hold the roof above=[木柱] @1 的木柱被壓斷了：上面的頂板撐不住
 [Steel set] The steel set at @1 yielded and bent: capacity down to @2%, add support=[鋼支保] @1 的鋼支保降伏彎曲：承載力剩 @2%，要補支撐
-Axial force @1 kN / capacity @2 kN (@3%)=軸力 @1 kN／承載力 @2 kN（@3%）
 Roof above: FS @1=上方頂板 FS @1
 [Wooden block] The wooden block at @1 was crushed: it could not hold the load=[木磚] @1 的木磚被壓碎了：撐不住上面的荷重
 Wooden block=木磚
@@ -1328,13 +1409,7 @@ My assumption (tell me which face doesn't match):=我的假設（請告訴我哪
 ・Dark gray (bottom face): standing below, facing north and looking up, a normal 'F'=・深灰（底面）：站在下方、面向北方抬頭往上看時，是正常的「F」
 (The HUD at the top right shows your heading)=（右上角 HUD 有方位顯示）
 
-### train.lua
-Railway track=鐵軌
-Track ballast=道碴
-Tunnel lining=隧道襯砌
-Railway: nothing can be built or dug here=鐵路：不能挖、不能蓋
-Loading point=裝車點
-[Train] Loading point: wagons stop here=【火車】裝車點：車廂停在這裡裝
+### traincore.lua
 Rail wagon=貨車廂
 Wagon @1  @2 / @3=第 @1 節  @2 / @3
 Freight train=貨運列車
@@ -1348,6 +1423,13 @@ Train: no trains at night; the first one comes at @1:00=火車：晚上沒車，
 Train: loading @1 / @2, leaves when all wagons are full=火車：裝車中 @1 / @2，全部裝滿就開
 Train: leaving=火車：出站中
 Depart now=現在出發
+
+### trainline.lua
+Track ballast=道碴
+Tunnel lining=隧道襯砌
+Railway track=鐵軌
+Loading point=裝車點
+Railway: nothing can be built or dug here=鐵路：不能挖、不能蓋
 
 ### ui.lua
 on=開啟
@@ -1501,6 +1583,7 @@ Pulling out of the dump spot=離開傾倒位置
 Dumped, returning to the route=倒完，回到路線
 Returning to the loading point=回裝載點
 Dump area full (doze it flat, then reset it in the settings screen)=傾倒區滿了（推平後在設定畫面重設）
+At the weighbridge, waiting to be sent to the power plant=在地磅站等派車
 Heading to the excavator=前往怪手
 Turning to line up with the excavator=掉頭對準怪手
 Backing up to the excavator=倒車到怪手旁
@@ -1623,6 +1706,8 @@ Rubble in front of the blade: @1=鏟刀前碎石 @1
 Can't push: @1; back up and change direction, or clear the way first=推不動：@1，倒車換個方向或先推開前面
 Blade down (push rubble)=放鏟（推碎石）
 Design grade=設計坡度
+Ripping the rock in front of the blade (@1 s)=松土中：耙碎鏟刀前的岩石（@1 秒）
+Rock too hard to rip (rock mass strength @1 MPa > @2 MPa): blast it first=岩石太硬耙不動（岩體強度 @1 MPa > @2 MPa）：先爆破
 
 ### vehicle_drillrig.lua
 Right-click to get in; E drills, Space sets the depth=右鍵上車；E 鑽孔、空白鍵設孔深
@@ -1637,7 +1722,6 @@ Vertical hole (@1 m deep)@nFill with ANFO and add one emulsion stick as a primer
 Drilled a @1 m hole=鑽好一個 @1 m 的孔
 The hole position is blocked=孔位被擋住了
 Hole depth (bench height + subdrill): @1 m=孔深（台階高度＋超鑽）：@1 m
-Done=完成
 Only @1 m of rock below: drilling to the bottom of the rock=下面岩石只有 @1 m，鑽到岩石底
 drill a hole=鑽孔
 Drilling=鑽孔中
@@ -1708,31 +1792,38 @@ Right-click to get in; Space tips the bed=右鍵上車；空白鍵倒車斗
 
 ### vehicle_jumbo.lua
 Right-click to get in; E drills, Space edits the pattern=右鍵上車；E 鑽孔、空白鍵編輯設計圖
+Level=水平
+Decline 1:@1 (@2%)=下坡 1:@1（@2%）
 Blast hole pattern @1 × @2=爆破孔設計圖 @1 × @2
+Tunnel: @1=坑道：@1
 Drilling @1 / @2=鑽孔中 @1 / @2
 Drill to pattern=依設計圖鑽孔
 Edit pattern=編輯設計圖
 Drill hole (design: relief hole, do not charge)=鑽孔（設計：空孔，不要裝藥）
+Drill hole (design: perimeter hole, smooth-blasting cartridge)=鑽孔（設計：周邊孔，裝勻滑開炸藥包）
 Drill hole (design: charged hole)=鑽孔（設計：裝藥孔）
 Drilled @1 holes=鑽好 @1 個孔
 Blast hole pattern (looking at the face; the bottom row is at floor level)=爆破孔設計圖（面向工作面看；最下面一排是地面那層）
 Click a cell to toggle: ● charged hole  ○ relief hole  · not drilled=點格子切換：● 裝藥孔　○ 空孔　· 不鑽
 Width @1=寬 @1
 Height @1=高 @1
+Decline: research @1 first=坑道坡度：先研發「@1」
 Charge all=全部裝藥
 Center relief-hole cut=中心空孔掏槽
 Cross relief-hole cut=十字空孔掏槽
 Clear=清空
 No rock face to drill within @1 m ahead (point the front at the rock wall)=前方 @1 格內沒有可鑽的岩面（車頭要對著岩壁）
+This round lowers the floor by 1 m=這一輪底板降 1 m
 Right-click to get in; E charges, Space sets sticks per hole=右鍵上車；E 裝藥、空白鍵設每孔幾條
 @1 emulsion sticks per hole=每孔 @1 條乳膠炸藥
 (not used up in creative mode)=（創造模式不扣）
 @1 sticks in inventory=物品欄 @1 條
+Smooth-blasting cartridges @1=勻滑開炸藥包 @1 條
 Charging @1 / @2=裝藥中 @1 / @2
 Charge (face ahead)=裝藥（前方工作面）
 Sticks per hole=每孔條數
-Out of emulsion (charged @1 holes)=乳膠炸藥用完了（裝好 @1 孔）
 Charged @1 holes=裝好 @1 孔
+Out of emulsion (charged @1 holes)=乳膠炸藥用完了（裝好 @1 孔）
 Emulsion sticks per hole=每孔裝幾條乳膠炸藥
 No holes to charge within @1 m ahead=前方 @1 格內沒有要裝藥的鑽孔
 
@@ -1791,6 +1882,26 @@ Trailer=拖車
 Right-click to get in; E loads / unloads a vehicle=右鍵上車；E 載車／卸車
 Heavy trailer=重型拖車
 
+### vehicle_masago.lua
+Right-click to get in; look around to slew; E grabs a bite 3 m long, 1 m thick and 2 m deep where you point, Space dumps it where you point=按右鍵上車；轉動視線讓吊車迴轉；E 在滑鼠指的地方抓一斗（長 3 m、厚 1 m、深 2 m），空白鍵倒在滑鼠指的地方
+Rock too hard for the grab (rock mass strength @1 MPa > @2 MPa)=岩石太硬抓不動（岩體強度 @1 MPa > @2 MPa）
+Something in the way of the grab=抓斗被東西擋住
+Out of reach (@1–@2 m from the crane)=搆不到（離吊車 @1–@2 m）
+The trench is as deep as the cable reaches (@1 m)=已經挖到吊索的極限（@1 m）
+Grab @1=抓斗 @1
+Slewing to the target=轉向目標中
+Biting at @1 m=在 @1 m 深處抓土
+Lowering the grab=抓斗下降中
+Raising the grab=抓斗上升中
+Trench depth @1 m (cable @2 m)=溝深 @1 m（吊索 @2 m）
+Grab (where the cursor points)=抓（滑鼠指的地方）
+Left-click=左鍵
+Dig guide=挖掘指示
+The grab is full: Space to dump it=抓斗滿了：按空白鍵倒掉
+Point at the ground where to grab=指著要抓的地面
+The grab is empty=抓斗是空的
+Point at the ground or a truck to dump=指著地面或卡車才能倒
+
 ### vehicle_miner.lua
 Miner=採礦機
 Right-click to get in; E turns the drum on/off, Space sets the cut=右鍵上車；E 開關滾筒、空白鍵設切深
@@ -1833,6 +1944,7 @@ Recording route=錄製路線中
 AHS settings=無人駕駛設定
 
 ### vehicle_views.lua
+Grade @1%=坡度 @1%
 [WRECKED] Cannot be driven; get a mechanic to repair it=【報廢】不能開，找機械技工修理
 Durability @1%=耐久 @1%
 Let go=放手
@@ -1908,6 +2020,7 @@ Come closer=走近一點
 Workbench@nRight-click: make wall panels, stairs, doors, fences, ladders… from planks=木工桌@n右鍵：用木板做木牆板、樓梯、門、柵欄、梯子…
 Saw bench@nRight-click: saw a log into posts, planks or slabs=鋸木台@n右鍵：把原木鋸成木柱、木板或木板半格
 [Site work] Soil removed @1 m³, filled @2 m³: $@3=[整地] 清土 @1 m³、回填 @2 m³：$@3
+Grass=草
 Topsoil (@1/8 m)=表土（@1/8 m）
 
 ### worklight.lua
@@ -1931,6 +2044,76 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+List market events, or start one=列出市場事件，或觸發一件
+No such event: @1=沒有這個事件：@1
+That event is already happening=這個事件正在進行中
+[Name tag] You have not set a nickname, so classmates see your account name. Press I → "Profile" to set a nickname=[名牌] 你還沒設定暱稱，同學現在看到的是你的帳號。按 I →「個人資料」可以設定暱稱
+A nickname can have at most @1 characters=暱稱最多 @1 個字
+A nickname cannot contain parentheses=暱稱不能有括號
+This nickname is already taken=這個暱稱已經有人用了
+A nickname cannot be someone else's account name=暱稱不能是別人的帳號
+Nickname (the name classmates see above your head, at most @1 characters; blank @= use your account name)=暱稱（同學在你頭上看到的名字，最多 @1 字；空白 @= 用帳號）
+Set nickname=設定
+Save=儲存
+Cancel=取消
+Set: classmates see "@1"=已設定：同學看到「@1」
+Give every team the same order (teams with an order already are skipped)=每組發同一張訂單，已經有訂單的組跳過
+Usage: /rockmech_order <tons> <grade %> <days> [price/t]=用法：/rockmech_order <噸> <品位%> <天> [每噸價格]
+Order sent to @1 teams (@2 skipped)=已發給 @1 組，跳過 @2 組
+[Server] Restarting for maintenance in @1 min (takes about 1 minute); please park your vehicles and put down the rubble you are holding=[伺服器] @1 分鐘後重開維護（約 1 分鐘），請先把車停好、手上的碎石放下
+[Teams] You are in team @1. The whole team shares one fund; your camp is at x @= @2 (hold the "Back to camp" flag and left-click to return to camp)=[分組] 你在第 @1 組。全組共用一筆資金，營地在 x @= @2（拿著「回營地」旗子按左鍵回營地）
+[Teams] You are no longer in any team=[分組] 你已經不在任何一組
+[Teams] Welcome! You are in team @1; the whole team shares one fund. The funds are shown at the top right of the screen; hold the "Back to camp" flag and left-click to return to camp=[分組] 歡迎！你在第 @1 組，全組共用一筆資金。資金在畫面右上角，拿著「回營地」旗子按左鍵回營地
+[Teams] You are not in a team yet, so you cannot buy equipment. Please ask the teacher to assign you to a team=[分組] 你還沒分組，還不能買設備。請找老師分組
+Line @1: account "@2" may only use English letters, digits, - and _, at most 20 characters=第 @1 行：帳號「@2」只能用英文字母、數字、- 和 _，最多 20 字
+Line @1: team "@2" is not between 1 and @3=第 @1 行：組別「@2」不在 1–@3 之間
+| list | set <account> <team|none> | money <team> <amount> | reload=| list | set <帳號> <組|none> | money <組> <金額> | reload
+Teams: show your own team; the teacher can list the teams, assign teams, adjust funds and reload the roster=分組：看自己的組；老師可以列出各組、分組、調整資金、重讀名單
+You are not in a team yet=你還沒分組
+You are in team @1, funds @2, camp at x @= @3. Members: @4=你在第 @1 組，資金 @2，營地 x @= @3。組員：@4
+This command is for the teacher only (@1 privilege)=這個指令要老師（@1 權限）才能用
+Team @1 (x @= @2) @3   @4 players: @5=第 @1 組（x @= @2）@3　@4 人：@5
+not opened=未開
+Usage: /team set <account> <team|none>=用法：/team set <帳號> <組|none>
+No such account: @1=沒有這個帳號：@1
+@1 is no longer in a team=@1 已取消分組
+The team must be between 1 and @1=組別要在 1–@1 之間
+@1 → team @2=@1 → 第 @2 組
+Usage: /team money <team> <amount> (negative to deduct)=用法：/team money <組> <金額>（負數是扣錢）
+[Team @1] The teacher adjusted the funds by @2@3=[第 @1 組] 老師調整資金 @2@3
+Team @1 funds are now @2=第 @1 組資金現在 @2
+Roster file not found: @1=找不到名單檔：@1
+Roster: @1 accounts created, @2 players changed teams@3=名單：新建 @1 個帳號、@2 人換組@3
+Usage: /team [list | set <account> <team|none> | money <team> <amount> | reload]=用法：/team [list | set <帳號> <組|none> | money <組> <金額> | reload]
+[team]=[組]
+Go back to your team's camp (the teacher can specify a team)=回自己組的營地（老師可以指定組別）
+You can only go back to your own team's camp: /site=只能回自己組的營地：/site
+Heading to the camp of team @1 (x @= @2)=前往第 @1 組營地（x @= @2）
+@1 (online)=@1（在線）
+Teacher=老師
+   Loan owed $@1=   欠款 $@1
+Members:=組員：
+Back to team @1's camp=回第 @1 組營地
+Teacher (not in a team)=老師（沒有分組）
+You are not in a team yet; please ask the teacher to assign you to a team=你還沒分組，請找老師分組
+Back to spawn=回出生點
+Teleport to the team camps:=傳送到各組的營地：
+[Teacher] Funds of each team:=【老師】各組資金：
+Team @1 @2 (@3 players)=第 @1 組 @2（@3 人）
+ owes $@1= 欠 $@1
+Amount (negative to deduct)=金額（負數扣錢）
+Add/deduct=加/扣錢
+Reload student roster=重讀學生名單
+Teacher test play:=老師試玩：
+Join this team=我加入這組
+Leave my team=我退出分組
+[Teacher] Camp of team @1=[老師] 第 @1 組的營地
+[Teacher] The amount must be a number=[老師] 金額要填數字
+[Teacher] Team @1 funds are now @2=[老師] 第 @1 組資金現在 @2
+[Teacher] Roster file not found: @1=[老師] 找不到名單檔：@1
+[Teacher] Roster: @1 accounts created, @2 players changed teams@3=[老師] 名單：新建 @1 個帳號、@2 人換組@3
+[Tip] Hold the "Back to camp" flag and left-click to return to camp; your team's funds are at the top right of the screen=[提示] 拿著「回營地」旗子按左鍵就回營地；全組的資金在畫面右上角
+[Train] Loading point: wagons stop here=【火車】裝車點：車廂停在這裡裝
 @1 grade @2%=@1品位 @2%
 Feed: dump into the hopper in front   Queue @1 t=進料：倒進前面的受料倉　排隊 @1 t
 [Gold plant] Place it on flat ground: the 3×3 m plant and the @1×@2 m receiving hopper in front need level ground and solid rock below=[提金廠] 要蓋在平地上：3×3 m 的機器和前面 @1×@2 m 的受料倉要平、底下是實心岩石
@@ -1982,7 +2165,6 @@ Wagon @1  rejected  grade @2=第 @1 節  退貨  品位 @2
 The train left with @1 / @2 t=火車開走了，累計 @1 / @2 噸
 Profile=個人資料
 Vehicles · crushers · conveyor belts=車輛・收煤站・輸送帶
-Close=關閉
 Rebound R=回彈值 R
 [Field notebook] Right-click a core box to log it=[野帳本] 對著岩芯箱按右鍵判讀
 Handheld XRF analyzer@nWorks from your inventory=手持式 XRF 分析儀@n放在背包裡就有作用
@@ -2141,164 +2323,9 @@ Point the tablet at rock=平板要對著岩石
 Basket control box=吊籠操作盒
 Basket control box@nQ switches between moving the boom and the rope=吊籠操作盒@nQ：切換動吊臂／收放吊索
 Q (hold the control box)=Q（拿著操作盒）
-Generating the map @1%=生成地圖中 @1%
-Glass pane=玻璃片
-Build view   E to exit=施工視角　E 離開
-Ripping the rock in front of the blade (@1 s)=松土中：耙碎鏟刀前的岩石（@1 秒）
-Rock too hard to rip (rock mass strength @1 MPa > @2 MPa): blast it first=岩石太硬耙不動（岩體強度 @1 MPa > @2 MPa）：先爆破
-Grade @1%=坡度 @1%
-Level=水平
-Decline 1:@1 (@2%)=下坡 1:@1（@2%）
-Tunnel: @1=坑道：@1
-This round lowers the floor by 1 m=這一輪底板降 1 m
-Dozer thrust=推土機推力
-Bulldozer can rip rock 20% stronger=推土機耙得動的岩石強度 +20%
-Smooth blasting=勻滑開炸
 Jumbo rounds blast to the design floor: level floors and decline tunnels=鑽堡爆破照設計底板：地板平整，可以開下坡坑道
-Decline: research @1 first=坑道坡度：先研發「@1」
-Sheet pile@nRight-click the ground: drives a 1 m wide sheet pile down (@1 m, until it meets hard rock); the steel face is on your side, the side you will dig=鋼板樁@n對地面按右鍵：往下打一片 1 m 寬的板樁（@1 m，碰到硬岩為止）；鋼板面在你這一側（要開挖的那一側）
-Sheet pile=鋼板樁
-Sheet pile (yielded)=鋼板樁（已降伏）
-Strut (H-beam)@nRight-click a sheet pile face: lays a horizontal strut across to the opposite side (1 per metre)=內支撐（H 型鋼）@n對板樁的一面按右鍵：水平架到對面（每 1 m 一支）
-Strut=內支撐
-[Sheet pile] Already driven here=[鋼板樁] 這裡已經打過了
-Rock too hard to drive into (rock mass strength @1 MPa > @2 MPa)=岩石太硬打不進去（岩體強度 @1 MPa > @2 MPa）
-Can't drive here: only soil, rubble and soft rock=這裡打不進去：只能打進土、碎石和軟岩
-[Sheet pile] Driven @1 m=[鋼板樁] 打入 @1 m
 [Strut] Point at the side face of a sheet pile=[內支撐] 請對著板樁的側面
 [Strut] Nothing to brace against within @1 m=[內支撐] @1 m 內沒有可以撐住的東西
 [Strut] This span needs @1 struts (1 per metre), you have @2=[內支撐] 這個跨距要 @1 支（每 1 m 一支），你只有 @2 支
 [Strut] Protected area=[內支撐] 保護區
 [Strut] Strut @1 m placed=[內支撐] 架好 @1 m
-[Sheet pile] The sheet pile at @1 yielded and bent: the soil behind it now takes the load; add struts=[鋼板樁] @1 的板樁降伏變形：後面的土開始承受荷重，加支撐
-[Strut] The strut at @1 buckled=[H 型鋼] @1 的 H 型鋼挫屈
-Bending moment @1 kN·m/m / yield @2 kN·m/m (@3%)=彎矩 @1 kN·m/m／降伏 @2 kN·m/m（@3%）
-Light H-beam=輕型 H 型鋼
-Heavy H-beam=重型 H 型鋼
-Light H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=輕型 H 型鋼@n對地板按右鍵：往上到頂板當支柱；對牆面：水平架到對面當橫撐（每 1 m 一支）
-Heavy H-beam@nRight-click the floor: a post up to the roof; a wall: a strut across to the opposite side (1 per metre)=重型 H 型鋼@n對地板按右鍵：往上到頂板當支柱；對牆面：水平架到對面當橫撐（每 1 m 一支）
-[H-beam] This span needs @1 (1 per metre), you have @2=[H 型鋼] 這段要 @1 支（每 1 m 一支），你只有 @2 支
-[H-beam] @1 m placed=[H 型鋼] 放好 @1 m
-[H-beam] An unsupported H-beam fell down=[H 型鋼] 懸空的 H 型鋼掉下來了
-Bentonite slurry=穩定液
-Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=穩定液@n每單位 1 m³。按右鍵倒進去；會慢慢流，頂住溝壁不讓它塌
-Diaphragm wall grab=連續壁抓斗
-Rock too hard for the grab (rock mass strength @1 MPa > @2 MPa)=岩石太硬抓不動（岩體強度 @1 MPa > @2 MPa）
-Something in the way of the grab=抓斗被東西擋住
-The trench is as deep as the cable reaches (@1 m)=已經挖到吊索的極限（@1 m）
-Grab @1=抓斗 @1
-Biting at @1 m=在 @1 m 深處抓土
-Lowering the grab=抓斗下降中
-Raising the grab=抓斗上升中
-Trench depth @1 m (cable @2 m)=溝深 @1 m（吊索 @2 m）
-The grab is full: Space to dump it=抓斗滿了：按空白鍵倒掉
-The grab is empty=抓斗是空的
-Slurry tank=穩定液儲槽
-Out of slurry: the level is dropping=存量用完了：液面在下降
-Pumping=補液中
-Right-click to get in; look around to slew; E grabs a bite 3 m long, 1 m thick and 2 m deep where you point, Space dumps it where you point=按右鍵上車；轉動視線讓吊車迴轉；E 在滑鼠指的地方抓一斗（長 3 m、厚 1 m、深 2 m），空白鍵倒在滑鼠指的地方
-Slewing to the target=轉向目標中
-Out of reach (@1–@2 m from the crane)=搆不到（離吊車 @1–@2 m）
-Grab (where the cursor points)=抓（滑鼠指的地方）
-Point at the ground where to grab=指著要抓的地面
-Point at the ground or a truck to dump=指著地面或卡車才能倒
-The pipe outlet is blocked=管口被擋住
-The pipe is not over a trench=管口底下不是溝槽
-Turn the pipe=轉向
-Slurry tank@n40 m³ steel tank, 3 × 6 × 3 m, built in the direction you look. Connect it to a slurry outlet with slurry pipes. Right-click with slurry to fill it=穩定液儲槽@n40 m³ 鋼槽（3 × 6 × 3 m），往你看的方向蓋。用穩定液管接到出液口。拿著穩定液按右鍵存進去
-Stock @1 / @2 m³=存量 @1 / @2 m³
-The slurry tank is full=穩定液儲槽滿了
-[Slurry tank] Needs 3 × 6 m of level, clear ground (3 m high)=[穩定液儲槽] 需要 3 × 6 m 平整、淨空的地面（高 3 m）
-[Slurry tank] There is @1 in the way: move it first=[穩定液儲槽] @1 擋住了：先移開
-Slurry pipe@nConnects slurry tanks to a slurry outlet=穩定液管@n把儲槽接到出液口
-Slurry pipe=穩定液管
-Slurry outlet=出液口
-Target level: @1 m below the ground here=目標液面：這裡的地面下 @1 m
-Connected tanks: @1, stock @2 m³=接到儲槽 @1 個，存量 @2 m³
-Not connected to a slurry tank=沒有接到儲槽
-Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=出液口@n管子朝向你：站在溝邊、往外放，管口就垂在溝槽上方。用穩定液管接到儲槽，自動把液面補到設定高度。Shift＋右鍵轉向
-Connect a slurry pipe to the valve on the blue side=穩定液管接在藍色那一面的閥門
-Put in all slurry=背包裡的穩定液全部存入
-Take 1 m³=取出 1 m³
-Take 10 m³=取出 10 m³
-Left-click=左鍵
-Dig guide=挖掘指示
-Power plant coal @1 t=電廠存煤 @1 t
-Power plant coal: tons received each day and the daily average=電廠存煤：每天進煤噸數和日平均
-Stock @1 t, @2 days: average @3 t/day (since first delivery @4 t/day)=存煤 @1 t，經過 @2 天：平均每天 @3 t（從第一次進煤算 @4 t/天）
-@1  grade @2=@1  品位 @2
-@1 is back at the weighbridge=@1 回到地磅站了
-@1 left for @2 with @3=@1 載 @3 開往@2
-@1 unloaded at @2, income @3=@1 在@2卸完，收入 @3
-@1: @2 one way, unloads @3 t/s=@1：單程 @2，每秒卸 @3 t
-Arriving=快到了
-Barrier=柵欄
-Coming back  @1=回程  @1
-Get out first=先下車
-Haul trucks cannot use public roads=礦卡不能上公路
-Haulage=運費
-Haulage per trip @1=每趟運費 @1
-No truck. Park on the weighbridge and get out=沒有車。開上地磅停好、下車
-None=沒有
-Not on the weighbridge=不在地磅上
-On the road=路上的車
-On the weighbridge=地磅上
-Queuing at @1 (@2 ahead)=在@1排隊（前面 @2 台）
-Raining: the trip takes @1% longer=下雨：路程多 @1%
-Send=派車
-Send the operator off first=先讓操作員下車
-Send to=送去
-To @1  @2=往@1  @2
-To the power plant=往電廠
-Unload it from the trailer first=先從拖車上開下來
-Unloading  @1=卸煤中  @1
-Weighbridge  (to the power plant)=地磅站（往電廠）
-Weighbridge office=地磅站
-[To the power plant] @1=[往電廠] @1
-At the weighbridge, waiting to be sent to the power plant=在地磅站等派車
-@1 (@2 of coal) at $@3/t: @4=@1（純煤 @2）每噸 $@3：@4
-A coal trader came by: too expensive, no deal=煤商來過：嫌貴，沒買
-A coal trader came by: too much rock in the pile, no deal=煤商來過：石頭太多，沒買
-A coal trader took @1 (@2 of coal) and paid @3=煤商買走 @1（純煤 @2），付了 @3
-At that price? Not today.=這個價錢？今天先不要。
-Coal trader=煤商
-I'll take some. Loading now.=我收一些，來裝車。
-Market price $@1/t, traders' price about $@2/t=市價 $@1/t，煤商行情約 $@2/t
-Morning. Business is slow lately.=早啊，最近生意不好做。
-None yet=還沒有
-Pile @1, coal-bearing @2, pure coal @3=煤堆 @1，含煤的 @2，純煤 @3
-Rain makes the coal heavy.=下雨煤就變重。
-Recent sales=最近的成交
-See you next time.=下次見。
-Size=大小
-Stockyard  @1 × @2 m=堆置處  @1 × @2 m
-Stockyard (right-click)=堆置處（右鍵）
-Stockyard sign=堆置處告示牌
-The power plant pays late again.=電廠又拖款了。
-The road from the plant is full of potholes.=電廠那條路坑坑洞洞的。
-Too much rock in this pile. Not today.=這堆石頭太多，今天先不要。
-Your pile looks decent.=你這堆看起來還可以。
-Your price ($ per t of coal)=你的售價（每噸純煤 $）
-[Stockyard] @1=[堆置處] @1
-[Stockyard] Price set to $@1/t=[堆置處] 售價改成 $@1/t
-[Stockyard] Set up @1 × @2 m. Dump coal inside the outline; buyers come in the daytime=[堆置處] 劃好 @1 × @2 m。煤倒在框裡，白天會有煤商來
-[Stockyard] The stockyard must touch a road, so the buyers' trucks can reach it=[堆置處] 範圍要碰到道路，煤商的車才開得到
-[Stockyard] You already have one. Take the old sign out first=[堆置處] 已經有一處了，先把舊的告示牌拔掉
-Stockyard sign@nPlace it at the edge of the stockyard, facing into it=堆置處告示牌@n插在堆置處的邊上，面向裡面
-Hello? Anyone selling coal?=有人在嗎？有煤賣嗎？
-Where's the coal? I drove all the way here.=煤呢？我大老遠開過來耶。
-Empty again?=又是空的？
-A coal trader came by: no coal in the pile=煤商來過：沒有煤
-No coal. I'll come back another day.=沒煤，改天再來。
-Reopen=重新開放
-Closed=已關閉
-[Stockyard] Closed: no traders will come=[堆置處] 已關閉：煤商不會來
-[Stockyard] Open again=[堆置處] 重新開放
-Smooth-blasting cartridge@nOne per empty drill hole: small charge, little damage to the rock left behind=勻滑開炸藥包@n一孔一條，裝進空的鑽孔：藥量小，留下來的岩壁比較不會被震鬆
-Smooth-blasting cartridge=勻滑開炸藥包
-Charged hole: smooth-blasting cartridge@nLight it with flint and steel, or use the blasting machine=裝藥鑽孔：勻滑開炸藥包@n打火石點火、或用起爆器
-This hole is already charged=這個孔已經裝藥了
-Smooth-blasting cartridges go into an empty drill hole=勻滑開炸藥包要裝進空的鑽孔
-Drill hole (design: perimeter hole, smooth-blasting cartridge)=鑽孔（設計：周邊孔，裝勻滑開炸藥包）
-Smooth-blasting cartridges @1=勻滑開炸藥包 @1 條
-Jumbo rounds blast to the design floor; perimeter holes take smooth-blasting cartridges=鑽堡爆破照設計底板（地板平整，可以開下坡坑道）；周邊孔裝勻滑開炸藥包

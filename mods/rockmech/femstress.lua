@@ -936,6 +936,8 @@ pump = function()
 		end
 		-- 鋼板樁彎矩、支撐軸力（retain.lua）
 		if rockmech.retain_fem_check then rockmech.retain_fem_check(job, res, meta) end
+		-- 鋼拱的軸力、彎矩（steelarch.lua）
+		if rockmech.steelarch_fem_check then rockmech.steelarch_fem_check(job, res, meta) end
 		if not cur.far then squeeze_rubble(job, res, meta) end
 		if rockmech.fswarn_refresh then rockmech.fswarn_refresh(cur.pos) end
 		if cur.excav or #failed > 0 then rockmech.collapse.queue_block_check(cur.pos) end

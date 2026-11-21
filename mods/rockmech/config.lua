@@ -261,6 +261,7 @@ config.shop = {
 	{key = "slurry_pipe", shop = "tools", item = "rockmech:slurry_pipe", label = TR("Slurry pipe"), price = 500, count = 10},
 	{key = "slurry_outlet", shop = "tools", item = "rockmech:slurry_outlet", label = TR("Slurry outlet"), price = 3000},
 	{key = "strut", shop = "tools", item = "rockmech:strut", label = TR("Heavy H-beam"), price = 4000, count = 10},      -- H300（原本的內支撐）
+	{key = "steel_arch", shop = "tools", item = "rockmech:steel_arch", label = TR("Steel arch"), price = 1500, count = 10},   -- H150 鋼拱支保（steelarch.lua）
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = TR("Timber plank"), price = 100, count = 10},
 	{key = "timber_slab", shop = "tools", item = "rockmech:timber_slab", label = TR("Timber slab"), price = 100, count = 10},
 	{key = "drone", shop = "tools", item = "rockmech:drone_remote", label = TR("Drone"), price = 2000},
