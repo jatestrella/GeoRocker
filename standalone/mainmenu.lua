@@ -1,5 +1,6 @@
 -- 開始畫面：先是標題畫面（背景插圖、標題、開始遊戲／加入連線／操作說明／設定／離開），點進去才是各頁。
 -- 進了世界就直接玩，遊戲裡不再跳標題畫面（mm_title 只剩圖）。打包時（make_package.ps1）放到 builtin/mainmenu/init.lua，取代 Luanti 的主選單（沒有公開伺服器清單）。
+-- macOS（make_mac_package.py）：引擎在 Luanti.app 裡不改，安裝腳本在 minetest.conf 設 main_menu_script 指到這個檔。
 --   開始遊戲：左邊開新遊戲（隨機地圖、自範本建立地圖、自訂地圖），右邊既有存檔（繼續、刪除）；存檔可以有很多個、自己取名。
 --     地圖範本：standalone/maps/<id>/ 一個資料夾：map.conf（title、description、mode = solo|class、order）、
 --     rockmech.conf（世界設定，建新遊戲時複製進世界資料夾）、其他檔案（例如 students.csv）也一起複製。
@@ -36,7 +37,10 @@ gamedata = gamedata or {}
 -- 點陣字型（俐方體11號 Cubic 11，OFL，games/georocker/fonts）：整個遊戲的文字都用它。
 -- 每次開都檢查一次（絕對路徑：資料夾搬了也跟著改），舊的安裝 git pull 之後也會換上；字型設定改了引擎會馬上重載
 do
-	local FONT = core.get_builtin_path() .. ".." .. DS .. "games" .. DS .. GAME .. DS .. "fonts" .. DS .. "Cubic_11.ttf"
+	-- 遊戲資料夾從 core.get_games() 找：Windows 包在引擎旁邊，macOS 在使用者資料夾（引擎在 Luanti.app 裡）
+	local gpath = core.get_builtin_path() .. ".." .. DS .. "games" .. DS .. GAME
+	for _, g in ipairs(core.get_games()) do if g.id == GAME then gpath = g.path end end
+	local FONT = gpath .. DS .. "fonts" .. DS .. "Cubic_11.ttf"
 	-- georocker_font：設定版本（改字級時加 1，舊的設定也會跟著換）
 	if core.settings:get("font_path") ~= FONT or core.settings:get("georocker_font") ~= "3" then
 		for _, k in ipairs({"font_path", "font_path_bold", "font_path_italic", "font_path_bold_italic",
