@@ -1,6 +1,6 @@
 -- 開始畫面：先是標題畫面（背景插圖、標題、開始遊戲／加入連線／操作說明／設定／離開），點進去才是各頁。
 -- 進了世界就直接玩，遊戲裡不再跳標題畫面（mm_title 只剩圖）。打包時（make_package.ps1）放到 builtin/mainmenu/init.lua，取代 Luanti 的主選單（沒有公開伺服器清單）。
--- macOS（make_mac_package.py）：引擎在 Luanti.app 裡不改，安裝腳本在 minetest.conf 設 main_menu_script 指到這個檔。
+-- macOS（make_mac_package.py）：引擎在 Luanti.app 裡不改，start.command 用 MINETEST_USER_PATH 把使用者資料夾放在包裡的 data/，並在 minetest.conf 設 main_menu_script 指到這個檔。
 --   開始遊戲：左邊開新遊戲（隨機地圖、自範本建立地圖、自訂地圖），右邊既有存檔（繼續、刪除）；存檔可以有很多個、自己取名。
 --     地圖範本：standalone/maps/<id>/ 一個資料夾：map.conf（title、description、mode = solo|class、order）、
 --     rockmech.conf（世界設定，建新遊戲時複製進世界資料夾）、其他檔案（例如 students.csv）也一起複製。

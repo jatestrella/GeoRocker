@@ -1,20 +1,11 @@
 GeoRocker（macOS）
 
-1. 安裝 Luanti
-   到 https://www.luanti.org 下載 macOS 版（5.15 或更新），把 Luanti 拖進「應用程式」。
-   第一次打開如果被擋：系統設定 → 隱私權與安全性 → 拉到下面按「仍要打開」。
-   打開一次之後關掉。
+1. 把下載的 zip 解壓縮，整個資料夾搬到想放的地方（例如「文件」）。
+2. 對「開始遊戲.command」按右鍵 →「打開」→ 再按「打開」。
+   （只有第一次要這樣，之後直接點兩下就好。）
+   如果沒有「打開」可以按：系統設定 → 隱私權與安全性 → 拉到下面按「仍要打開」。
+   還是不行：打開「終端機」，輸入 bash 和一個空格，把「開始遊戲.command」拖進視窗，按 Enter。
 
-2. 安裝遊戲
-   對「安裝遊戲.command」按右鍵 →「打開」。
-   如果被擋：打開「終端機」，輸入 bash 和一個空格，把「安裝遊戲.command」拖進終端機視窗，按 Enter。
+存檔和設定都在這個資料夾的 data 裡面。換新版時，把舊的 data/worlds 搬到新資料夾的 data 裡，存檔就跟過去了。
 
-3. 完成後會自動打開 Luanti，出現 GeoRocker 的開始畫面就可以玩了。
-
-更新：下載新版的 zip，解壓縮後再做一次第 2 步。存檔不會不見。
-
-想換回 Luanti 原本的選單：打開
-~/Library/Application Support/minetest/minetest.conf（或 luanti 資料夾裡的），
-刪掉 main_menu_script 那一行。
-
-字型：俐方體11號 Cubic 11（ACh-K，SIL Open Font License），見 georocker/fonts/Cubic_11_OFL.txt。
+需要 macOS 12.3 或更新。Apple 晶片和 Intel 的 Mac 都可以（會自動選）。

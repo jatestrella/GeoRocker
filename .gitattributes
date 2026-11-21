@@ -1,2 +1,2 @@
 *.bin binary
-standalone/mac/install.command text eol=lf
+standalone/mac/start.command text eol=lf
