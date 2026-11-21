@@ -29,9 +29,16 @@ GeoRocker 是一款岩石力學、隧道與大地工程的採礦模擬遊戲，�
 
 ## 下載與安裝
 
-**Windows**：到 [Releases](https://github.com/jatestrella/GeoRocker/releases/latest) 下載 `GeoRocker.zip`，解壓縮後點兩下 `開始遊戲.bat`。不用另外安裝任何東西。
+不用另外安裝任何東西，遊戲引擎已經包在裡面。
 
-**macOS、Linux**：先安裝 [Luanti](https://www.luanti.org/) 5.15，再下載本 repo（綠色 **Code** 按鈕 → Download ZIP），把解壓出來的資料夾**改名為 `georocker`**，放進 Luanti 的 `games` 資料夾，開 Luanti 選 GeoRocker 建立新世界。這種裝法沒有 GeoRocker 的開始畫面，建立的世界會用預設地圖。
+| 系統 | 下載 | 開始玩 |
+|---|---|---|
+| Windows | [GeoRocker.zip](https://github.com/jatestrella/GeoRocker/releases/latest/download/GeoRocker.zip) | 解壓縮後點兩下 `開始遊戲.bat` |
+| macOS 12.3 以上（Apple 晶片、Intel 都可以） | [GeoRocker_mac.zip](https://github.com/jatestrella/GeoRocker/releases/latest/download/GeoRocker_mac.zip) | 解壓縮後對 `開始遊戲.command` 按右鍵 →「打開」（第一次才要，之後點兩下就好） |
+
+舊版本在 [Releases](https://github.com/jatestrella/GeoRocker/releases)。
+
+**Linux**：先安裝 [Luanti](https://www.luanti.org/) 5.15，再下載本 repo（綠色 **Code** 按鈕 → Download ZIP），把解壓出來的資料夾**改名為 `georocker`**，放進 Luanti 的 `games` 資料夾，開 Luanti 選 GeoRocker 建立新世界。這種裝法沒有 GeoRocker 的開始畫面，建立的世界會用預設地圖。
 
 ## 意見與合作
 
@@ -41,7 +48,7 @@ GeoRocker 是一款岩石力學、隧道與大地工程的採礦模擬遊戲，�
 
 | 素材 | 出處 | 授權 |
 |---|---|---|
-| 遊戲引擎 | [Luanti](https://www.luanti.org/)（Windows 下載包內附） | LGPL-2.1+ |
+| 遊戲引擎 | [Luanti](https://www.luanti.org/)（Windows、macOS 下載包內附） | LGPL-2.1+ |
 | `mods/default`、`stairs`、`doors`、`fire`、`tnt`、`sfinv`、`creative`、`player_api` | [Minetest Game](https://github.com/luanti-org/minetest_game) | 程式 LGPL-2.1+ 或 MIT；圖片、音效 CC BY-SA 3.0 等，作者與細節見各資料夾的 `license.txt` |
 | 字型 `fonts/Cubic_11.ttf` | [俐方體 11 號（Cubic 11）](https://github.com/ACh-K/Cubic-11) | SIL Open Font License 1.1 |
 
