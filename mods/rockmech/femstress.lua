@@ -390,9 +390,16 @@ local function make_job(pos)
 	local soil_str = {c = sp.c / 1000 * wet, phi = math.rad(sp.phi), t = (sp.tensile or 0) / 1000 * wet}
 	for c in pairs(job.soil) do meta.soil[c] = soil_str end
 	-- 土的塑性（fem.lua 的 job.plastic）：同一組 c（kPa，下雨打折）、φ；迭代上限 rockmech_fem_plastic_iters
-	if next(job.soil) and (fcfg.plastic_iters or 0) > 0 then
+	-- 滿格碎石（應力解裡的軟元素）也走同一個迭代：c = 0、φ = 顆粒流的殘餘摩擦角 φr，加上拉力截斷（fem.lua）。
+	-- 碎石只能頂（撐住上面、頂住旁邊），不能拉、不能靠剪力掛在岩壁上：它的重量和側壓照鬆散材料的荷重給
+	local has_rubble = false
+	for c, sft in pairs(job.soft) do
+		if sft == true and not job.soil[c] then has_rubble = true; break end
+	end
+	if (next(job.soil) or has_rubble) and (fcfg.plastic_iters or 0) > 0 then
 		job.plastic = {c = sp.c * wet, phi = sp.phi, iters = fcfg.plastic_iters, pcg_iter = fcfg.plastic_pcg or 300,
-			c_res = fcfg.soil_c_res or 0.5}
+			c_res = fcfg.soil_c_res or 0.5, rubble_phi = has_rubble and cfg.slope.phi_r or nil,
+			rubble_iters = math.max(fcfg.plastic_iters, 60)}
 	end
 	local damage_at = rockmech.collapse.damage_at_xyz
 	local press = job.press or {}

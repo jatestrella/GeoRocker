@@ -4,7 +4,8 @@
 -- ## 模型
 -- 每個岩石格是一個邊長 1 m 的 8 節點六面體元素（線彈性、均質、等向），空氣沒有勁度。
 -- 滿格的碎石是軟的元素（job.soft，勁度 = 岩石 × job.soft_e）：沒有現地應力、不加重力，反力只來自岩壁收斂壓它
--- （等於開挖前就在那裡，同回採區充填的簡化）。
+-- （等於開挖前就在那裡，同回採區充填的簡化）。碎石只能頂、不能拉：job.plastic.rubble_phi 有給時，碎石格走塑性迭代
+-- （c = 0、φ = 顆粒流的殘餘摩擦角，加上主應力的拉力截斷），不會靠拉力、剪力掛在岩壁上；重量另外當荷重給（femstress.lua）。
 -- 解的是「開挖造成的變化」：現地應力 σ0（每格給定）與重力在完整岩體裡平衡，開挖後臨空面上不平衡，
 --   K·Δu = F_重力 − ∫Bᵀσ0 dV       （節點不平衡力只出現在臨空面）
 --   σ = σ0 + D·B·Δu                 （每格中心）
@@ -36,6 +37,44 @@ local E = 1e6        -- kPa；應力與 E 無關，只影響 Δu 的尺度
 -- 單位立方體 8 節點元素的 Ke（節點 a = i + 2j + 4k；K[a][b] = {3×3 列展開}）
 -- blend（可選）：剪力項減積分。全積分的元素彎曲時有假的剪應變（剪力鎖定），一層元素太少時梁太硬；
 -- 剪力項改取格中心，留 blend 比例的全積分防止沙漏模態。
+-- 拉力截斷：應力（壓為正：xx, yy, zz, xy, yz, zx）的主應力有比 −tol 更拉的，就把拉的主應力設成 0、方向不變，
+-- 回傳截斷後的 6 個分量；沒有拉力回傳 nil。3×3 對稱矩陣用 Jacobi 旋轉求特徵值
+local function no_tension(a1, a2, a3, a4, a5, a6, tol)
+	local m = {{a1, a4, a6}, {a4, a2, a5}, {a6, a5, a3}}
+	local v = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+	for _ = 1, 12 do
+		local off = m[1][2] * m[1][2] + m[1][3] * m[1][3] + m[2][3] * m[2][3]
+		if off <= 1e-14 * (m[1][1] * m[1][1] + m[2][2] * m[2][2] + m[3][3] * m[3][3]) + 1e-20 then break end
+		for p = 1, 2 do for q = p + 1, 3 do
+			local apq = m[p][q]
+			if apq ~= 0 then
+				local th = (m[q][q] - m[p][p]) / (2 * apq)
+				local t = (th >= 0 and 1 or -1) / (math.abs(th) + math.sqrt(th * th + 1))
+				local c = 1 / math.sqrt(t * t + 1)
+				local s = t * c
+				for k = 1, 3 do
+					local x, y = m[k][p], m[k][q]
+					m[k][p], m[k][q] = c * x - s * y, s * x + c * y
+				end
+				for k = 1, 3 do
+					local x, y = m[p][k], m[q][k]
+					m[p][k], m[q][k] = c * x - s * y, s * x + c * y
+				end
+				for k = 1, 3 do
+					local x, y = v[k][p], v[k][q]
+					v[k][p], v[k][q] = c * x - s * y, s * x + c * y
+				end
+			end
+		end end
+	end
+	local l1, l2, l3 = m[1][1], m[2][2], m[3][3]
+	if l1 >= -tol and l2 >= -tol and l3 >= -tol then return nil end
+	l1, l2, l3 = math.max(0, l1), math.max(0, l2), math.max(0, l3)
+	local function cmp(i, j) return v[i][1] * l1 * v[j][1] + v[i][2] * l2 * v[j][2] + v[i][3] * l3 * v[j][3] end
+	return cmp(1, 1), cmp(2, 2), cmp(3, 3), cmp(1, 2), cmp(2, 3), cmp(3, 1)
+end
+fem.no_tension = no_tension
+
 local function element_stiffness(nu, blend)
 	local lam = E * nu / ((1 + nu) * (1 - 2 * nu))
 	local mu = E / (2 * (1 + nu))
@@ -385,16 +424,29 @@ function fem.solve(job)
 	-- 超過錐頂就整個拉到錐頂（土不能再受拉）。
 	-- 結果：牆後的土到了強度上限就維持在上限推牆（主動土壓）、被擠的土最多頂到被動土壓。
 	-- 迭代上限到了還有格子在超出（res.flow：超出的比例）→ 形成機構、還在流動（femstress.lua 拿來判定破壞）
+	-- 滿格碎石（job.soft 是 true、不是土）：同一個迴圈，c = 0、φ = plastic.rubble_phi（顆粒流的殘餘摩擦角），
+	-- 再加上拉力截斷：主應力是拉的就設成 0（碎石只能頂、不能拉，哪個方向都一樣）
 	local P, flow, piters = nil, nil, 0
 	local plastic = job.plastic
-	if plastic and job.soil and next(job.soil) then
-		local tp = math.tan(math.rad(plastic.phi or 30))
-		local den = math.sqrt(9 + 12 * tp * tp)
-		local alpha, kc = 3 * tp / den, 3 * (plastic.c or 0) / den     -- alpha 已乘 3：√J2 ≤ α_I1·I1 + k = (3α_I1)·p + k
+	local rub = {}
+	if plastic and plastic.rubble_phi then
+		for c, s in pairs(soft) do
+			if s == true and not soil[c] and solid[c] then rub[c] = true end
+		end
+	end
+	if plastic and ((job.soil and next(job.soil)) or next(rub)) then
+		local function dp(phi, c)
+			local tp = math.tan(math.rad(phi))
+			local den = math.sqrt(9 + 12 * tp * tp)
+			return 3 * tp / den, 3 * c / den     -- alpha 已乘 3：√J2 ≤ α_I1·I1 + k = (3α_I1)·p + k
+		end
+		local alpha_s, kc_s = dp(plastic.phi or 30, plastic.c or 0)
+		local alpha_r = plastic.rubble_phi and dp(plastic.rubble_phi, 0)
 		-- 應變軟化：降伏過的土格（有塑性應力 P）凝聚力降到殘餘值 c_res × c（膠結破壞），φ 不變
-		local kres = kc * math.max(0, math.min(1, plastic.c_res or 1))
+		local kres_s = kc_s * math.max(0, math.min(1, plastic.c_res or 1))
 		local cells = {}
-		for c in pairs(job.soil) do if solid[c] then cells[#cells + 1] = c end end
+		for c in pairs(job.soil or {}) do if solid[c] then cells[#cells + 1] = c end end
+		for c in pairs(rub) do cells[#cells + 1] = c end
 		table.sort(cells)
 		P = {}
 		local fv = {}
@@ -412,11 +464,18 @@ function fem.solve(job)
 			end
 			return cx, cy, cz, exx, eyy, ezz, gxy, gyz, gzx
 		end
-		for it = 1, plastic.iters or 15 do
+		-- 土照舊迭代 plastic.iters 輪（到上限還在流動 = 破壞，femstress.lua 的判定）；之後只剩碎石沒收斂的話，
+		-- 只對碎石繼續到 plastic.rubble_iters 輪（碎石的拉力截斷收斂得慢，土格的塑性應力不再動）
+		local soil_iters = plastic.iters or 15
+		local total = math.max(soil_iters, next(rub) and (plastic.rubble_iters or soil_iters) or 0)
+		for it = 1, total do
 			piters = it
 			local over = {}
 			local any = false
+			local soil_phase = it <= soil_iters
 			for _, c in ipairs(cells) do
+				if not soil_phase and not rub[c] then goto next_cell end
+				do
 				local _, _, _, exx, eyy, ezz, gxy, gyz, gzx = cell_strain(c)
 				local w = w_of(c)
 				local tr = w * lam * (exx + eyy + ezz)
@@ -430,11 +489,15 @@ function fem.solve(job)
 				local pm = (s1 + s2 + s3) / 3
 				local d1, d2, d3 = s1 - pm, s2 - pm, s3 - pm
 				local sq = math.sqrt(0.5 * (d1 * d1 + d2 * d2 + d3 * d3) + s4 * s4 + s5 * s5 + s6 * s6)
-				local kk = pc and kres or kc
+				local isr = rub[c]
+				local alpha, kc = alpha_s, kc_s
+				local kk = pc and kres_s or kc_s
+				if isr then alpha, kc, kk = alpha_r, 0, 0 end
 				local lim = alpha * pm + kk
 				local scale = alpha * math.abs(pm) + kc + 0.1
+				local r1, r2, r3, r4, r5, r6
+				local excess = 0
 				if sq > lim + 0.01 * scale then
-					local r1, r2, r3, r4, r5, r6
 					if lim <= 0 then
 						local pa = alpha > 1e-9 and -kk / alpha or 0      -- 錐頂（張力上限）
 						r1, r2, r3, r4, r5, r6 = pa, pa, pa, 0, 0, 0
@@ -443,15 +506,30 @@ function fem.solve(job)
 						r1, r2, r3 = pm + d1 * fr, pm + d2 * fr, pm + d3 * fr
 						r4, r5, r6 = s4 * fr, s5 * fr, s6 * fr
 					end
+					excess = (sq - math.max(lim, 0)) / scale
+				end
+				if isr then          -- 碎石：拉力截斷（主應力 < 0 → 0）
+					local t1, t2, t3, t4, t5, t6 = no_tension(r1 or s1, r2 or s2, r3 or s3, r4 or s4, r5 or s5, r6 or s6, 0.5)
+					if t1 then
+						r1, r2, r3, r4, r5, r6 = t1, t2, t3, t4, t5, t6
+						if excess == 0 then excess = 0.01 end
+					end
+				end
+				if r1 then
 					if not pc then pc = {0, 0, 0, 0, 0, 0}; P[c] = pc end
 					pc[1], pc[2], pc[3] = pc[1] - (s1 - r1), pc[2] - (s2 - r2), pc[3] - (s3 - r3)
 					pc[4], pc[5], pc[6] = pc[4] - (s4 - r4), pc[5] - (s5 - r5), pc[6] - (s6 - r6)
-					over[c] = (sq - math.max(lim, 0)) / scale
+					over[c] = excess
 					any = true
 				end
+				end
+				::next_cell::
 			end
-			flow = over
-			if not any then flow = nil; break end
+			if soil_phase then flow = over end
+			if not any then
+				if soil_phase then flow = nil end
+				break
+			end
 			-- 外力 = 原本的 + 塑性應力當初始應力（σ0 在 f 裡是 +σ0·∂N/∂x，同一個寫法）
 			for i = 1, ndof do fv[i] = f[i] end
 			for c, pc in pairs(P) do
