@@ -65,7 +65,7 @@ local function set_press(job, g, to_cell, scale)
 end
 
 -- 土的參數表（下面 cid_tables 建）：粗網格、細網格都用，先宣告
-local K0_SOIL, gamma_of_cid, soil_cid, soil_set, topsoil_f, cid_tables, gamma_s, fluid_f
+local K0_SOIL, gamma_of_cid, soil_cid, soil_set, topsoil_f, cid_tables, gamma_s, fluid_f, fluid_g
 
 -- 粗網格（子模型的外圍）：同樣的格數，每格 C³ 公尺，一半以上是岩石就算實心。
 -- 原點對齊 C 的倍數，附近的開挖共用同一個粗網格，上次的解當初始值。
@@ -166,8 +166,13 @@ function cid_tables()
 	if core.registered_nodes["rockmech:subsoil"] then soil_set[core.get_content_id("rockmech:subsoil")] = true end
 	K0_SOIL = 1 - math.sin(math.rad(rockmech.materials.defaults("rockmech:topsoil").phi))
 	-- 穩定液（slurry.lua）：cid → 液面高度比例
-	fluid_f = {}
+	-- 其他流體（新拌混凝土，concrete.lua）：cid → 比例，fluid_g：cid → 單位重 γ（沒列的用穩定液的）
+	fluid_f, fluid_g = {}, {}
 	for name, k in pairs(rockmech.slurry_level or {}) do fluid_f[core.get_content_id(name)] = k / rockmech.RUBBLE_LEVELS end
+	for name, v in pairs(rockmech.fluid_extra or {}) do
+		local cid = core.get_content_id(name)
+		fluid_f[cid], fluid_g[cid] = v[1], v[2]
+	end
 end
 function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
 -- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料：厚度 (m)、重量 Σγ·h (kPa)，從 ly 那一格開始算。
@@ -326,17 +331,19 @@ local function make_job(pos)
 		end end end
 	end
 	-- 穩定液（slurry.lua）的液壓（K = 1）：側面 γ·(液面到那一格中心的深度)、頂面 γ·(上面的液柱高)。
-	-- 天然地形那一解沒有（人灌的）。job.fluid：裝著穩定液的格（find_failed：貼著穩定液的土面有液壓頂著，不算臨空）
+	-- 新拌混凝土（concrete.lua）也是液體、γ 比較大（沉在穩定液底下）：上面的液柱照各層的 γ 加起來 Σγ·h。
+	-- 天然地形那一解沒有（人灌的）。job.fluid：裝著液體的格（find_failed：貼著液體的土面有液壓頂著，不算臨空）
 	if next(fluid_f) then
 		local GF = rockmech.SLURRY_GAMMA or 11
-		local function fluid_above(gx, ly, gz)
-			local h = 0
+		local function fluid_above(gx, ly, gz)        -- → 上面液柱的重量 Σγ·h (kPa)
+			local q = 0
 			for y = ly, g.ny - 1 do
-				local f = fluid_f[g.data[1 + gx + y * gsy + gz * gsz]]
+				local cid = g.data[1 + gx + y * gsy + gz * gsz]
+				local f = fluid_f[cid]
 				if not f then break end
-				h = h + f
+				q = q + (fluid_g[cid] or GF) * f
 			end
-			return h
+			return q
 		end
 		local press = job.press or {}
 		job.press = press
@@ -348,16 +355,18 @@ local function make_job(pos)
 				job.fluid = job.fluid or {}
 				job.fluid[c] = true
 			elseif job.solid[c] and (not job.soft[c] or job.soil[c] or (job.retain and job.retain[c])) then
-				local h = fluid_above(gx, ly + 1, gz)
-				if h > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, GF * h end
+				local q = fluid_above(gx, ly + 1, gz)
+				if q > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, q end
 				for _, d in ipairs(SIDES) do
 					local nx_, nz_ = gx + d[1], gz + d[2]
 					if nx_ >= 0 and nz_ >= 0 and nx_ < g.nx and nz_ < g.nz then
-						local f = fluid_f[g.data[1 + nx_ + ly * gsy + nz_ * gsz]]
+						local cid = g.data[1 + nx_ + ly * gsy + nz_ * gsz]
+						local f = fluid_f[cid]
 						if f then
-							-- 不滿格：液體只貼著那一面的下面 f，合力 γ·f²/2；上面還有液柱就是整面 γ·(h + f/2)
-							local ha = fluid_above(nx_, ly + 1, nz_)
-							local p = ha > 0 and GF * (ha + f / 2) or GF * f * f / 2
+							-- 不滿格：液體只貼著那一面的下面 f，合力 γ·f²/2；上面還有液柱就是整面 Σγh + γ·f/2
+							local gf = fluid_g[cid] or GF
+							local qa = fluid_above(nx_, ly + 1, nz_)
+							local p = qa > 0 and (qa + gf * f / 2) or gf * f * f / 2
 							press[#press + 1], press[#press + 2], press[#press + 3] = c, d[3], p
 						end
 					end

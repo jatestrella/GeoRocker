@@ -120,6 +120,22 @@ falling=落下
 planar sliding=平面滑動
 wedge sliding=楔形滑動
 
+### concrete.lua
+Concrete (cracked)=混凝土（已開裂）
+Concrete=混凝土
+Age @1 days, strength @2 / @3 MPa (@4%)=齡期 @1 天，強度 @2 / @3 MPa（@4%）
+Fresh concrete=新拌混凝土
+Ready-mix concrete (m³)=預拌混凝土（m³）
+Tremie frame=特密管支架
+Poured @1 m³=已灌 @1 m³
+The tremie frame is gone=特密管支架不見了
+The panel is full=這一段灌滿了
+Tremie frame@nRight-click a trench: the frame sits on the mouth and the tremie pipe reaches the bottom. A concrete mixer truck pours through it=特密管支架@n對溝槽按右鍵：支架架在槽口，管子自己伸到槽底。預拌車從這裡灌混凝土
+Point into a trench: the frame sits on its mouth=要對著溝槽：支架架在槽口
+[Concrete] The plain concrete wall at @1 cracked in bending=[混凝土] @1 的素混凝土牆彎裂了
+[Concrete] The concrete wall at @1 is not embedded deep enough: the soil pushed it over and it cracked=[混凝土] @1 的混凝土牆埋入不夠，被土推動、開裂了
+Bending moment @1 kN·m/m / cracking @2 kN·m/m (@3%)=彎矩 @1 kN·m/m / 開裂 @2 kN·m/m（@3%）
+
 ### config.lua
 Sandstone=砂岩
 Shale=頁岩
@@ -167,6 +183,7 @@ Core drill rig=岩芯鑽探車
 Aerial work platform=高空作業車
 Crane=吊車
 Diaphragm wall grab=連續壁抓斗
+Concrete mixer truck=預拌車
 Surface drill rig=鑽機
 Drill jumbo=鑽孔台車
 Haul truck=礦卡
@@ -1154,10 +1171,12 @@ Connected tanks: @1, stock @2 m³=接到儲槽 @1 個，存量 @2 m³
 Not connected to a slurry tank=沒有接到儲槽
 The pipe outlet is blocked=管口被擋住
 The pipe is not over a trench=管口底下不是溝槽
+Tanks are full: the slurry is overflowing=儲槽滿了：穩定液溢出來了
+Pumping back=抽回儲槽
 Out of slurry: the level is dropping=存量用完了：液面在下降
 Pumping=補液中
 Turn the pipe=轉向
-Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=出液口@n管子朝向你：站在溝邊、往外放，管口就垂在溝槽上方。用穩定液管接到儲槽，自動把液面補到設定高度。Shift＋右鍵轉向
+Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench at the target level and pumps any excess back. Shift + right-click turns it=出液口@n管子朝向你：站在溝邊、往外放，管口就垂在溝槽上方。用穩定液管接到儲槽，自動把液面保持在設定高度，多的抽回儲槽。Shift＋右鍵轉向
 
 ### steelarch.lua
 Steel arch (yielded)=鋼拱（已降伏）
@@ -1917,6 +1936,18 @@ Cut 1 m down (off @= level)=下切 1 m（關＝平切）
 Bin full: waiting to unload=料倉滿了：等卸料
 Something ahead can't be cut (facility, conveyor)=前面有切不動的東西（設施、輸送帶）
 
+### vehicle_mixer.lua
+Right-click to get in; Space orders concrete, E pours into a tremie frame=右鍵上車；空白鍵叫料，E 灌進特密管支架
+Concrete @1 / @2 m³=混凝土 @1 / @2 m³
+Pouring (@1 m³)=灌注中（@1 m³）
+Pour into the tremie frame=灌進特密管支架
+Order concrete=叫料
+The truck is empty (poured @1 m³)=車上的混凝土灌完了（灌了 @1 m³）
+(poured @1 m³)=（灌了 @1 m³）
+No tremie frame within @1 m of the chute=溜槽 @1 m 內沒有特密管支架
+The drum is empty: press Space to order concrete=拌筒是空的：按空白鍵叫料
+Stopped (poured @1 m³)=停了（灌了 @1 m³）
+
 ### vehicle_op.lua
 Operator: @1=操作員：@1
 @1 jobs queued=排了 @1 個工作
@@ -1959,8 +1990,10 @@ This vehicle belongs to @1; other teams cannot drive it=這是@1的車，別組�
 [Vehicle] @1=[車輛] @1
 @1 / @2 m³ (@3 t)=@1 / @2 m³（@3 t）
 @1 m³ (@2 t)=@1 m³（@2 t）
+Order $@1=叫料 $@1
 Fill=裝滿
 Unload=卸下
+Not enough money=錢不夠
 No free seat=沒有空位了
 [Breaker] Only excavators can be fitted with it=[破碎錘] 只有怪手裝得上
 There is still rubble on the vehicle; dump it before picking the vehicle up=車上還有碎石，先倒掉才能收起來
@@ -2044,6 +2077,7 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=出液口@n管子朝向你：站在溝邊、往外放，管口就垂在溝槽上方。用穩定液管接到儲槽，自動把液面補到設定高度。Shift＋右鍵轉向
 List market events, or start one=列出市場事件，或觸發一件
 No such event: @1=沒有這個事件：@1
 That event is already happening=這個事件正在進行中

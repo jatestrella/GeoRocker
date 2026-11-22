@@ -18,6 +18,8 @@ local STEP = tonumber(core.settings:get("rockmech_slurry_step") or "") or 0.25
 rockmech.SLURRY = BASE
 rockmech.SLURRY_GAMMA = GAMMA
 rockmech.slurry_level = {}           -- 方塊名稱 → 級數（滿格 8）
+-- 應力解裡也算液壓的其他流體（concrete.lua 的新拌混凝土）：方塊名稱 → {級數比例, γ kN/m³}
+rockmech.fluid_extra = rockmech.fluid_extra or {}
 
 local COLOR = "#8a7a5c"
 local function name_of(k)
@@ -267,6 +269,15 @@ end
 rockmech.slurry_equalize = equalize
 rockmech.slurry_add_up = add_up            -- (p, 級數, 最高到哪一格) → 加不進去的級數
 rockmech.slurry_schedule = function(p) schedule(p) end
+-- 把 p 換成別的方塊（特密管灌混凝土），不觸發排開：回傳原本那一格的穩定液級數，排去哪裡由呼叫的人決定
+function rockmech.slurry_replace(p, node)
+	local k = level_at(p) or 0
+	internal = true
+	core.set_node(p, node)
+	internal = false
+	if k > 0 then wake_around(p) end
+	return k
+end
 
 -- p 剛被挖空（抓斗咬走）：上面那一欄穩定液馬上往下補（由下往上一格一格掉一層），液面跟著降。
 -- 不等慢慢流：泥漿裡挖出來的空洞不會撐著不動，不然應力解會把空洞當成臨空面

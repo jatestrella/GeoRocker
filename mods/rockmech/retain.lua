@@ -603,9 +603,10 @@ end
 -- 板旁邊那一格的土：回傳 σv（kPa）、c、φ、kh；岩石回傳 rigid = true；不是土回傳 nil。
 -- σv：應力解有解到這裡（天然的土）就用應力解的 σv（地面上的荷重、堆的碎石、空洞上方的拱效應、轉角的幾何都在裡面）；
 -- 取離板再遠一格的土（貼著板的那一格被應力解裡的厚板樁拖著，σv 偏小）。沒有就用那一欄土的重量 γ·h
+local function is_wall(n) return IS_PILE[n] or (rockmech.concrete_wall and rockmech.concrete_wall[n]) end
 local function soil_at(p, out, sv_of)
 	local n = core.get_node(p).name
-	if not holds(n) or IS_PILE[n] then return nil end
+	if not holds(n) or is_wall(n) then return nil end
 	if rockmech.lith_of_node[n] and not rockmech.is_rubble(n) then return {rigid = true} end
 	local sp = rockmech.materials.defaults("rockmech:topsoil")
 	local sv = sv_of and (sv_of(vector.add(p, out)) or sv_of(p))
@@ -613,7 +614,7 @@ local function soil_at(p, out, sv_of)
 		local h, q = 0, {x = p.x, y = p.y + 1, z = p.z}
 		for _ = 1, 40 do
 			local m = core.get_node(q).name
-			if not holds(m) or IS_PILE[m] then break end
+			if not holds(m) or is_wall(m) then break end
 			h = h + 1
 			q.y = q.y + 1
 		end
@@ -643,6 +644,10 @@ local function wall_solve(lo, hi, sv_of)
 				t = xaxis and p.z or p.x, plane = xaxis and p.x or p.z, bent = bent}
 		end
 	end
+	-- 其他的牆（concrete.lua：1 m 厚的混凝土牆，自己的 EI、自己的檢查 col.check）
+	if rockmech.retain_extra_cols then
+		for _, col in ipairs(rockmech.retain_extra_cols(lo, hi)) do cols[#cols + 1] = col end
+	end
 	-- 支撐：同一面牆（同軸向、同一個平面）、同一個高度、同一側 → 沿牆的位置清單
 	local lines = {}
 	local function line_key(col, y, s) return (col.xaxis and "x" or "z") .. col.plane .. ":" .. y .. ":" .. s end
@@ -656,7 +661,7 @@ local function wall_solve(lo, hi, sv_of)
 					local sc, ends = strut_line(nb)
 					local far_pile = false
 					for _, e in ipairs(ends) do
-						if not vector.equals(e, q) and IS_PILE[core.get_node(e).name] then far_pile = true end
+						if not vector.equals(e, q) and is_wall(core.get_node(e).name) then far_pile = true end
 					end
 					local kind = HB_INFO[name].kind
 					local ks = (far_pile and 2 or 1) * E_STEEL * HB[kind].A / #sc        -- kN/m（兩邊都是板樁：各頂一半長度）
@@ -713,7 +718,7 @@ local function wall_solve(lo, hi, sv_of)
 	local out = {}
 	for _, col in ipairs(cols) do
 		local n = #col.cells
-		local t = {n = n, EI = EI_PILE * (col.bent and BENT_R or 1), soil = {}, props = {}}
+		local t = {n = n, EI = col.EI or EI_PILE * (col.bent and BENT_R or 1), soil = {}, props = {}}
 		local own = {}          -- props 的序號 → 這一欄自己的那一支支撐
 		for i, q in ipairs(col.cells) do
 			for _, s in ipairs({1, -1}) do
@@ -752,7 +757,15 @@ local function wall_check(lo, hi, sv_of)
 	local My = pile_my()
 	for _, e in ipairs(wall_solve(lo, hi, sv_of)) do
 		local col, t, r, own = e.col, e.t, e.r, e.own
-		if not r.ok then
+		if col.check then
+			if r.ok then
+				for k, mine in pairs(own) do
+					local N = (r.prop[k] or 0) / t.props[k][3] * mine.k
+					strut_N[mine.id] = math.max(strut_N[mine.id] or 0, N)
+				end
+			end
+			col.check(r, t)
+		elseif not r.ok then
 			topple(col.cells)                -- 撐不住：埋入不夠、整片倒進坑裡
 		else
 			for k, mine in pairs(own) do

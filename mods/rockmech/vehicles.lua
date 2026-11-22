@@ -1097,7 +1097,7 @@ end
 
 -- 車輛的自重 (t)，車種沒列的用 20
 V.MASS = {cart = 0.2, truck = 15, haul = 70, bulktruck = 30, anfotruck = 25, dozer = 20, excavator = 20, excavator_big = 100,
-	jumbo = 30, charger = 20, drillrig = 25, suv = 2.5, miner = 120}   -- 露天採礦機約 100–200 t：只有重型拖車載得動
+	jumbo = 30, charger = 20, drillrig = 25, suv = 2.5, miner = 120, mixer = 30}   -- 露天採礦機約 100–200 t：只有重型拖車載得動
 
 -- 接地壓力 (kPa) = (自重 + 車上的碎石) / 兩條輪跡的面積（各寬 1 m、長 = 車長），g 取 10。
 -- 重量都在輪子或履帶下面，不能平均到整個車身
@@ -1395,6 +1395,7 @@ local hud_clear, update_hud, update_mirrors = V.hud_clear, V.update_hud, V.updat
 
 -- 車上存放：def.store = {{物品, 容量, 名稱}, …}，self.store[物品] = 數量（跟著車存檔，收車時還給玩家）。
 -- V.open_store 打開存放畫面：「裝滿」從背包拿（創造模式直接裝滿）、「卸下」放回背包；作業時用 V.store_take 消耗
+-- 叫料的東西（{物品, 容量, 名稱, buy = 單價}，例如預拌車的混凝土）：「叫料」付錢裝滿，不能卸下、收車時倒掉不還
 function V.store_count(self, item) return self.store[item] or 0 end
 -- 儲槽裡的東西還成物品（def.store_stack 可以加上 meta，例如 ANFO 的比例）
 function V.store_stack(self, item, n)
@@ -1413,9 +1414,16 @@ local function store_formspec(self)
 	local fs = {("formspec_version[6]size[8.2,%.1f]"):format(1.5 + #list * 1.2)}
 	for i, s in ipairs(list) do
 		local y = 0.4 + (i - 1) * 1.2
+		if s.buy then
+			local room = s[2] - V.store_count(self, s[1])
+			fs[#fs + 1] = ("item_image[0.4,%.1f;0.9,0.9;%s]label[1.5,%.2f;%s  %d / %d]button[4.5,%.1f;3.3,0.9;fill_%d;%s]")
+				:format(y, s[1], y + 0.45, core.formspec_escape(s[3]), V.store_count(self, s[1]), s[2], y, i,
+					core.formspec_escape(S("Order $@1", ("%d"):format(room * s.buy))))
+		else
 		fs[#fs + 1] = ("item_image[0.4,%.1f;0.9,0.9;%s]label[1.5,%.2f;%s  %d / %d]button[4.5,%.1f;1.6,0.9;fill_%d;%s]button[6.2,%.1f;1.6,0.9;out_%d;%s]")
 			:format(y, s[1], y + 0.45, core.formspec_escape(s[3]), V.store_count(self, s[1]), s[2], y, i,
 				core.formspec_escape(S("Fill")), y, i, core.formspec_escape(S("Unload")))
+		end
 	end
 	fs[#fs + 1] = ("button_exit[5.8,%.1f;2,0.7;ok;%s]"):format(0.5 + #list * 1.2, core.formspec_escape(S("Done")))
 	return table.concat(fs)
@@ -1433,13 +1441,22 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	for i, s in ipairs(TYPES[self.vkind].store) do
 		local item, cap = s[1], s[2]
 		local have = V.store_count(self, item)
-		if fields["fill_" .. i] and have < cap then
+		if fields["fill_" .. i] and have < cap and s.buy then
+			-- 叫料：付錢（錢不夠就叫買得起的量）
+			local n = cap - have
+			if not core.is_creative_enabled(name) then
+				n = math.min(n, math.floor(rockmech.money(name) / s.buy))
+				if n > 0 then rockmech.add_money(name, -n * s.buy) end
+			end
+			if n <= 0 then rockmech.notify(name, S("Not enough money")) end
+			self.store[item] = have + math.max(0, n)
+		elseif fields["fill_" .. i] and have < cap then
 			local fill = TYPES[self.vkind].store_fill      -- 自訂裝法（例如 ANFO 要記比例）
 			local got = core.is_creative_enabled(name) and cap - have
 				or fill and fill(self, item, inv, cap - have)
 				or inv:remove_item("main", ItemStack(item .. " " .. (cap - have))):get_count()
 			self.store[item] = have + got
-		elseif fields["out_" .. i] and have > 0 then
+		elseif fields["out_" .. i] and have > 0 and not s.buy then
 			self.store[item] = inv:add_item("main", V.store_stack(self, item, have)):get_count()
 		end
 	end
@@ -1791,8 +1808,10 @@ function V.register(kind, def)
 					if not l2:is_empty() then core.add_item(self.object:get_pos(), l2) end
 				end
 			end
+			local bought = {}
+			for _, s in ipairs(TYPES[self.vkind].store or {}) do if s.buy then bought[s[1]] = true end end
 			for item, n in pairs(self.store) do
-				if n > 0 then
+				if n > 0 and not bought[item] then
 					local l3 = inv:add_item("main", V.store_stack(self, item, n))
 					if not l3:is_empty() then core.add_item(self.object:get_pos(), l3) end
 				end

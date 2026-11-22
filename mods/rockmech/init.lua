@@ -252,4 +252,5 @@ dofile(modpath .. "/slurry.lua")           -- 穩定液：連續壁溝槽的護�
 dofile(modpath .. "/slurrytank.lua")       -- 穩定液儲槽：自動補液到設定的液面
 dofile(modpath .. "/retain.lua")           -- 擋土：鋼板樁、內支撐（應力解的元素）
 dofile(modpath .. "/steelarch.lua")        -- 鋼拱支保（應力解的元素，一格一格放）
+dofile(modpath .. "/concrete.lua")         -- 混凝土、特密管支架、預拌車（連續壁的水中混凝土）
 dofile(modpath .. "/buildview.lua")        -- 施工視角

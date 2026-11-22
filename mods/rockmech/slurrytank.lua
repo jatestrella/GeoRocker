@@ -12,6 +12,7 @@
 --         目標液面 = 出液口那一格的地面往下 off m（0–3 m，每 0.5 m 一段，預設 0.5 m）。
 --         每 TICK 秒：量管口那一欄的液面（空溝槽就從溝底開始灌），低於目標就補，每次最多 RATE 級（泵的能力），
 --         從管線接到的儲槽裡扣（守恆），補進去的會慢慢流到整條溝槽。
+--         高於目標 RECOVER_TOL 級以上（特密管灌混凝土把穩定液擠上來）就反過來抽回儲槽（回收再用），儲槽滿了就會溢出來。
 
 local S = rockmech.S
 local NL = 8
@@ -26,6 +27,7 @@ local CAP = 40 * NL           -- 一個儲槽的容量（40 m³）
 local L, H3 = 6, 3            -- 儲槽長、高（格；寬 3）
 local NET_MAX = 400           -- 管線最多找幾格
 local OFF_DEFAULT = 0.5
+local RECOVER_TOL = 2         -- 液面比目標高幾級以上就抽回儲槽（灌混凝土時被擠上來的）
 
 local function m3(lv) return ("%.1f"):format(lv / NL) end
 local function may(pos, name)
@@ -402,7 +404,52 @@ local function pump(pos)
 			q.y = q.y + 1; k = at(q)
 		end
 		local need = math.floor((H - (q.y - 0.5 + k / NL)) * NL + 0.5)
-		if need > 0 then
+		if need <= -RECOVER_TOL then
+			-- 液面比目標高（特密管灌混凝土把穩定液擠上來）：多的抽回儲槽。
+			-- 多出來的量照整片連通的液面算（同一層連通的每一欄，液面高出目標的級數加起來），
+			-- 從管口那一欄往下抽（可以抽到目標以下），再整片做一次靜水平衡
+			local room = 0
+			for _, t in ipairs(tanks) do room = room + math.max(0, CAP - core.get_meta(t):get_int("stock")) end
+			local excess = 0
+			local seen, queue = {[core.hash_node_position(q)] = true}, {{x = q.x, y = q.y, z = q.z}}
+			local i = 1
+			while queue[i] and #queue < 256 do
+				local c = queue[i]; i = i + 1
+				local top, kt = {x = c.x, y = c.y, z = c.z}, at(c) or 0
+				while kt == NL and (at({x = top.x, y = top.y + 1, z = top.z}) or 0) > 0 do top.y = top.y + 1; kt = at(top) end
+				excess = excess + math.max(0, math.floor(((top.y - 0.5 + kt / NL) - H) * NL + 0.5))
+				for _, d in ipairs(NB6) do
+					if d[2] == 0 then
+						local n = {x = c.x + d[1], y = c.y, z = c.z + d[3]}
+						local h = core.hash_node_position(n)
+						if not seen[h] and (at(n) or 0) > 0 then seen[h] = true; queue[#queue + 1] = n end
+					end
+				end
+			end
+			local take = math.min(excess, RATE, room)
+			if room <= 0 then msg = S("Tanks are full: the slurry is overflowing")
+			elseif take > 0 then
+				local got, r = 0, {x = q.x, y = q.y, z = q.z}
+				for _ = 1, DEPTH do
+					local kr = at(r)
+					if not kr or got >= take then break end
+					local t = math.min(kr, take - got)
+					rockmech.slurry_replace(r, {name = rockmech.slurry_with_level(kr - t)})
+					got = got + t
+					r.y = r.y - 1
+				end
+				rockmech.slurry_wake(q)
+				rockmech.slurry_equalize(q)
+				msg = S("Pumping back")
+				table.sort(tanks, function(a, b) return core.get_meta(a):get_int("stock") < core.get_meta(b):get_int("stock") end)
+				for _, t in ipairs(tanks) do
+					if got <= 0 then break end
+					local tm = core.get_meta(t)
+					local put = math.min(got, CAP - tm:get_int("stock"))
+					if put > 0 then tm:set_int("stock", tm:get_int("stock") + put); got = got - put; tank_info(t) end
+				end
+			end
+		elseif need > 0 then
 			if st <= 0 then msg = S("Out of slurry: the level is dropping")
 			elseif core.is_protected(q, meta:get_string("owner")) then msg = S("The pipe outlet is blocked")
 			else
@@ -441,7 +488,7 @@ end
 local editing = {}
 
 core.register_node(OUTLET, {
-	description = S("Slurry outlet\nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it"),
+	description = S("Slurry outlet\nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench at the target level and pumps any excess back. Shift + right-click turns it"),
 	short_description = S("Slurry outlet"),
 	tiles = {"[fill:16x16:#3a6ea8^[fill:8x8:4,4:#2a4e78", "[fill:16x16:#3a3f44", "[fill:16x16:#4a7eb8^[fill:16x1:0,8:#2a4e78"},
 	drawtype = "nodebox",

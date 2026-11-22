@@ -216,6 +216,7 @@ config.shop = {
 	{key = "aerial", shop = "vehicle", item = "rockmech:aerial_item", label = TR("Aerial work platform"), price = 60000},
 	{key = "crane", shop = "vehicle", item = "rockmech:crane_item", label = TR("Crane"), price = 80000},
 	{key = "masago", shop = "vehicle", item = "rockmech:masago_item", label = TR("Diaphragm wall grab"), price = 90000},
+	{key = "mixer", shop = "vehicle", item = "rockmech:mixer_item", label = TR("Concrete mixer truck"), price = 50000},
 	{key = "drillrig", shop = "blast", item = "rockmech:drillrig_item", label = TR("Surface drill rig"), price = 50000},
 	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = TR("Drill jumbo"), price = 60000},
 	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = TR("Haul truck"), price = 150000},
@@ -260,6 +261,8 @@ config.shop = {
 	{key = "slurry_tank", shop = "tools", item = "rockmech:slurry_tank", label = TR("Slurry tank"), price = 20000},
 	{key = "slurry_pipe", shop = "tools", item = "rockmech:slurry_pipe", label = TR("Slurry pipe"), price = 500, count = 10},
 	{key = "slurry_outlet", shop = "tools", item = "rockmech:slurry_outlet", label = TR("Slurry outlet"), price = 3000},
+	-- 水中混凝土（concrete.lua）：特密管支架；混凝土由預拌車叫料（車上付錢，每 m³ $300）
+	{key = "tremie_frame", shop = "tools", item = "rockmech:tremie_frame", label = TR("Tremie frame"), price = 3000},
 	{key = "strut", shop = "tools", item = "rockmech:strut", label = TR("Heavy H-beam"), price = 4000, count = 10},      -- H300（原本的內支撐）
 	{key = "steel_arch", shop = "tools", item = "rockmech:steel_arch", label = TR("Steel arch"), price = 1500, count = 10},   -- H150 鋼拱支保（steelarch.lua）
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = TR("Timber plank"), price = 100, count = 10},
@@ -281,7 +284,7 @@ config.shop = {
 -- 引擎額定功率（kW，fuel.lua 算油耗）：沒列的車不耗油（手推車靠人推）
 config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, anfotruck = 250, lowboy = 400, dozer = 250,
 	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500,
-	aerial = 150, crane = 250, heavyhaul = 500, masago = 250}
+	aerial = 150, crane = 250, heavyhaul = 500, masago = 250, mixer = 250}
 
 -- 化學成分（碎石的 metadata：assay.lua，質量比例 0..1）。有 chem 的岩性（褐鐵礦）挖下來就帶著這些成分，
 -- 混到廢石照體積稀釋。破碎站照成分計價（config.element_value）：

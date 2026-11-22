@@ -120,6 +120,22 @@ falling=
 planar sliding=
 wedge sliding=
 
+### concrete.lua
+Concrete (cracked)=
+Concrete=
+Age @1 days, strength @2 / @3 MPa (@4%)=
+Fresh concrete=
+Ready-mix concrete (m³)=
+Tremie frame=
+Poured @1 m³=
+The tremie frame is gone=
+The panel is full=
+Tremie frame@nRight-click a trench: the frame sits on the mouth and the tremie pipe reaches the bottom. A concrete mixer truck pours through it=
+Point into a trench: the frame sits on its mouth=
+[Concrete] The plain concrete wall at @1 cracked in bending=
+[Concrete] The concrete wall at @1 is not embedded deep enough: the soil pushed it over and it cracked=
+Bending moment @1 kN·m/m / cracking @2 kN·m/m (@3%)=
+
 ### config.lua
 Sandstone=
 Shale=
@@ -167,6 +183,7 @@ Core drill rig=
 Aerial work platform=
 Crane=
 Diaphragm wall grab=
+Concrete mixer truck=
 Surface drill rig=
 Drill jumbo=
 Haul truck=
@@ -1154,10 +1171,12 @@ Connected tanks: @1, stock @2 m³=
 Not connected to a slurry tank=
 The pipe outlet is blocked=
 The pipe is not over a trench=
+Tanks are full: the slurry is overflowing=
+Pumping back=
 Out of slurry: the level is dropping=
 Pumping=
 Turn the pipe=
-Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=
+Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench at the target level and pumps any excess back. Shift + right-click turns it=
 
 ### steelarch.lua
 Steel arch (yielded)=
@@ -1917,6 +1936,18 @@ Cut 1 m down (off @= level)=
 Bin full: waiting to unload=
 Something ahead can't be cut (facility, conveyor)=
 
+### vehicle_mixer.lua
+Right-click to get in; Space orders concrete, E pours into a tremie frame=
+Concrete @1 / @2 m³=
+Pouring (@1 m³)=
+Pour into the tremie frame=
+Order concrete=
+The truck is empty (poured @1 m³)=
+(poured @1 m³)=
+No tremie frame within @1 m of the chute=
+The drum is empty: press Space to order concrete=
+Stopped (poured @1 m³)=
+
 ### vehicle_op.lua
 Operator: @1=
 @1 jobs queued=
@@ -1959,8 +1990,10 @@ This vehicle belongs to @1; other teams cannot drive it=
 [Vehicle] @1=
 @1 / @2 m³ (@3 t)=
 @1 m³ (@2 t)=
+Order $@1=
 Fill=
 Unload=
+Not enough money=
 No free seat=
 [Breaker] Only excavators can be fitted with it=
 There is still rubble on the vehicle; dump it before picking the vehicle up=
