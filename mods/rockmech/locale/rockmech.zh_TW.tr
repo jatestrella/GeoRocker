@@ -1950,14 +1950,17 @@ Bin full: waiting to unload=料倉滿了：等卸料
 Something ahead can't be cut (facility, conveyor)=前面有切不動的東西（設施、輸送帶）
 
 ### vehicle_mixer.lua
-Right-click to get in; Space orders concrete, E pours into a tremie frame=右鍵上車；空白鍵叫料，E 灌進特密管支架
+Right-click to get in; Space orders concrete. Point at a tremie frame behind the truck and press E to pour=右鍵上車；空白鍵叫料。準星對準車尾後方的特密管支架，按 E 灌
+Point at a tremie frame=準星要對準特密管支架
+The chute only reaches behind the truck=溜槽只轉得到車尾後方
+Out of chute reach (@1 m, chute @2 m)=溜槽搆不到（@1 m，溜槽 @2 m）
+The chute cannot reach that height=溜槽搆不到那個高度
 Concrete @1 / @2 m³=混凝土 @1 / @2 m³
 Pouring (@1 m³)=灌注中（@1 m³）
-Pour into the tremie frame=灌進特密管支架
+Pour where you point=灌準星指的地方
 Order concrete=叫料
 The truck is empty (poured @1 m³)=車上的混凝土灌完了（灌了 @1 m³）
 (poured @1 m³)=（灌了 @1 m³）
-No tremie frame within @1 m of the chute=溜槽 @1 m 內沒有特密管支架
 The drum is empty: press Space to order concrete=拌筒是空的：按空白鍵叫料
 Stopped (poured @1 m³)=停了（灌了 @1 m³）
 

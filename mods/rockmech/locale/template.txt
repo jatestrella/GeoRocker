@@ -1950,14 +1950,17 @@ Bin full: waiting to unload=
 Something ahead can't be cut (facility, conveyor)=
 
 ### vehicle_mixer.lua
-Right-click to get in; Space orders concrete, E pours into a tremie frame=
+Right-click to get in; Space orders concrete. Point at a tremie frame behind the truck and press E to pour=
+Point at a tremie frame=
+The chute only reaches behind the truck=
+Out of chute reach (@1 m, chute @2 m)=
+The chute cannot reach that height=
 Concrete @1 / @2 m³=
 Pouring (@1 m³)=
-Pour into the tremie frame=
+Pour where you point=
 Order concrete=
 The truck is empty (poured @1 m³)=
 (poured @1 m³)=
-No tremie frame within @1 m of the chute=
 The drum is empty: press Space to order concrete=
 Stopped (poured @1 m³)=
 

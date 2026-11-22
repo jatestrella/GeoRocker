@@ -394,6 +394,10 @@ function rockmech.tremie_pour(F)
 	end)
 	return true
 end
+-- 預拌車灌得進去的東西（vehicle_mixer.lua：溜槽對準哪一格、E 就灌那一格）：方塊名 → function(pos) return ok, 原因 end。
+-- 之後的地基模板等也登記在這裡
+rockmech.pour_targets = rockmech.pour_targets or {}
+rockmech.pour_targets[FRAME] = rockmech.tremie_pour
 
 local FRAME_C = "#d8b020"
 core.register_node(FRAME, {

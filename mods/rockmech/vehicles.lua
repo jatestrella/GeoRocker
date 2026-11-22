@@ -689,6 +689,26 @@ function V.to_world(self, lp)
 	return {x = p.x + x * c - z * sn, y = p.y + y, z = p.z + x * sn + z * c}
 end
 
+-- 駕駛的準星指到的方塊（跟怪手同一套：從駕駛的相機沿視線找第一個方塊；追蹤視角從追蹤相機找、射線長一點）。
+-- 回傳 {under, above} 或 nil
+function V.aim_node(self, d, def, reach)
+	local pos = self.object:get_pos()
+	local look = d:get_look_dir()
+	local hl = math.sqrt(look.x * look.x + look.z * look.z)
+	local fx, fz = hl > 0 and look.x / hl or 0, hl > 0 and look.z / hl or 0
+	local side = def.eye_side or 0
+	local pr = d.get_properties and d:get_properties()
+	local eh = pr and pr.eye_height or EYE_HEIGHT
+	local eye = {x = pos.x + fx * def.eye_fwd + fz * side, y = pos.y + eh + def.eye_up - EYE_HEIGHT, z = pos.z + fz * def.eye_fwd - fx * side}
+	if self.chase and self.chase:get_pos() then
+		eye = vector.add(self.chase:get_pos(), {x = 0, y = eh, z = 0})
+		reach = reach + 12
+	end
+	for pt in core.raycast(eye, vector.add(eye, vector.multiply(look, reach)), false, false) do
+		if pt.type == "node" then return {under = pt.under, above = pt.above} end
+	end
+end
+
 -- 追蹤相機：Z 鍵時把駕駛掛到一個看不見、跟著車子的點上（Luanti 內建第三人稱拉不遠）。
 -- 位置：車尾後 3.5 m、車頂上方 4 m（眼睛）
 local CHASE = "rockmech:chasecam"

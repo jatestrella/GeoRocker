@@ -1,7 +1,9 @@
 -- rockmech/vehicle_mixer.lua
 -- 預拌車（混凝土車）。由 concrete.lua 載入。
 --   空白鍵：叫料（付錢把拌筒裝滿，一車 CAP m³；錢不夠就叫買得起的量）。混凝土只在車上，不能卸到背包，收車時倒掉。
---   E：車尾的溜槽 REACH m 內的特密管支架（concrete.lua），每 POUR_TIME 秒灌 1 m³，到車上沒料或那一段灌滿。灌的時候不能開車。
+--   溜槽：跟怪手的上部結構一樣跟著駕駛的視線轉（只轉得到車尾左右各 SWING 度）。
+--   E：灌準星指的那一格（rockmech.pour_targets 裡登記的東西，現在是特密管支架；離溜槽根部水平 REACH m 內），
+--     溜槽伸過去對準它，每 POUR_TIME 秒灌 1 m³，到車上沒料或那一段灌滿。灌的時候不能開車。
 
 local S = rockmech.S
 local V = rockmech.vehicles
@@ -10,11 +12,13 @@ local WHEEL, TREAD = V.WHEEL, V.TREAD
 
 local CAP = 6               -- 一車 (m³)
 local PRICE = 300           -- 每 m³
-local REACH = 4             -- 溜槽口到支架的水平距離 (m)
+local REACH = 4             -- 溜槽（含延長槽）根部到灌的地方的水平距離 (m)
 local POUR_TIME = 3.0       -- 灌 1 m³ (s)
-local CHUTE = {x = 0, y = 0.9, z = -5.3}     -- 溜槽口（車身座標）
+local CHUTE = {x = 0, y = 0.9, z = -4.75}    -- 溜槽根部（車身座標）
+local SLOPE = 0.3           -- 溜槽往下的坡度
+local REST = 1.0            -- 收著的溜槽長 (m)
+local SWING = math.rad(90)  -- 左右各轉得到幾度（從車尾正後方量）
 local ITEM = rockmech.CONCRETE_M3
-local FRAME = rockmech.TREMIE_FRAME
 
 local def = {desc = S("Concrete mixer truck"), color = "#e07020", cap = 0, speed = 5.0,
 	top_speed = 12, accel = 1.5, max_grade = math.rad(17), look_limit = math.rad(75), tire = 1.0,
@@ -22,7 +26,7 @@ local def = {desc = S("Concrete mixer truck"), color = "#e07020", cap = 0, speed
 	tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	tail_lat = {-1.25, 0, 1.25}, tail_dy = {1.2, 2.2},
 	store = {{ITEM, CAP, S("Ready-mix concrete (m³)"), buy = PRICE}},
-	item_desc = S("Right-click to get in; Space orders concrete, E pours into a tremie frame")}
+	item_desc = S("Right-click to get in; Space orders concrete. Point at a tremie frame behind the truck and press E to pour")}
 do   -- 圖示：斜放的拌筒（白底橘色螺旋）、駕駛室、三軸
 	local c, r = def.color, {}
 	r[#r + 1] = {3, 11, 18, 11, "#e8e8e0"}; r[#r + 1] = {5, 12, 2, 9, c}; r[#r + 1] = {10, 11, 2, 11, c}; r[#r + 1] = {15, 12, 2, 10, c}
@@ -50,7 +54,8 @@ do
 		{pos = {x = 0, y = 0.75, z = -2.6}, size = {x = 2.0, y = 1.9, z = 3.2}, tex = {drum, drum, drum, drum, drum_end, drum_end}},   -- 拌筒
 		{pos = {x = 0, y = 0.95, z = -4.45}, size = {x = 1.3, y = 1.3, z = 0.5}, tex = box_tex("#d8d8d0")},   -- 拌筒尾
 		{pos = {x = 0, y = 1.25, z = -4.85}, size = {x = 0.8, y = 0.5, z = 0.5}, tex = box_tex("#6c7278")},   -- 進料斗
-		{pos = {x = 0, y = 0.85, z = -5.1}, size = {x = 0.5, y = 0.12, z = 0.9}, tex = box_tex("#6c7278")},   -- 溜槽
+		{id = "chute", pos = {x = 0, y = 0.75, z = -5.25}, size = {x = 0.5, y = 1.04, z = 0.12}, rot = {x = 106.7, y = 180, z = 0},
+			tex = box_tex("#6c7278")},   -- 溜槽（長軸是自身 +Y，跟著視線轉：place_chute）
 	}
 	for _, w in ipairs({{x = -1.15, z = 0.5, wd = 0.35}, {x = 1.15, z = 0.5, wd = 0.35},
 			{x = -1.1, z = -3.2, wd = 0.6}, {x = 1.1, z = -3.2, wd = 0.6}, {x = -1.1, z = -4.4, wd = 0.6}, {x = 1.1, z = -4.4, wd = 0.6}}) do
@@ -59,18 +64,38 @@ do
 end
 def.overhangs = {{x0 = -1.3, x1 = 1.3, z0 = -5.5, z1 = -1.5, y0 = -1.5, y1 = 1.7, body = "z1"}}
 
--- 溜槽 REACH m 內最近的特密管支架
-local function frame_near(self)
-	local r = V.to_world(self, CHUTE)
-	local best, bd
-	for _, p in ipairs(core.find_nodes_in_area({x = r.x - REACH, y = r.y - 4, z = r.z - REACH},
-			{x = r.x + REACH, y = r.y + 2, z = r.z + REACH}, {FRAME})) do
-		local dd = (p.x - r.x) ^ 2 + (p.z - r.z) ^ 2
-		if dd <= REACH * REACH and (not bd or dd < bd) then best, bd = p, dd end
-	end
-	return best
+-- 溜槽：車身座標裡的水平角 ang（從車尾正後方量、往右為正）、水平長 len
+local function chute_tip(ang, len)
+	return {x = CHUTE.x + math.sin(ang) * len, y = CHUTE.y - SLOPE * len, z = CHUTE.z - math.cos(ang) * len}
 end
-rockmech.vehicle_mixer_frame = frame_near     -- 測試用
+local function place_chute(self, ang, len)
+	local o = self.parts and self.parts.chute
+	if not o then return end
+	if self.chute_ang and math.abs(self.chute_ang - ang) < 0.01 and math.abs(self.chute_len - len) < 0.05 then return end
+	if not self.chute_len or math.abs(self.chute_len - len) >= 0.05 then
+		o:set_properties({visual_size = {x = 0.5, y = len * math.sqrt(1 + SLOPE * SLOPE), z = 0.12}})
+	end
+	self.chute_ang, self.chute_len = ang, len
+	V.seg_attach(self, o, CHUTE, chute_tip(ang, len))
+end
+local function clamp_ang(a) return math.max(-SWING, math.min(SWING, a)) end
+-- 世界座標的一點 → 溜槽要轉的角度、水平距離、高差（車身座標）
+local function chute_to(self, wp)
+	local lp = V.to_local(self, wp)
+	local dx, dz = lp.x - CHUTE.x, lp.z - CHUTE.z
+	return V.atan2(dx, -dz), math.sqrt(dx * dx + dz * dz), lp.y - CHUTE.y
+end
+-- 準星指的那一格灌不灌得到：回傳 目標格 或 nil, 原因
+local function pick_at(self, P)
+	local name = P and core.get_node(P).name
+	if not P or not rockmech.pour_targets[name] then return nil, S("Point at a tremie frame") end
+	local ang, dist, dy = chute_to(self, {x = P.x, y = P.y + 0.5, z = P.z})
+	if math.abs(ang) > SWING then return nil, S("The chute only reaches behind the truck") end
+	if dist > REACH then return nil, S("Out of chute reach (@1 m, chute @2 m)", ("%.1f"):format(dist), REACH) end
+	if dy > 0.5 or dy < -5 then return nil, S("The chute cannot reach that height") end
+	return P
+end
+rockmech.vehicle_mixer_pick = pick_at     -- 測試用
 
 function def.hud(self)
 	local s = "\n" .. S("Concrete @1 / @2 m³", ("%d"):format(V.store_count(self, ITEM)), CAP)
@@ -78,7 +103,7 @@ function def.hud(self)
 	return s
 end
 function def.keys(self)
-	return {{"E", S("Pour into the tremie frame"), on = self.pouring ~= nil}, {S("Space"), S("Order concrete")}}
+	return {{"E", S("Pour where you point"), on = self.pouring ~= nil}, {S("Space"), S("Order concrete")}}
 end
 function def.can_turn(self, pos, yaw, yaw2)
 	return not self.pouring and V.tail_can_turn(self, pos, yaw, yaw2, def)
@@ -96,9 +121,21 @@ end
 
 function def.step(self, ctx)
 	local pm = self.pouring
-	if not pm then return end
+	if not pm then
+		-- 溜槽跟著視線轉（沒人開的時候停在原地）
+		local d = ctx.d
+		if d then
+			local lv = V.to_local(self, vector.add(self.object:get_pos(), d:get_look_dir()))
+			place_chute(self, clamp_ang(V.atan2(lv.x, -lv.z)), REST)
+		elseif not self.chute_ang then
+			place_chute(self, 0, REST)
+		end
+		return
+	end
 	local F = pm.frame
-	local from = V.to_world(self, CHUTE)
+	local ang, dist = chute_to(self, {x = F.x, y = F.y + 0.5, z = F.z})
+	place_chute(self, clamp_ang(ang), math.max(REST, math.min(REACH, dist)))
+	local from = V.to_world(self, chute_tip(self.chute_ang, self.chute_len))
 	local to = {x = F.x, y = F.y + 0.4, z = F.z}
 	local v = vector.multiply(vector.subtract(to, from), 1.6)
 	core.add_particlespawner({
@@ -115,7 +152,9 @@ function def.step(self, ctx)
 	if V.store_count(self, ITEM) < 1 then
 		return finish(self, S("The truck is empty (poured @1 m³)", ("%d"):format(pm.done)))
 	end
-	local ok, why = rockmech.tremie_pour(F)
+	local fn = rockmech.pour_targets[core.get_node(F).name]
+	local ok, why
+	if fn then ok, why = fn(F) else why = S("The tremie frame is gone") end
 	if not ok then return finish(self, why .. " " .. S("(poured @1 m³)", ("%d"):format(pm.done))) end
 	V.store_take(self, ITEM, 1)
 	pm.done = pm.done + 1
@@ -129,9 +168,10 @@ function def.action(self, ctx)
 	local ctrl, d = ctx.ctrl, ctx.d
 	if ctrl.aux1 and not self.pouring then
 		self.t_act = 0.5
-		local F = frame_near(self)
+		local hit = d and V.aim_node(self, d, def, REACH + 8)
+		local F, why = pick_at(self, hit and hit.under)
 		if not F then
-			self.msg = S("No tremie frame within @1 m of the chute", REACH)
+			self.msg = why
 		elseif V.store_count(self, ITEM) < 1 then
 			self.msg = S("The drum is empty: press Space to order concrete")
 		else
