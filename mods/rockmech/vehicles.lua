@@ -1636,6 +1636,30 @@ local function get_off(self)
 	hud_clear(self, nil)
 end
 
+-- 切換追蹤相機（on = true：駕駛掛到車子後上方的點上；false：回到駕駛座第一人稱）。Z 鍵、預拌車的瞄準模式用
+function V.set_chase(self, d, on)
+	local def = TYPES[self.vkind]
+	if not d or not def or (on and self.chase) or (not on and not self.chase) then return end
+	if not on then
+		drop_chase(self)
+		d:set_detach()
+		d:set_attach(self.object, "", seat_pos(def), {x = 0, y = 0, z = 0})
+		d:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
+	else
+		local c = core.add_entity(chase_pos(self, def), CHASE)
+		if not c then return end
+		c:get_luaentity().vehicle = self
+		self.chase = c
+		chase_hide(self, d, true)
+		d:set_detach()
+		d:set_attach(c, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+		d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
+	end
+	d:set_camera({mode = "first"})
+	set_seated(d, true)
+	update_hud(self)   -- 追蹤相機時收起駕駛艙框與後照鏡，回到車上再顯示
+end
+
 -- Z 在車上、作業籠裡是切換視角。引擎預設 zoom_fov = 0（不能放大），按 Z 會跳「放大已被停用」的提示：
 -- 設成跟一般視角一樣（72°），按 Z 不跳提示、畫面也不會放大
 core.register_on_joinplayer(function(player) player:set_properties({zoom_fov = 72}) end)
@@ -2044,25 +2068,7 @@ function V.register(kind, def)
 			-- Z（zoom 鍵）：切換追蹤相機（駕駛掛到車子後上方的點上）／車頂第一人稱
 			if d then
 				if ctrl.zoom and not self.zoom_held and not def.pushed and not held then
-					if self.chase then
-						drop_chase(self)
-						d:set_detach()
-						d:set_attach(obj, "", seat_pos(def), {x = 0, y = 0, z = 0})
-						d:set_eye_offset(eye_offset(def), {x = 0, y = 15, z = -5})
-					else
-						local c = core.add_entity(chase_pos(self, def), CHASE)
-						if c then
-							c:get_luaentity().vehicle = self
-							self.chase = c
-							chase_hide(self, d, true)
-							d:set_detach()
-							d:set_attach(c, "", {x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
-							d:set_eye_offset({x = 0, y = 0, z = 0}, {x = 0, y = 0, z = 0})
-						end
-					end
-					d:set_camera({mode = "first"})
-					set_seated(d, true)
-					update_hud(self)   -- 追蹤相機時收起駕駛艙框與後照鏡，回到車上再顯示
+					V.set_chase(self, d, not self.chase)
 				end
 				self.zoom_held = ctrl.zoom
 			end

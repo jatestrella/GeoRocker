@@ -1,7 +1,8 @@
 -- rockmech/vehicle_mixer.lua
 -- 預拌車（混凝土車）。由 concrete.lua 載入。
 --   空白鍵：叫料（付錢把拌筒裝滿，一車 CAP m³；錢不夠就叫買得起的量）。混凝土只在車上，不能卸到背包，收車時倒掉。
---   溜槽：跟怪手的上部結構一樣跟著駕駛的視線轉（只轉得到車尾左右各 SWING 度）。
+--   Shift＋E：瞄準模式（切到追蹤視角，再按一次回駕駛座）：溜槽轉過去、伸到準星指的地方（車尾左右各 SWING 度、
+--     水平 REACH m 內；搆不到就停在邊界，提示為什麼）。瞄準、灌的時候不能開車。
 --   E：灌準星指的那一格（rockmech.pour_targets 裡登記的東西，現在是特密管支架；離溜槽根部水平 REACH m 內），
 --     溜槽伸過去對準它，每 POUR_TIME 秒灌 1 m³，到車上沒料或那一段灌滿。灌的時候不能開車。
 
@@ -26,7 +27,7 @@ local def = {desc = S("Concrete mixer truck"), color = "#e07020", cap = 0, speed
 	tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	tail_lat = {-1.25, 0, 1.25}, tail_dy = {1.2, 2.2},
 	store = {{ITEM, CAP, S("Ready-mix concrete (m³)"), buy = PRICE}},
-	item_desc = S("Right-click to get in; Space orders concrete. Point at a tremie frame behind the truck and press E to pour")}
+	item_desc = S("Right-click to get in; Space orders concrete. Shift + E aims the chute; point at a tremie frame behind the truck and press E to pour")}
 do   -- 圖示：斜放的拌筒（白底橘色螺旋）、駕駛室、三軸
 	local c, r = def.color, {}
 	r[#r + 1] = {3, 11, 18, 11, "#e8e8e0"}; r[#r + 1] = {5, 12, 2, 9, c}; r[#r + 1] = {10, 11, 2, 11, c}; r[#r + 1] = {15, 12, 2, 10, c}
@@ -103,13 +104,13 @@ function def.hud(self)
 	return s
 end
 function def.keys(self)
-	return {{"E", S("Pour where you point"), on = self.pouring ~= nil}, {S("Space"), S("Order concrete")}}
+	return {{"Shift+E", S("Aim the chute"), on = self.aiming == true}, {"E", S("Pour where you point"), on = self.pouring ~= nil}, {S("Space"), S("Order concrete")}}
 end
 function def.can_turn(self, pos, yaw, yaw2)
-	return not self.pouring and V.tail_can_turn(self, pos, yaw, yaw2, def)
+	return not self.pouring and not self.aiming and V.tail_can_turn(self, pos, yaw, yaw2, def)
 end
 function def.move(self, ctx)
-	if self.pouring then ctx.speed = 0; return end
+	if self.pouring or self.aiming then ctx.speed = 0; return end
 	V.tail_guard(self, def, ctx)
 end
 
@@ -122,14 +123,23 @@ end
 function def.step(self, ctx)
 	local pm = self.pouring
 	if not pm then
-		-- 溜槽跟著視線轉（沒人開的時候停在原地）
 		local d = ctx.d
-		if d then
-			local lv = V.to_local(self, vector.add(self.object:get_pos(), d:get_look_dir()))
-			place_chute(self, clamp_ang(V.atan2(lv.x, -lv.z)), REST)
-		elseif not self.chute_ang then
-			place_chute(self, 0, REST)
+		if not d and self.aiming then self.aiming = nil end        -- 駕駛下車
+		if not self.aiming then
+			if self.chute_ang ~= 0 or self.chute_len ~= REST then place_chute(self, 0, REST) end
+			return
 		end
+		-- 瞄準模式：溜槽伸到準星指的地方（每 0.1 s 找一次）
+		self.aim_t = (self.aim_t or 0) - ctx.dtime
+		if self.aim_t > 0 then return end
+		self.aim_t = 0.1
+		local hit = V.aim_node(self, d, def, REACH + 8)
+		if not hit then return end
+		local ang, dist = chute_to(self, {x = hit.under.x, y = hit.under.y + 0.5, z = hit.under.z})
+		place_chute(self, clamp_ang(ang), math.max(REST, math.min(REACH, dist)))
+		-- 指的東西灌不灌得到變了才換訊息（不然剛灌完的「車上沒料了」馬上被蓋掉）
+		local _, why = pick_at(self, hit.under)
+		if why ~= self.aim_why then self.aim_why = why; self.msg = why; update_hud(self) end
 		return
 	end
 	local F = pm.frame
@@ -166,7 +176,20 @@ end
 
 function def.action(self, ctx)
 	local ctrl, d = ctx.ctrl, ctx.d
-	if ctrl.aux1 and not self.pouring then
+	if ctrl.aux1 and ctrl.sneak then
+		-- 瞄準模式：切到追蹤視角（原本就在追蹤視角就不動），再按一次回到原來的視角、溜槽收回
+		self.t_act = 0.5
+		if self.pouring or not d then return end
+		if self.aiming then
+			self.aiming = nil
+			if not self.aim_had_chase then V.set_chase(self, d, false) end
+			self.msg = nil
+		else
+			self.aiming, self.aim_had_chase, self.aim_t, self.aim_why = true, self.chase ~= nil, 0, false
+			V.set_chase(self, d, true)
+		end
+		update_hud(self)
+	elseif ctrl.aux1 and not self.pouring then
 		self.t_act = 0.5
 		local hit = d and V.aim_node(self, d, def, REACH + 8)
 		local F, why = pick_at(self, hit and hit.under)
