@@ -603,7 +603,8 @@ end
 -- 板旁邊那一格的土：回傳 σv（kPa）、c、φ、kh；岩石回傳 rigid = true；不是土回傳 nil。
 -- σv：應力解有解到這裡（天然的土）就用應力解的 σv（地面上的荷重、堆的碎石、空洞上方的拱效應、轉角的幾何都在裡面）；
 -- 取離板再遠一格的土（貼著板的那一格被應力解裡的厚板樁拖著，σv 偏小）。沒有就用那一欄土的重量 γ·h
-local function is_wall(n) return IS_PILE[n] or (rockmech.concrete_wall and rockmech.concrete_wall[n]) end
+-- 牆、導溝：不是土（板旁邊沒有土彈簧）
+local function is_wall(n) return IS_PILE[n] or (rockmech.concrete_wall and rockmech.concrete_wall[n]) or n == rockmech.GUIDE_WALL end
 local function soil_at(p, out, sv_of)
 	local n = core.get_node(p).name
 	if not holds(n) or is_wall(n) then return nil end

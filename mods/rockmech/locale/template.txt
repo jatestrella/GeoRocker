@@ -121,10 +121,12 @@ planar sliding=
 wedge sliding=
 
 ### concrete.lua
-Concrete (cracked)=
 Concrete=
 Age @1 days, strength @2 / @3 MPa (@4%)=
 Fresh concrete=
+Concrete (cracked)=
+Reinforced concrete=
+Reinforced concrete (rebar yielded)=
 Ready-mix concrete (m³)=
 Tremie frame=
 Poured @1 m³=
@@ -132,9 +134,20 @@ The tremie frame is gone=
 The panel is full=
 Tremie frame@nRight-click a trench: the frame sits on the mouth and the tremie pipe reaches the bottom. A concrete mixer truck pours through it=
 Point into a trench: the frame sits on its mouth=
-[Concrete] The plain concrete wall at @1 cracked in bending=
 [Concrete] The concrete wall at @1 is not embedded deep enough: the soil pushed it over and it cracked=
+[Concrete] The rebar in the wall at @1 yielded: the bending moment exceeded M_u=
+[Concrete] The plain concrete wall at @1 cracked in bending=
+Bending moment @1 kN·m/m / ultimate @2 kN·m/m (@3%)=
 Bending moment @1 kN·m/m / cracking @2 kN·m/m (@3%)=
+Rebar cage@nRight-click a slurry trench: lowers a 1 m wide cage from the mouth to the bottom. Concrete poured around it becomes reinforced concrete=
+Rebar cage=
+Point into a trench: the cage hangs from its mouth=
+This trench column already has a cage=
+Rebar cage lowered: @1 m=
+Guide wall@nRight-click the ground: builds a 1 m length of guide walls on both sides of the trench line, along the way you look. With guide walls at the mouth, concrete can be poured right up to the top=
+Guide wall=
+Point at the top of the ground where the trench will be=
+Guide walls go in soil, not rock=
 
 ### config.lua
 Sandstone=

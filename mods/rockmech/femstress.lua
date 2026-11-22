@@ -332,18 +332,31 @@ local function make_job(pos)
 	end
 	-- 穩定液（slurry.lua）的液壓（K = 1）：側面 γ·(液面到那一格中心的深度)、頂面 γ·(上面的液柱高)。
 	-- 新拌混凝土（concrete.lua）也是液體、γ 比較大（沉在穩定液底下）：上面的液柱照各層的 γ 加起來 Σγ·h。
+	-- 新拌混凝土的側壓照雙線性包絡線（Lings、Ng、Nash 1994，連續壁設計常用）：液面往下到臨界深度 h_crit = H/3
+	-- （H = 那一欄液柱的總深）照混凝土的 γ，再往下只照穩定液的 γ 增加（混凝土邊灌邊變稠，深處沒有全液壓）。
 	-- 天然地形那一解沒有（人灌的）。job.fluid：裝著液體的格（find_failed：貼著液體的土面有液壓頂著，不算臨空）
 	if next(fluid_f) then
 		local GF = rockmech.SLURRY_GAMMA or 11
-		local function fluid_above(gx, ly, gz)        -- → 上面液柱的重量 Σγ·h (kPa)
-			local q = 0
-			for y = ly, g.ny - 1 do
-				local cid = g.data[1 + gx + y * gsy + gz * gsz]
-				local f = fluid_f[cid]
-				if not f then break end
-				q = q + (fluid_g[cid] or GF) * f
+		local HCRIT = 1 / 3
+		local function cid_at(gx, y, gz) return g.data[1 + gx + y * gsy + gz * gsz] end
+		-- (gx, gz) 那一欄、ly 那一格以上（含）的液柱重量 Σγ·h (kPa)，和 ly 頂面的深度 z、那一欄的臨界深度 hc；
+		-- ly 那一格不是液體就是 0
+		local function fluid_above(gx, ly, gz)
+			if ly > g.ny - 1 or not fluid_f[cid_at(gx, ly, gz)] then return 0, 0, 0 end
+			local yt, yb = ly, ly
+			while yt + 1 <= g.ny - 1 and fluid_f[cid_at(gx, yt + 1, gz)] do yt = yt + 1 end
+			while yb - 1 >= 0 and fluid_f[cid_at(gx, yb - 1, gz)] do yb = yb - 1 end
+			local H = 0
+			for y = yb, yt do H = H + fluid_f[cid_at(gx, y, gz)] end
+			local hc = H * HCRIT
+			local q, z = 0, 0
+			for y = yt, ly, -1 do
+				local cid = cid_at(gx, y, gz)
+				local f, gm = fluid_f[cid], fluid_g[cid] or GF
+				if gm > GF and z >= hc then gm = GF end
+				q, z = q + gm * f, z + f
 			end
-			return q
+			return q, z, hc
 		end
 		local press = job.press or {}
 		job.press = press
@@ -351,9 +364,11 @@ local function make_job(pos)
 		for z = 0, n - 1 do for y = 0, n - 1 do for x = 0, n - 1 do
 			local c = 1 + x + y * n + z * n * n
 			local gx, ly, gz = a.x + x - g.ox, a.y + y - g.oy, a.z + z - g.oz
-			if fluid_f[g.data[1 + gx + ly * gsy + gz * gsz]] then
+			local fcid = g.data[1 + gx + ly * gsy + gz * gsz]
+			if fluid_f[fcid] then
 				job.fluid = job.fluid or {}
 				job.fluid[c] = true
+				if fluid_g[fcid] then job.fresh = true end
 			elseif job.solid[c] and (not job.soft[c] or job.soil[c] or (job.retain and job.retain[c])) then
 				local q = fluid_above(gx, ly + 1, gz)
 				if q > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, q end
@@ -366,6 +381,8 @@ local function make_job(pos)
 							-- 不滿格：液體只貼著那一面的下面 f，合力 γ·f²/2；上面還有液柱就是整面 Σγh + γ·f/2
 							local gf = fluid_g[cid] or GF
 							local qa = fluid_above(nx_, ly + 1, nz_)
+							local _, za, hc = fluid_above(nx_, ly, nz_)
+							if gf > GF and za - f >= hc then gf = GF end        -- 臨界深度以下的新拌混凝土
 							local p = qa > 0 and (qa + gf * f / 2) or gf * f * f / 2
 							press[#press + 1], press[#press + 2], press[#press + 3] = c, d[3], p
 						end
@@ -406,7 +423,8 @@ local function make_job(pos)
 		if sft == true and not job.soil[c] then has_rubble = true; break end
 	end
 	if (next(job.soil) or has_rubble) and (fcfg.plastic_iters or 0) > 0 then
-		job.plastic = {c = sp.c * wet, phi = sp.phi, iters = fcfg.plastic_iters, pcg_iter = fcfg.plastic_pcg or 300,
+		-- 有新拌混凝土（大的液壓荷重，只維持一陣子）：塑性迭代要多一點才收斂（20 輪會把還在收斂的土判成流動）
+		job.plastic = {c = sp.c * wet, phi = sp.phi, iters = job.fresh and math.max(fcfg.plastic_iters, 60) or fcfg.plastic_iters, pcg_iter = fcfg.plastic_pcg or 300,
 			c_res = fcfg.soil_c_res or 0.5, rubble_phi = has_rubble and cfg.slope.phi_r or nil,
 			rubble_iters = math.max(fcfg.plastic_iters, 60)}
 	end
