@@ -261,6 +261,9 @@ config.shop = {
 	{key = "slurry_tank", shop = "tools", item = "rockmech:slurry_tank", label = TR("Slurry tank"), price = 20000},
 	{key = "slurry_pipe", shop = "tools", item = "rockmech:slurry_pipe", label = TR("Slurry pipe"), price = 500, count = 10},
 	{key = "slurry_outlet", shop = "tools", item = "rockmech:slurry_outlet", label = TR("Slurry outlet"), price = 3000},
+	-- 地下水（groundwater.lua）：抽水機（每秒 1 級，約 450 m³/h）、排水溝（每個 1 m）
+	{key = "water_pump", shop = "tools", item = "rockmech:water_pump", label = TR("Water pump"), price = 8000},
+	{key = "drain", shop = "tools", item = "rockmech:drain", label = TR("Drain"), price = 300, count = 10},
 	-- 水中混凝土（concrete.lua）：特密管支架；混凝土由預拌車叫料（車上付錢，每 m³ $300）
 	{key = "tremie_frame", shop = "tools", item = "rockmech:tremie_frame", label = TR("Tremie frame"), price = 3000},
 	{key = "rebar_cage", shop = "tools", item = "rockmech:rebar_cage", label = TR("Rebar cage"), price = 3000},              -- 一片 1 m 寬、整欄深

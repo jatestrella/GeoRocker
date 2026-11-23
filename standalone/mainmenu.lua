@@ -75,7 +75,7 @@ local state = {page = "title", map = nil, msg = nil, confirm = false}
 -- 勾兩種以上：每種礦一個地質區，隔著斷層（worldgen.lua 的 rockmech_gen_ores）。加一種礦：這裡加一列、worldgen.lua 加它的地質
 -- 銅礦：斑岩銅礦（安山岩裡一根直立斑岩體，鐵帽、氧化帶、次生富集帶、原生帶）
 local GEN_ORE = {{"coal", "煤礦", "煤"}, {"marble", "大理岩", "大理岩"}, {"copper", "銅礦", "銅"}}
-local gen = {ores = {true, false, false}, wtdepth = 50, watertable = 11, strata = 2, terrain = 1, relief = 25, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
+local gen = {ores = {true, false, false}, wtdepth = 50, watertable = 0, strata = 2, terrain = 1, relief = 25, seams = 50, outcrop = 40, dip = 40, thickvar = 30, fold = 30,
 	coal_scale = 20, coal_outcrop = 40, coalcont = 50, marble_scale = 20, marble_outcrop = 40, marble_schist = 30,
 	copper_scale = 20, copper_outcrop = 40, copper_sat = 50, seed = ""}
 local function chosen()
@@ -105,7 +105,7 @@ local scale_text = scale_text_for(2)
 local GEN_SLIDERS = {
 	-- cat：屬於哪個大類（GEN_CATS）
 	{"relief", "地形起伏", function(v) return ("%d m"):format(math.floor(120 * v / 100 + 0.5)) end, cat = "terrain"},
-	{"watertable", "地下水位", function(v) return ("地表下 %d m"):format(math.floor(1 + 19 * v / 100 + 0.5)) end, cat = "terrain"},
+	{"watertable", "地下水位", function(v) return v <= 0 and "忽略（沒有地下水）" or ("地表下 %d m"):format(math.floor(1 + 39 * v / 100 + 0.5)) end, cat = "terrain"},
 	{"seams", "礦層數（互層）", function(v) return ("%d 層"):format(1 + math.floor(4 * v / 100 + 0.5)) end, cat = "strata"},
 	{"dip", "地層傾角", function(v)
 		local c, t = chosen(), {}

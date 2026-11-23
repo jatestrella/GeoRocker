@@ -18,7 +18,7 @@
 --                第 1 組節理是葉理（間距密、面平滑、有綠泥石雲母，Jr 1.5–2、Ja 2），世界設定 rockmech_ores = marble
 --                copper：斑岩銅礦（安山岩裡一根直立斑岩體，鐵帽 → 氧化帶 → 次生富集帶 → 原生帶），不分 single／inter
 --   gen_wtdepth  銅礦的古地下水位深 10–40 m（富集帶在它底下）
---   gen_watertable 現在的地下水位深 1–20 m（rockmech_water_table_depth；沒設定 3 m）
+--   gen_watertable 現在的地下水位深 1–40 m（rockmech_water_table_depth；0 或沒設定 = 1000 m，等於忽略）
 -- 其他：節理第 1 組是層面（地層的平均位態），第 2、3 組陡傾、走向大致互相垂直，Jr、Ja 取 Q 法表格值；
 -- 各岩性的 GSI；現地應力 K_Hmax、K_hmin、σHmax 方位。
 -- 地質不直接顯示（要自己鑽岩心、量節理）；老師用 /rockmech_geology 查（單機版看不到，直接看世界資料夾的 rockmech.conf）。
@@ -462,9 +462,10 @@ function M.generate(world_conf)
 	local gos, gcc = tonumber(world_conf:get("rockmech_gen_orescale") or ""), tonumber(world_conf:get("rockmech_gen_coalcont") or "")
 	set("ore_scale", gos and round(0.5 + 2.5 * math.max(0, math.min(100, gos)) / 100, 0.05) or 1)
 	set("coal_continuity", gcc and round(math.max(5, math.min(100, gcc)) / 100, 0.01) or 0.5)
-	-- 地下水位深度（slurry.lua：比它深的土本來就飽和）：自訂地圖的滑桿 rockmech_gen_watertable（0–100 → 1–20 m），沒有就 3 m
+	-- 地下水位深度（slurry.lua、groundwater.lua：水位以下的土飽和、挖開會冒水）：自訂地圖的滑桿 rockmech_gen_watertable
+	-- （0 = 忽略，1–100 → 1–40 m）；隨機地圖、滑桿 0：1000 m（等於沒有）
 	local gwt = tonumber(world_conf:get("rockmech_gen_watertable") or "")
-	set("water_table_depth", gwt and round(1 + 19 * math.max(0, math.min(100, gwt)) / 100) or 3)
+	set("water_table_depth", (gwt and gwt > 0) and round(1 + 39 * math.min(100, gwt) / 100) or 1000)
 	set("solo", "true")            -- 個人遊戲
 	set("teacher", "false")        -- 不是教學地圖：沒有老師示範區、分組、防爆、名牌（config.lua 的 cfg.teacher）
 	world_conf:write()

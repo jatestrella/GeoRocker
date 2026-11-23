@@ -237,6 +237,8 @@ Bentonite slurry=穩定液
 Slurry tank=穩定液儲槽
 Slurry pipe=穩定液管
 Slurry outlet=出液口
+Water pump=抽水機
+Drain=排水溝
 Heavy H-beam=重型 H 型鋼
 Steel arch=鋼拱
 Timber plank=木板
@@ -582,6 +584,13 @@ Shotcrete@nRight-click a rock face=噴凝土@n對岩面右鍵
 The rubble here is already compacted=這裡的碎石已經是夯實碎石了
 Shotcrete must be sprayed on a rock face=噴凝土要噴在岩面上
 This is already sprayed to @1 layers (or the space in front of the rock face is not empty)=這裡已經噴滿 @1 層了（或岩面前面不是空的）
+
+### groundwater.lua
+Drain@nWater that flows into it or onto it is carried away=排水溝@n流進來、流到上面的水會被排走
+No water in reach=吸管碰不到水
+Outlet blocked=出水口被擋住了
+Pumping @1 m³/h=抽水中 @1 m³/h
+Water pump@nThe suction hose points back at you: stand at the pit edge and place it on the far side. Pumps water from the pit and pours it out behind the pump; lead it into a drain=抽水機@n吸管朝向你：站在坑邊往外放，吸管就垂進坑裡。把坑裡的水抽到機器後面，接排水溝排掉
 
 ### haulroad.lua
 Weighbridge office=地磅站

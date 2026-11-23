@@ -45,6 +45,7 @@ local is_water = {}                  -- 水那一組的方塊名稱 → true
 rockmech.liquid_is_water = is_water
 -- 應力解裡也算液壓的其他流體（concrete.lua 的新拌混凝土）：方塊名稱 → {級數比例, γ kN/m³}
 rockmech.fluid_extra = rockmech.fluid_extra or {}
+rockmech.liquid_drains = rockmech.liquid_drains or {}   -- 排水溝：方塊名稱 → 每步吃掉幾級（groundwater.lua）
 
 -- 成分 ---------------------------------------------------------------
 local COMPS = {"b"}                  -- 成分名稱（metadata 鍵 lq_<名稱>）
@@ -225,6 +226,7 @@ local function set_liquid(p, k, c)
 		for i = 1, #PRIV do m:set_string(PRIV[i], "") end
 	end
 	note_change(p, k - old)
+	if k < old and rockmech.groundwater_poke then rockmech.groundwater_poke(p) end
 end
 local function set_level(p, k) set_liquid(p, k, comp_of(p)) end
 
@@ -306,6 +308,7 @@ local function set_cell(p, r, w, c)
 	if r == 0 then set_liquid(p, w, c); return end
 	local h = core.hash_node_position(p)
 	note_change(p, w - (wet[h] or 0))
+	if w < (wet[h] or 0) and rockmech.groundwater_poke then rockmech.groundwater_poke(p) end
 	wet[h] = w > 0 and w or nil
 	wetc[h] = (w > 0 and c ~= SLURRY_C) and c or nil
 	wet_dirty = true
@@ -390,6 +393,10 @@ local SOIL_N = tonumber(setting("rockmech_soil_porosity") or "") or 0.4
 local SOIL_DT = tonumber(setting("rockmech_soil_seep_step") or "") or 5
 local CAKE_B = tonumber(setting("rockmech_filter_cake") or "") or 0.5
 rockmech.SOIL_POROSITY = SOIL_N
+-- 一格騰出空間（液面降了、變成空格、孔隙液變少）：地下水冒水那邊要知道（groundwater.lua 設 rockmech.groundwater_poke）
+local function room_poke(p)
+	if rockmech.groundwater_poke then rockmech.groundwater_poke(p) end
+end
 local PARTICLES = {b = true}          -- 顆粒成分（皂土）：過不了土的孔隙，水滲走時留在液體裡
 local soil_frac = {}                  -- 表土、底土的方塊名稱 → 厚度比例
 local function build_soil()
@@ -405,18 +412,32 @@ core.register_on_mods_loaded(build_soil)
 rockmech.soil_frac = soil_frac
 local function soil_cap(name) return math.floor(SOIL_N * soil_frac[name] * NL + 0.5) end
 local SOIL_S0 = tonumber(setting("rockmech_soil_saturation") or "") or 0.33
-local SOIL_WT = tonumber(setting("rockmech_water_table_depth") or "") or 3
--- 這格土還能再吸幾級（容量 − 背景含水）：上面連續 SOIL_WT 格實心（地下水位以下）就飽和、不吸
+local SOIL_WT = 3                     -- 地表下幾格實心以下當作飽和（池子不會整欄滲光）
+-- 地下水位（rockmech_water_table_depth：天然地表下幾 m；沒設定、0 = 這個世界沒有地下水）。
+-- 水位高程固定 = 天然地表（地圖產生器的地形，挖坑不會改變）− 深度；y ≤ 水位高程的格在水位以下
+local GW_D = tonumber(setting("rockmech_water_table_depth") or "")
+if GW_D and GW_D <= 0 then GW_D = nil end
+rockmech.GROUNDWATER_DEPTH = GW_D
+local function water_table_y(x, z)
+	if not GW_D then return nil end
+	local c, st = rockmech.cfg, rockmech.stress
+	local top = math.floor(c.surface_y or 0)
+	if st and st.has_terrain(c) then top = top + math.floor(st.terrain_rise(c, math.floor(x + 0.5), math.floor(z + 0.5)) + 0.5) end
+	return top - math.floor(GW_D + 0.5)
+end
+rockmech.water_table_y = water_table_y
+-- 這格土還能再吸幾級（容量 − 背景含水）：在地下水位以下、或上面連續 SOIL_WT 格實心（深的土，池子才不會整欄滲光）
+-- 就飽和、不吸；其他照 SOIL_S0
 local function soil_room(p, name)
 	local cap = soil_cap(name)
-	local d = 0
+	if GW_D and p.y <= water_table_y(p.x, p.z) then return 0 end
 	for i = 1, SOIL_WT do
 		local n = core.get_node({x = p.x, y = p.y + i, z = p.z}).name
-		if n == "air" or n == "ignore" or rockmech.slurry_level[n] then break end
-		d = i
+		if n == "air" or n == "ignore" or rockmech.slurry_level[n] then
+			return cap - math.floor(cap * SOIL_S0 + 0.5)
+		end
 	end
-	if d >= SOIL_WT then return 0 end
-	return cap - math.floor(cap * SOIL_S0 + 0.5)
+	return 0
 end
 local W_KEY, W_PRIV = "rm_w", {"rm_w"}
 local function soil_w(p) return core.get_meta(p):get_int(W_KEY) end
@@ -669,6 +690,18 @@ step = function(p)
 			end
 		end
 	end
+	-- 貼著排水溝（底下、旁邊）：流進去就沒了（groundwater.lua 的排水溝，rockmech.liquid_drains：方塊名稱 → 每步幾級）
+	for _, d in ipairs(SEEP_DIRS) do
+		local q = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
+		local rate = rockmech.liquid_drains[core.get_node(q).name]
+		if rate then
+			local t = math.min(k, rate)
+			set_liquid(p, k - t, c)
+			if k - t > 0 then schedule(p) end
+			wake_around(p)
+			return
+		end
+	end
 	-- 貼著土（底下、旁邊）：水滲進土裡（每格土每 SOIL_DT 秒 1 級）
 	local ok, wait = seep_soil(p, 0, k, c)
 	if ok then wake_around(p); schedule(p, SOIL_DT); return end
@@ -885,7 +918,7 @@ for _, fname in ipairs({"set_node", "add_node", "swap_node", "remove_node"}) do
 				core.after(0, function() displace(p, lk, lc) end)
 			end
 			local lv = n and rockmech.rubble_level[n]
-			if n == "air" or (lv and lv < NL) then poke(pos) end
+			if n == "air" or (lv and lv < NL) then poke(pos); room_poke(pos) end
 		end
 		return r
 	end
@@ -961,6 +994,7 @@ end)
 rockmech.slurry_wet = wet
 rockmech.slurry_wetc = wetc          -- 孔隙液的成分（沒有 = 純穩定液）
 rockmech.slurry_cell = cell
+rockmech.liquid_cap = cap_of        -- r 級碎石的格（0 = 開放格）最多裝幾級
 -- 流動是事件驅動的（挖掉、倒液、流過去才排判定）：靜止的液體跟一般方塊一樣不計算（像 Minecraft 的水）。
 -- 沒有定時掃描；區塊載入、VoxelManip 改寫地圖時，用幾次查表確認真的會流（底下有空位、旁邊低 2 級以上、
 -- 旁邊的碎石還吸得了）才排判定
