@@ -6,7 +6,11 @@
 --   每一步（rockmech_slurry_step 秒，慢慢流）：底下是空的 → 整格往下掉；底下不滿 → 先把底下補滿；
 --   底下撐著 → 跟四周比液面，比最低的那一格高 2 級以上就分一半過去（差 1 級就算平了）。
 --   流進洞裡、漏到坑裡，液面就降下來，要補液。
---   人、東西可以在裡面（不能站、會減速，像在水裡）；放方塊、碎石掉進去會把那一格的穩定液擠掉（不守恆，簡化）
+--   人、東西可以在裡面（不能站、會減速，像在水裡）；放方塊、碎石掉進去會把那一格的穩定液往上擠（排開）
+-- 碎石的孔隙：碎石格也裝得了液（孔隙率 n，rockmech_rubble_porosity）。r 級碎石的孔隙裝 round(n·r) 級，上面空的 8 − r 級
+--   照常裝；水位在碎石裡時液面 = r·w / 孔隙容量。量記在 mod storage 的位置表（param2 已經存成分比例，不加方塊）。
+--   碎石被挖走、流走：液留在原地；碎石變多：多的往上擠。只畫液面那一層（半格碎石上面的自由液，一格一個拉伸的方塊實體），
+--   孔隙裡的液看不到也不畫
 
 local S = rockmech.S
 local cfg = rockmech.cfg
@@ -70,6 +74,100 @@ local function set_level(p, k)
 	core.set_node(p, {name = name_of(k)})
 	internal = false
 end
+
+-- 碎石孔隙裡的液 ---------------------------------------------------------
+local PORE = tonumber(core.settings:get("rockmech_rubble_porosity") or "") or 0.35
+rockmech.RUBBLE_POROSITY = PORE
+local storage = core.get_mod_storage()
+local wet = core.deserialize(storage:get_string("slurry_wet")) or {}   -- 位置 hash → 級數（1/8 m³）
+local wet_dirty = false
+local function pore_cap(r) return math.floor(PORE * r + 0.5) end
+local function wcap(r) return pore_cap(r) + NL - r end                 -- r 級碎石的格最多裝幾級
+local function surface(r, w)                                           -- 液面高度（1/8 m）
+	if w <= 0 then return 0 end
+	local pc = pore_cap(r)
+	if w <= pc then return r * w / pc end
+	return r + w - pc
+end
+-- 一格裝液的狀態：r（碎石級數，空氣、穩定液是 0）、w（液的級數）。實心的格回傳 nil
+local function cell(p)
+	local n = core.get_node(p).name
+	if n == "air" then return 0, 0 end
+	local k = rockmech.slurry_level[n]
+	if k then return 0, k end
+	local r = rockmech.rubble_level[n]
+	if r then return r, wet[core.hash_node_position(p)] or 0 end
+end
+local function cap_of(r) return r == 0 and NL or wcap(r) end
+
+-- 液面那一層的畫面：半格碎石上面的自由液，一格一個拉伸的方塊實體
+local SHOW = "rockmech:slurry_free"
+local SHOW_RANGE = 48
+local shown = {}                       -- 位置 hash → 實體
+local free_tex = "[fill:16x16:" .. COLOR .. "c8"
+core.register_entity(SHOW, {
+	initial_properties = {
+		visual = "cube", textures = {free_tex, free_tex, free_tex, free_tex, free_tex, free_tex},
+		use_texture_alpha = true, backface_culling = false,
+		physical = false, pointable = false, static_save = false, collisionbox = {0, 0, 0, 0, 0, 0},
+	},
+	on_activate = function(self) self.object:set_armor_groups({immortal = 1}) end,
+})
+local function near_player(p)
+	if rockmech.slurry_show_all then return true end     -- 測試用
+	for _, pl in ipairs(core.get_connected_players()) do
+		if vector.distance(pl:get_pos(), p) < SHOW_RANGE then return true end
+	end
+end
+local function show(p, r, w)
+	local h = core.hash_node_position(p)
+	local free = r < NL and w - pore_cap(r) or 0
+	local o = shown[h]
+	if o and not o:get_pos() then o = nil; shown[h] = nil end
+	if free <= 0 or not near_player(p) then
+		if o then o:remove(); shown[h] = nil end
+		return
+	end
+	free = math.min(free, NL - r)
+	local key = r * 16 + free
+	if o and o:get_luaentity().key == key then return end
+	local pos = {x = p.x, y = p.y - 0.5 + (r + free / 2) / NL, z = p.z}
+	if not o then
+		o = core.add_entity(pos, SHOW)
+		if not o then return end
+		shown[h] = o
+	else
+		o:set_pos(pos)
+	end
+	o:get_luaentity().key = key
+	o:set_properties({visual_size = {x = 1, y = free / NL, z = 1}})
+end
+local function set_cell(p, r, w)
+	if r == 0 then set_level(p, w); return end
+	local h = core.hash_node_position(p)
+	wet[h] = w > 0 and w or nil
+	wet_dirty = true
+	show(p, r, w)
+end
+-- 從 p 往上一格一格加 k 級（碎石格加進孔隙、上面的空隙），回傳加不進去的級數
+local function push_up(p, k)
+	local q = {x = p.x, y = p.y + 1, z = p.z}
+	for _ = 1, 32 do
+		if k <= 0 then return 0 end
+		local r, w = cell(q)
+		if not r then return k end
+		local put = math.min(cap_of(r) - w, k)
+		if put > 0 then set_cell(q, r, w + put); k = k - put; schedule(q) end
+		q.y = q.y + 1
+	end
+	return k
+end
+-- 側向一級一級流：流完 a 的液面還不比 b 低才流。回傳流了幾級
+local function seep_amount(ra, wa, rb, wb)
+	local cb, t = cap_of(rb), 0
+	while wa - t > 0 and wb + t < cb and surface(ra, wa - t - 1) >= surface(rb, wb + t + 1) do t = t + 1 end
+	return t
+end
 -- 從 p 往上加 k 級：穿過滿格的穩定液，加在第一個不滿或空的格，滿了再往上（最多 32 格）。回傳加不進去的級數
 local function add_up(p, k, ymax)
 	local q = vector.copy(p)
@@ -85,6 +183,13 @@ local function add_up(p, k, ymax)
 	return k
 end
 displace = function(p, k)
+	-- 擠進來的是碎石：先裝進它的孔隙、上面的空隙
+	local r, w = cell(p)
+	if r and r > 0 then
+		local t = math.min(k, math.max(0, wcap(r) - w))
+		if t > 0 then set_cell(p, r, w + t); k = k - t; schedule(p) end
+		if k <= 0 then return end
+	end
 	local up = {x = p.x, y = p.y + 1, z = p.z}
 	local left = add_up(up, k)
 	if left < k then schedule(up) end
@@ -136,11 +241,69 @@ local function level_low(p, k)
 	end
 	return best, bk
 end
+-- 碎石格裡的液：先往下滲，再往旁邊液面低的格流，碎石變多裝不下就往上擠
+local function rubble_step(p, r, w)
+	if w <= 0 then return end
+	local cap = wcap(r)
+	if w > cap then
+		local left = push_up(p, w - cap)
+		set_cell(p, r, cap + left)
+		wake_around(p)
+		return
+	end
+	local below = {x = p.x, y = p.y - 1, z = p.z}
+	local rb, wb = cell(below)
+	if rb and wb < cap_of(rb) then
+		local t = math.min(cap_of(rb) - wb, w)
+		set_cell(below, rb, wb + t)
+		set_cell(p, r, w - t)
+		schedule(below); wake_around(p)
+		if w - t > 0 then schedule(p) end
+		return
+	end
+	local best, bt
+	local s = math.random(4)
+	for j = 0, 3 do
+		local d = DIRS[(s + j - 1) % 4 + 1]
+		local q = {x = p.x + d[1], y = p.y, z = p.z + d[2]}
+		local rq, wq = cell(q)
+		if rq then
+			local t = seep_amount(r, w, rq, wq)
+			if t > 0 and (not bt or t > bt) then best, bt = {q, rq, wq}, t end
+		end
+	end
+	if best then
+		set_cell(best[1], best[2], best[3] + bt)
+		set_cell(p, r, w - bt)
+		schedule(best[1]); wake_around(p); schedule(p)
+		return
+	end
+	show(p, r, w)
+end
+
 step = function(p)
 	local k = level_at(p)
-	if not k or k <= 0 then return end
+	if not k then
+		local r, w = cell(p)
+		if r and r > 0 then rubble_step(p, r, w) end
+		return
+	end
+	if k <= 0 then return end
 	local below = {x = p.x, y = p.y - 1, z = p.z}
 	local kb = level_at(below)
+	if not kb then
+		-- 底下是碎石：先滲進它的孔隙、補滿它上面的空隙
+		local rb, wb = cell(below)
+		if rb and wb < wcap(rb) then
+			local t = math.min(wcap(rb) - wb, k)
+			set_cell(below, rb, wb + t)
+			set_level(p, k - t)
+			schedule(below)
+			wake_around(p)
+			if k - t > 0 then schedule(p) end
+			return
+		end
+	end
 	if kb and kb < NL then
 		-- 往下：先把底下補滿
 		local put = math.min(NL - kb, k)
@@ -168,6 +331,21 @@ step = function(p)
 		wake_around(p)
 		schedule(p)
 		return
+	end
+	-- 旁邊是碎石：液面比它的高就滲過去
+	for j = 0, 3 do
+		local d = DIRS[(s + j - 1) % 4 + 1]
+		local q = {x = p.x + d[1], y = p.y, z = p.z + d[2]}
+		local rq, wq = cell(q)
+		if rq and rq > 0 then
+			local t = seep_amount(0, k, rq, wq)
+			if t > 0 then
+				set_cell(q, rq, wq + t)
+				set_level(p, k - t)
+				schedule(q); wake_around(p); schedule(p)
+				return
+			end
+		end
 	end
 	-- 旁邊都只差 1 級（一格一格差 1/8 m 的階梯，長溝槽兩端差很多、遠端流不到）：連通管——
 	-- 同一層連通的液面（含底下撐著的空格）裡最低的那一格比這格低 2 級以上，就搬差距的一半過去。流平，最後整片差不到 1 級
@@ -303,9 +481,72 @@ end
 core.register_on_dignode(function(pos)
 	for _, v in ipairs({{x = 0, y = 1, z = 0}, {x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
 		local q = vector.add(pos, v)
-		if level_at(q) and level_at(q) > 0 then schedule(q) end
+		if (level_at(q) and level_at(q) > 0) or wet[core.hash_node_position(q)] then schedule(q) end
 	end
 end)
+
+-- 孔隙液的帳：碎石被挖走、流走、換成別的（滿格、壓實、VoxelManip 大崩塌都不會通知），每 0.5 s 對一次。
+-- 碎石沒了：液留在原地（空氣、穩定液的格）或往上擠；碎石變多裝不下：多的往上擠。順便更新液面那一層的畫面
+local REC_DT, SAVE_DT = 0.5, 5
+local rec_t, save_t = 0, 0
+rockmech.slurry_wet_stats = {n = 0, us = 0, shown = 0}
+local function reconcile()
+	local t0 = core.get_us_time()
+	local todo, n = {}, 0
+	for h, w in pairs(wet) do
+		n = n + 1
+		local p = core.get_position_from_hash(h)
+		local node = core.get_node_or_nil(p)
+		if node then
+			local r = rockmech.rubble_level[node.name]
+			if not r or w > wcap(r) then todo[#todo + 1] = {p, h, w, r}
+			else show(p, r, w) end
+		end
+	end
+	for _, a in ipairs(todo) do
+		local p, h, w, r = a[1], a[2], a[3], a[4]
+		if r then
+			local left = push_up(p, w - wcap(r))
+			wet[h] = wcap(r) + left
+			show(p, r, wet[h])
+		else
+			wet[h] = nil
+			if shown[h] then shown[h]:remove(); shown[h] = nil end
+			local k = level_at(p)
+			if k then
+				local put = math.min(NL - k, w)
+				if put > 0 then set_level(p, k + put); w = w - put end
+			end
+			if w > 0 then
+				local left = push_up(p, w)
+				if left > 0 then core.log("warning", ("[rockmech] 孔隙液 %d 級沒地方放（%s）"):format(left, core.pos_to_string(p))) end
+			end
+			schedule(p)
+		end
+		wet_dirty = true
+		wake_around(p)
+	end
+	local st = rockmech.slurry_wet_stats
+	st.n, st.us = n, core.get_us_time() - t0
+	st.shown = 0
+	for _ in pairs(shown) do st.shown = st.shown + 1 end
+end
+local function save_wet()
+	if not wet_dirty then return end
+	wet_dirty = false
+	storage:set_string("slurry_wet", core.serialize(wet))
+end
+core.register_globalstep(function(dt)
+	rec_t, save_t = rec_t + dt, save_t + dt
+	if rec_t >= REC_DT then rec_t = 0; reconcile() end
+	if save_t >= SAVE_DT then save_t = 0; save_wet() end
+end)
+core.register_on_shutdown(save_wet)
+core.after(1, function()
+	for h in pairs(wet) do schedule(core.get_position_from_hash(h)) end
+end)
+rockmech.slurry_wet = wet
+rockmech.slurry_cell = cell
 -- 保險：玩家附近還沒平的穩定液（區塊重新載入、被別的機制改過）
 core.register_abm({
 	label = "rockmech: 穩定液流動",
