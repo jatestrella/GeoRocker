@@ -387,10 +387,11 @@ local function make_job(pos)
 				in_situ(job, c, sv)
 			end
 			if nat then
-				-- 鋼板樁打下去的格記成開挖過：天然地形照原本的土、岩石填回去（下面的分支），不會多出一條溝
-				if job.soft[c] and not job.soil[c] and not (retain_r[cid] and is_excavated_at(a.x + x, wy, a.z + z)) then
-					nat.solid[c] = false             -- 碎石、木柱、支撐：人放的，天然地形沒有
-				elseif not is_excavated_at(a.x + x, wy, a.z + z) then
+				-- 挖過的格（含打鋼板樁的格、塞了碎石或木柱的洞）：天然地形照原本的土、岩石填回去（下面的分支），不會多出洞
+				local dug = is_excavated_at(a.x + x, wy, a.z + z)
+				if job.soft[c] and not job.soil[c] and not dug then
+					nat.solid[c] = false             -- 地面上的碎石、木柱、支撐：人放的，天然地形沒有
+				elseif not dug then
 					nat.solid[c], nat.soft[c], nat.soil[c], nat.gam[c] = job.solid[c], job.soft[c], job.soil[c], job.gam[c]
 					nat.sxx[c], nat.syy[c], nat.szz[c], nat.sxz[c] = job.sxx[c], job.syy[c], job.szz[c], job.sxz[c]
 				elseif wy > top then             -- 挖掉的土
