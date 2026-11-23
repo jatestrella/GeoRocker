@@ -58,6 +58,7 @@ local function get_setting(key)
 	if v ~= nil and v ~= "" then return v end
 	return core.settings:get(key)
 end
+rockmech.get_setting = get_setting      -- 世界的 rockmech.conf 優先，沒有才看 minetest.conf
 local cfg, warnings = rockmech.config.load(get_setting, {read_file = read_world_file})
 rockmech.cfg = cfg
 for _, w in ipairs(warnings) do

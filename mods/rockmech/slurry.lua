@@ -29,12 +29,13 @@
 
 local S = rockmech.S
 local cfg = rockmech.cfg
+local setting = rockmech.get_setting or function(k) return core.settings:get(k) end     -- 世界的 rockmech.conf 優先
 
 local NL = 8
 local BASE = "rockmech:slurry"        -- 純穩定液
 local WBASE = "rockmech:water"        -- 水、混合液
 local GAMMA, GAMMA_W = 11, 9.81       -- kN/m³（皂土泥漿比重約 1.05–1.1；水）
-local STEP = tonumber(core.settings:get("rockmech_slurry_step") or "") or 0.25
+local STEP = tonumber(setting("rockmech_slurry_step") or "") or 0.25
 rockmech.SLURRY = BASE
 rockmech.WATER = WBASE
 rockmech.SLURRY_GAMMA = GAMMA
@@ -228,7 +229,7 @@ end
 local function set_level(p, k) set_liquid(p, k, comp_of(p)) end
 
 -- 碎石孔隙裡的液 ---------------------------------------------------------
-local PORE = tonumber(core.settings:get("rockmech_rubble_porosity") or "") or 0.35
+local PORE = tonumber(setting("rockmech_rubble_porosity") or "") or 0.35
 rockmech.RUBBLE_POROSITY = PORE
 local storage = core.get_mod_storage()
 local wet = core.deserialize(storage:get_string("slurry_wet")) or {}    -- 位置 hash → 級數（1/8 m³）
@@ -385,9 +386,9 @@ displace = function(p, k, c)
 end
 
 -- 土的含水 ---------------------------------------------------------------
-local SOIL_N = tonumber(core.settings:get("rockmech_soil_porosity") or "") or 0.4
-local SOIL_DT = tonumber(core.settings:get("rockmech_soil_seep_step") or "") or 5
-local CAKE_B = tonumber(core.settings:get("rockmech_filter_cake") or "") or 0.5
+local SOIL_N = tonumber(setting("rockmech_soil_porosity") or "") or 0.4
+local SOIL_DT = tonumber(setting("rockmech_soil_seep_step") or "") or 5
+local CAKE_B = tonumber(setting("rockmech_filter_cake") or "") or 0.5
 rockmech.SOIL_POROSITY = SOIL_N
 local PARTICLES = {b = true}          -- 顆粒成分（皂土）：過不了土的孔隙，水滲走時留在液體裡
 local soil_frac = {}                  -- 表土、底土的方塊名稱 → 厚度比例
@@ -403,8 +404,8 @@ build_soil()
 core.register_on_mods_loaded(build_soil)
 rockmech.soil_frac = soil_frac
 local function soil_cap(name) return math.floor(SOIL_N * soil_frac[name] * NL + 0.5) end
-local SOIL_S0 = tonumber(core.settings:get("rockmech_soil_saturation") or "") or 0.33
-local SOIL_WT = tonumber(core.settings:get("rockmech_water_table_depth") or "") or 3
+local SOIL_S0 = tonumber(setting("rockmech_soil_saturation") or "") or 0.33
+local SOIL_WT = tonumber(setting("rockmech_water_table_depth") or "") or 3
 -- 這格土還能再吸幾級（容量 − 背景含水）：上面連續 SOIL_WT 格實心（地下水位以下）就飽和、不吸
 local function soil_room(p, name)
 	local cap = soil_cap(name)
