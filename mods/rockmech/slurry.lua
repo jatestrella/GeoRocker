@@ -69,10 +69,38 @@ local function level_at(p)
 	return rockmech.slurry_level[n]
 end
 local schedule
+-- 液量變了（流動、倒、抽、滲進碎石）：同一區累積變動 ≥ 1 m³（8 級），等那一區流平（安靜 QUIET 秒，持續流動最多等
+-- MAXWAIT 秒）再排一次應力解（femstress.lua），應力解讀到的液面就是畫面上的液面
+local QUIET, MAXWAIT = 1, 5
+local changed = {}           -- 區 → {p, acc, first, last}
+local function note_change(p, d)
+	if d == 0 or not rockmech.fem_queue or not cfg.fem.drive then return end
+	local s = math.max(1, math.floor(cfg.fem.radius / 2))
+	local key = math.floor(p.x / s) .. "," .. math.floor(p.y / s) .. "," .. math.floor(p.z / s)
+	local t = core.get_us_time() / 1e6
+	local c = changed[key]
+	if not c then c = {p = vector.copy(p), acc = 0, first = t}; changed[key] = c end
+	c.acc, c.last = c.acc + math.abs(d), t
+end
+local fem_t = 0
+core.register_globalstep(function(dt)
+	fem_t = fem_t + dt
+	if fem_t < 0.5 then return end
+	fem_t = 0
+	local t = core.get_us_time() / 1e6
+	for key, c in pairs(changed) do
+		if t - c.last >= QUIET or t - c.first >= MAXWAIT then
+			changed[key] = nil
+			if c.acc >= NL then rockmech.fem_queue(c.p, 1, false, true) end
+		end
+	end
+end)
 local function set_level(p, k)
+	local old = level_at(p) or 0
 	internal = true
 	core.set_node(p, {name = name_of(k)})
 	internal = false
+	note_change(p, k - old)
 end
 
 -- 碎石孔隙裡的液 ---------------------------------------------------------
@@ -145,6 +173,7 @@ end
 local function set_cell(p, r, w)
 	if r == 0 then set_level(p, w); return end
 	local h = core.hash_node_position(p)
+	note_change(p, w - (wet[h] or 0))
 	wet[h] = w > 0 and w or nil
 	wet_dirty = true
 	show(p, r, w)

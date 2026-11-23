@@ -65,7 +65,7 @@ local function set_press(job, g, to_cell, scale)
 end
 
 -- 土的參數表（下面 cid_tables 建）：粗網格、細網格都用，先宣告
-local K0_SOIL, gamma_of_cid, soil_cid, soil_set, topsoil_f, cid_tables, gamma_s, fluid_f, fluid_g
+local K0_SOIL, gamma_of_cid, soil_cid, soil_set, topsoil_f, cid_tables, gamma_s, fluid_f, fluid_g, rubble_lv_cid
 
 -- 粗網格（子模型的外圍）：同樣的格數，每格 C³ 公尺，一半以上是岩石就算實心。
 -- 原點對齊 C 的倍數，附近的開挖共用同一個粗網格，上次的解當初始值。
@@ -168,6 +168,8 @@ function cid_tables()
 	-- 穩定液（slurry.lua）：cid → 液面高度比例
 	-- 其他流體（新拌混凝土，concrete.lua）：cid → 比例，fluid_g：cid → 單位重 γ（沒列的用穩定液的）
 	fluid_f, fluid_g = {}, {}
+	rubble_lv_cid = {}
+	for name, lv in pairs(rockmech.rubble_level or {}) do rubble_lv_cid[core.get_content_id(name)] = lv end
 	for name, k in pairs(rockmech.slurry_level or {}) do fluid_f[core.get_content_id(name)] = k / rockmech.RUBBLE_LEVELS end
 	for name, v in pairs(rockmech.fluid_extra or {}) do
 		local cid = core.get_content_id(name)
@@ -180,6 +182,14 @@ function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
 -- 液柱頂上被蓋住（溝壁破洞、洞穴頂、懸空的岩簷底下）：靜水壓看的是整片連通液體的液面，不是這一欄自己的高度——
 -- 沿著連通的液體找最高的開口（上面是空氣的那一欄），從那裡算到這一欄液柱頂的壓力，再往下加這一欄自己的
 local fluid_col
+-- 泡滿液的碎石（孔隙和上面的空隙都滿，slurry.lua）：跟液體連通，液壓穿得過去
+local function saturated(g, x, y, z, cid)
+	local lv = rubble_lv_cid and rubble_lv_cid[cid]
+	local wet = lv and rockmech.slurry_wet
+	local w = wet and wet[core.hash_node_position({x = x + g.ox, y = y + g.oy, z = z + g.oz})]
+	if not w then return false end
+	return w >= math.floor((rockmech.RUBBLE_POROSITY or 0.35) * lv + 0.5) + rockmech.RUBBLE_LEVELS - lv
+end
 local function open_top(g, gx, yt, gz)
 	local gsy, gsz = g.nx, g.nx * g.ny
 	local air = core.CONTENT_AIR
@@ -197,12 +207,24 @@ local function open_top(g, gx, yt, gz)
 			local nx_, ny_, nz_ = x + d[1], y + d[2], z + d[3]
 			if nx_ >= 0 and ny_ >= 0 and nz_ >= 0 and nx_ < g.nx and ny_ < g.ny and nz_ < g.nz then
 				local j = 1 + nx_ + ny_ * gsy + nz_ * gsz
-				if not seen[j] and fluid_f[g.data[j]] then seen[j] = true; queue[#queue + 1] = {nx_, ny_, nz_} end
+				if not seen[j] and (fluid_f[g.data[j]] or saturated(g, nx_, ny_, nz_, g.data[j])) then
+					seen[j] = true; queue[#queue + 1] = {nx_, ny_, nz_}
+				end
 			end
 		end
 	end
 	for j in pairs(seen) do g._flr[j] = best end
 	return best
+end
+-- 連通液面 o（open_top 找到的開口格）算到高度 yt 那一格頂面的液壓 (kPa)
+local function head_at(g, o, yt)
+	local GF = rockmech.SLURRY_GAMMA or 11
+	local gsy, gsz = g.nx, g.nx * g.ny
+	local ox, oz = o[1], o[3]
+	if not fluid_f[g.data[1 + ox + o[2] * gsy + oz * gsz]] then return GF * (o[2] - yt) end     -- 開口是泡滿液的碎石：液面在它的頂
+	local ylow = o[2]
+	while ylow - 1 >= yt + 1 and fluid_f[g.data[1 + ox + (ylow - 1) * gsy + oz * gsz]] do ylow = ylow - 1 end
+	return fluid_col(g, ox, ylow, oz) + GF * (ylow - (yt + 1))
 end
 fluid_col = function(g, gx, ly, gz)
 	local gsy, gsz = g.nx, g.nx * g.ny
@@ -220,12 +242,7 @@ fluid_col = function(g, gx, ly, gz)
 	local above = yt + 1 <= g.ny - 1 and cid_at(yt + 1)
 	if above and above ~= core.CONTENT_AIR and fluid_f[cid_at(yt)] >= 1 then
 		local o = open_top(g, gx, yt, gz)
-		if o and o[2] > yt then
-			local ox, oz = o[1], o[3]
-			local ylow = o[2]
-			while ylow - 1 >= yt + 1 and fluid_f[g.data[1 + ox + (ylow - 1) * gsy + oz * gsz]] do ylow = ylow - 1 end
-			q = fluid_col(g, ox, ylow, oz) + GF * (ylow - (yt + 1))
-		end
+		if o and o[2] > yt then q = head_at(g, o, yt) end
 	end
 	for y = yt, ly, -1 do
 		local cid = cid_at(y)
@@ -258,6 +275,14 @@ local function loose_col(g, gx, ly, gz, only_nat)
 	local NL = rockmech.RUBBLE_LEVELS
 	local wet = not only_nat and rockmech.slurry_wet
 	local u = only_nat and 0 or fluid_col(g, gx, y, gz)
+	-- 頂上被蓋住、最上面那格碎石泡滿液：孔隙液壓從連通液面算下來（岩簷底下、洞裡的碎石）
+	if not only_nat and u == 0 and y <= g.ny - 1 and g.data[1 + gx + y * sy + gz * sz] ~= core.CONTENT_AIR then
+		local top = cells[#cells]
+		if top.y == y - 1 and saturated(g, gx, top.y, gz, top.cid) then
+			local o = open_top(g, gx, top.y, gz)
+			if o and o[2] > top.y then u = head_at(g, o, top.y) end
+		end
+	end
 	local h, q, qm, um = 0, 0, 0, 0
 	for i = #cells, 1, -1 do
 		local c = cells[i]
@@ -443,6 +468,11 @@ local function make_job(pos)
 				local fb = ly >= 1 and fluid_f[g.data[1 + gx + (ly - 1) * gsy + gz * gsz]]
 				if fb and fb >= 1 then
 					local qb = fluid_above(gx, ly - 1, gz) - (fluid_g[g.data[1 + gx + (ly - 1) * gsy + gz * gsz]] or GF)
+					if qb > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 4, qb end
+				elseif ly >= 1 and saturated(g, gx, ly - 1, gz, g.data[1 + gx + (ly - 1) * gsy + gz * gsz]) then
+					-- 底下是泡滿液的碎石：孔隙液壓一樣往上頂
+					local o = open_top(g, gx, ly - 1, gz)
+					local qb = o and o[2] > ly - 1 and head_at(g, o, ly - 1) or 0
 					if qb > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 4, qb end
 				end
 				for _, d in ipairs(SIDES) do
