@@ -176,8 +176,35 @@ function cid_tables()
 end
 function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
 -- 網格 g 裡 (gx, ly, gz) 那一欄、ly 那一格以上（含）的液柱重量 Σγ·h (kPa)，和 ly 頂面的深度 z、那一欄的臨界深度 hc；
--- ly 那一格不是液體就是 0。新拌混凝土照雙線性包絡線（見 make_job 的液壓那段）
-local function fluid_col(g, gx, ly, gz)
+-- ly 那一格不是液體就是 0。新拌混凝土照雙線性包絡線（見 make_job 的液壓那段）。
+-- 液柱頂上被蓋住（溝壁破洞、洞穴頂、懸空的岩簷底下）：靜水壓看的是整片連通液體的液面，不是這一欄自己的高度——
+-- 沿著連通的液體找最高的開口（上面是空氣的那一欄），從那裡算到這一欄液柱頂的壓力，再往下加這一欄自己的
+local fluid_col
+local function open_top(g, gx, yt, gz)
+	local gsy, gsz = g.nx, g.nx * g.ny
+	local air = core.CONTENT_AIR
+	g._flr = g._flr or {}
+	local i0 = 1 + gx + yt * gsy + gz * gsz
+	if g._flr[i0] ~= nil then return g._flr[i0] end
+	local seen, queue, best = {[i0] = true}, {{gx, yt, gz}}, false
+	local k = 1
+	while queue[k] and k <= 8000 do
+		local c = queue[k]; k = k + 1
+		local x, y, z = c[1], c[2], c[3]
+		local up = y + 1 <= g.ny - 1 and g.data[1 + x + (y + 1) * gsy + z * gsz]
+		if (not up or up == air) and (not best or y > best[2]) then best = {x, y, z} end
+		for _, d in ipairs({{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}}) do
+			local nx_, ny_, nz_ = x + d[1], y + d[2], z + d[3]
+			if nx_ >= 0 and ny_ >= 0 and nz_ >= 0 and nx_ < g.nx and ny_ < g.ny and nz_ < g.nz then
+				local j = 1 + nx_ + ny_ * gsy + nz_ * gsz
+				if not seen[j] and fluid_f[g.data[j]] then seen[j] = true; queue[#queue + 1] = {nx_, ny_, nz_} end
+			end
+		end
+	end
+	for j in pairs(seen) do g._flr[j] = best end
+	return best
+end
+fluid_col = function(g, gx, ly, gz)
 	local gsy, gsz = g.nx, g.nx * g.ny
 	local function cid_at(y) return g.data[1 + gx + y * gsy + gz * gsz] end
 	if not fluid_f or ly > g.ny - 1 or not fluid_f[cid_at(ly)] then return 0, 0, 0 end
@@ -189,6 +216,17 @@ local function fluid_col(g, gx, ly, gz)
 	for y = yb, yt do H = H + fluid_f[cid_at(y)] end
 	local hc = H / 3
 	local q, z = 0, 0
+	-- 頂上蓋住：先加開口那一欄算到這一欄液柱頂（yt 的頂面）的壓力
+	local above = yt + 1 <= g.ny - 1 and cid_at(yt + 1)
+	if above and above ~= core.CONTENT_AIR and fluid_f[cid_at(yt)] >= 1 then
+		local o = open_top(g, gx, yt, gz)
+		if o and o[2] > yt then
+			local ox, oz = o[1], o[3]
+			local ylow = o[2]
+			while ylow - 1 >= yt + 1 and fluid_f[g.data[1 + ox + (ylow - 1) * gsy + oz * gsz]] do ylow = ylow - 1 end
+			q = fluid_col(g, ox, ylow, oz) + GF * (ylow - (yt + 1))
+		end
+	end
 	for y = yt, ly, -1 do
 		local cid = cid_at(y)
 		local f, gm = fluid_f[cid], fluid_g[cid] or GF
@@ -401,6 +439,12 @@ local function make_job(pos)
 			elseif job.solid[c] and (not job.soft[c] or job.soil[c] or (job.retain and job.retain[c])) then
 				local q = fluid_above(gx, ly + 1, gz)
 				if q > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 3, q end
+				-- 底面貼著滿格的液體（洞穴頂、岩簷底）：液壓往上頂
+				local fb = ly >= 1 and fluid_f[g.data[1 + gx + (ly - 1) * gsy + gz * gsz]]
+				if fb and fb >= 1 then
+					local qb = fluid_above(gx, ly - 1, gz) - (fluid_g[g.data[1 + gx + (ly - 1) * gsy + gz * gsz]] or GF)
+					if qb > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 4, qb end
+				end
 				for _, d in ipairs(SIDES) do
 					local nx_, nz_ = gx + d[1], gz + d[2]
 					if nx_ >= 0 and nz_ >= 0 and nx_ < g.nx and nz_ < g.nz then
@@ -408,11 +452,12 @@ local function make_job(pos)
 						local f = fluid_f[cid]
 						if f then
 							-- 不滿格：液體只貼著那一面的下面 f，合力 γ·f²/2；上面還有液柱就是整面 Σγh + γ·f/2
+							-- qa：那一格頂面的液壓（上面的液柱；頂上蓋住時從連通液面算，見 fluid_col）
 							local gf = fluid_g[cid] or GF
-							local qa = fluid_above(nx_, ly + 1, nz_)
-							local _, za, hc = fluid_above(nx_, ly, nz_)
+							local qn, za, hc = fluid_above(nx_, ly, nz_)
 							if gf > GF and za - f >= hc then gf = GF end        -- 臨界深度以下的新拌混凝土
-							local p = qa > 0 and (qa + gf * f / 2) or gf * f * f / 2
+							local qa = qn - gf * f
+							local p = qa > 1e-6 and (qa + gf * f / 2) or gf * f * f / 2
 							press[#press + 1], press[#press + 2], press[#press + 3] = c, d[3], p
 						end
 					end
