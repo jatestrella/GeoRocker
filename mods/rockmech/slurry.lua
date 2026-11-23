@@ -17,6 +17,15 @@
 --   照常裝；水位在碎石裡時液面 = r·w / 孔隙容量。量和成分記在 mod storage 的位置表（碎石的 param2 已經存成分比例）。
 --   碎石被挖走、流走：液留在原地；碎石變多：多的往上擠。只畫液面那一層（半格碎石上面的自由液，一格一個拉伸的方塊實體），
 --   孔隙裡的液看不到也不畫
+-- 土的含水（表土、底土）：孔隙率 rockmech_soil_porosity（0.4，一格滿格的土裝 3 級水），量記在土的私有 metadata rm_w。
+--   液體貼著土（底下、旁邊）：只有水滲進去、皂土留下（混合液變濃），每格土每 rockmech_soil_seep_step 秒收 1 級；
+--   皂土比例 ≥ rockmech_filter_cake（0.5）就不滲（泥膜），混合液最後一級也不滲（那就是泥膜）。
+--   土裡的水：往下滲到下面的土（不往旁邊擴散：不然整片地表的土都在吸水，池子會被慢慢吸乾）；土飽和了才往下滴進
+--   底下的空洞、碎石（不往旁邊流）。
+--   土被挖掉、變成碎石、換成別的：水放出來（空格）、移進碎石孔隙或往上擠。都是事件驅動，水分布穩定了就不算
+--   土本來就有的水（背景，不寫 metadata、不算總量、挖土也不放出來）：地表往下 rockmech_water_table_depth（3 m，上面連續
+--   幾格都是實心）以下當作在地下水位以下、飽和；淺的照 rockmech_soil_saturation（0.33）。rm_w 只記額外滲進去的水，
+--   一格土能再吸「容量 − 背景」。所以湖、池子只被表層吸走一點就穩定，不會整個滲光
 
 local S = rockmech.S
 local cfg = rockmech.cfg
@@ -358,17 +367,179 @@ displace = function(p, k, c)
 	end
 	local up = {x = p.x, y = p.y + 1, z = p.z}
 	local left = add_up(up, k, nil, c)
-	if left < k then schedule(up) end
+	-- 上面被碎石蓋住：穿過碎石的孔隙往上；還放不下就放旁邊（同一層、上一層）
+	if left > 0 then left = push_up(p, left, c) end
+	if left > 0 then
+		for _, dy in ipairs({0, 1}) do
+			for _, d in ipairs({{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) do
+				if left <= 0 then break end
+				local q = {x = p.x + d[1], y = p.y + dy, z = p.z + d[2]}
+				local l2 = add_into(q, left, c)
+				if l2 < left then schedule(q) end
+				left = l2
+			end
+		end
+	end
+	if left > 0 then core.log("warning", ("[rockmech] 排開的液體 %d 級沒地方放（%s）"):format(left, core.pos_to_string(p))) end
+	schedule(up)
+end
+
+-- 土的含水 ---------------------------------------------------------------
+local SOIL_N = tonumber(core.settings:get("rockmech_soil_porosity") or "") or 0.4
+local SOIL_DT = tonumber(core.settings:get("rockmech_soil_seep_step") or "") or 5
+local CAKE_B = tonumber(core.settings:get("rockmech_filter_cake") or "") or 0.5
+rockmech.SOIL_POROSITY = SOIL_N
+local PARTICLES = {b = true}          -- 顆粒成分（皂土）：過不了土的孔隙，水滲走時留在液體裡
+local soil_frac = {}                  -- 表土、底土的方塊名稱 → 厚度比例
+local function build_soil()
+	for name, def in pairs(core.registered_nodes) do
+		if def.groups and (def.groups.rockmech_topsoil or 0) > 0 then
+			local k = tonumber(name:match("_(%d)$"))
+			soil_frac[name] = k and k / NL or 1
+		end
+	end
+end
+build_soil()
+core.register_on_mods_loaded(build_soil)
+rockmech.soil_frac = soil_frac
+local function soil_cap(name) return math.floor(SOIL_N * soil_frac[name] * NL + 0.5) end
+local SOIL_S0 = tonumber(core.settings:get("rockmech_soil_saturation") or "") or 0.33
+local SOIL_WT = tonumber(core.settings:get("rockmech_water_table_depth") or "") or 3
+-- 這格土還能再吸幾級（容量 − 背景含水）：上面連續 SOIL_WT 格實心（地下水位以下）就飽和、不吸
+local function soil_room(p, name)
+	local cap = soil_cap(name)
+	local d = 0
+	for i = 1, SOIL_WT do
+		local n = core.get_node({x = p.x, y = p.y + i, z = p.z}).name
+		if n == "air" or n == "ignore" or rockmech.slurry_level[n] then break end
+		d = i
+	end
+	if d >= SOIL_WT then return 0 end
+	return cap - math.floor(cap * SOIL_S0 + 0.5)
+end
+local W_KEY, W_PRIV = "rm_w", {"rm_w"}
+local function soil_w(p) return core.get_meta(p):get_int(W_KEY) end
+local function set_soil_w(p, w)
+	local m = core.get_meta(p)
+	local old = m:get_int(W_KEY)
+	if w > 0 then m:set_int(W_KEY, w); m:mark_as_private(W_PRIV) else m:set_string(W_KEY, "") end
+	note_change(p, w - old)
+end
+rockmech.soil_water = soil_w
+local soil_pending = core.deserialize(storage:get_string("soil_pending")) or {}
+local soil_step
+local function soil_schedule(p, dt)
+	local h = core.hash_node_position(p)
+	if soil_pending[h] then return end
+	soil_pending[h] = true
+	core.after(dt or SOIL_DT, function() soil_pending[h] = nil; soil_step(p) end)
+end
+-- 液體留下 k − 1 級（滲走 1 級水）：顆粒成分的量不變、濃度變高；溶在水裡的照舊
+local function minus_water(c, k)
+	if c == WATER_C or k <= 1 then return c end
+	local out, any = {}, false
+	for key, v in pairs(c) do
+		out[key] = PARTICLES[key] and math.min(1, v * k / (k - 1)) or v
+		any = true
+	end
+	if not any then return WATER_C end
+	if is_pure_slurry(out) then return SLURRY_C end
+	return out
+end
+local soil_in = {}                    -- 土格 hash → 下次可以再收水的時間（每 SOIL_DT 秒收 1 級）
+local function now_s() return core.get_us_time() / 1e6 end
+-- p 這一格的液（r = 0 開放格、r > 0 碎石孔隙；w 級、成分 c）往底下、旁邊的土滲 1 級水。
+-- 回傳 true（滲了）、或 nil 加最早可以再試的秒數（有土但還沒輪到）
+local SEEP_DIRS = {{0, -1, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}
+local function seep_soil(p, r, w, c)
+	local b = c.b or 0
+	if w <= 0 or b >= CAKE_B or (b > 0 and w < 2) then return nil end
+	local t, wait = now_s(), nil
+	for _, d in ipairs(SEEP_DIRS) do
+		local q = {x = p.x + d[1], y = p.y + d[2], z = p.z + d[3]}
+		local nq = core.get_node(q).name
+		if soil_frac[nq] then
+			local wq = soil_w(q)
+			if wq < soil_room(q, nq) then
+				local h = core.hash_node_position(q)
+				if (soil_in[h] or 0) <= t then
+					soil_in[h] = t + SOIL_DT
+					set_soil_w(q, wq + 1)
+					set_cell(p, r, w - 1, minus_water(c, w))
+					soil_schedule(q)
+					return true
+				end
+				wait = math.min(wait or math.huge, soil_in[h] - t)
+			end
+		end
+	end
+	return nil, wait
+end
+-- 土格的水往下、往旁邊走（每 SOIL_DT 秒一次，一次 1 級）
+soil_step = function(p)
+	local node = core.get_node(p)
+	if not soil_frac[node.name] then return end
+	local w = soil_w(p)
+	if w <= 0 then return end
+	local cap = soil_room(p, node.name)      -- 額外的水最多幾級
+	if w > cap then                          -- 土變薄了、上面蓋了東西（變成地下水位以下）：多的往上擠
+		set_soil_w(p, cap)
+		local left = push_up(p, w - cap, WATER_C)
+		if left > 0 then set_soil_w(p, cap + left) end      -- 擠不出去就先留著
+		schedule({x = p.x, y = p.y + 1, z = p.z})
+		return
+	end
+	-- 往下：下面的土沒滿就滲下去；下面是空洞、碎石：這格飽和了才滴下去
+	local b = {x = p.x, y = p.y - 1, z = p.z}
+	local nb = core.get_node(b).name
+	if soil_frac[nb] then
+		local wb = soil_w(b)
+		if wb < soil_room(b, nb) then
+			set_soil_w(b, wb + 1); set_soil_w(p, w - 1)
+			soil_schedule(b); soil_schedule(p)
+			return
+		end
+	elseif w >= cap then
+		local rb, wbb = cell(b)
+		if rb and wbb < cap_of(rb) then
+			add_into(b, 1, WATER_C); set_soil_w(p, w - 1)
+			schedule(b); soil_schedule(p)
+			return
+		end
+	end
+end
+rockmech.soil_schedule = soil_schedule
+-- p 這一格原本是土、含 w 級水，現在換成 name：水放出來（空格、液體）、移進碎石孔隙，或往上擠
+local function release_soil(p, w, name)
+	if w <= 0 then return end
+	if soil_frac[name] then                    -- 還是土（薄的、厚的）：留下裝得下的
+		local cap = soil_room(p, name)
+		set_soil_w(p, math.min(w, cap))
+		if w > cap then
+			local left = push_up(p, w - cap, WATER_C)
+			if left > 0 then set_soil_w(p, cap + left) end
+			schedule({x = p.x, y = p.y + 1, z = p.z})
+		end
+		soil_schedule(p, 0.5)
+		return
+	end
+	local m = core.get_meta(p)
+	if m:contains(W_KEY) then m:set_string(W_KEY, "") end
+	note_change(p, -w)
+	if name == "air" or rockmech.slurry_level[name] or rockmech.rubble_level[name] then w = add_into(p, w, WATER_C) end
+	if w > 0 then w = push_up(p, w, WATER_C) end
+	if w > 0 then core.log("warning", ("[rockmech] 土裡的水 %d 級沒地方放（%s）"):format(w, core.pos_to_string(p))) end
+	schedule(p); rockmech.slurry_wake(p)
 end
 
 -- 排一次流動判定（同一格合併）
 local pending = {}
 local step
-schedule = function(p)
+schedule = function(p, dt)
 	local key = core.hash_node_position(p)
 	if pending[key] then return end
 	pending[key] = true
-	core.after(STEP, function()
+	core.after(dt or STEP, function()
 		pending[key] = nil
 		step(p)
 	end)
@@ -442,6 +613,10 @@ local function rubble_step(p, r, w, c)
 		schedule(best[1]); wake_around(p); schedule(p)
 		return
 	end
+	-- 貼著土：水滲進土裡
+	local ok, wait = seep_soil(p, r, w, c)
+	if ok then schedule(p, SOIL_DT); return end
+	if wait then schedule(p, wait + 0.05) end
 	show(p, r, w, c)
 end
 
@@ -493,6 +668,10 @@ step = function(p)
 			end
 		end
 	end
+	-- 貼著土（底下、旁邊）：水滲進土裡（每格土每 SOIL_DT 秒 1 級）
+	local ok, wait = seep_soil(p, 0, k, c)
+	if ok then wake_around(p); schedule(p, SOIL_DT); return end
+	if wait then schedule(p, wait + 0.05) end
 	-- 旁邊都只差 1 級（一格一格差 1/8 m 的階梯，長溝槽兩端差很多、遠端流不到）：連通管——
 	-- 同一層連通的液面（含底下撐著的空格）裡最低的那一格比這格低 2 級以上，就搬差距的一半過去。流平，最後整片差不到 1 級
 	if k >= 2 then
@@ -521,6 +700,7 @@ local EQ_MAX, EQ_DT = 3000, 1.0
 local eq_last, eq_retry = {}, {}
 local NB6 = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, 1, 0}}
 equalize = function(p)
+	if (level_at(p) or 0) <= 0 then return end        -- 延後重做時，這格可能已經不是液體了
 	local key = math.floor(p.x / 16) .. "," .. math.floor(p.y / 16) .. "," .. math.floor(p.z / 16)
 	local now = core.get_us_time() / 1e6
 	if eq_last[key] and now - eq_last[key] < EQ_DT then
@@ -671,16 +851,38 @@ local NB5 = {{0, 1, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}
 local function poke(pos)
 	for _, v in ipairs(NB5) do
 		local q = {x = pos.x + v[1], y = pos.y + v[2], z = pos.z + v[3]}
-		local k = level_at(q)
-		if (k and k > 0) or wet[core.hash_node_position(q)] then schedule(q) end
+		local n = core.get_node(q).name
+		local k = n == "air" and 0 or rockmech.slurry_level[n]
+		if (k and k > 0) or wet[core.hash_node_position(q)] then schedule(q)
+		elseif soil_frac[n] and soil_w(q) > 0 then soil_schedule(q, 0.5) end
 	end
 end
 for _, fname in ipairs({"set_node", "add_node", "swap_node", "remove_node"}) do
 	local orig = core[fname]
 	core[fname] = function(pos, node, ...)
+		-- 土換成別的（挖掉、變碎石、變薄）：裡面的水先記下來（set_node 會清掉 metadata）
+		local sw, before, lk, lc = 0, nil, nil, nil
+		if not internal then
+			before = core.get_node(pos).name
+			if soil_frac[before] then sw = soil_w(pos) end
+			-- swap_node 不觸發 on_destruct：液體格被換掉時自己排開
+			if fname == "swap_node" then
+				lk = rockmech.slurry_level[before]
+				if lk then lc = comp_of(pos, {name = before}) end
+			end
+		end
 		local r = orig(pos, node, ...)
 		if not internal then
 			local n = fname == "remove_node" and "air" or (node and node.name)
+			if sw > 0 and n ~= before then release_soil(pos, sw, n or "air") end
+			if lk and not rockmech.slurry_level[n] then
+				if is_water[before] then
+					local m = core.get_meta(pos)
+					for i = 1, #PRIV do m:set_string(PRIV[i], "") end
+				end
+				local p = vector.copy(pos)
+				core.after(0, function() displace(p, lk, lc) end)
+			end
 			local lv = n and rockmech.rubble_level[n]
 			if n == "air" or (lv and lv < NL) then poke(pos) end
 		end
@@ -737,6 +939,15 @@ local function save_wet()
 	storage:set_string("slurry_wet", core.serialize(wet))
 	storage:set_string("slurry_wetc", core.serialize(wetc))
 end
+-- 還沒滲完的土格：關遊戲時記下來，下次開接著滲
+core.register_on_shutdown(function() storage:set_string("soil_pending", core.serialize(soil_pending)) end)
+do
+	local old = soil_pending
+	soil_pending = {}
+	core.after(2, function()
+		for h in pairs(old) do soil_schedule(core.get_position_from_hash(h), 1) end
+	end)
+end
 core.register_globalstep(function(dt)
 	rec_t, save_t = rec_t + dt, save_t + dt
 	if rec_t >= REC_DT then rec_t = 0; reconcile() end
@@ -790,6 +1001,16 @@ local function wake_box(a, b)
 	for h in pairs(wet) do
 		local q = core.get_position_from_hash(h)
 		if q.x >= p1.x and q.x <= p2.x and q.y >= p1.y and q.y <= p2.y and q.z >= p1.z and q.z <= p2.z then schedule(q) end
+	end
+	-- 土裡的水：VoxelManip 不動 metadata，土被換掉的格水還記在那裡 → 放出來；還是土的叫起來
+	for _, q in ipairs(core.find_nodes_with_meta(p1, p2)) do
+		local m = core.get_meta(q)
+		local w = m:get_int(W_KEY)
+		if w > 0 then
+			local n = core.get_node(q).name
+			if soil_frac[n] then soil_schedule(q, 0.5)
+			else m:set_string(W_KEY, ""); note_change(q, w); release_soil(q, w, n) end
+		end
 	end
 end
 local prev_written = rockmech.map_written
