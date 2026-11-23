@@ -760,3 +760,59 @@ core.register_craftitem(ITEM, {
 	end,
 })
 rockmech.SLURRY_ITEM = ITEM
+
+-- 從 p 那一欄的液面往下抽 k 級（測試用：不守恆）。回傳抽了幾級
+function rockmech.slurry_take(p, k)
+	local q = vector.copy(p)
+	while (level_at({x = q.x, y = q.y + 1, z = q.z}) or 0) > 0 do q.y = q.y + 1 end
+	local took = 0
+	for _ = 1, 64 do
+		local kq = level_at(q)
+		if not kq or kq <= 0 or took >= k then break end
+		local t = math.min(kq, k - took)
+		set_level(q, kq - t)
+		took = took + t
+		wake_around(q)
+		q.y = q.y - 1
+	end
+	return took
+end
+
+-- 無限穩定液桶（測試用，創造模式物品欄）：右鍵在指的地方倒 1 m³（往上疊，不限溝頂），左鍵從視線碰到的那一欄液面抽 1 m³；
+-- 按住 Shift 是 5 m³。不消耗、不收錢
+local BUCKET = "rockmech:slurry_bucket_infinite"
+local function amount(user) return (user and user:get_player_control().sneak) and 5 * NL or NL end
+core.register_tool(BUCKET, {
+	description = S("Infinite slurry bucket\nRight-click: pour 1 m³ (Shift: 5 m³); left-click: drain 1 m³ (Shift: 5 m³). For testing"),
+	short_description = S("Infinite slurry bucket"),
+	inventory_image = "[fill:16x16:#00000000^[fill:10x10:3,5:#606870^[fill:8x7:4,5:" .. COLOR .. "^[fill:12x1:2,4:#909aa4^[fill:2x2:13,1:#b070ff",
+	stack_max = 1,
+	on_place = function(itemstack, placer, pointed)
+		if pointed.type ~= "node" or not placer then return itemstack end
+		local p = level_at(pointed.under) and pointed.under or pointed.above
+		if not level_at(p) or core.is_protected(p, placer:get_player_name()) then return itemstack end
+		local k = amount(placer)
+		local left = add_up(p, k)
+		schedule(p); wake_around(p)
+		for y = p.y, p.y + 8 do schedule({x = p.x, y = y, z = p.z}) end
+		core.log("action", ("[rockmech] 無限穩定液桶 倒 %d 級 %s"):format(k - left, core.pos_to_string(p)))
+		return itemstack
+	end,
+	on_use = function(itemstack, user)
+		if not user then return itemstack end
+		-- 穩定液指不到：沿視線一小步一小步找第一格有液的
+		local eye = vector.add(user:get_pos(), {x = 0, y = user:get_properties().eye_height or 1.625, z = 0})
+		local look = user:get_look_dir()
+		for i = 1, 80 do
+			local q = vector.round(vector.add(eye, vector.multiply(look, i * 0.1)))
+			local k = level_at(q)
+			if k == nil then break end              -- 碰到實心
+			if k > 0 then
+				local took = rockmech.slurry_take(q, amount(user))
+				core.log("action", ("[rockmech] 無限穩定液桶 抽 %d 級 %s"):format(took, core.pos_to_string(q)))
+				break
+			end
+		end
+		return itemstack
+	end,
+})

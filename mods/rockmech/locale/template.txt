@@ -1167,6 +1167,8 @@ Dig wand=
 
 ### slurry.lua
 Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=
+Infinite slurry bucket@nRight-click: pour 1 m³ (Shift: 5 m³); left-click: drain 1 m³ (Shift: 5 m³). For testing=
+Infinite slurry bucket=
 
 ### slurrytank.lua
 Connect a slurry pipe to the valve on the blue side=

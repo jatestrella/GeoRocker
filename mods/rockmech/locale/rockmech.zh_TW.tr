@@ -1167,6 +1167,8 @@ Dig wand=挖洞魔杖
 
 ### slurry.lua
 Bentonite slurry@n1 m³ each. Right-click to pour; it flows slowly and holds up trench walls=穩定液@n每單位 1 m³。按右鍵倒進去；會慢慢流，頂住溝壁不讓它塌
+Infinite slurry bucket@nRight-click: pour 1 m³ (Shift: 5 m³); left-click: drain 1 m³ (Shift: 5 m³). For testing=無限穩定液桶@n右鍵倒 1 m³（Shift：5 m³）；左鍵抽掉 1 m³（Shift：5 m³）。測試用
+Infinite slurry bucket=無限穩定液桶
 
 ### slurrytank.lua
 Connect a slurry pipe to the valve on the blue side=穩定液管接在藍色那一面的閥門
