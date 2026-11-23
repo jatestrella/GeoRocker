@@ -13,7 +13,7 @@ local setting = rockmech.get_setting or function(k) return core.settings:get(k) 
 local NL = rockmech.RUBBLE_LEVELS
 local WATER = rockmech.LIQUID_WATER
 
-local SOIL_IN = tonumber(setting("rockmech_groundwater_soil_step") or "") or 10   -- 秒／級（每一面）
+local SOIL_IN = tonumber(setting("rockmech_groundwater_soil_step") or "") or 120  -- 秒／級（每一面）：1/8 m³ ÷ 120 s ≈ 透水係數 1e-3 m/s（粗砂）
 local IN_DT = 5                                                                   -- 冒水的判定間隔（秒）
 local PUMP_RATE = tonumber(setting("rockmech_pump_rate") or "") or 1             -- 級／秒
 local HOSE = 30                                                                   -- 吸管長（m）
