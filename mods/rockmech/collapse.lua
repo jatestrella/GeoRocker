@@ -2020,6 +2020,7 @@ do
                 vm:close()
                 for _, e in ipairs(made) do A.set(e.p, e.name, e.c) end      -- VoxelManip 不管 metadata
                 if rockmech.jointmesh then rockmech.jointmesh.dirty_box(ma, mb) end
+                if rockmech.map_written then rockmech.map_written(ma, mb) end     -- 穩定液接著流（slurry.lua）
                 -- 碎屑與顆粒流：每欄的頂格（由下往上），稍後依序判定
                 local tops = {}
                 for _, p in ipairs(m.cells) do

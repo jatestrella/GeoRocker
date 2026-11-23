@@ -400,12 +400,20 @@ rockmech.slurry_step = step
 -- 那一格慢慢往下倒、量少了會卡住，液面一段高一段低，低的那段溝壁就沒撐住。
 -- 整片超過 EQ_MAX 格（溢到地面上攤開）就不算，交給局部的流動。同一片（約 16 m 範圍）每 EQ_DT 秒最多算一次
 local EQ_MAX, EQ_DT = 3000, 1.0
-local eq_last = {}
+local eq_last, eq_retry = {}, {}
 local NB6 = {{1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}, {0, -1, 0}, {0, 1, 0}}
 equalize = function(p)
 	local key = math.floor(p.x / 16) .. "," .. math.floor(p.y / 16) .. "," .. math.floor(p.z / 16)
 	local now = core.get_us_time() / 1e6
-	if eq_last[key] and now - eq_last[key] < EQ_DT then return end
+	if eq_last[key] and now - eq_last[key] < EQ_DT then
+		-- 剛算過：時間到再算一次（不然倒液時被擋掉的這次就沒了，液面停在一邊高一邊低）
+		if not eq_retry[key] then
+			eq_retry[key] = true
+			local pp = vector.copy(p)
+			core.after(EQ_DT - (now - eq_last[key]) + 0.05, function() eq_retry[key] = nil; equalize(pp) end)
+		end
+		return
+	end
 	eq_last[key] = now
 	-- 第一遍：連通的穩定液（有液的格）
 	local seen, cells, total, ymax = {}, {}, 0, -math.huge
@@ -514,6 +522,29 @@ core.register_on_dignode(function(pos)
 	end
 end)
 
+-- 任何程式把一格變成空氣、不滿格的碎石（崩塌、碎石流走、車子取料……用 set_node，不會觸發 on_dignode）：
+-- 上面、四周的液體叫起來。穩定液自己流動改的不算（internal）
+local NB5 = {{0, 1, 0}, {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1}}
+local function poke(pos)
+	for _, v in ipairs(NB5) do
+		local q = {x = pos.x + v[1], y = pos.y + v[2], z = pos.z + v[3]}
+		local k = level_at(q)
+		if (k and k > 0) or wet[core.hash_node_position(q)] then schedule(q) end
+	end
+end
+for _, fname in ipairs({"set_node", "add_node", "swap_node", "remove_node"}) do
+	local orig = core[fname]
+	core[fname] = function(pos, node, ...)
+		local r = orig(pos, node, ...)
+		if not internal then
+			local n = fname == "remove_node" and "air" or (node and node.name)
+			local lv = n and rockmech.rubble_level[n]
+			if n == "air" or (lv and lv < NL) then poke(pos) end
+		end
+		return r
+	end
+end
+
 -- 孔隙液的帳：碎石被挖走、流走、換成別的（滿格、壓實、VoxelManip 大崩塌都不會通知），每 0.5 s 對一次。
 -- 碎石沒了：液留在原地（空氣、穩定液的格）或往上擠；碎石變多裝不下：多的往上擠。順便更新液面那一層的畫面
 local REC_DT, SAVE_DT = 0.5, 5
@@ -576,14 +607,60 @@ core.after(1, function()
 end)
 rockmech.slurry_wet = wet
 rockmech.slurry_cell = cell
--- 保險：玩家附近還沒平的穩定液（區塊重新載入、被別的機制改過）
-core.register_abm({
-	label = "rockmech: 穩定液流動",
+-- 流動是事件驅動的（挖掉、倒液、流過去才排判定）：靜止的液體跟一般方塊一樣不計算（像 Minecraft 的水）。
+-- 沒有定時掃描；區塊載入、VoxelManip 改寫地圖時，用幾次查表確認真的會流（底下有空位、旁邊低 2 級以上、
+-- 旁邊的碎石還吸得了）才排判定
+local function can_flow(p, k)
+	local below = {x = p.x, y = p.y - 1, z = p.z}
+	local kb = level_at(below)
+	if kb then
+		if kb < NL then return true end
+	else
+		local rb, wb = cell(below)
+		if rb and rb > 0 and wb < wcap(rb) then return true end
+	end
+	for _, d in ipairs(DIRS) do
+		local q = {x = p.x + d[1], y = p.y, z = p.z + d[2]}
+		local kq = level_at(q)
+		if kq then
+			if k - kq >= 2 then return true end
+		else
+			local rq, wq = cell(q)
+			if rq and rq > 0 and seep_amount(0, k, rq, wq) > 0 then return true end
+		end
+	end
+	return false
+end
+-- 區塊載入時（重開遊戲、走回來）：還沒流完的液體接著流
+core.register_lbm({
+	label = "rockmech: 穩定液接著流",
+	name = "rockmech:slurry_resume",
 	nodenames = {"group:rockmech_slurry"},
-	neighbors = {"air", "group:rockmech_slurry"},
-	interval = 2, chance = 1, catch_up = false,
-	action = function(pos) schedule(pos) end,
+	run_at_every_load = true,
+	action = function(pos, node)
+		local k = rockmech.slurry_level[node.name]
+		if k and can_flow(pos, k) then schedule(pos) end
+	end,
 })
+-- 地圖被 VoxelManip 直接改寫（大崩塌、爆破、整地工具；這些不會觸發任何事件）：範圍裡（外擴 1 格）會流的液體、
+-- 含液的碎石叫起來。寫入的地方呼叫 rockmech.map_written(a, b)
+local function wake_box(a, b)
+	local p1 = {x = math.min(a.x, b.x) - 1, y = math.min(a.y, b.y) - 1, z = math.min(a.z, b.z) - 1}
+	local p2 = {x = math.max(a.x, b.x) + 1, y = math.max(a.y, b.y) + 1, z = math.max(a.z, b.z) + 1}
+	for _, q in ipairs(core.find_nodes_in_area(p1, p2, {"group:rockmech_slurry"})) do
+		local k = level_at(q)
+		if k and can_flow(q, k) then schedule(q) end
+	end
+	for h in pairs(wet) do
+		local q = core.get_position_from_hash(h)
+		if q.x >= p1.x and q.x <= p2.x and q.y >= p1.y and q.y <= p2.y and q.z >= p1.z and q.z <= p2.z then schedule(q) end
+	end
+end
+local prev_written = rockmech.map_written
+function rockmech.map_written(a, b)
+	if prev_written then prev_written(a, b) end
+	core.after(0, wake_box, vector.copy(a), vector.copy(b))
+end
 
 -- 從 p（空氣或穩定液的格）倒 k 級進去：沉到那一欄液體的底，從第一個不滿的格往上加（液面上升，不會疊成一根柱子），
 -- 最多到溝槽的頂（cap：再低一點的上限）；這一欄放不下的分給同一層相連的格。

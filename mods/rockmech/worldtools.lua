@@ -99,6 +99,7 @@ core.register_chatcommand("rockmech_slope", {
 		vm:write_to_map(true)
 		vm:close()
 		if rockmech.jointmesh then rockmech.jointmesh.dirty_box(a, b) end
+		if rockmech.map_written then rockmech.map_written(a, b) end     -- 穩定液接著流（slurry.lua）
 		local warn = daylighting_sets(-dx, -dz, ang)
 		core.log("action", ("[rockmech] %s 建岩山：往 %s 挖進山、高 %d、寬 %d、深 %d、坡角 %g°，填入 %d 格"):format(
 			name, dir.name, H, Wd, D, ang, n))

@@ -110,6 +110,7 @@ local function clear(cells, p1, p2, pname, any)
 	vm:set_data(data)
 	vm:write_to_map(true)
 	if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
+	if rockmech.map_written then rockmech.map_written(p1, p2) end     -- 穩定液接著流（slurry.lua）
 	for _, p in ipairs(removed) do rockmech.shotcrete_uncover(p) end
 	for _, p in ipairs(removed) do rockmech.assay.set(p, "air") end      -- VoxelManip 不清 metadata：清掉碎石的成分
 

@@ -145,6 +145,7 @@ function rockmech.blast_rock(center, R, floor_y, D)
 		vm:write_to_map(true)
 		vm:update_liquids()
 		if rockmech.jointmesh then rockmech.jointmesh.dirty_box(p1, p2) end
+		if rockmech.map_written then rockmech.map_written(p1, p2) end     -- 穩定液接著流（slurry.lua）
 	end
 	vm:close()
 	-- VoxelManip 不管 metadata：新的碎石寫上成分，炸飛的格子清掉舊的
