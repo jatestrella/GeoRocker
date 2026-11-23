@@ -322,7 +322,7 @@ end
 -- 溢出來的攤成薄薄一層（槽口那一層地面，從支架往外，每格補到 FILM 級），不要在槽口疊成液柱：
 -- 液柱的重量壓在槽口邊的土上，應力解的塑性迭代很難收斂、會判出一大片破壞
 local FILM = 2
-local function spill(F, left)
+local function spill(F, left, lc)
 	local lv = rockmech.slurry_level
 	local seen, queue = {[core.hash_node_position(F)] = true}, {F}
 	local i = 1
@@ -340,9 +340,8 @@ local function spill(F, left)
 					local k = lv[n] or 0
 					if k < FILM and left > 0 then
 						local put = math.min(FILM - k, left)
-						rockmech.slurry_replace(q, {name = rockmech.slurry_with_level(k + put)})
+						left = left - put + rockmech.slurry_add_at(q, put, lc)
 						rockmech.slurry_schedule(q)
-						left = left - put
 					end
 				end
 			end
@@ -353,18 +352,19 @@ local function spill(F, left)
 			if left <= 0 then break end
 			local q = {x = F.x + d[1], y = F.y, z = F.z + d[2]}
 			if fillable(name_at(q)) then
-				left = rockmech.slurry_add_up(q, left)
+				left = rockmech.slurry_add_up(q, left, nil, lc)
 				rockmech.slurry_schedule(q)
 			end
 		end
 	end
 end
-local function displace(c, F, k)
+-- 被混凝土擠掉的 k 級液體（成分 lc：穩定液、摻了水的……）往上排開
+local function displace(c, F, k, lc)
 	if k <= 0 then return end
 	local up = {x = c.x, y = c.y + 1, z = c.z}
 	local left = k
-	if fillable(name_at(up)) then left = left - rockmech.slurry_pour(up, left, F.y - 1, true) end
-	if left > 0 then spill(F, left) end
+	if fillable(name_at(up)) then left = left - rockmech.slurry_pour(up, left, F.y - 1, true, lc) end
+	if left > 0 then spill(F, left, lc) end
 end
 
 local fem_wait = {}
@@ -376,12 +376,12 @@ function rockmech.tremie_pour(F)
 		frame_info(F, S("The panel is full"))
 		return false, S("The panel is full")
 	end
-	local k = rockmech.slurry_replace(c, {name = FRESH})
+	local k, lc = rockmech.slurry_replace(c, {name = FRESH})
 	local cm = core.get_meta(c)
 	cm:set_float("t0", now())
 	if rockmech.rebar_caged(c) then cm:set_int("rc", 1) end
 	core.get_node_timer(c):start(SET_DAYS * day_s())
-	displace(c, F, k)
+	displace(c, F, k, lc)
 	meta:set_int("poured", meta:get_int("poured") + 1)
 	frame_info(F, "")
 	pipe_update(F)

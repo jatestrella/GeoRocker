@@ -434,7 +434,7 @@ local function pump(pos)
 					local kr = at(r)
 					if not kr or got >= take then break end
 					local t = math.min(kr, take - got)
-					rockmech.slurry_replace(r, {name = rockmech.slurry_with_level(kr - t)})
+					rockmech.slurry_set_level(r, kr - t)
 					got = got + t
 					r.y = r.y - 1
 				end

@@ -65,7 +65,7 @@ local function set_press(job, g, to_cell, scale)
 end
 
 -- 土的參數表（下面 cid_tables 建）：粗網格、細網格都用，先宣告
-local K0_SOIL, gamma_of_cid, soil_cid, soil_set, topsoil_f, cid_tables, gamma_s, fluid_f, fluid_g, rubble_lv_cid
+local K0_SOIL, gamma_of_cid, soil_cid, soil_set, topsoil_f, cid_tables, gamma_s, fluid_f, fluid_g, rubble_lv_cid, water_cid
 
 -- 粗網格（子模型的外圍）：同樣的格數，每格 C³ 公尺，一半以上是岩石就算實心。
 -- 原點對齊 C 的倍數，附近的開挖共用同一個粗網格，上次的解當初始值。
@@ -168,7 +168,8 @@ function cid_tables()
 	-- 穩定液（slurry.lua）：cid → 液面高度比例
 	-- 其他流體（新拌混凝土，concrete.lua）：cid → 比例，fluid_g：cid → 單位重 γ（沒列的用穩定液的）
 	fluid_f, fluid_g = {}, {}
-	rubble_lv_cid = {}
+	rubble_lv_cid, water_cid = {}, {}
+	for name in pairs(rockmech.liquid_is_water or {}) do water_cid[core.get_content_id(name)] = true end
 	for name, lv in pairs(rockmech.rubble_level or {}) do rubble_lv_cid[core.get_content_id(name)] = lv end
 	for name, k in pairs(rockmech.slurry_level or {}) do fluid_f[core.get_content_id(name)] = k / rockmech.RUBBLE_LEVELS end
 	for name, v in pairs(rockmech.fluid_extra or {}) do
@@ -177,6 +178,22 @@ function cid_tables()
 	end
 end
 function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
+-- 網格 g 的第 i 格（content id cid）液體的單位重：水和混合液照 param2（皂土比例的顏色快取，slurry.lua）內插，
+-- 純穩定液、新拌混凝土照表
+local function liq_gamma(g, i, cid)
+	local GF = rockmech.SLURRY_GAMMA or 11
+	if water_cid and water_cid[cid] then
+		local GW = rockmech.WATER_GAMMA or 9.81
+		return GW + ((g.p2 and g.p2[i] or 0) / 255) * (GF - GW)
+	end
+	return fluid_g[cid] or GF
+end
+-- 碎石孔隙液（世界座標的 hash）的單位重：成分記在 rockmech.slurry_wetc（沒有 = 純穩定液）
+local function pore_gamma(h)
+	local c = rockmech.slurry_wetc and rockmech.slurry_wetc[h]
+	if not c then return rockmech.SLURRY_GAMMA or 11 end
+	return rockmech.liquid_gamma(c)
+end
 -- 網格 g 裡 (gx, ly, gz) 那一欄、ly 那一格以上（含）的液柱重量 Σγ·h (kPa)，和 ly 頂面的深度 z、那一欄的臨界深度 hc；
 -- ly 那一格不是液體就是 0。新拌混凝土照雙線性包絡線（見 make_job 的液壓那段）。
 -- 液柱頂上被蓋住（溝壁破洞、洞穴頂、懸空的岩簷底下）：靜水壓看的是整片連通液體的液面，不是這一欄自己的高度——
@@ -221,7 +238,9 @@ local function head_at(g, o, yt)
 	local GF = rockmech.SLURRY_GAMMA or 11
 	local gsy, gsz = g.nx, g.nx * g.ny
 	local ox, oz = o[1], o[3]
-	if not fluid_f[g.data[1 + ox + o[2] * gsy + oz * gsz]] then return GF * (o[2] - yt) end     -- 開口是泡滿液的碎石：液面在它的頂
+	if not fluid_f[g.data[1 + ox + o[2] * gsy + oz * gsz]] then          -- 開口是泡滿液的碎石：液面在它的頂
+		return pore_gamma(core.hash_node_position({x = ox + g.ox, y = o[2] + g.oy, z = oz + g.oz})) * (o[2] - yt)
+	end
 	local ylow = o[2]
 	while ylow - 1 >= yt + 1 and fluid_f[g.data[1 + ox + (ylow - 1) * gsy + oz * gsz]] do ylow = ylow - 1 end
 	return fluid_col(g, ox, ylow, oz) + GF * (ylow - (yt + 1))
@@ -246,7 +265,7 @@ fluid_col = function(g, gx, ly, gz)
 	end
 	for y = yt, ly, -1 do
 		local cid = cid_at(y)
-		local f, gm = fluid_f[cid], fluid_g[cid] or GF
+		local f, gm = fluid_f[cid], liq_gamma(g, 1 + gx + y * gsy + gz * gsz, cid)
 		if gm > GF and z >= hc then gm = GF end
 		q, z = q + gm * f, z + f
 	end
@@ -294,8 +313,9 @@ local function loose_col(g, gx, ly, gz, only_nat)
 			fs = (pc > 0 and math.min(1, w / pc) or 1) * c.f
 			ff = math.max(0, w - pc) / NL
 		end
-		local dq = gd * (c.f - fs) + (gd - (1 - n) * GF) * fs
-		local du = GF * (ff + fs)
+		local gf = w > 0 and pore_gamma(core.hash_node_position({x = gx + g.ox, y = c.y + g.oy, z = gz + g.oz})) or GF
+		local dq = gd * (c.f - fs) + (gd - (1 - n) * gf) * fs
+		local du = gf * (ff + fs)
 		if i == 1 then qm, um = q + dq / 2, u + du / 2 end
 		h, q, u = h + c.f, q + dq, u + du
 	end
@@ -468,7 +488,8 @@ local function make_job(pos)
 				-- 底面貼著滿格的液體（洞穴頂、岩簷底）：液壓往上頂
 				local fb = ly >= 1 and fluid_f[g.data[1 + gx + (ly - 1) * gsy + gz * gsz]]
 				if fb and fb >= 1 then
-					local qb = fluid_above(gx, ly - 1, gz) - (fluid_g[g.data[1 + gx + (ly - 1) * gsy + gz * gsz]] or GF)
+					local ib = 1 + gx + (ly - 1) * gsy + gz * gsz
+					local qb = fluid_above(gx, ly - 1, gz) - liq_gamma(g, ib, g.data[ib])
 					if qb > 0 then press[#press + 1], press[#press + 2], press[#press + 3] = c, 4, qb end
 				elseif ly >= 1 and saturated(g, gx, ly - 1, gz, g.data[1 + gx + (ly - 1) * gsy + gz * gsz]) then
 					-- 底下是泡滿液的碎石：孔隙液壓一樣往上頂
@@ -484,7 +505,7 @@ local function make_job(pos)
 						if f then
 							-- 不滿格：液體只貼著那一面的下面 f，合力 γ·f²/2；上面還有液柱就是整面 Σγh + γ·f/2
 							-- qa：那一格頂面的液壓（上面的液柱；頂上蓋住時從連通液面算，見 fluid_col）
-							local gf = fluid_g[cid] or GF
+							local gf = liq_gamma(g, 1 + nx_ + ly * gsy + nz_ * gsz, cid)
 							local qn, za, hc = fluid_above(nx_, ly, nz_)
 							if gf > GF and za - f >= hc then gf = GF end        -- 臨界深度以下的新拌混凝土
 							local qa = qn - gf * f
