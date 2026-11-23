@@ -26,6 +26,25 @@ MECHANICS = [
 </ul>
 <h3>老礦工</h3>
 <p>出生點有位老礦工。不知道下一步做什麼時，右鍵點他，他會給你一點提示。</p>"""),
+("m-download", "下載與安裝", "start", """
+<p>最新版在 GitHub 的下載頁：<a href="https://github.com/jatestrella/GeoRocker/releases/latest">https://github.com/jatestrella/GeoRocker/releases/latest</a></p>
+<h3>Windows</h3>
+<ol>
+<li>下載 <a href="https://github.com/jatestrella/GeoRocker/releases/latest/download/GeoRocker.zip">GeoRocker.zip</a>，整個解壓縮。</li>
+<li>點兩下「開始遊戲.bat」。跳出「Windows 已保護您的電腦」時，按「其他資訊」→「仍要執行」。</li>
+<li>之後有新版，點兩下「更新遊戲.bat」，存檔不會不見。</li>
+</ol>
+<h3>macOS</h3>
+<p>需要 macOS 12.3 或更新，Apple 晶片和 Intel 都可以。</p>
+<ol>
+<li>下載 <a href="https://github.com/jatestrella/GeoRocker/releases/latest/download/GeoRocker_mac.zip">GeoRocker_mac.zip</a>，解壓縮，整個資料夾搬到「文件」。</li>
+<li>點兩下「開始遊戲.command」。第一次會跳出「無法驗證」，按「完成」。</li>
+<li>打開 系統設定 → 隱私權與安全性，拉到最下面按「仍要打開」，輸入密碼，再按「打開」。之後點兩下就能玩。</li>
+</ol>
+<p>還是打不開：在「終端機」輸入 <code>xattr -dr com.apple.quarantine </code>（最後有一個空格），把遊戲資料夾拖進視窗，按 Enter。</p>
+<p>不想跳警告：在「終端機」貼上這一行，會下載最新版放到「文件」→ GeoRocker_mac 並開始遊戲：</p>
+<p><code>curl -L -o /tmp/GeoRocker_mac.zip https://github.com/jatestrella/GeoRocker/releases/latest/download/GeoRocker_mac.zip &amp;&amp; ditto -x -k /tmp/GeoRocker_mac.zip ~/Documents &amp;&amp; bash ~/Documents/GeoRocker_mac/開始遊戲.command</code></p>
+<p>存檔在資料夾裡的 <code>data/worlds</code>；換新版時把它搬到新資料夾的 <code>data</code> 裡。</p>"""),
 ("m-newworld", "開新世界", "start", """
 <p>開始畫面 →「開始遊戲」，左邊三種開法，右邊是既有存檔：</p>
 <ul>
