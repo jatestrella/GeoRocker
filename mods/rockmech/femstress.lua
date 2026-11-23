@@ -175,19 +175,68 @@ function cid_tables()
 	end
 end
 function gamma_s(cid) return gamma_of_cid[cid] or cfg.failure.gamma_other end
--- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料：厚度 (m)、重量 Σγ·h (kPa)，從 ly 那一格開始算。
--- 整格表土是應力解的元素（自己有重量），不算鬆散材料
--- only_nat：只算天然的（地圖生成的不滿格表土），玩家放的碎石不算（天然地形那一解用）
-local function loose_above(g, gx, ly, gz, only_nat)
-	local h, q = 0, 0
+-- 網格 g 裡 (gx, ly, gz) 那一欄、ly 那一格以上（含）的液柱重量 Σγ·h (kPa)，和 ly 頂面的深度 z、那一欄的臨界深度 hc；
+-- ly 那一格不是液體就是 0。新拌混凝土照雙線性包絡線（見 make_job 的液壓那段）
+local function fluid_col(g, gx, ly, gz)
+	local gsy, gsz = g.nx, g.nx * g.ny
+	local function cid_at(y) return g.data[1 + gx + y * gsy + gz * gsz] end
+	if not fluid_f or ly > g.ny - 1 or not fluid_f[cid_at(ly)] then return 0, 0, 0 end
+	local GF = rockmech.SLURRY_GAMMA or 11
+	local yt, yb = ly, ly
+	while yt + 1 <= g.ny - 1 and fluid_f[cid_at(yt + 1)] do yt = yt + 1 end
+	while yb - 1 >= 0 and fluid_f[cid_at(yb - 1)] do yb = yb - 1 end
+	local H = 0
+	for y = yb, yt do H = H + fluid_f[cid_at(y)] end
+	local hc = H / 3
+	local q, z = 0, 0
+	for y = yt, ly, -1 do
+		local cid = cid_at(y)
+		local f, gm = fluid_f[cid], fluid_g[cid] or GF
+		if gm > GF and z >= hc then gm = GF end
+		q, z = q + gm * f, z + f
+	end
+	return q, z, hc
+end
+
+-- 網格 g 裡 (gx, ly, gz)（g 的索引，0 起算）往上連續的鬆散材料。整格表土是應力解的元素（自己有重量），不算鬆散材料。
+-- 有效應力：碎石孔隙裡的穩定液（slurry.lua 的 rockmech.slurry_wet）不推顆粒，另外算液壓 u（K = 1）：
+--   沒泡到液的那段用 γ（材料表的單位重，含孔隙的乾單位重）；泡在液裡的那段用浮單位重 γ′ = γ − (1 − n)·γ_f
+--   （n：孔隙率 rockmech_rubble_porosity）；u 從那一欄的液面往下照 γ_f 增加（碎石上面的液柱、碎石上面的自由液、泡液的那段）。
+-- 回傳：厚度 (m)、ly 底面的有效垂直應力 σ′v、液壓 u (kPa)，和 ly 那一格中心的 σ′v、u（側壓用）。
+-- only_nat：只算天然的（地圖生成的不滿格表土），玩家放的碎石、灌的液不算（天然地形那一解用）
+local function loose_col(g, gx, ly, gz, only_nat)
 	local sy, sz = g.nx, g.nx * g.ny
-	for y = ly, g.ny - 1 do
+	local cells, y = {}, ly
+	while y <= g.ny - 1 do
 		local cid = g.data[1 + gx + y * sy + gz * sz]
 		local f = (not soil_set[cid] or not fcfg.soil) and g.loose_of[cid]
 		if not f then break end
-		if not only_nat or topsoil_f[cid] then h, q = h + f, q + f * gamma_s(cid) end
+		if not only_nat or topsoil_f[cid] then cells[#cells + 1] = {f = f, cid = cid, y = y} end
+		y = y + 1
 	end
-	return h, q
+	if #cells == 0 then return 0, 0, 0, 0, 0 end
+	local GF = rockmech.SLURRY_GAMMA or 11
+	local n = rockmech.RUBBLE_POROSITY or 0.35
+	local NL = rockmech.RUBBLE_LEVELS
+	local wet = not only_nat and rockmech.slurry_wet
+	local u = only_nat and 0 or fluid_col(g, gx, y, gz)
+	local h, q, qm, um = 0, 0, 0, 0
+	for i = #cells, 1, -1 do
+		local c = cells[i]
+		local gd = gamma_s(c.cid)
+		local w = wet and wet[core.hash_node_position({x = gx + g.ox, y = c.y + g.oy, z = gz + g.oz})] or 0
+		local fs, ff = 0, 0                 -- 泡在液裡的那段碎石、碎石上面的自由液 (m)
+		if w > 0 then
+			local pc = math.floor(n * c.f * NL + 0.5)
+			fs = (pc > 0 and math.min(1, w / pc) or 1) * c.f
+			ff = math.max(0, w - pc) / NL
+		end
+		local dq = gd * (c.f - fs) + (gd - (1 - n) * GF) * fs
+		local du = GF * (ff + fs)
+		if i == 1 then qm, um = q + dq / 2, u + du / 2 end
+		h, q, u = h + c.f, q + dq, u + du
+	end
+	return h, q, u, qm, um
 end
 -- 組工作：box 內的岩石格、每格的現地應力（kPa，壓為正）。
 -- 現地應力是開挖前的狀態，由座標算（挖掉的算回去，所以開挖才會放出應力）；
@@ -299,7 +348,7 @@ local function make_job(pos)
 		local x, y, z = wx - a.x, wy - a.y, wz - a.z
 		if x >= 0 and y >= 0 and z >= 0 and x < n and y < n and z < n then return 1 + x + y * n + z * n * n end
 	end, 1)
-	-- 鬆散材料的重量：頂面 γ·h、側面 K₀·γ·z（見上面 loose_above）
+	-- 鬆散材料的重量：頂面 σ′v + u、側面 K₀·σ′v + u（有效應力，見上面 loose_col；沒泡液就是 γ·h、K₀·γ·z）
 	-- 天然地形那一解（nat）：只有天然的不滿格表土的重量，沒有人放的碎石、支撐、設施
 	local press_nat = {}
 	if g.loose_of then
@@ -313,16 +362,16 @@ local function make_job(pos)
 				local gx, ly, gz = a.x + x - g.ox, a.y + y - g.oy, a.z + z - g.oz
 				for pass = 1, nat and 2 or 1 do
 					local only_nat, list = pass == 2, pass == 2 and press_nat or press
-					local h, q = loose_above(g, gx, ly + 1, gz, only_nat)
-					if h > 0 then list[#list + 1], list[#list + 2], list[#list + 3] = c, 3, q end
+					local h, q, u = loose_col(g, gx, ly + 1, gz, only_nat)
+					if h > 0 then list[#list + 1], list[#list + 2], list[#list + 3] = c, 3, q + u end
 					for _, d in ipairs(SIDES) do
 						local nx_, nz_ = gx + d[1], gz + d[2]
 						if nx_ >= 0 and nz_ >= 0 and nx_ < g.nx and nz_ < g.nz then
 							local cid = g.data[1 + nx_ + ly * gsy + nz_ * gsz]
 							local f = (not soil_set[cid] or not fcfg.soil) and g.loose_of[cid]
 							if f and (not only_nat or topsoil_f[cid]) then
-								local _, q = loose_above(g, nx_, ly + 1, nz_, only_nat)
-								list[#list + 1], list[#list + 2], list[#list + 3] = c, d[3], K0_S * (q + gamma_s(cid) * f / 2)
+								local _, _, _, qm, um = loose_col(g, nx_, ly, nz_, only_nat)
+								list[#list + 1], list[#list + 2], list[#list + 3] = c, d[3], K0_S * qm + um
 							end
 						end
 					end
@@ -337,27 +386,7 @@ local function make_job(pos)
 	-- 天然地形那一解沒有（人灌的）。job.fluid：裝著液體的格（find_failed：貼著液體的土面有液壓頂著，不算臨空）
 	if next(fluid_f) then
 		local GF = rockmech.SLURRY_GAMMA or 11
-		local HCRIT = 1 / 3
-		local function cid_at(gx, y, gz) return g.data[1 + gx + y * gsy + gz * gsz] end
-		-- (gx, gz) 那一欄、ly 那一格以上（含）的液柱重量 Σγ·h (kPa)，和 ly 頂面的深度 z、那一欄的臨界深度 hc；
-		-- ly 那一格不是液體就是 0
-		local function fluid_above(gx, ly, gz)
-			if ly > g.ny - 1 or not fluid_f[cid_at(gx, ly, gz)] then return 0, 0, 0 end
-			local yt, yb = ly, ly
-			while yt + 1 <= g.ny - 1 and fluid_f[cid_at(gx, yt + 1, gz)] do yt = yt + 1 end
-			while yb - 1 >= 0 and fluid_f[cid_at(gx, yb - 1, gz)] do yb = yb - 1 end
-			local H = 0
-			for y = yb, yt do H = H + fluid_f[cid_at(gx, y, gz)] end
-			local hc = H * HCRIT
-			local q, z = 0, 0
-			for y = yt, ly, -1 do
-				local cid = cid_at(gx, y, gz)
-				local f, gm = fluid_f[cid], fluid_g[cid] or GF
-				if gm > GF and z >= hc then gm = GF end
-				q, z = q + gm * f, z + f
-			end
-			return q, z, hc
-		end
+		local function fluid_above(gx, ly, gz) return fluid_col(g, gx, ly, gz) end
 		local press = job.press or {}
 		job.press = press
 		local SIDES = {{1, 0, 1}, {-1, 0, 2}, {0, 1, 5}, {0, -1, 6}}
