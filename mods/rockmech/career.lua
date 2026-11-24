@@ -1329,6 +1329,7 @@ local function build_village_shops()
 	-- 顧問公司、操作員宿舍 → 兩層大屋。研究所（地質學家 1 人，小屋）在 research.lua
 	build_shop("blasting", 1, {{"blast", false}}, {{-2, 1, 1, "explosives"}, {2, 1, 1, "crate"}, {3, 1, 1, "barrel"}}, {size = "small"})
 	build_shop("hardware", 1, {{"tools", true}}, {{-3, 1, 1, "shelf"}, {-3, 1, 2, "shelf"}, {3, 1, 1, "shelf"}, {2, 1, 1, "crate"}}, {size = "small"})
+	if rockmech.water_hydrant_place then rockmech.water_hydrant_place() end      -- 五金行門口的給水栓（slurrytank.lua，單機版）
 	-- 2 樓是辦公室（辦公桌、文件、黑板）：{dx, 離後牆幾格, 高度層（2 樓地板上一格 = 5）, 名稱}；右邊 dx = hw − 1 是樓梯
 	local UPSTAIRS = {{-2, 1, 5, "table"}, {-1, 1, 5, "table"}, {-1, 1, 6, "papers"}, {-1, 2, 5, "chair"},
 		{-3, 3, 5, "table"}, {-3, 3, 6, "helmets"}, {1, 1, 5, "shelf"}, {1, 1, 6, "shelf"}}

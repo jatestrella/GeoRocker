@@ -257,7 +257,10 @@ config.shop = {
 	{key = "steel_set", shop = "tools", item = "rockmech:steel_set", label = TR("Light H-beam"), price = 2000, count = 10},      -- H200（原本的鋼支保）
 	-- 擋土（retain.lua）：鋼板樁（SP-III，寬 1 m、長 9 m）；H 型鋼輕型 H200、重型 H300（每支 1 m，支柱、橫撐都用）
 	{key = "sheet_pile", shop = "tools", item = "rockmech:sheet_pile", label = TR("Sheet pile"), price = 2500, count = 5},
-	{key = "slurry", shop = "tools", item = "rockmech:slurry_m3", label = TR("Bentonite slurry"), price = 500, count = 10},
+	-- 單機版（solo = true 的只在單機地圖賣）：皂土＋自來水（每包調 1 m³，水費 rockmech_water_fee）；調好的穩定液單機版比較貴（solo_price）
+	{key = "slurry", shop = "tools", item = "rockmech:slurry_m3", label = TR("Bentonite slurry"), price = 500, solo_price = 800, count = 10},
+	{key = "bentonite", shop = "tools", item = "rockmech:bentonite", label = TR("Bentonite"), price = 300, count = 10, solo = true},
+	{key = "water_pipe", shop = "tools", item = "rockmech:water_pipe", label = TR("Water pipe"), price = 500, count = 10, solo = true},
 	{key = "slurry_tank", shop = "tools", item = "rockmech:slurry_tank", label = TR("Slurry tank"), price = 20000},
 	{key = "slurry_pipe", shop = "tools", item = "rockmech:slurry_pipe", label = TR("Slurry pipe"), price = 500, count = 10},
 	{key = "slurry_outlet", shop = "tools", item = "rockmech:slurry_outlet", label = TR("Slurry outlet"), price = 3000},
@@ -1337,10 +1340,14 @@ function config.load(get, opts)
 	cfg.pick_rubble_time = math.max(0.1, tonumber(get("rockmech_pick_rubble_time")) or 2)
 	cfg.shovel_time = math.max(0.1, tonumber(get("rockmech_shovel_time")) or 0.5)
 	cfg.cart_blocks = math.max(1, math.floor(tonumber(get("rockmech_cart_blocks")) or 3))
-	cfg.shop = copy(config.shop)
-	for _, it in ipairs(cfg.shop) do
-		it.price = math.max(0, tonumber(get("rockmech_price_" .. it.key)) or it.price)
+	cfg.shop = {}
+	for _, it in ipairs(copy(config.shop)) do
+		if cfg.solo or not it.solo then
+			it.price = math.max(0, tonumber(get("rockmech_price_" .. it.key)) or (cfg.solo and it.solo_price) or it.price)
+			cfg.shop[#cfg.shop + 1] = it
+		end
 	end
+	cfg.water_fee = math.max(0, tonumber(get("rockmech_water_fee")) or 5)     -- 自來水費（$/m³，slurrytank.lua 皂土調漿）
 	-- 無人卡車綁定怪手（vehicle_ahs.lua）：車尾離怪手車身、倒車的距離、怪手移動多遠要重新停車、離路線起點多遠就不去
 	cfg.ahs_tail_gap = math.max(0.6, tonumber(get("rockmech_ahs_tail_gap")) or 1.5)
 	cfg.ahs_back_in = math.max(0.5, tonumber(get("rockmech_ahs_back_in")) or 3)

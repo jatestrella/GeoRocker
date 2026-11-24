@@ -27,6 +27,10 @@ local CAP = 40 * NL           -- 一個儲槽的容量（40 m³）
 local L, H3 = 6, 3            -- 儲槽長、高（格；寬 3）
 local NET_MAX = 400           -- 管線最多找幾格
 local OFF_DEFAULT = 0.5
+local WPIPE = "rockmech:water_pipe"
+local HYDRANT = "rockmech:water_hydrant"
+local BENTONITE = "rockmech:bentonite"
+local mix                     -- 拿皂土右鍵儲槽：從給水栓接水調漿（下面「自來水、皂土」）
 local RECOVER_TOL = 1         -- 液面比目標高幾級以上就抽回儲槽（灌混凝土時被擠上來的；反應慢的話擠上來的會從槽口溢出）
 
 local function m3(lv) return ("%.1f"):format(lv / NL) end
@@ -142,6 +146,7 @@ core.register_node(SHELL, {
 		local c = tank_of(pos)
 		if not (c and clicker and clicker:is_player() and may(c, clicker:get_player_name())) then return itemstack end
 		if itemstack:get_name() == rockmech.SLURRY_ITEM then return store(pos, clicker, itemstack) end
+		if itemstack:get_name() == BENTONITE then return mix(pos, clicker, itemstack) end
 		local st, placed = place_held(itemstack, clicker, pointed)
 		if placed then return st end
 		tank_editing[clicker:get_player_name()] = c
@@ -228,6 +233,7 @@ core.register_node(TANK, {
 	on_rightclick = function(pos, node, clicker, itemstack, pointed)
 		if not (clicker and clicker:is_player() and may(pos, clicker:get_player_name())) then return itemstack end
 		if itemstack:get_name() == rockmech.SLURRY_ITEM then return store(pos, clicker, itemstack) end
+		if itemstack:get_name() == BENTONITE then return mix(pos, clicker, itemstack) end
 		local st, placed = place_held(itemstack, clicker, pointed)
 		if placed then return st end
 		tank_editing[clicker:get_player_name()] = pos
@@ -564,3 +570,172 @@ core.register_lbm({
 rockmech.SLURRY_TANK, rockmech.SLURRY_OUTLET, rockmech.SLURRY_PIPE = TANK, OUTLET, PIPE
 rockmech.slurry_outlet_pump = pump
 rockmech.slurry_tanks_of = tanks_of
+
+---------------------------------------------------------------------------
+-- 自來水、皂土（單機版）：小鎮五金行門口有一個給水栓（不能拆），鋪水管接到儲槽；
+--   拿皂土右鍵儲槽：每包從給水栓取 1 m³ 自來水（收水費 cfg.water_fee $/m³）調成 1 m³ 穩定液。
+--   實務：拌合廠用自來水加皂土（約 50 kg/m³）拌成穩定液；這裡不算膨潤時間、濃度。
+--   儲槽裡永遠只有穩定液，不另外存水。
+---------------------------------------------------------------------------
+local BLUE = "[fill:16x16:#2f6db5^[fill:16x2:0,6:#4f8dd5"
+do
+	local r = 0.09
+	local lo, hi = -0.5, -0.5 + 2 * r + 0.04
+	core.register_node(WPIPE, {
+		description = S("Water pipe\nConnects the town water supply to slurry tanks"),
+		short_description = S("Water pipe"),
+		drawtype = "nodebox",
+		paramtype = "light",
+		sunlight_propagates = true,
+		tiles = {BLUE},
+		inventory_image = "[fill:16x16:#00000000^[fill:16x4:0,6:#2f6db5^[fill:16x1:0,7:#4f8dd5",
+		node_box = {
+			type = "connected",
+			fixed = {-r, lo, -r, r, hi, r},
+			connect_front = {-r, lo, -0.5, r, hi, -r},
+			connect_back = {-r, lo, r, r, hi, 0.5},
+			connect_left = {-0.5, lo, -r, -r, hi, r},
+			connect_right = {r, lo, -r, 0.5, hi, r},
+			connect_top = {-r, lo, -r, r, 0.5, r},
+		},
+		connects_to = {WPIPE, TANK, HYDRANT},
+		is_ground_content = false,
+		walkable = false,
+		groups = {cracky = 3, rockmech_by_hand = 1, not_in_creative_inventory = 1},
+	})
+end
+
+core.register_node(HYDRANT, {
+	description = S("Water supply\nLay water pipes from here to your slurry tanks"),
+	short_description = S("Water supply"),
+	drawtype = "nodebox",
+	paramtype = "light",
+	tiles = {"[fill:16x16:#2f6db5^[fill:8x8:4,4:#1f4f88", "[fill:16x16:#1f4f88", "[fill:16x16:#2f6db5^[fill:16x1:0,4:#1f4f88"},
+	node_box = {type = "fixed", fixed = {
+		{-0.25, -0.5, -0.25, 0.25, -0.42, 0.25},         -- 底座
+		{-0.12, -0.42, -0.12, 0.12, 0.3, 0.12},          -- 立管
+		{-0.16, 0.3, -0.16, 0.16, 0.38, 0.16},           -- 頂蓋
+		{-0.03, 0.38, -0.03, 0.03, 0.46, 0.03},          -- 閥桿
+		{-0.2, 0.44, -0.2, 0.2, 0.48, 0.2},              -- 閥輪
+		{-0.5, -0.5, -0.09, 0.5, -0.28, 0.09},           -- 往四面接水管
+		{-0.09, -0.5, -0.5, 0.09, -0.28, 0.5},
+	}},
+	selection_box = {type = "fixed", fixed = {-0.25, -0.5, -0.25, 0.25, 0.48, 0.25}},
+	collision_box = {type = "fixed", fixed = {-0.25, -0.5, -0.25, 0.25, 0.48, 0.25}},
+	is_ground_content = false,
+	diggable = false,
+	on_blast = function() end,
+	drop = "",
+	groups = {not_in_creative_inventory = 1},
+	on_construct = function(pos)
+		core.get_meta(pos):set_string("infotext", S("Water supply") .. "\n" .. S("Lay water pipes from here to your slurry tanks"))
+	end,
+})
+
+-- 儲槽接得到給水栓嗎（從控制格沿著水管找）
+local function hydrant_of(c)
+	local seen, queue = {[core.hash_node_position(c)] = true}, {c}
+	local i = 1
+	while queue[i] and #queue < NET_MAX * 4 do
+		local q = queue[i]; i = i + 1
+		for _, d in ipairs(NB6) do
+			local n = {x = q.x + d[1], y = q.y + d[2], z = q.z + d[3]}
+			local h = core.hash_node_position(n)
+			if not seen[h] then
+				seen[h] = true
+				local name = core.get_node(n).name
+				if name == HYDRANT then return n end
+				if name == WPIPE then queue[#queue + 1] = n end
+			end
+		end
+	end
+end
+rockmech.water_hydrant_of = hydrant_of
+
+mix = function(pos, clicker, itemstack)
+	local c = tank_of(pos)
+	if not (c and clicker) then return itemstack end
+	local name = clicker:get_player_name()
+	if not hydrant_of(c) then
+		rockmech.notify(name, S("[Slurry tank] No water: lay water pipes from the water supply in town to this tank"))
+		return itemstack
+	end
+	local meta = core.get_meta(c)
+	local st = meta:get_int("stock")
+	local n = math.min(itemstack:get_count(), math.floor((CAP - st) / NL))
+	if n <= 0 then rockmech.notify(name, S("The slurry tank is full")); return itemstack end
+	local fee = rockmech.cfg.water_fee or 0
+	local paying = fee > 0 and rockmech.has_account and rockmech.has_account(name)
+	if paying then
+		n = math.min(n, math.floor(rockmech.money(name) / fee))
+		if n <= 0 then
+			rockmech.notify(name, S("[Slurry tank] Not enough money for the water ($@1/m³)", ("%d"):format(fee)))
+			return itemstack
+		end
+		rockmech.add_money(name, -n * fee)
+	end
+	meta:set_int("stock", st + n * NL)
+	itemstack:take_item(n)
+	tank_info(c)
+	rockmech.notify(name, S("[Slurry tank] Mixed @1 m³ of slurry (water $@2)", n, ("%d"):format(paying and n * fee or 0)))
+	return itemstack
+end
+
+core.register_craftitem(BENTONITE, {
+	description = S("Bentonite\nOne bag makes 1 m³ of slurry. Right-click a slurry tank connected to the water supply"),
+	short_description = S("Bentonite"),
+	inventory_image = "[fill:16x16:#00000000^[fill:10x12:3,3:#b9ad92^[fill:10x2:3,5:#8a7e66^[fill:4x2:6,2:#b9ad92",
+	stack_max = 99,
+	on_place = function(itemstack, placer, pointed)
+		if pointed.type ~= "node" then return itemstack end
+		local un = core.get_node(pointed.under)
+		local udef = core.registered_nodes[un.name]
+		if udef and udef.on_rightclick then return udef.on_rightclick(pointed.under, un, placer, itemstack, pointed) or itemstack end
+		return itemstack
+	end,
+})
+
+-- 給水栓的位置：五金行（村莊的 hardware 地塊；小屋半寬 4、正面牆 zf = 地塊深/2 − 2）正面右邊牆角外
+function rockmech.water_hydrant_pos()
+	local L = rockmech.village_lot and rockmech.village_lot("hardware")
+	if not (L and rockmech.career_placer) then return end
+	local _, at = rockmech.career_placer(L.x, L.z, L.y, L.rot)
+	return at(4, 1, math.floor(L.d / 2) - 1)
+end
+local HYDRANT_KEY = "water_hydrant1"
+function rockmech.water_hydrant_place()
+	if not rockmech.cfg.solo then return end
+	local p = rockmech.water_hydrant_pos()
+	if not p then return end
+	local storage = rockmech.collapse.storage
+	local n = core.get_node(p).name
+	if n ~= HYDRANT then
+		local def = core.registered_nodes[n]
+		if n == "ignore" or not (n == "air" or (def and def.buildable_to)) then
+			core.log("warning", "[rockmech] 給水栓放不下去：" .. core.pos_to_string(p) .. " 是 " .. n)
+			if n == "ignore" then return end
+		end
+		core.set_node(p, {name = HYDRANT})
+	end
+	storage:set_string(HYDRANT_KEY, core.pos_to_string(p))
+	return p
+end
+-- 舊存檔（村莊早就蓋好）：載入時補一個
+if rockmech.cfg.solo then
+	core.register_on_mods_loaded(function()
+		core.after(3, function()
+			local storage = rockmech.collapse.storage
+			if storage:get_string(HYDRANT_KEY) ~= "" then return end
+			-- 五金行已經蓋好（有五金行的攤主）才補；新世界還在整地、蓋房子時由 career.lua 蓋五金行時放
+			local built = false
+			for _, s in ipairs(core.deserialize(storage:get_string("career_vendor_spots")) or {}) do
+				if s.kind == "tools" then built = true end
+			end
+			local p = built and rockmech.village and rockmech.village.get() and rockmech.water_hydrant_pos()
+			if not p then return end
+			core.emerge_area(vector.subtract(p, 2), vector.add(p, 2), function(_, _, rem)
+				if rem == 0 then rockmech.water_hydrant_place() end
+			end)
+		end)
+	end)
+end
