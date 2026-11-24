@@ -1235,7 +1235,7 @@ Written into the field notebook (@1 joint readings; see the stereonet tab)=記�
 
 ### stockyard.lua
 [Stockyard] @1=[堆置處] @1
-Stockyard sign@nPlace it at the edge of the stockyard, facing into it=堆置處告示牌@n插在堆置處的邊上，面向裡面
+Stockyard sign@nPlace it in the middle of the stockyard=堆置處告示牌@n插在堆置處的中間
 [Stockyard] You already have one. Take the old sign out first=[堆置處] 已經有一處了，先把舊的告示牌拔掉
 [Stockyard] The stockyard must touch a road, so the buyers' trucks can reach it=[堆置處] 範圍要碰到道路，煤商的車才開得到
 Stockyard (right-click)=堆置處（右鍵）

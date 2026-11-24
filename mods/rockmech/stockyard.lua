@@ -1,7 +1,7 @@
 -- rockmech/stockyard.lua
 -- 煤礦堆置處（rockmech_stockyard = true 的地圖，取代小鎮的收煤站）：玩家自己插「堆置處告示牌」劃一塊地，把煤倒在上面；
 -- 白天不定期有煤商開小貨車從地磅站（haulroad.lua）沿路開來，停在煤堆旁邊，人下車講幾句話，挖走不定量的煤、付錢，再開走。
---   範圍：告示牌往前（插牌時看的方向）展開 size × size m（10／16／24），範圍裡至少要有一格壓到道路（小鎮的路或往電廠的路），
+--   範圍：以告示牌為中心往外 size × size m（10／16／24），範圍裡至少要有一格壓到道路（小鎮的路或往電廠的路），
 --     買家的車才開得到。一個帳戶一處；外框在告示牌附近用粒子線畫出來（沒有圍籬，不擋車）。
 --   售價：玩家自己訂（每噸純煤）。買家的行情價 = 市價 × rockmech_stockyard_ref（預設 0.8，小盤商要自己載、要賺價差）；
 --     售價不超過行情一定買，超過越多越不想買：機率 = exp(−彈性 ×（售價 ÷ 行情 − 1）)（rockmech_stockyard_elasticity）。
@@ -50,20 +50,15 @@ end
 local function hour() return (core.get_timeofday() or 0.5) * 24 end
 local function daytime() local h = hour(); return h >= HOURS[1] and h < HOURS[2] end
 
--- 範圍：告示牌前一格起往 (dx, dz) 展開 size，橫向置中。cells(y) 回傳每一格的 x, z
+-- 範圍：以告示牌為中心的 size × size（東西、南北對齊格線）。each_cell(y, fn) 對每一格呼叫 fn(x, z)
 local function each_cell(y, fn)
-	local lx, lz = -y.dz, y.dx
 	local h = math.floor(y.size / 2)
-	for a = 1, y.size do for l = -h, y.size - h - 1 do
-		fn(y.x + y.dx * a + lx * l, y.z + y.dz * a + lz * l)
-	end end
+	for i = -h, y.size - h - 1 do for j = -h, y.size - h - 1 do fn(y.x + i, y.z + j) end end
 end
 local function inside(y, x, z)
-	local rx, rz = x - y.x, z - y.z
-	local a = rx * y.dx + rz * y.dz
-	local l = rx * -y.dz + rz * y.dx
 	local h = math.floor(y.size / 2)
-	return a >= 1 and a <= y.size and l >= -h and l <= y.size - h - 1
+	local rx, rz = x - y.x, z - y.z
+	return rx >= -h and rx <= y.size - h - 1 and rz >= -h and rz <= y.size - h - 1
 end
 
 ---------------------------------------------------------------------------
@@ -140,7 +135,7 @@ local function route_to(y)
 	if not G.gate then return nil end
 	local goal, gd = nil, math.huge
 	for i, n in ipairs(G.nodes) do
-		local cx, cz = y.x + y.dx * (y.size / 2 + 0.5), y.z + y.dz * (y.size / 2 + 0.5)
+		local cx, cz = y.x, y.z
 		local d = (n.x - cx) ^ 2 + (n.z - cz) ^ 2
 		if d < gd then gd, goal = d, i end
 	end
@@ -224,13 +219,13 @@ local function tell(acc, msg) rockmech.notify_account(acc, S("[Stockyard] @1", m
 local function sign_pos(y) return {x = y.x, y = y.y, z = y.z} end
 
 core.register_node(SIGN, {
-	description = S("Stockyard sign\nPlace it at the edge of the stockyard, facing into it"),
+	description = S("Stockyard sign\nPlace it in the middle of the stockyard"),
 	short_description = S("Stockyard sign"),
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	node_box = {type = "fixed", fixed = {{-0.06, -0.5, -0.06, 0.06, 1.0, 0.06}, {-0.5, 0.8, -0.04, 0.5, 1.45, 0.04}}},
 	tiles = {"[fill:16x16:#6a4a2a^[fill:14x9:1,2:#e8d8a0^[fill:10x2:3,4:#3a2a1a^[fill:8x2:4,8:#3a2a1a"},
 	inventory_image = "[fill:16x16:#00000000^[fill:2x10:7,6:#6a4a2a^[fill:14x8:1,1:#e8d8a0^[fill:10x2:3,3:#3a2a1a^[fill:8x2:4,6:#3a2a1a",
-	groups = {choppy = 3, oddly_breakable_by_hand = 2},
+	groups = {choppy = 3, oddly_breakable_by_hand = 2, dig_immediate = 2},      -- 什麼工具（徒手也行）都拔得起來
 	is_ground_content = false,
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" or not placer then return itemstack end
@@ -288,16 +283,15 @@ core.register_globalstep(function(dtime)
 		for _, pl in ipairs(players) do
 			if vector.distance(pl:get_pos(), sp) < 30 then
 				local name = pl:get_player_name()
-				local lx, lz = -y.dz, y.dx
 				local h = math.floor(y.size / 2)
-				local function mark(a, l)
-					local x, z = y.x + y.dx * a + lx * l, y.z + y.dz * a + lz * l
-					local gy = rockmech.ground_y(x, z, y.y + 8, y.y - 6) or y.y - 1
+				local function mark(i, j)
+					local x, z = y.x + i, y.z + j
+					local gy = rockmech.ground_y(math.floor(x + 0.5), math.floor(z + 0.5), y.y + 8, y.y - 6) or y.y - 1
 					core.add_particle({pos = {x = x, y = gy + 0.6, z = z}, expirationtime = 1.1, size = 3, playername = name,
 						texture = "[fill:4x4:#ffd040", glow = 8})
 				end
-				for a = 0.5, y.size + 0.5, 1 do mark(a, -h - 0.5); mark(a, y.size - h - 0.5) end
-				for l = -h - 0.5, y.size - h - 0.5, 1 do mark(0.5, l); mark(y.size + 0.5, l) end
+				local lo, hi = -h - 0.5, y.size - h - 0.5
+				for t = lo, hi, 1 do mark(t, lo); mark(t, hi); mark(lo, t); mark(hi, t) end
 			end
 		end
 	end

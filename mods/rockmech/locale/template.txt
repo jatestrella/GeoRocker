@@ -1235,7 +1235,7 @@ Written into the field notebook (@1 joint readings; see the stereonet tab)=
 
 ### stockyard.lua
 [Stockyard] @1=
-Stockyard sign@nPlace it at the edge of the stockyard, facing into it=
+Stockyard sign@nPlace it in the middle of the stockyard=
 [Stockyard] You already have one. Take the old sign out first=
 [Stockyard] The stockyard must touch a road, so the buyers' trucks can reach it=
 Stockyard (right-click)=
