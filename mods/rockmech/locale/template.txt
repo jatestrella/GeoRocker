@@ -588,8 +588,8 @@ This is already sprayed to @1 layers (or the space in front of the rock face is 
 ### groundwater.lua
 Drain@nWater that flows into it or onto it is carried away=
 No water in reach=
-Outlet blocked=
 Pumping @1 m³/h=
+Outlet blocked=
 Water pump@nThe suction hose points back at you: stand at the pit edge and place it on the far side. Pumps water from the pit and pours it out behind the pump; lead it into a drain=
 
 ### haulroad.lua

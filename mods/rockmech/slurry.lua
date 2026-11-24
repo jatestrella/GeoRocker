@@ -414,7 +414,8 @@ local function soil_cap(name) return math.floor(SOIL_N * soil_frac[name] * NL + 
 local SOIL_S0 = tonumber(setting("rockmech_soil_saturation") or "") or 0.33
 local SOIL_WT = 3                     -- 地表下幾格實心以下當作飽和（池子不會整欄滲光）
 -- 地下水位（rockmech_water_table_depth：天然地表下幾 m；沒設定、0 = 這個世界沒有地下水）。
--- 水位高程固定 = 天然地表（地圖產生器的地形，挖坑不會改變）− 深度；y ≤ 水位高程的格在水位以下
+-- 天然水位高程 = 天然地表（地圖產生器的地形，挖坑不會改變）− 深度；y ≤ 水位高程的格在水位以下。
+-- groundwater.lua 把 rockmech.water_table_y 換成滲流解出來的水位（坑、井周圍降下來的漏斗）；這裡的是天然的
 local GW_D = tonumber(setting("rockmech_water_table_depth") or "")
 if GW_D and GW_D <= 0 then GW_D = nil end
 rockmech.GROUNDWATER_DEPTH = GW_D
@@ -426,11 +427,12 @@ local function water_table_y(x, z)
 	return top - math.floor(GW_D + 0.5)
 end
 rockmech.water_table_y = water_table_y
+rockmech.water_table_natural = water_table_y
 -- 這格土還能再吸幾級（容量 − 背景含水）：在地下水位以下、或上面連續 SOIL_WT 格實心（深的土，池子才不會整欄滲光）
 -- 就飽和、不吸；其他照 SOIL_S0
 local function soil_room(p, name)
 	local cap = soil_cap(name)
-	if GW_D and p.y <= water_table_y(p.x, p.z) then return 0 end
+	if GW_D and p.y <= rockmech.water_table_y(p.x, p.z) then return 0 end      -- groundwater.lua 換成抽水後的水位
 	for i = 1, SOIL_WT do
 		local n = core.get_node({x = p.x, y = p.y + i, z = p.z}).name
 		if n == "air" or n == "ignore" or rockmech.slurry_level[n] then
