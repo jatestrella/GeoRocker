@@ -480,6 +480,21 @@ local function wake(p)
 	if rockmech.slurry_schedule then rockmech.slurry_schedule(p) end
 	if rockmech.slurry_wake then rockmech.slurry_wake(p) end
 end
+-- 被新拌混凝土擠掉的 k 級液體（成分 comp）：倒回那一條溝槽裡（整條溝一起抬高、最高到槽口，slurry.lua 的 pour），
+-- 而不是在那一欄直接往上疊（會疊出槽口、從那裡溢出來）。溝槽裡放不下的才往上疊（溢出）
+local function displace_liquid(p, k, comp)
+	if k <= 0 then return end
+	local left = k
+	local function liquid(q) local n = name_at(q); return n == "air" or level_of[n] ~= nil end
+	local cands = {{x = p.x, y = p.y + 1, z = p.z}}
+	for _, d in ipairs(DIRS) do cands[#cands + 1] = {x = p.x + d[1], y = p.y, z = p.z + d[2]} end
+	for _, q in ipairs(cands) do
+		if left <= 0 then break end
+		if liquid(q) then left = left - rockmech.slurry_pour(q, left, nil, true, comp) end
+	end
+	if left > 0 then left = rockmech.slurry_add_up({x = p.x, y = p.y + 1, z = p.z}, left, nil, comp) end
+	if left > 0 then core.log("warning", ("[rockmech] 新拌混凝土擠掉的液體 %d 級沒地方放（%s）"):format(left, core.pos_to_string(p))) end
+end
 -- 把 a 級（齡期起點 t0、強度比例 q）加進 c 那一格（空格、液體、不滿的混凝土）：回傳放不下的級數
 local function put(c, a, t0, q)
 	local n = name_at(c)
@@ -492,7 +507,12 @@ local function put(c, a, t0, q)
 	if add <= 0 then return a end
 	local m
 	if k == 0 then
-		core.set_node(c, {name = fresh_name(add)})         -- 原本的液體被擠開（slurry.lua 往上排）
+		if level_of[n] then                                   -- 原本是液體：換掉（不觸發排開），擠掉的倒回溝裡
+			local kl, comp = rockmech.slurry_replace(c, {name = fresh_name(add)})
+			displace_liquid(c, kl, comp)
+		else
+			core.set_node(c, {name = fresh_name(add)})
+		end
 		m = core.get_meta(c)
 		m:set_float("t0", t0)
 		if q < 0.999 then m:set_float("q", q) end
