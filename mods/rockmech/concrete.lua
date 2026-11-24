@@ -71,6 +71,7 @@ rockmech.concrete_wall = IS_WALL
 rockmech.GUIDE_WALL = GUIDE
 
 local function day_s() return math.max(1, cfg.price_period or 1200) end
+local INFO_DT = 30                               -- 硬化混凝土的齡期、強度文字多久更新一次（秒）
 local function now() return core.get_gametime() end
 local function age_of(meta)
 	if not meta:contains("t0") then return 0 end
@@ -126,7 +127,7 @@ local function harden(pos)
 	local rc = k >= 8 and (core.get_meta(pos):get_int("rc") == 1 or (rockmech.rebar_caged and rockmech.rebar_caged(pos)))
 	core.swap_node(pos, {name = rc and RC or hard_name(k)})
 	hard_info(pos)
-	core.get_node_timer(pos):start(day_s() / 2)
+	core.get_node_timer(pos):start(INFO_DT)
 	queue_fem(pos)
 end
 
@@ -182,7 +183,9 @@ for _, v in ipairs({{HARD, TEX}, {CRACKED, CRACK_TEX}, {RC, RC_TEX}, {RC_Y, RCY_
 		sounds = default and default.node_sound_stone_defaults and default.node_sound_stone_defaults() or nil,
 		on_timer = function(pos)
 			hard_info(pos)
-			return age_of(core.get_meta(pos)) < 28
+			-- 明確重排（回傳 true 會沿用舊的間隔：舊存檔的計時器是 10 分鐘）
+			if age_of(core.get_meta(pos)) < 28 then core.get_node_timer(pos):start(INFO_DT) end
+			return false
 		end,
 		after_dig_node = function(pos) waste_after_dig(pos) end,
 	})
@@ -203,7 +206,9 @@ for k = 1, 7 do
 		sounds = default and default.node_sound_stone_defaults and default.node_sound_stone_defaults() or nil,
 		on_timer = function(pos)
 			hard_info(pos)
-			return age_of(core.get_meta(pos)) < 28
+			-- 明確重排（回傳 true 會沿用舊的間隔：舊存檔的計時器是 10 分鐘）
+			if age_of(core.get_meta(pos)) < 28 then core.get_node_timer(pos):start(INFO_DT) end
+			return false
 		end,
 		after_dig_node = function(pos) waste_after_dig(pos, k) end,
 	})
@@ -234,7 +239,7 @@ core.register_lbm({
 			end
 		elseif t < 28 and not timer:is_started() then
 			hard_info(pos)
-			timer:start(day_s() / 2)
+			timer:start(INFO_DT)
 		end
 	end,
 })
