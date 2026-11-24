@@ -29,7 +29,7 @@
 --   土欄：地面是露天（正午陽光照得到）的土，每秒補 α·I 進水位（入滲係數 α = rockmech_rain_infiltration），水位升 α·I·dt/Sy。
 --     地面鋪了混凝土、蓋了東西、在隧道裡：不入滲。
 --   露天與否每 SKY_DT 秒重看一次（只在下雨時、一次最多 SKY_MAX 欄）。
--- 雨滴（降雨落地）：每個玩家周圍 DROP_R m 內，照時雨量隨機丟「一級水」（1/8 m³），平均總量 = I × 面積 × 時間。
+-- 雨滴（降雨落地，只有單機地圖 rockmech_solo）：每個玩家周圍 DROP_R m 內，照時雨量隨機丟「一級水」（1/8 m³），平均總量 = I × 面積 × 時間。
 --   從天空往下找第一格不像空氣的；那一格上面正午有直射陽光才算露天。
 --   只有挖過、蓋過的地方接雨：上面那一格是挖開的、落在液面上、或落在混凝土上。天然地面不接（土會滲掉、天然岩坡不管）。
 --   落在土上：滲掉（土的透水係數遠大於時雨量，沒有地表逕流；漏斗裡照上面的入滲係數補地下水）。
@@ -729,7 +729,10 @@ local function evaporate()
 	end
 end
 local drop_acc, evap_t = 0, 0
+-- 只有單機地圖（rockmech_solo）：上課的世界維持原本的玩法（下雨只弱化，不積水）
+local DROPS_ON = rockmech.cfg.solo
 core.register_globalstep(function(dt)
+	if not DROPS_ON then return end
 	local I = rockmech.raining_now and rockmech.rain_i_now or 0
 	if I <= 0 then
 		if not next(RAINED) then return end
