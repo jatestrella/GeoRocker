@@ -29,6 +29,7 @@ local SY = (rockmech.SOIL_POROSITY or 0.4) * (1 - (rockmech.SOIL_S0 or 0.33))   
 local RANGE = tonumber(setting("rockmech_groundwater_range") or "") or 64        -- 計算範圍（離坑幾 m）
 local EPS = 0.01                                                                  -- 跟天然水位差不到 1 cm 不算
 local BASE_MAX = 40                                                               -- 含水層最厚（m）
+local GROW_MAX = 500                                                              -- 範圍每秒最多長幾欄
 local STEP_DT = 1                                                                 -- 每幾秒推進一次
 local PUMP_RATE = tonumber(setting("rockmech_pump_rate") or "") or 1             -- 級／秒
 local HOSE = 30                                                                   -- 吸管長（m）
@@ -262,7 +263,7 @@ local function grow()
 		if i == nil or (i and not aquifer(i)) then ROCK[nk] = true
 		elseif i then add(nk, i, d) end
 		n = n + 1
-		if n >= 2000 then break end                       -- 一次最多長 2000 欄
+		if n >= GROW_MAX then break end                   -- 一次最多長 GROW_MAX 欄（每欄要往下讀地圖，分散到好幾秒）
 	end
 	-- 沒有坑在抽了、全部回到天然：清掉
 	local active = next(WELL) ~= nil
@@ -347,9 +348,12 @@ rockmech.groundwater_head = function(x, z)
 	return h0
 end
 
--- 水位變了，土的孔隙水壓跟著變：同一區（應力解範圍的一半）有一欄比上次排應力解時差 FEM_DH 以上，就排一次
-local FEM_DH, FEM_DT = 0.5, 5
+-- 水位變了，土的孔隙水壓跟著變：每 FEM_DT 秒看一次，同一區（應力解範圍的一半）有一欄比上次排應力解時差 FEM_DH 以上，
+-- 就排一次；一次最多 FEM_MAX 區（水位變最多的先，其他的下次）。應力解在主執行緒組工作要幾十 ms、背景一次只解一個，
+-- 排太勤會卡。只看坑、井旁邊 FEM_NEAR m 內的欄：遠處完整的地盤沒有臨空面，水位降了也不會崩，不必重算
+local FEM_DH, FEM_DT, FEM_NEAR, FEM_MAX = 1.0, 30, 4, 4
 local HQ = {}            -- 欄 → 上次排應力解時的水位
+local stats
 local function fem_check()
 	local fc = rockmech.cfg and rockmech.cfg.fem
 	if not rockmech.fem_queue or not fc or not fc.drive then return end
@@ -357,16 +361,27 @@ local function fem_check()
 	local function region(k) local x, z = cxz(k); return math.floor(x / s) .. "," .. math.floor(z / s) end
 	local hit = {}
 	for k, h in pairs(H) do
-		if math.abs(h - (HQ[k] or info[k].h0)) >= FEM_DH then
+		local d = DIST[k] <= FEM_NEAR and math.abs(h - (HQ[k] or info[k].h0)) or 0
+		if d >= FEM_DH then
 			local rk = region(k)
-			if not hit[rk] then local x, z = cxz(k); hit[rk] = {x = x, y = math.floor(h), z = z} end
+			if not hit[rk] or d > hit[rk].d then local x, z = cxz(k); hit[rk] = {d = d, rk = rk, p = {x = x, y = math.floor(h), z = z}} end
 		end
 	end
-	if not next(hit) then return end
-	for k, h in pairs(H) do if hit[region(k)] then HQ[k] = h end end
-	for _, p in pairs(hit) do rockmech.fem_queue(p, 1, false, true) end
+	local list = {}
+	for _, v in pairs(hit) do list[#list + 1] = v end
+	if #list == 0 then return end
+	table.sort(list, function(a, b) return a.d > b.d end)
+	local take = {}
+	for i = 1, math.min(FEM_MAX, #list) do take[list[i].rk] = list[i].p end
+	for k, h in pairs(H) do if take[region(k)] then HQ[k] = h end end
+	for _, p in pairs(take) do rockmech.fem_queue(p, 1, false, true); stats.fem_queued = stats.fem_queued + 1 end
 end
 
+-- 效能統計（微秒）：最近一次每一段花的時間、開機以來最久的一次、累計；n_dom 範圍內的土欄數
+-- max_advance、max_grow：那一段最久的一次；fem_queued：水位變動排了幾次應力解
+stats = {dirty = 0, advance = 0, deliver = 0, grow = 0, fem = 0, total = 0, max = 0, sum = 0, n = 0, n_dom = 0,
+	max_advance = 0, max_grow = 0, fem_queued = 0}
+rockmech.groundwater_stats = stats
 local t_acc, t_fem = 0, 0
 if rockmech.GROUNDWATER_DEPTH then
 	core.register_globalstep(function(dt)
@@ -374,17 +389,37 @@ if rockmech.GROUNDWATER_DEPTH then
 		if t_acc < STEP_DT then return end
 		local step_dt = math.min(t_acc, 5)
 		t_acc = 0
+		local us = core.get_us_time
+		local t0 = us()
 		for k in pairs(dirty) do
 			local x, z = cxz(k)
 			local i = scan(x, z)
 			if i ~= false then dirty[k] = nil; update(k, i) end
 		end
-		if not next(info) then HQ = {}; return end
+		local t1 = us()
+		stats.dirty = t1 - t0
+		if not next(info) then
+			HQ = {}
+			stats.advance, stats.deliver, stats.grow, stats.fem, stats.total, stats.n_dom = 0, 0, 0, 0, t1 - t0, 0
+			return
+		end
 		advance(step_dt)
+		local t2 = us()
 		deliver()
+		local t3 = us()
 		grow()
+		local t4 = us()
 		t_fem = t_fem + step_dt
 		if t_fem >= FEM_DT then t_fem = 0; fem_check() end
+		local t5 = us()
+		stats.advance, stats.deliver, stats.grow, stats.fem, stats.total = t2 - t1, t3 - t2, t4 - t3, t5 - t4, t5 - t0
+		if stats.advance > stats.max_advance then stats.max_advance = stats.advance end
+		if stats.grow > stats.max_grow then stats.max_grow = stats.grow end
+		if stats.total > stats.max then stats.max = stats.total end
+		stats.sum, stats.n = stats.sum + stats.total, stats.n + 1
+		local nd = 0
+		for _ in pairs(H) do nd = nd + 1 end
+		stats.n_dom = nd
 	end)
 	-- 關遊戲時記下每一欄的水位，下次接著算
 	local saved = core.deserialize(storage:get_string("gw_state")) or {}
