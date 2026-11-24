@@ -1,10 +1,18 @@
 -- rockmech/groundwater.lua
 -- 地下水：世界設定 rockmech_water_table_depth（天然地表下幾 m；slurry.lua 的 rockmech.water_table_natural 算天然水位）。
 -- 滲流（Dupuit 假設：每一欄土一個水位 H，水平流；暫態）：
---   相鄰兩欄的流量 q = k·b·ΔH（每 1 m 寬、相距 1 m；b = 兩欄飽和厚度的平均），k = 透水係數 rockmech_soil_permeability。
---   一欄的水位變化 Sy·dH/dt = 流進來的總量；給水度 Sy = 孔隙率 ×（1 − 背景含水）：水位降下去，飽和的土剩背景含水，
---     放出來的水流向坑（slurry.lua 的 rockmech_soil_porosity、rockmech_soil_saturation）。
---   含水層底：天然水位以下往下穿過土、坑，碰到岩石（或其他不透水的東西：混凝土、連續壁）為止，最多 BASE_MAX m。
+--   相鄰兩欄的流量 q = T̄·ΔH（每 1 m 寬、相距 1 m；T̄ = 兩欄導水係數的平均；全是土時 = k·兩欄飽和厚度的平均）。
+--   一欄的水位變化 Sy·dH/dt = 流進來的總量；土的給水度 Sy = 孔隙率 ×（1 − 背景含水）：水位降下去，飽和的土剩背景含水，
+--     放出來的水流向坑（slurry.lua 的 rockmech_soil_porosity、rockmech_soil_saturation）。岩石的給水度很小，水位降得快、漏斗擴得遠。
+--   含水層：天然水位以下往下 BASE_MAX m 裡透水的格。每一格的透水係數 k、給水度：
+--     土（和天然的崩積土、碎石）：k = rockmech_soil_permeability，給水度 Sy（下面）；
+--     岩石：裂隙岩體，用體積節理數 Jv（條/m³，跟岩芯記錄同一套：細裂隙 Jv = (115 − RQD)/3.3，RQD 由那一格的 GSI 和
+--       岩性的 Jr/Ja 反推；加上節理網路的粗節理，那一格六個面裡是節理的面數 ÷ 3）。Jv ≥ 門檻 rockmech_rock_seep_jv 才透水，
+--       照立方定律（平行板）：k = (2/3)·Jv·g·e³/(12ν)，給水度 = 裂隙孔隙率 Jv·e（e = 裂隙開口寬 rockmech_joint_aperture）；
+--       不到門檻的岩石、混凝土、連續壁：不透水。
+--     含水層底：往下碰到連續 AQ_T m 以上不透水的阻水層為止（中間零星不透水的格不切斷，只是不導水）；阻水層下面的受壓含水層先不算。
+--     一欄的導水係數 T(H) = 含水層底到水位 H 之間各格 k 的和（含水層裡的層當作互通）；水位所在那一格的給水度管水位升降。
+--     坑、隧道要有一部分在旁邊那一欄的含水層裡（坑頂高過那一欄的含水層底）才收得到那一欄的水。
 --   坑（天然水位以下有挖開的格、或有液體的格）：水頭 = 坑裡的水面（乾的就是坑底），固定。灌滿、上面又被土蓋住的空洞不算坑。
 --     地圖產生器生的崩積土、天然空洞（沒挖過、沒有液體）跟周圍的土一起飽和，不算坑。
 --   坑一直把水位壓低，漏斗就隨時間往外擴（擴多快看 k、Sy、含水層厚度），沒有規定半徑；坑積水、水被抽走都自然平衡。
@@ -12,7 +20,8 @@
 --   冒水：坑邊那一欄收到的流量，每 STEP_DT 秒加進坑裡最低、還有空間的那一格（之後照 slurry.lua 守恆地流）。
 --     坑裡的水比旁邊的土高就不流（不往回灌進含水層；水位以上的土照 slurry.lua 慢慢滲）。
 --   rockmech.water_table_y 換成算出來的水位：漏斗裡水位以上的土不再飽和（slurry.lua 的 soil_room）。
---   岩石不透水、先不冒水（之後照節理）。關遊戲時記下每一欄的水位，下次接著算。
+--   隧道、坑挖進透水的岩層：一樣是坑，周圍岩層的水照上面的規則流進來（一塊岩石只放得出它裂隙裡的水，持續的冒水是
+--   遠處的水沿著透水岩層流過來的）。關遊戲時記下每一欄的水位，下次接著算。
 -- 抽水井：抽水機放在往下鑽的岩芯孔套管上。井那一欄的水頭壓到孔底（不低於含水層底）；周圍流進來的比抽水機抽得多，
 --   水頭就停在剛好抽得完的高度（Σ k·b·(H_鄰 − h) = 抽水量）。抽出來的水倒在機器後面（排水溝就排掉）；出水擋住就停。
 -- 降雨入滲（weather.lua 的時雨量 I）：只算在計算範圍裡（漏斗）。天然水位當作已經跟平常的雨平衡，範圍外不動，
@@ -47,6 +56,12 @@ local HOSE = 30                                                                 
 local DRAIN = 8                                                                   -- 排水溝每步吃掉幾級
 local ALPHA = tonumber(setting("rockmech_rain_infiltration") or "") or 0.3       -- 入滲係數（雨量進到地下水的比例）
 local SKY_DT, SKY_MAX = 60, 500                                                   -- 露天重看的間隔（秒）、一次最多幾欄
+local APERTURE = (tonumber(setting("rockmech_joint_aperture") or "") or 0.1) / 1000  -- 裂隙開口寬（mm → m）
+local JV_C = tonumber(setting("rockmech_rock_seep_jv") or "") or 23              -- 岩石透水的門檻（Jv，條/m³）
+local KF = 2 / 3 * 9.81 * APERTURE ^ 3 / (12 * 1.0e-6)                           -- 立方定律：每 1 條/m³ 的透水係數（m/s）
+local SY_MIN = 1e-3                                                               -- 給水度的下限（不透水的格，數值穩定用）
+local GROW_US = 20000                                                             -- 範圍每秒長的時間預算（微秒）
+local AQ_T = 3                                                                    -- 阻水層：連續這麼多 m 不透水就是含水層底
 
 -- 滲流 -------------------------------------------------------------------
 local storage = core.get_mod_storage()
@@ -58,35 +73,84 @@ local function ckey(x, z) return (x + 32768) * 65536 + (z + 32768) end
 local function cxz(k) local a = math.floor(k / 65536); return a - 32768, k - a * 65536 - 32768 end
 local function H0(x, z) local w = natural(x, z); return w and w + 0.5 end
 
--- 一欄：天然水位以下往下看。回傳 {h0, base, low, hs}（low/hs：坑的最低格、坑的水頭；沒有坑就 nil）；
--- nil = 沒有地下水；false = 還沒載入
+-- 岩石那一格的體積節理數 Jv（條/m³）：細裂隙（GSI → RQD → Jv，Palmström）＋粗節理（六個面裡是節理的面數 ÷ 3）。不是岩石 nil
+local lith_of_node = rockmech.lith_of_node
+local function rock_jv(p, node)
+	local lith = lith_of_node[node.name]
+	if not lith then return nil end
+	local key = lith.name
+	local L = rockmech.cfg.lithologies[key]
+	local gsi = node.param2
+	if not gsi or gsi < 1 or gsi > 100 or (L and L.ore) then gsi = rockmech.collapse.rock.gsi(key, p.y) end
+	local q = (L and L.jr or 2) / (L and L.ja or 1)
+	local rqd = math.max(0, math.min(100, 2 * (gsi - 52 * q / (1 + q))))
+	local m = rockmech.joints.cell_mask(rockmech.get_joint_sets(), p.x, p.y, p.z)
+	local c = 0
+	while m > 0 do c = c + m % 2; m = math.floor(m / 2) end
+	return math.max(0, (115 - rqd) / 3.3) + c / 3
+end
+rockmech.rock_jv = rock_jv
+-- 那一格的透水係數、給水度
+local function rock_k(jv)
+	if jv and jv >= JV_C then return KF * jv, APERTURE * jv end
+	return 0, 0
+end
+rockmech.rock_permeability = function(p)
+	local node = core.get_node(p)
+	local jv = rock_jv(p, node)
+	if not jv then return nil end
+	local k, sy = rock_k(jv)
+	return k, sy, jv
+end
+
+-- 一欄：天然水位以下往下看。回傳 {h0, base, low, hs, ybot, kk, sy, ct}（low/hs：坑的最低格、坑的水頭；沒有坑就 nil；
+-- kk、sy：含水層底那一格往上每一格的透水係數、給水度，ct：累積的導水係數）；nil = 沒有地下水；false = 還沒載入
 local function scan(x, z)
 	local h0 = H0(x, z)
 	if not h0 then return nil end
 	local top = math.floor(h0 - 0.5)
 	local p = {x = x, y = top, z = z}
-	local base = top - BASE_MAX - 0.5
 	local stacks = {}                       -- 空格堆的最低格（由上往下）
 	local prev_open = false
+	local ks, ss = {}, {}                   -- 由上往下
+	local low_perm                          -- 最低的透水格（第幾格）
+	local run = 0                           -- 連續不透水的格數
 	for y = top, top - BASE_MAX, -1 do
 		p.y = y
-		local n = core.get_node(p).name
+		local node = core.get_node(p)
+		local n = node.name
 		if n == "ignore" then return false end
-		local open = false
+		local open, k, sy = false, K, SY
 		if not soil_frac[n] then
 			local r, w = cell(p)
-			if not r then base = y + 0.5; break end
-			open = w > 0 or is_excavated(p)          -- 天然的崩積土、空洞：跟周圍的土一起飽和，不算坑
+			if r then
+				open = w > 0 or is_excavated(p)          -- 天然的崩積土、空洞：跟周圍的土一起飽和，不算坑
+			else
+				k, sy = rock_k(rock_jv(p, node))         -- 岩石照 Jv；混凝土這類 nil → 不透水
+			end
 		end
+		ks[#ks + 1], ss[#ss + 1] = k, sy
+		if k > 0 or open then low_perm = #ks; run = 0 else run = run + 1 end
 		if open then
-			if prev_open then stacks[#stacks] = y else stacks[#stacks + 1] = y end
+			if prev_open then stacks[#stacks].low = y else stacks[#stacks + 1] = {low = y, top = y} end
 		end
 		prev_open = open
+		if run >= AQ_T then break end           -- 阻水層：含水層到這裡為止
 	end
+	local nb = low_perm or 0
+	local base = top + 0.5 - nb
 	local info = {h0 = h0, base = base}
+	if nb > 0 then
+		local kk, sy, ct = {}, {}, {0}
+		for j = nb, 1, -1 do                    -- 由下往上
+			kk[#kk + 1], sy[#sy + 1] = ks[j], ss[j]
+			ct[#ct + 1] = ct[#ct] + ks[j]
+		end
+		info.ybot, info.kk, info.sy, info.ct = top - nb + 1, kk, sy, ct
+	end
 	-- 由下往上：第一個有自由液面的空格堆（灌滿、上面又是土的不算）
 	for i = #stacks, 1, -1 do
-		local low = stacks[i]
+		local low = stacks[i].low
 		local h, free = low - 0.5, false
 		local q = {x = x, y = low, z = z}
 		for _ = 1, 64 do
@@ -98,11 +162,30 @@ local function scan(x, z)
 			if f < 1 then free = true; break end
 			q.y = q.y + 1
 		end
-		if free then info.low, info.hs = low, h; break end
+		if free then info.low, info.hs, info.ltop = low, h, stacks[i].top; break end
 	end
 	return info
 end
-local function aquifer(i) return i and (i.low or i.h0 - i.base > 0.01) end
+-- 一欄在水位 h 時的導水係數 T（m²/s）、水位所在那一格的給水度
+local function T_of(i, h)
+	local kk = i.kk
+	if not kk then return K * math.max(0, h - i.base) end          -- 存檔讀回來、還沒重看的
+	local m = math.floor(h + 0.5) - i.ybot + 1
+	if m < 1 then return 0 end
+	if m > #kk then return i.ct[#kk + 1] end
+	return i.ct[m] + kk[m] * (h - (i.ybot + m - 1.5))
+end
+local function Sy_of(i, h)
+	local s = i.sy
+	if not s then return SY end
+	local m = math.floor(h + 0.5) - i.ybot + 1
+	if m < 1 then m = 1 elseif m > #s then m = #s end
+	-- 水位在不透水的格（沒有存水）：水位很快穿過去，用底下最近一格透水層的給水度（不然要切很多步）
+	while m > 1 and s[m] <= 0 do m = m - 1 end
+	local v = s[m]
+	return v > SY_MIN and v or SY_MIN
+end
+local function aquifer(i) return i and (i.low or T_of(i, i.h0) > 1e-9) end
 
 local info = {}         -- 範圍內的欄 → scan 的結果（土欄的 low 是 nil）
 local H = {}            -- 範圍內的土欄 → 現在的水位
@@ -163,14 +246,14 @@ local function update(k, i)
 	elseif info[k] then info[k] = i end
 end
 
--- 鄰欄的水頭和含水層底（範圍外：天然水位，底跟自己一樣）
+-- 鄰欄的水頭和那一欄（範圍外：天然水位，nil = 導水係數跟自己一樣）
 local function nb_head(nk)
 	local h = H[nk]
-	if h then return h, info[nk].base, false end
+	if h then return h, info[nk], false end
 	local w = WELL[nk]
-	if w then return w.h, info[nk].base, true end
+	if w then return w.h, info[nk], true end
 	h = OPEN[nk]
-	if h then return h, info[nk].base, true end
+	if h then return h, info[nk], true end
 	if ROCK[nk] then return nil end
 	h = BND[nk]
 	if not h then
@@ -215,10 +298,15 @@ end
 -- 推進 dt 秒（顯式：先算每一欄的淨流量再一起改；坑收到的累積起來）
 local inflow_now = {}   -- 坑 → 最近一步的流量（m³/s）
 local function advance(dt)
-	-- 穩定：dt ≤ Sy / (4·T)
-	local tmax = K * 1
-	for k, h in pairs(H) do local t = K * (h - info[k].base); if t > tmax then tmax = t end end
-	local n = math.max(1, math.ceil(dt / (0.8 * SY / (4 * tmax))))
+	-- 穩定：dt ≤ Sy / (4·T)（每一欄；岩石的給水度小，可能要切比較多步）
+	local rmax = K / SY
+	for k, h in pairs(H) do
+		local i = info[k]
+		local r = T_of(i, h) / Sy_of(i, h)
+		if r > rmax then rmax = r end
+	end
+	local n = math.min(60, math.max(1, math.ceil(dt * 4 * rmax / 0.8)))
+	if rockmech.groundwater_stats then rockmech.groundwater_stats.sub = n end
 	local h_dt = dt / n
 	local q_open = {}
 	-- 下雨：I（mm/h → m/s）
@@ -233,12 +321,12 @@ local function advance(dt)
 			if i then H[k] = math.min(w.h, i.h0) end
 		else
 			local x, z = cxz(k)
-			local base = info[k].base
 			local sk, skh = 0, 0
 			for _, dd in ipairs(D4) do
-				local hj, bj = nb_head(ckey(x + dd[1], z + dd[2]))
+				local hj, nj = nb_head(ckey(x + dd[1], z + dd[2]))
 				if hj and not WELL[ckey(x + dd[1], z + dd[2])] then
-					local t = K * ((hj - (bj or base)) + math.max(w.h - base, 0)) / 2
+					local ij = nj or info[k]
+					local t = (T_of(ij, hj) + T_of(ij, w.h)) / 2
 					if t > 0 then sk = sk + t; skh = skh + t * hj end
 				end
 			end
@@ -252,27 +340,31 @@ local function advance(dt)
 		local dH = {}
 		for k, hi in pairs(H) do
 			local x, z = cxz(k)
-			local bi = info[k].base
-			local ti = math.max(hi - bi, 0)
+			local i = info[k]
+			local ti = T_of(i, hi)
 			local net = 0
 			for _, dd in ipairs(D4) do
 				local nk = ckey(x + dd[1], z + dd[2])
-				local hj, bj, open = nb_head(nk)
+				local hj, nj, open = nb_head(nk)
 				if hj then
-					local tj = bj and math.max(hj - bj, 0) or ti
+					-- 坑要有一部分在這一欄的含水層裡（坑頂高過含水層底）；坑底低過含水層底時，水頭差算到含水層底
 					if open then
-						if hj < hi then                                   -- 流進坑（坑比土高不往回流）
-							local q = K * (ti + tj) / 2 * (hi - hj)
-							net = net - q
-							q_open[nk] = (q_open[nk] or 0) + q * h_dt
+						if not (nj and nj.ltop and nj.ltop + 0.5 <= i.base) then
+							if hj < i.base then hj = i.base end
+							if hj < hi then                               -- 流進坑（坑比土高不往回流）：照這一欄自己的層算
+								local q = (ti + T_of(i, hj)) / 2 * (hi - hj)
+								net = net - q
+								q_open[nk] = (q_open[nk] or 0) + q * h_dt
+							end
 						end
 					else
-						net = net + K * (ti + tj) / 2 * (hj - hi)
+						local tj = nj and T_of(nj, hj) or ti
+						net = net + (ti + tj) / 2 * (hj - hi)
 					end
 				end
 			end
 			if R > 0 and SKY[k] and SKY[k][1] then net = net + R end
-			dH[k] = net * h_dt / SY
+			dH[k] = net * h_dt / Sy_of(i, hi)
 		end
 		for k, d in pairs(dH) do
 			local i = info[k]
@@ -290,6 +382,7 @@ local function advance(dt)
 	end
 end
 rockmech.groundwater_inflow = function(x, z) return inflow_now[ckey(x, z)] or 0 end
+rockmech.groundwater_acc = function(x, z) return acc[ckey(x, z)] or 0 end
 
 -- 範圍往外長：水位降了 EPS 以上的欄，旁邊還不在範圍裡的（RANGE 以內）加進來；回到天然的拿掉
 local function grow()
@@ -305,13 +398,15 @@ local function grow()
 		end
 	end
 	local n = 0
+	local t0 = core.get_us_time()
 	for nk, d in pairs(new) do
 		local x, z = cxz(nk)
 		local i = scan(x, z)
 		if i == nil or (i and not aquifer(i)) then ROCK[nk] = true
 		elseif i then add(nk, i, d) end
 		n = n + 1
-		if n >= GROW_MAX then break end                   -- 一次最多長 GROW_MAX 欄（每欄要往下讀地圖，分散到好幾秒）
+		-- 一次最多長 GROW_MAX 欄、GROW_US 微秒（每欄要往下讀地圖、岩石要算 Jv，分散到好幾秒）
+		if n >= GROW_MAX or core.get_us_time() - t0 > GROW_US then break end
 	end
 	-- 沒有坑在抽了、全部回到天然：清掉
 	local active = next(WELL) ~= nil
@@ -327,6 +422,28 @@ local function grow()
 end
 
 local function deliver()
+	-- 零星的冒水（隧道很長、每欄冒得少，各欄都不到一級）：相連的坑欄（一整條隧道、一個坑）當成一區，
+	-- 累積的量加起來，放在那一區水面最低的那一欄
+	local seen = {}
+	for k, a in pairs(acc) do
+		if a > 0 and OPEN[k] and not seen[k] then
+			seen[k] = true
+			local q, tot, best, bh = {k}, 0, k, OPEN[k]
+			local j = 1
+			while q[j] and j <= 4096 do
+				local c = q[j]; j = j + 1
+				tot = tot + (acc[c] or 0)
+				acc[c] = nil
+				if OPEN[c] < bh then best, bh = c, OPEN[c] end
+				local x, z = cxz(c)
+				for _, dd in ipairs(D4) do
+					local nk = ckey(x + dd[1], z + dd[2])
+					if OPEN[nk] and not seen[nk] then seen[nk] = true; q[#q + 1] = nk end
+				end
+			end
+			acc[best] = tot
+		end
+	end
 	for k, a in pairs(acc) do
 		local add_n = math.floor(a)
 		if add_n > 0 and OPEN[k] then
@@ -341,6 +458,7 @@ local function deliver()
 			end
 			if p and core.get_node(p).name ~= "ignore" then
 				local left = rockmech.slurry_add_at(p, add_n, WATER)
+				if rockmech.groundwater_stats then rockmech.groundwater_stats.delivered = (rockmech.groundwater_stats.delivered or 0) + add_n - left end
 				a = a - (add_n - left)
 				if left < add_n then rockmech.slurry_schedule(p); rockmech.slurry_wake(p) end
 			end
@@ -384,6 +502,22 @@ function rockmech.groundwater_poke(p)
 	local wt = natural(p.x, p.z)
 	if not wt or p.y > wt + 1 then return end
 	dirty[ckey(p.x, p.z)] = true
+end
+
+-- 地圖被 VoxelManip 直接改寫（爆破、大崩塌）：範圍裡的欄重看（隧道爆破開出來的空間也算坑）
+do
+	local prev = rockmech.map_written
+	function rockmech.map_written(a, b)
+		if prev then prev(a, b) end
+		local x1, x2 = math.min(a.x, b.x), math.max(a.x, b.x)
+		local z1, z2 = math.min(a.z, b.z), math.max(a.z, b.z)
+		if (x2 - x1 + 1) * (z2 - z1 + 1) > 4096 then return end
+		local ylo = math.min(a.y, b.y)
+		for x = x1, x2 do for z = z1, z2 do
+			local wt = natural(x, z)
+			if wt and ylo <= wt + 1 then dirty[ckey(x, z)] = true end
+		end end
+	end
 end
 
 -- 現在的水位（水面高程，浮點數）：範圍內照算的，其他照天然；沒有地下水 nil（femstress.lua 算孔隙水壓）
@@ -439,10 +573,11 @@ if rockmech.GROUNDWATER_DEPTH then
 		t_acc = 0
 		local us = core.get_us_time
 		local t0 = us()
-		for k in pairs(dirty) do
+		for k in pairs(dirty) do                         -- 一次最多 GROW_US 微秒（隧道一次挖開很多欄：分散到好幾秒）
 			local x, z = cxz(k)
 			local i = scan(x, z)
 			if i ~= false then dirty[k] = nil; update(k, i) end
+			if us() - t0 > GROW_US then break end
 		end
 		local t1 = us()
 		stats.dirty = t1 - t0
@@ -477,6 +612,7 @@ if rockmech.GROUNDWATER_DEPTH then
 	local saved = core.deserialize(storage:get_string("gw_state")) or {}
 	for k, v in pairs(saved.H or {}) do
 		info[k] = {h0 = v[2], base = v[3]}; H[k] = v[1]; DIST[k] = v[4]
+		dirty[k] = true                                  -- 重看一次，補上每一格的透水係數
 	end
 	for k in pairs(saved.OPEN or {}) do dirty[k] = true end
 	core.register_on_shutdown(function()
