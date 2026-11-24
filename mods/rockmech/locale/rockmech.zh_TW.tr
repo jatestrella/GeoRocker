@@ -123,6 +123,7 @@ wedge sliding=楔形滑動
 ### concrete.lua
 Concrete=混凝土
 Age @1 days, strength @2 / @3 MPa (@4%)=齡期 @1 天，強度 @2 / @3 MPa（@4%）
+Poured through water: segregated, strength × @1=穿過水倒下去：骨材分離，強度 × @1
 Fresh concrete=新拌混凝土
 Concrete (cracked)=混凝土（已開裂）
 Reinforced concrete=鋼筋混凝土
@@ -592,7 +593,7 @@ Well=抽水井
 Pumping @1 m³/h=抽水中 @1 m³/h
 No water in reach=吸管碰不到水
 Water pump@nThe suction hose points back at you: stand at the pit edge and place it on the far side. Pumps water from the pit and pours it out behind the pump; lead it into a drain=抽水機@n吸管朝向你：站在坑邊往外放，吸管就垂進坑裡。把坑裡的水抽到機器後面，接排水溝排掉
-On a borehole casing it pumps the well and lowers the groundwater around it=
+On a borehole casing it pumps the well and lowers the groundwater around it=放在岩芯孔套管上就是抽水井，會把周圍的地下水位降下來
 
 ### haulroad.lua
 Weighbridge office=地磅站
@@ -1966,8 +1967,8 @@ Bin full: waiting to unload=料倉滿了：等卸料
 Something ahead can't be cut (facility, conveyor)=前面有切不動的東西（設施、輸送帶）
 
 ### vehicle_mixer.lua
-Right-click to get in; Space orders concrete. Shift + E aims the chute; point at a tremie frame behind the truck and press E to pour=右鍵上車；空白鍵叫料。Shift＋E 瞄準溜槽，準星對準車尾後方的特密管支架按 E 灌
-Point at a tremie frame=準星要對準特密管支架
+Right-click to get in; Space orders concrete. Shift + E aims the chute; press E to pour where you point behind the truck (a tremie frame pours from the trench bottom), WASD moves the chute while pouring=右鍵上車；空白鍵叫料。Shift＋E 瞄準溜槽，準星指著車尾後方按 E 就倒在那裡（指著特密管支架就從槽底灌），倒的時候 WASD 移動溜槽
+Point where to pour, behind the truck=準星指著車尾後方要倒的地方
 The chute only reaches behind the truck=溜槽只轉得到車尾後方
 Out of chute reach (@1 m, chute @2 m)=溜槽搆不到（@1 m，溜槽 @2 m）
 The chute cannot reach that height=溜槽搆不到那個高度
@@ -1975,9 +1976,12 @@ Concrete @1 / @2 m³=混凝土 @1 / @2 m³
 Pouring (@1 m³)=灌注中（@1 m³）
 Aim the chute=瞄準溜槽
 Pour where you point=灌準星指的地方
+Move the chute=移動溜槽
 Order concrete=叫料
 The truck is empty (poured @1 m³)=車上的混凝土灌完了（灌了 @1 m³）
+Something is in the way of the chute=溜槽口被擋住了
 (poured @1 m³)=（灌了 @1 m³）
+Poured through water: the concrete segregates and will be weak (use a tremie pipe)=穿過水倒下去會骨材分離、強度變差（水中要用特密管）
 The drum is empty: press Space to order concrete=拌筒是空的：按空白鍵叫料
 Stopped (poured @1 m³)=停了（灌了 @1 m³）
 
@@ -2110,6 +2114,8 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Right-click to get in; Space orders concrete. Shift + E aims the chute; point at a tremie frame behind the truck and press E to pour=右鍵上車；空白鍵叫料。Shift＋E 瞄準溜槽，準星對準車尾後方的特密管支架按 E 灌
+Point at a tremie frame=準星要對準特密管支架
 Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=出液口@n管子朝向你：站在溝邊、往外放，管口就垂在溝槽上方。用穩定液管接到儲槽，自動把液面補到設定高度。Shift＋右鍵轉向
 List market events, or start one=列出市場事件，或觸發一件
 No such event: @1=沒有這個事件：@1

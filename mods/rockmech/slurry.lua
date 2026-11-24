@@ -46,6 +46,9 @@ rockmech.liquid_is_water = is_water
 -- 應力解裡也算液壓的其他流體（concrete.lua 的新拌混凝土）：方塊名稱 → {級數比例, γ kN/m³}
 rockmech.fluid_extra = rockmech.fluid_extra or {}
 rockmech.liquid_drains = rockmech.liquid_drains or {}   -- 排水溝：方塊名稱 → 每步吃掉幾級（groundwater.lua）
+-- 其他流體自己的流動規則（concrete.lua 的新拌混凝土）：方塊名稱 → function(p)。跟液體同一個排程（schedule、叫醒）
+rockmech.fluid_step_hooks = rockmech.fluid_step_hooks or {}
+local FLUID_HOOK = rockmech.fluid_step_hooks
 
 -- 成分 ---------------------------------------------------------------
 local COMPS = {"b"}                  -- 成分名稱（metadata 鍵 lq_<名稱>）
@@ -646,6 +649,9 @@ local function rubble_step(p, r, w, c)
 end
 
 step = function(p)
+	-- 其他流體（concrete.lua 的新拌混凝土）：自己的規則
+	local hook = FLUID_HOOK[core.get_node(p).name]
+	if hook then hook(p); return end
 	local r, k, c = cell(p)
 	if not r then return end
 	if r > 0 then rubble_step(p, r, k, c); return end
@@ -905,7 +911,7 @@ local function poke(pos)
 		local q = {x = pos.x + v[1], y = pos.y + v[2], z = pos.z + v[3]}
 		local n = core.get_node(q).name
 		local k = n == "air" and 0 or rockmech.slurry_level[n]
-		if (k and k > 0) or wet[core.hash_node_position(q)] then schedule(q)
+		if (k and k > 0) or wet[core.hash_node_position(q)] or FLUID_HOOK[n] then schedule(q)
 		elseif soil_frac[n] and soil_w(q) > 0 then soil_schedule(q, 0.5) end
 	end
 end

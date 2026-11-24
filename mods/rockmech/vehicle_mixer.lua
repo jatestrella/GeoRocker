@@ -3,8 +3,11 @@
 --   空白鍵：叫料（付錢把拌筒裝滿，一車 CAP m³；錢不夠就叫買得起的量）。混凝土只在車上，不能卸到背包，收車時倒掉。
 --   Shift＋E：瞄準模式（切到追蹤視角，再按一次回駕駛座）：溜槽轉過去、伸到準星指的地方（車尾左右各 SWING 度、
 --     水平 REACH m 內；搆不到就停在邊界，提示為什麼）。瞄準、灌的時候不能開車。
---   E：灌準星指的那一格（rockmech.pour_targets 裡登記的東西，現在是特密管支架；離溜槽根部水平 REACH m 內），
---     溜槽伸過去對準它，每 POUR_TIME 秒灌 1 m³，到車上沒料或那一段灌滿。灌的時候不能開車。
+--   E：灌準星指的那一格（離溜槽根部水平 REACH m 內），再按一次停：
+--     特密管支架（rockmech.pour_targets）：從支架灌，每 POUR_TIME 秒 1 m³，到車上沒料或那一段灌滿。
+--     其他地方：從溜槽口直接倒（每 POUR_TIME/8 秒 1 級），新拌混凝土照安息角流（concrete.lua）；WASD 照視線方向移動溜槽口，
+--       一邊倒一邊攤。穿過水、穩定液倒下去會夾泥（凝固後強度打折），水中要用特密管。
+--     灌的時候不能開車。
 
 local S = rockmech.S
 local V = rockmech.vehicles
@@ -27,7 +30,7 @@ local def = {desc = S("Concrete mixer truck"), color = "#e07020", cap = 0, speed
 	tilt = {front = 0.5, rear = -3.8, side_z = -1.6, side_x = 1.1},
 	tail_lat = {-1.25, 0, 1.25}, tail_dy = {1.2, 2.2},
 	store = {{ITEM, CAP, S("Ready-mix concrete (m³)"), buy = PRICE}},
-	item_desc = S("Right-click to get in; Space orders concrete. Shift + E aims the chute; point at a tremie frame behind the truck and press E to pour")}
+	item_desc = S("Right-click to get in; Space orders concrete. Shift + E aims the chute; press E to pour where you point behind the truck (a tremie frame pours from the trench bottom), WASD moves the chute while pouring")}
 do   -- 圖示：斜放的拌筒（白底橘色螺旋）、駕駛室、三軸
 	local c, r = def.color, {}
 	r[#r + 1] = {3, 11, 18, 11, "#e8e8e0"}; r[#r + 1] = {5, 12, 2, 9, c}; r[#r + 1] = {10, 11, 2, 11, c}; r[#r + 1] = {15, 12, 2, 10, c}
@@ -86,15 +89,20 @@ local function chute_to(self, wp)
 	local dx, dz = lp.x - CHUTE.x, lp.z - CHUTE.z
 	return V.atan2(dx, -dz), math.sqrt(dx * dx + dz * dz), lp.y - CHUTE.y
 end
--- 準星指的那一格灌不灌得到：回傳 目標格 或 nil, 原因
+-- 準星指的那一格灌不灌得到：特密管支架 → 從支架灌（回傳 支架, true）；其他地方 → 從溜槽口直接倒在那一欄（回傳 那一格, false）；
+-- 灌不到回傳 nil, 原因
 local function pick_at(self, P)
-	local name = P and core.get_node(P).name
-	if not P or not rockmech.pour_targets[name] then return nil, S("Point at a tremie frame") end
+	if not P then return nil, S("Point where to pour, behind the truck") end
+	local frame = rockmech.pour_targets[core.get_node(P).name] ~= nil
 	local ang, dist, dy = chute_to(self, {x = P.x, y = P.y + 0.5, z = P.z})
 	if math.abs(ang) > SWING then return nil, S("The chute only reaches behind the truck") end
 	if dist > REACH then return nil, S("Out of chute reach (@1 m, chute @2 m)", ("%.1f"):format(dist), REACH) end
-	if dy > 0.5 or dy < -5 then return nil, S("The chute cannot reach that height") end
-	return P
+	if frame then
+		if dy > 0.5 or dy < -5 then return nil, S("The chute cannot reach that height") end
+		return P, true
+	end
+	if dy > 0 then return nil, S("The chute cannot reach that height") end
+	return P, false
 end
 rockmech.vehicle_mixer_pick = pick_at     -- 測試用
 
@@ -104,8 +112,13 @@ function def.hud(self)
 	return s
 end
 function def.keys(self)
-	return {{"Shift+E", S("Aim the chute"), on = self.aiming == true}, {"E", S("Pour where you point"), on = self.pouring ~= nil}, {S("Space"), S("Order concrete")}}
+	local k = {{"Shift+E", S("Aim the chute"), on = self.aiming == true}, {"E", S("Pour where you point"), on = self.pouring ~= nil}}
+	if self.pouring and self.pouring.open then k[#k + 1] = {"WASD", S("Move the chute")} end
+	k[#k + 1] = {S("Space"), S("Order concrete")}
+	return k
 end
+-- 瞄準、灌的時候 WASD 給溜槽用（不開車、Shift 不下車）
+function def.hold_controls(self) return self.pouring ~= nil or self.aiming == true end
 function def.can_turn(self, pos, yaw, yaw2)
 	return not self.pouring and not self.aiming and V.tail_can_turn(self, pos, yaw, yaw2, def)
 end
@@ -118,6 +131,64 @@ local function finish(self, msg)
 	self.pouring = nil
 	self.msg = msg
 	update_hud(self)
+end
+
+local CHUTE_SPEED = 1.5     -- WASD 移動溜槽口 (m/s)
+local function pour_fx(self, from, to, dtime)
+	local v = vector.multiply(vector.subtract(to, from), 1.6)
+	core.add_particlespawner({
+		amount = 6, time = dtime,
+		minpos = vector.subtract(from, 0.1), maxpos = vector.add(from, 0.1),
+		minvel = vector.add(v, {x = -0.1, y = 1.2, z = -0.1}), maxvel = vector.add(v, {x = 0.1, y = 1.6, z = 0.1}),
+		minacc = {x = 0, y = -4, z = 0}, maxacc = {x = 0, y = -4, z = 0},
+		minexptime = 0.5, maxexptime = 0.6, minsize = 1.5, maxsize = 2.5,
+		texture = "[fill:4x4:#8c8c86",
+	})
+end
+
+-- 直接倒（不是特密管）：每 POUR_TIME / 8 秒倒 1 級在溜槽口底下那一欄；WASD 照視線方向移動溜槽口
+local function open_step(self, ctx, pm)
+	local d = ctx.d
+	local c = ctx.ctrl or {}
+	if d then
+		local f = (c.up and 1 or 0) - (c.down and 1 or 0)
+		local s = (c.right and 1 or 0) - (c.left and 1 or 0)
+		if f ~= 0 or s ~= 0 then
+			local lh = d:get_look_horizontal()
+			local hx, hz = -math.sin(lh) * f + math.cos(lh) * s, math.cos(lh) * f + math.sin(lh) * s
+			local hl = math.sqrt(hx * hx + hz * hz)
+			local step = CHUTE_SPEED * ctx.dtime / hl
+			local nT = {x = pm.T.x + hx * step, y = pm.T.y, z = pm.T.z + hz * step}
+			local ang, dist = chute_to(self, nT)
+			if math.abs(ang) <= SWING and dist <= REACH and dist >= REST then pm.T = nT end
+		end
+	end
+	local ang, dist = chute_to(self, pm.T)
+	local ca, cl = clamp_ang(ang), math.max(REST, math.min(REACH, dist))
+	place_chute(self, ca, cl)
+	local tip = V.to_world(self, chute_tip(ca, cl))
+	local x, z = math.floor(tip.x + 0.5), math.floor(tip.z + 0.5)
+	pour_fx(self, tip, {x = x, y = pm.land or tip.y - 1, z = z}, ctx.dtime)
+	pm.t = pm.t + ctx.dtime
+	if pm.t < POUR_TIME / 8 then return end
+	pm.t = 0
+	if V.store_count(self, ITEM) < 1 then
+		return finish(self, S("The truck is empty (poured @1 m³)", ("%d"):format(pm.done)))
+	end
+	local n, land, dirty = rockmech.concrete_pour_at(x, math.floor(tip.y + 0.5), z, 1, d and d:get_player_name())
+	if n <= 0 then return finish(self, S("Something is in the way of the chute") .. " " .. S("(poured @1 m³)", ("%d"):format(pm.done))) end
+	pm.land = land and land.y
+	if dirty and not pm.warned then
+		pm.warned = true
+		self.msg = S("Poured through water: the concrete segregates and will be weak (use a tremie pipe)")
+	end
+	self.drum_lv = (self.drum_lv or 0) + 1
+	if self.drum_lv >= 8 then
+		self.drum_lv = 0
+		V.store_take(self, ITEM, 1)
+		pm.done = pm.done + 1
+		update_hud(self)
+	end
 end
 
 function def.step(self, ctx)
@@ -139,23 +210,16 @@ function def.step(self, ctx)
 		place_chute(self, clamp_ang(ang), math.max(REST, math.min(REACH, dist)))
 		-- 指的東西灌不灌得到變了才換訊息（不然剛灌完的「車上沒料了」馬上被蓋掉）
 		local _, why = pick_at(self, hit.under)
+		if type(why) ~= "string" then why = nil end
 		if why ~= self.aim_why then self.aim_why = why; self.msg = why; update_hud(self) end
 		return
 	end
+	if pm.open then return open_step(self, ctx, pm) end
 	local F = pm.frame
 	local ang, dist = chute_to(self, {x = F.x, y = F.y + 0.5, z = F.z})
-	place_chute(self, clamp_ang(ang), math.max(REST, math.min(REACH, dist)))
-	local from = V.to_world(self, chute_tip(self.chute_ang, self.chute_len))
-	local to = {x = F.x, y = F.y + 0.4, z = F.z}
-	local v = vector.multiply(vector.subtract(to, from), 1.6)
-	core.add_particlespawner({
-		amount = 6, time = ctx.dtime,
-		minpos = vector.subtract(from, 0.1), maxpos = vector.add(from, 0.1),
-		minvel = vector.add(v, {x = -0.1, y = 1.2, z = -0.1}), maxvel = vector.add(v, {x = 0.1, y = 1.6, z = 0.1}),
-		minacc = {x = 0, y = -4, z = 0}, maxacc = {x = 0, y = -4, z = 0},
-		minexptime = 0.5, maxexptime = 0.6, minsize = 1.5, maxsize = 2.5,
-		texture = "[fill:4x4:#8c8c86",
-	})
+	local ca, cl = clamp_ang(ang), math.max(REST, math.min(REACH, dist))
+	place_chute(self, ca, cl)
+	pour_fx(self, V.to_world(self, chute_tip(ca, cl)), {x = F.x, y = F.y + 0.4, z = F.z}, ctx.dtime)
 	pm.t = pm.t + ctx.dtime
 	if pm.t < POUR_TIME then return end
 	pm.t = 0
@@ -192,13 +256,16 @@ function def.action(self, ctx)
 	elseif ctrl.aux1 and not self.pouring then
 		self.t_act = 0.5
 		local hit = d and V.aim_node(self, d, def, REACH + 8)
-		local F, why = pick_at(self, hit and hit.under)
-		if not F then
-			self.msg = why
+		local P, frame = pick_at(self, hit and hit.under)
+		if not P then
+			self.msg = frame
 		elseif V.store_count(self, ITEM) < 1 then
 			self.msg = S("The drum is empty: press Space to order concrete")
+		elseif frame then
+			self.pouring = {frame = P, done = 0, t = 0}
+			self.msg = nil
 		else
-			self.pouring = {frame = F, done = 0, t = 0}
+			self.pouring = {open = true, T = {x = P.x, y = P.y + 0.5, z = P.z}, done = 0, t = 0}
 			self.msg = nil
 		end
 		update_hud(self)

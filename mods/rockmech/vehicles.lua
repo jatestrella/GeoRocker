@@ -766,6 +766,12 @@ function V.ground_y(pos, half) return math.floor(pos.y - (half or 1) + 0.5) end
 function V.take_rubble(cell, want)
 	local node = core.get_node(cell)
 	local name = node.name
+	-- 凝固前的混凝土（concrete.lua）：挖得起來，車上算建築廢棄物
+	if rockmech.fresh_concrete_level and rockmech.fresh_concrete_level[name] and rockmech.RUBBLE_DEBRIS and want > 0 then
+		local t = rockmech.fresh_take(cell, want)
+		local c = A.new(0)
+		return t, rockmech.RUBBLE_DEBRIS, A.g(c), c
+	end
 	local k = rockmech.rubble_level[name]
 	if not k or want <= 0 then return 0 end
 	local base = rockmech.rubble_base[name]

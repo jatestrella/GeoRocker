@@ -52,8 +52,18 @@ local CONC_R = 1.0                              -- 應力解的勁度比（跟�
 local CRACK_R = 0.1
 local DEPTH = 60
 rockmech.CONCRETE, rockmech.CONCRETE_FRESH, rockmech.TREMIE_FRAME, rockmech.CONCRETE_M3 = HARD, FRESH, FRAME, ITEM_M3
+-- 分級的新拌混凝土（流體，跟水同一套分 8 級；安息角 REPOSE，比水黏、堆得起來）：FRESH 是滿格，_l1…_l7 不滿格。
+-- 凝固後不滿格的變成薄的混凝土 HARD_l1…_l7（地坪）
+local REPOSE = tonumber(core.settings:get("rockmech_concrete_repose") or "") or 20      -- 新拌混凝土的安息角（°）
+local DC = 8 * math.tan(math.rad(REPOSE))       -- 臨界落差（級／m）
+local DIRTY_Q = 0.5                             -- 夾泥：溜槽直接倒進水、穩定液裡，凝固後強度剩這個比例
+local function fresh_name(k) if k <= 0 then return "air" end; if k >= 8 then return FRESH end; return FRESH .. "_l" .. k end
+local function hard_name(k) return k >= 8 and HARD or HARD .. "_l" .. k end
+local FRESH_K, HARDP_K = {[FRESH] = 8}, {}
+for k = 1, 7 do FRESH_K[fresh_name(k)] = k; HARDP_K[hard_name(k)] = k end
+rockmech.fresh_concrete_level = FRESH_K
 rockmech.fluid_extra = rockmech.fluid_extra or {}
-rockmech.fluid_extra[FRESH] = {1, GAMMA}
+for name, k in pairs(FRESH_K) do rockmech.fluid_extra[name] = {k / 8, GAMMA} end
 local IS_WALL = {[HARD] = true, [CRACKED] = true, [RC] = true, [RC_Y] = true}
 local IS_RC = {[RC] = true, [RC_Y] = true}
 local IS_BAD = {[CRACKED] = true, [RC_Y] = true}
@@ -92,12 +102,16 @@ local RCY_TEX = CRACK_TEX .. "^[fill:2x2:3,3:#7a4a30^[fill:2x2:11,3:#7a4a30^[fil
 local LABEL = {}
 
 -- 硬化的混凝土：齡期、強度（還有應力解算的彎矩，meta mtxt）
+-- 強度的比例（夾泥：溜槽直接倒進水裡的，DIRTY_Q；照體積加權）
+local function quality(meta) return meta:contains("q") and meta:get_float("q") or 1 end
 local function hard_info(pos)
 	local meta = core.get_meta(pos)
 	local t = age_of(meta)
-	local fc = CC.fc(FC28, t)
+	local q = quality(meta)
+	local fc = CC.fc(FC28, t) * q
 	local s = (LABEL[core.get_node(pos).name] or S("Concrete")) .. "\n"
 		.. S("Age @1 days, strength @2 / @3 MPa (@4%)", ("%.1f"):format(t), ("%.1f"):format(fc), d0(FC28), d0(fc / FC28 * 100))
+	if q < 0.999 then s = s .. "\n" .. S("Poured through water: segregated, strength × @1", ("%.2f"):format(q)) end
 	local m = meta:get_string("mtxt")
 	if m ~= "" then s = s .. "\n" .. m end
 	meta:set_string("infotext", s)
@@ -108,7 +122,9 @@ local function queue_fem(pos)
 end
 
 local function harden(pos)
-	core.swap_node(pos, {name = core.get_meta(pos):get_int("rc") == 1 and RC or HARD})
+	local k = FRESH_K[core.get_node(pos).name] or 8
+	local rc = k >= 8 and (core.get_meta(pos):get_int("rc") == 1 or (rockmech.rebar_caged and rockmech.rebar_caged(pos)))
+	core.swap_node(pos, {name = rc and RC or hard_name(k)})
 	hard_info(pos)
 	core.get_node_timer(pos):start(day_s() / 2)
 	queue_fem(pos)
@@ -127,14 +143,28 @@ core.register_node(FRESH, {
 	is_ground_content = false,
 	groups = {rockmech_concrete = 1, not_in_creative_inventory = 1},
 	on_timer = function(pos)
-		if age_of(core.get_meta(pos)) >= SET_DAYS - 1e-3 then harden(pos); return false end
-		return true
+		-- 流動時跟別格混合，齡期起點照體積加權：還沒到就照剩下的時間重排
+		local left = SET_DAYS - age_of(core.get_meta(pos))
+		if left <= 1e-3 then harden(pos); return false end
+		core.get_node_timer(pos):start(left * day_s() + 0.1)
+		return false
 	end,
 })
 
-local function waste_after_dig(pos)
+-- 不滿格的新拌混凝土：同一個定義，高度 k/8
+for k = 1, 7 do
+	local d = table.copy(core.registered_nodes[FRESH])
+	d.drawtype = "nodebox"
+	d.node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.5 + k / 8, 0.5}}
+	d.sunlight_propagates = true
+	d.groups = {rockmech_concrete = 1, rockmech_fresh = k, not_in_creative_inventory = 1}
+	core.register_node(fresh_name(k), d)
+end
+core.override_item(FRESH, {groups = {rockmech_concrete = 1, rockmech_fresh = 8, not_in_creative_inventory = 1}})
+
+local function waste_after_dig(pos, levels)
 	if core.get_node(pos).name ~= "air" or not rockmech.RUBBLE_DEBRIS then return end
-	rockmech.assay.place(pos, rockmech.RUBBLE_DEBRIS, rockmech.RUBBLE_LEVELS, rockmech.assay.new(0))
+	rockmech.assay.place(pos, rockmech.RUBBLE_DEBRIS, levels or rockmech.RUBBLE_LEVELS, rockmech.assay.new(0))
 	if rockmech.collapse and rockmech.collapse.update_affected_area then
 		core.after(0.05, function() rockmech.collapse.update_affected_area(pos) end)
 	end
@@ -157,6 +187,27 @@ for _, v in ipairs({{HARD, TEX}, {CRACKED, CRACK_TEX}, {RC, RC_TEX}, {RC_Y, RCY_
 		after_dig_node = function(pos) waste_after_dig(pos) end,
 	})
 end
+-- 凝固後不滿格的混凝土（地坪）：高度 k/8
+for k = 1, 7 do
+	LABEL[hard_name(k)] = S("Concrete")
+	core.register_node(hard_name(k), {
+		description = S("Concrete"),
+		drawtype = "nodebox",
+		node_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, -0.5 + k / 8, 0.5}},
+		tiles = {TEX},
+		paramtype = "light",
+		sunlight_propagates = true,
+		is_ground_content = false,
+		groups = {cracky = 1, rockmech_concrete = 2, not_in_creative_inventory = 1},
+		drop = "",
+		sounds = default and default.node_sound_stone_defaults and default.node_sound_stone_defaults() or nil,
+		on_timer = function(pos)
+			hard_info(pos)
+			return age_of(core.get_meta(pos)) < 28
+		end,
+		after_dig_node = function(pos) waste_after_dig(pos, k) end,
+	})
+end
 -- 預拌車上的混凝土（存放畫面的圖示；背包裡不會有）
 core.register_craftitem(ITEM_M3, {
 	description = S("Ready-mix concrete (m³)"),
@@ -166,16 +217,21 @@ core.register_craftitem(ITEM_M3, {
 
 -- 載入時：計時器沒在跑就補上（沒有齡期的當作現在灌的）
 core.register_lbm({
-	label = "rockmech: 混凝土凝固、強度計時器", name = "rockmech:concrete_timer", nodenames = {FRESH, HARD, CRACKED, RC, RC_Y},
+	label = "rockmech: 混凝土凝固、強度計時器", name = "rockmech:concrete_timer",
+	nodenames = {"group:rockmech_fresh", HARD, CRACKED, RC, RC_Y, hard_name(1), hard_name(2), hard_name(3), hard_name(4),
+		hard_name(5), hard_name(6), hard_name(7)},
 	run_at_every_load = true,
 	action = function(pos, node)
 		local meta = core.get_meta(pos)
 		if not meta:contains("t0") then meta:set_float("t0", now()) end
 		local t = age_of(meta)
 		local timer = core.get_node_timer(pos)
-		if node.name == FRESH then
+		if FRESH_K[node.name] then
 			if t >= SET_DAYS then harden(pos)
-			elseif not timer:is_started() then timer:start((SET_DAYS - t) * day_s() + 0.1) end
+			else
+				if not timer:is_started() then timer:start((SET_DAYS - t) * day_s() + 0.1) end
+				if rockmech.slurry_schedule then rockmech.slurry_schedule(pos) end      -- 還沒流完的接著流
+			end
 		elseif t < 28 and not timer:is_started() then
 			hard_info(pos)
 			timer:start(day_s() / 2)
@@ -187,7 +243,7 @@ core.register_lbm({
 -- 特密管支架、管子
 ---------------------------------------------------------------------------
 local lvl = rockmech.slurry_level
-local function passable(n) return n == "air" or lvl[n] ~= nil or n == FRESH end
+local function passable(n) return n == "air" or lvl[n] ~= nil or FRESH_K[n] ~= nil end
 local function fillable(n) return n == "air" or lvl[n] ~= nil end
 local function name_at(p) return core.get_node(p).name end
 local DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
@@ -203,7 +259,7 @@ local function tip_y(F)
 	local bottom = q.y
 	for _ = 1, DEPTH do
 		local n = name_at(q)
-		if n == FRESH or IS_WALL[n] then return math.max(bottom - 0.4, q.y + 0.5 - 1.5) end
+		if FRESH_K[n] or IS_WALL[n] then return math.max(bottom - 0.4, q.y + 0.5 - 1.5) end
 		if not passable(n) then break end
 		bottom = q.y
 		q.y = q.y - 1
@@ -382,6 +438,7 @@ function rockmech.tremie_pour(F)
 	if rockmech.rebar_caged(c) then cm:set_int("rc", 1) end
 	core.get_node_timer(c):start(SET_DAYS * day_s())
 	displace(c, F, k, lc)
+	if rockmech.slurry_schedule then rockmech.slurry_schedule(c) end        -- 沿著槽底攤開（安息角）
 	meta:set_int("poured", meta:get_int("poured") + 1)
 	frame_info(F, "")
 	pipe_update(F)
@@ -398,6 +455,156 @@ end
 -- 之後的地基模板等也登記在這裡
 rockmech.pour_targets = rockmech.pour_targets or {}
 rockmech.pour_targets[FRAME] = rockmech.tremie_pour
+
+---------------------------------------------------------------------------
+-- 新拌混凝土的流動：流體（分 8 級、比水重會沉下去把水擠上來），安息角 REPOSE（比水黏，堆得起來）。
+-- 規則跟碎石一樣比整欄的表面：先往下（底下是空格、液體、不滿的混凝土）；底下撐著就跟四周的表面比，
+-- 落差超過臨界落差 DC = 8·tan(REPOSE) 級，流超出量的一半（懸空的邊緣也算，鄰欄的表面在底下）。
+-- 事件驅動：跟液體同一個排程（slurry.lua 的 fluid_step_hooks），流平了就不算
+---------------------------------------------------------------------------
+local level_of = rockmech.slurry_level
+local function open(n)
+	if n == "ignore" then return false end
+	return n == "air" or level_of[n] ~= nil or (rockmech.air_like and rockmech.air_like(n)) or false
+end
+local function fresh_meta(p)
+	local m = core.get_meta(p)
+	return m:contains("t0") and m:get_float("t0") or now(), quality(m)
+end
+local function wake(p)
+	if rockmech.slurry_schedule then rockmech.slurry_schedule(p) end
+	if rockmech.slurry_wake then rockmech.slurry_wake(p) end
+end
+-- 把 a 級（齡期起點 t0、強度比例 q）加進 c 那一格（空格、液體、不滿的混凝土）：回傳放不下的級數
+local function put(c, a, t0, q)
+	local n = name_at(c)
+	local k = FRESH_K[n]
+	if not k then
+		if not open(n) then return a end
+		k = 0
+	end
+	local add = math.min(8 - k, a)
+	if add <= 0 then return a end
+	local m
+	if k == 0 then
+		core.set_node(c, {name = fresh_name(add)})         -- 原本的液體被擠開（slurry.lua 往上排）
+		m = core.get_meta(c)
+		m:set_float("t0", t0)
+		if q < 0.999 then m:set_float("q", q) end
+	else
+		local t1, q1 = fresh_meta(c)
+		core.swap_node(c, {name = fresh_name(k + add)})
+		m = core.get_meta(c)
+		m:set_float("t0", (t1 * k + t0 * add) / (k + add))
+		local qq = (q1 * k + q * add) / (k + add)
+		if qq < 0.999 then m:set_float("q", qq) else m:set_string("q", "") end
+	end
+	local left = SET_DAYS - (now() - m:get_float("t0")) / day_s()
+	core.get_node_timer(c):start(math.max(0.1, left * day_s() + 0.1))
+	return a - add
+end
+-- 從 p 那一格拿走 t 級，回傳拿了幾級
+local function take(p, t)
+	local k = FRESH_K[name_at(p)]
+	if not k then return 0 end
+	t = math.min(k, t)
+	if t >= k then core.set_node(p, {name = "air"}) else core.swap_node(p, {name = fresh_name(k - t)}) end
+	return t
+end
+-- 這一欄從 p 那一格往上的混凝土表面（級，以 p 那一格的底為 0）
+local function col_top(p, k)
+	local e, q = k, {x = p.x, y = p.y, z = p.z}
+	while k >= 8 and e < 64 do
+		q.y = q.y + 1
+		k = FRESH_K[name_at(q)]
+		if not k then break end
+		e = e + k
+	end
+	return e
+end
+-- 鄰格 c 的表面（同一個基準）：混凝土照它那一欄；空格看它底下（撐著 0、不滿的混凝土 k − 8、懸空 −8）；擋住 nil
+local function nb_surface(c)
+	local n = name_at(c)
+	local kc = FRESH_K[n]
+	if kc then return col_top(c, kc) end
+	if not open(n) then return nil end
+	local b = name_at({x = c.x, y = c.y - 1, z = c.z})
+	local kb = FRESH_K[b]
+	if kb then return kb - 8 end
+	if open(b) then return -8 end
+	return 0
+end
+local function fresh_step(p)
+	local k = FRESH_K[name_at(p)]
+	if not k then return end
+	local t0, q = fresh_meta(p)
+	-- 往下：底下是空格、液體 → 掉下去；不滿的混凝土 → 補滿
+	local b = {x = p.x, y = p.y - 1, z = p.z}
+	local bn = name_at(b)
+	local kb = FRESH_K[bn]
+	if (kb and kb < 8) or (not kb and open(bn)) then
+		local t = take(p, math.min(k, kb and 8 - kb or 8))
+		put(b, t, t0, q)
+		wake(p); wake(b)
+		return
+	end
+	-- 四周：表面落差超過臨界落差就流超出量的一半
+	local es = col_top(p, k)
+	local best, bx
+	local s = math.random(4)
+	for j = 0, 3 do
+		local d = DIRS[(s + j - 1) % 4 + 1]
+		local c = {x = p.x + d[1], y = p.y, z = p.z + d[2]}
+		local en = nb_surface(c)
+		if en then
+			local x = es - en - DC
+			if x >= 1 and (not bx or x > bx) then best, bx = c, x end
+		end
+	end
+	if not best then return end
+	local a = math.min(k, math.ceil(bx / 2), 8 - (FRESH_K[name_at(best)] or 0))
+	if a <= 0 then return end
+	take(p, a)
+	put(best, a, t0, q)
+	wake(p); wake(best)
+end
+rockmech.fluid_step_hooks = rockmech.fluid_step_hooks or {}
+for name in pairs(FRESH_K) do rockmech.fluid_step_hooks[name] = fresh_step end
+
+-- 從 (x, ytop, z) 往下倒 a 級新拌混凝土（預拌車的溜槽口）：穿過空氣、液體往下掉，落在第一個撐得住的地方，之後照上面的規則流。
+-- 掉下去穿過 0.5 m 以上的水、穩定液（不是用特密管從底下灌）：夾泥，凝固後強度 × DIRTY_Q。
+-- 回傳 倒進去的級數、落點、有沒有夾泥
+function rockmech.concrete_pour_at(x, ytop, z, a, owner)
+	local p = {x = x, y = ytop, z = z}
+	if not open(name_at(p)) and not FRESH_K[name_at(p)] then return 0 end
+	local wet = 0
+	for _ = 1, 64 do
+		local n = name_at(p)
+		if n == "ignore" then return 0 end
+		local k = FRESH_K[n]
+		if k then
+			if k >= 8 then p.y = p.y + 1 end
+			break
+		end
+		if not open(n) then p.y = p.y + 1; break end
+		wet = wet + (level_of[n] or 0)
+		p.y = p.y - 1
+	end
+	if owner and core.is_protected(p, owner) then return 0 end
+	local dirty = wet >= 4
+	local left = put(p, a, now(), dirty and DIRTY_Q or 1)
+	if left > 0 then left = put({x = p.x, y = p.y + 1, z = p.z}, left, now(), dirty and DIRTY_Q or 1) end
+	wake(p)
+	return a - left, p, dirty
+end
+
+-- 挖土機挖起凝固前的混凝土（vehicles.lua 的 take_rubble）：拿走最多 want 級，回傳拿了幾級（車上算建築廢棄物）
+function rockmech.fresh_take(c, want)
+	if not FRESH_K[name_at(c)] then return 0 end
+	local t = take(c, want)
+	wake(c)
+	return t
+end
 
 local FRAME_C = "#d8b020"
 core.register_node(FRAME, {
@@ -466,6 +673,10 @@ core.register_on_mods_loaded(function()
 		ids.pile[core.get_content_id(name)] = true
 	end
 	ids.retain_r[core.get_content_id(GUIDE)] = CONC_R
+	-- 凝固的地坪：半格以上當混凝土元素，更薄的不算
+	for name, k in pairs(HARDP_K) do
+		if k >= 4 then ids.retain_r[core.get_content_id(name)] = CONC_R; ids.pile[core.get_content_id(name)] = true end
+	end
 end)
 
 -- 彈性支承梁（retain.lua 的 wall_solve 叫）：lo..hi 裡一欄一欄 1 m 厚的混凝土牆。
@@ -497,7 +708,7 @@ local function wall_cols(lo, hi)
 				-- 整欄都是鋼筋混凝土才算鋼筋混凝土牆（籠子沒放到的那幾格是素混凝土，從那裡斷）
 				local fc, bent, rc = math.huge, false, true
 				for _, c in ipairs(cells) do
-					fc = math.min(fc, CC.fc(FC28, age_of(core.get_meta(c))))
+					fc = math.min(fc, CC.fc(FC28, age_of(core.get_meta(c))) * quality(core.get_meta(c)))
 					local n = name_at(c)
 					if IS_BAD[n] then bent = true end
 					if not IS_RC[n] then rc = false end
@@ -639,7 +850,7 @@ core.register_on_dignode(function(pos)
 	if not a or pos.y < a - 1 or pos.y > b + 1 then return end
 	for y = a, b do
 		local n = name_at({x = pos.x, y = y, z = pos.z})
-		if n == FRESH or IS_WALL[n] or lvl[n] then return end
+		if FRESH_K[n] or IS_WALL[n] or lvl[n] then return end
 	end
 	storage:set_string(cage_key(pos.x, pos.z), "")
 end)
