@@ -412,6 +412,7 @@ core.register_on_mods_loaded(build_soil)
 rockmech.soil_frac = soil_frac
 local function soil_cap(name) return math.floor(SOIL_N * soil_frac[name] * NL + 0.5) end
 local SOIL_S0 = tonumber(setting("rockmech_soil_saturation") or "") or 0.33
+rockmech.SOIL_S0 = SOIL_S0
 local SOIL_WT = 3                     -- 地表下幾格實心以下當作飽和（池子不會整欄滲光）
 -- 地下水位（rockmech_water_table_depth：天然地表下幾 m；沒設定、0 = 這個世界沒有地下水）。
 -- 天然水位高程 = 天然地表（地圖產生器的地形，挖坑不會改變）− 深度；y ≤ 水位高程的格在水位以下。

@@ -1,16 +1,18 @@
 -- rockmech/groundwater.lua
 -- 地下水：世界設定 rockmech_water_table_depth（天然地表下幾 m；slurry.lua 的 rockmech.water_table_natural 算天然水位）。
--- 滲流（Dupuit 假設：每一欄土一個水位 H，水平流）：
---   達西定律 q = k·b·i（每 1 m 寬；b = 飽和厚度 H − 含水層底，i = 相鄰兩欄的水頭差 ÷ 1 m），k = 透水係數 rockmech_soil_permeability。
+-- 滲流（Dupuit 假設：每一欄土一個水位 H，水平流；暫態）：
+--   相鄰兩欄的流量 q = k·b·ΔH（每 1 m 寬、相距 1 m；b = 兩欄飽和厚度的平均），k = 透水係數 rockmech_soil_permeability。
+--   一欄的水位變化 Sy·dH/dt = 流進來的總量；給水度 Sy = 孔隙率 ×（1 − 背景含水）：水位降下去，飽和的土剩背景含水，
+--     放出來的水流向坑（slurry.lua 的 rockmech_soil_porosity、rockmech_soil_saturation）。
 --   含水層底：天然水位以下往下穿過土、坑，碰到岩石（或其他不透水的東西：混凝土、連續壁）為止，最多 BASE_MAX m。
---   坑（天然水位以下有挖開的格、或有液體的格）：水頭 = 坑裡的水面（乾的就是坑底）。灌滿、上面又被土蓋住的空洞不算坑。
+--   坑（天然水位以下有挖開的格、或有液體的格）：水頭 = 坑裡的水面（乾的就是坑底），固定。灌滿、上面又被土蓋住的空洞不算坑。
 --     地圖產生器生的崩積土、天然空洞（沒挖過、沒有液體）跟周圍的土一起飽和，不算坑。
---   影響半徑：起始坡降 I0（1/8：水頭差不到 1/8 m 流不動）→ 洩降 s 的坑最多影響到 R = s ÷ I0（最多 RMAX m）。
---     R 以外是沒受影響的含水層（天然水位，無限的水源）；R 以內解穩態（Gauss-Seidel，每個 globalstep 算 BUDGET 微秒）。
---   冒水：坑邊那一欄收到的流量 Σ k·b·(H_鄰 − H_坑)，每 IN_DT 秒加進坑裡最低、還有空間的那一格（之後照 slurry.lua 守恆地流）。
---     坑裡的水漲到離天然水位不到 1/8 m，洩降沒了，就不冒了；水被抽走、流走（slurry.lua 呼叫 rockmech.groundwater_poke）又冒。
---   rockmech.water_table_y 換成解出來的水位：漏斗裡水位以上的土不再飽和（slurry.lua 的 soil_room）。
---   岩石不透水、先不冒水（之後照節理）。
+--   坑一直把水位壓低，漏斗就隨時間往外擴（擴多快看 k、Sy、含水層厚度），沒有規定半徑；坑積水、水被抽走都自然平衡。
+--     計算範圍：離坑 RANGE m 以內、水位跟天然差 EPS 以上的欄；再外面當天然水位（無限的含水層）。
+--   冒水：坑邊那一欄收到的流量，每 STEP_DT 秒加進坑裡最低、還有空間的那一格（之後照 slurry.lua 守恆地流）。
+--     坑裡的水比旁邊的土高就不流（不往回灌進含水層；水位以上的土照 slurry.lua 慢慢滲）。
+--   rockmech.water_table_y 換成算出來的水位：漏斗裡水位以上的土不再飽和（slurry.lua 的 soil_room）。
+--   岩石不透水、先不冒水（之後照節理）。關遊戲時記下每一欄的水位，下次接著算。
 -- 排水溝：液體流到旁邊、上面就沒了（每步 DRAIN 級）。給深開挖的地圖把抽出來的水排掉。
 -- 抽水機：放在坑邊，吸管朝前伸進坑裡（跟出液口一樣朝放的人那一側）；每秒從前面那一欄的液面抽 PUMP_RATE 級，
 --   倒在機器後面那一格（守恆）；後面那一格是排水溝就直接排掉。
@@ -21,12 +23,11 @@ local NL = rockmech.RUBBLE_LEVELS
 local WATER = rockmech.LIQUID_WATER
 
 local K = tonumber(setting("rockmech_soil_permeability") or "") or 1e-3          -- 透水係數（m/s）
-local I0 = tonumber(setting("rockmech_groundwater_i0") or "") or 1 / 8           -- 起始坡降
-local RMAX = 64                                                                   -- 影響半徑上限（m）
+local SY = (rockmech.SOIL_POROSITY or 0.4) * (1 - (rockmech.SOIL_S0 or 0.33))     -- 給水度
+local RANGE = tonumber(setting("rockmech_groundwater_range") or "") or 64        -- 計算範圍（離坑幾 m）
+local EPS = 0.01                                                                  -- 跟天然水位差不到 1 cm 不算
 local BASE_MAX = 40                                                               -- 含水層最厚（m）
-local IN_DT = 1                                                                   -- 冒水交付間隔（秒）
-local BUDGET = 4000                                                               -- 每個 globalstep 解滲流的時間（微秒）
-local OMEGA = 1.6                                                                 -- 超鬆弛
+local STEP_DT = 1                                                                 -- 每幾秒推進一次
 local PUMP_RATE = tonumber(setting("rockmech_pump_rate") or "") or 1             -- 級／秒
 local HOSE = 30                                                                   -- 吸管長（m）
 local DRAIN = 8                                                                   -- 排水溝每步吃掉幾級
@@ -85,27 +86,22 @@ local function scan(x, z)
 	end
 	return info
 end
-local function is_sink(inf) return inf and inf.low and inf.h0 - inf.hs > I0 end
-local function radius(inf) return math.min(RMAX, (inf.h0 - inf.hs) / I0) end
+local function aquifer(i) return i and (i.low or i.h0 - i.base > 0.01) end
 
-local info = {}         -- 範圍內的欄 → scan 的結果
+local info = {}         -- 範圍內的欄 → scan 的結果（土欄的 low 是 nil）
 local H = {}            -- 範圍內的土欄 → 現在的水位
-local FH = {}           -- 固定水頭的欄（坑、範圍外緣）→ 水頭
-local B = {}            -- 欄 → 含水層底
-local OPEN = {}         -- 坑的欄 → true
-local NB = {}           -- 欄 → 會流的鄰欄（4 鄰，不含岩石）
-local dom = {}          -- 範圍內的土欄（解的順序）
-local sinks = {}        -- 洩降中的坑的欄 → 影響半徑（記到 mod storage）
+local OPEN = {}         -- 範圍內的坑 → 水頭
+local DIST = {}         -- 範圍內的欄 → 離坑幾 m（4 鄰的步數）
+local ROCK = {}         -- 查過、不是含水層的欄（岩石、沒有地下水）
+local BND = {}          -- 範圍外緣的欄 → 天然水位
 local dirty = {}        -- 要重看的欄
-local acc = {}          -- 坑的欄 → 累積的小數級
-local converged, cursor, maxd = true, 1, 0
-local need_build, building = false, nil
-local function idle() return not next(sinks) end
+local acc = {}          -- 坑 → 累積的級數
+local D4 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 
--- 抽水後的水位：範圍內照解，其他照天然
+-- 算出來的水位：範圍內照算的，其他照天然
 rockmech.water_table_y = function(x, z)
 	local k = ckey(x, z)
-	local h = H[k] or (OPEN[k] and FH[k])
+	local h = H[k] or OPEN[k]
 	if h then
 		local i = info[k]
 		if i and h > i.h0 then h = i.h0 end
@@ -114,136 +110,164 @@ rockmech.water_table_y = function(x, z)
 	return natural(x, z)
 end
 
--- 重建範圍：每個洩降中的坑往外擴到影響半徑（8 鄰，斜的 √2），碰到岩石、沒載入的就停
-local D8 = {{1, 0, 1}, {-1, 0, 1}, {0, 1, 1}, {0, -1, 1}, {1, 1, 1.414}, {1, -1, 1.414}, {-1, 1, 1.414}, {-1, -1, 1.414}}
-local D4 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
-local function build()
-	local ni, best, queue = {}, {}, {}
-	local n_scan = 0
-	local function get(k)
-		local i = ni[k]
-		if i == nil then
-			if info[k] and not dirty[k] then i = info[k]
-			else
-				local x, z = cxz(k)
-				i = scan(x, z) or false
-				n_scan = n_scan + 1
-				if n_scan % 200 == 0 then coroutine.yield() end
-			end
-			ni[k] = i
-		end
-		return i
-	end
-	for k, r in pairs(sinks) do
-		if is_sink(get(k)) then best[k] = r; queue[#queue + 1] = k end
-	end
-	local qi = 1
-	while queue[qi] do
-		local k = queue[qi]; qi = qi + 1
-		local x, z = cxz(k)
-		for _, d in ipairs(D8) do
-			local rem = best[k] - d[3]
-			if rem >= 0 then
-				local nk = ckey(x + d[1], z + d[2])
-				if rem > (best[nk] or -1) then
-					local i = get(nk)
-					if i and (i.low or i.h0 - i.base > 0.01) then best[nk] = rem; queue[#queue + 1] = nk end
-				end
-			end
-		end
-	end
-	-- 換成新的範圍
-	local nH, nFH, nB, nOPEN, nNB, ndom = {}, {}, {}, {}, {}, {}
-	for k in pairs(best) do
-		local i = ni[k]
-		nB[k] = i.base
-		if i.low then nOPEN[k] = true; nFH[k] = math.min(i.hs, i.h0)
-		else nH[k] = H[k] or i.h0; ndom[#ndom + 1] = k end
-	end
-	for k in pairs(best) do
-		local x, z = cxz(k)
-		local nb = {}
-		for _, d in ipairs(D4) do
-			local nk = ckey(x + d[1], z + d[2])
-			if best[nk] then
-				if not (nOPEN[k] and nOPEN[nk]) then nb[#nb + 1] = nk end
-			else
-				local i = ni[nk]
-				if i == nil then i = get(nk) end
-				if i and not i.low and i.h0 - i.base > 0.01 then      -- 範圍外緣：天然水位
-					nFH[nk] = i.h0; nB[nk] = i.base; nb[#nb + 1] = nk
-				end
-			end
-		end
-		nNB[k] = nb
-	end
-	for k in pairs(ni) do if best[k] then dirty[k] = nil end end
-	local keep = {}
-	for k in pairs(best) do keep[k] = ni[k] end
-	info, H, FH, B, OPEN, NB, dom = keep, nH, nFH, nB, nOPEN, nNB, ndom
-	converged, cursor, maxd = false, 1, 0
+-- 把一欄加進範圍（已經 scan 過）
+local function add(k, i, d)
+	info[k] = i
+	DIST[k] = math.min(DIST[k] or d, d)
+	BND[k] = nil
+	if i.low then OPEN[k] = math.min(i.hs, i.h0); H[k] = nil
+	elseif not H[k] then H[k] = i.h0 end
 end
-
--- 一欄重看完：洩降有沒有變（要不要重建範圍）、坑的水頭
+local function drop(k) info[k], H[k], OPEN[k], DIST[k], acc[k] = nil, nil, nil, nil, nil end
+-- 坑旁邊的土欄要在範圍裡（不然坑收不到水）
+local function add_ring(k)
+	local x, z = cxz(k)
+	for _, dd in ipairs(D4) do
+		local nk = ckey(x + dd[1], z + dd[2])
+		if not info[nk] and not ROCK[nk] then
+			local i = scan(x + dd[1], z + dd[2])
+			if i == nil or (i and not aquifer(i)) then ROCK[nk] = true
+			elseif i then add(nk, i, 1) end
+		end
+	end
+end
+-- 一欄重看完
 local function update(k, i)
-	local was = sinks[k]
-	if is_sink(i) then
-		local r = radius(i)
-		if not was or math.abs(r - was) >= 1 then sinks[k] = r; need_build = true end
-	elseif was then sinks[k] = nil; need_build = true end
-	if info[k] ~= nil then
-		local open_now = i and i.low and true or false
-		if open_now ~= (OPEN[k] or false) then need_build = true
-		elseif open_now then
-			info[k] = i
-			local h = math.min(i.hs, i.h0)
-			if math.abs(h - FH[k]) > 1e-3 then FH[k] = h; converged = false end
-		end
+	if not i then
+		if i == nil and info[k] then drop(k) end
+		return
 	end
+	if i.low then
+		if i.h0 - i.hs > EPS or info[k] then add(k, i, 0); add_ring(k) end
+	elseif OPEN[k] then                           -- 坑填回去了
+		local h = OPEN[k]
+		OPEN[k] = nil; info[k] = i; H[k] = math.min(h, i.h0)
+	elseif info[k] then info[k] = i end
 end
 
--- 坑收到的流量（m³/s）
-local function inflow(k)
-	local hs, bs = FH[k], B[k]
-	local q = 0
-	for _, nk in ipairs(NB[k]) do
-		local hj = H[nk] or FH[nk]
-		if hj and hj > hs then
-			local t = ((hj - B[nk]) + math.max(hs - bs, 0)) / 2
-			if t > 0 then q = q + K * t * (hj - hs) end
+-- 鄰欄的水頭和含水層底（範圍外：天然水位，底跟自己一樣）
+local function nb_head(nk)
+	local h = H[nk]
+	if h then return h, info[nk].base, false end
+	h = OPEN[nk]
+	if h then return h, info[nk].base, true end
+	if ROCK[nk] then return nil end
+	h = BND[nk]
+	if not h then
+		local x, z = cxz(nk)
+		h = H0(x, z)
+		if not h then ROCK[nk] = true; return nil end
+		BND[nk] = h
+	end
+	return h, nil, false
+end
+
+-- 推進 dt 秒（顯式：先算每一欄的淨流量再一起改；坑收到的累積起來）
+local inflow_now = {}   -- 坑 → 最近一步的流量（m³/s）
+local function advance(dt)
+	-- 穩定：dt ≤ Sy / (4·T)
+	local tmax = K * 1
+	for k, h in pairs(H) do local t = K * (h - info[k].base); if t > tmax then tmax = t end end
+	local n = math.max(1, math.ceil(dt / (0.8 * SY / (4 * tmax))))
+	local h_dt = dt / n
+	local q_open = {}
+	for _ = 1, n do
+		local dH = {}
+		for k, hi in pairs(H) do
+			local x, z = cxz(k)
+			local bi = info[k].base
+			local ti = math.max(hi - bi, 0)
+			local net = 0
+			for _, dd in ipairs(D4) do
+				local nk = ckey(x + dd[1], z + dd[2])
+				local hj, bj, open = nb_head(nk)
+				if hj then
+					local tj = bj and math.max(hj - bj, 0) or ti
+					if open then
+						if hj < hi then                                   -- 流進坑（坑比土高不往回流）
+							local q = K * (ti + tj) / 2 * (hi - hj)
+							net = net - q
+							q_open[nk] = (q_open[nk] or 0) + q * h_dt
+						end
+					else
+						net = net + K * (ti + tj) / 2 * (hj - hi)
+					end
+				end
+			end
+			dH[k] = net * h_dt / SY
+		end
+		for k, d in pairs(dH) do
+			local i = info[k]
+			local h = H[k] + d
+			if h > i.h0 then h = i.h0 elseif h < i.base then h = i.base end
+			H[k] = h
 		end
 	end
-	return q
+	inflow_now = {}
+	for k, v in pairs(q_open) do
+		acc[k] = (acc[k] or 0) + v * NL                  -- m³ → 級
+		inflow_now[k] = v / dt
+	end
 end
-rockmech.groundwater_inflow = function(x, z) local k = ckey(x, z); return OPEN[k] and inflow(k) or 0 end
+rockmech.groundwater_inflow = function(x, z) return inflow_now[ckey(x, z)] or 0 end
+
+-- 範圍往外長：水位降了 EPS 以上的欄，旁邊還不在範圍裡的（RANGE 以內）加進來；回到天然的拿掉
+local function grow()
+	local new = {}
+	for k, h in pairs(H) do
+		local i = info[k]
+		if i.h0 - h > EPS and DIST[k] < RANGE then
+			local x, z = cxz(k)
+			for _, dd in ipairs(D4) do
+				local nk = ckey(x + dd[1], z + dd[2])
+				if not info[nk] and not ROCK[nk] and not new[nk] then new[nk] = DIST[k] + 1 end
+			end
+		end
+	end
+	local n = 0
+	for nk, d in pairs(new) do
+		local x, z = cxz(nk)
+		local i = scan(x, z)
+		if i == nil or (i and not aquifer(i)) then ROCK[nk] = true
+		elseif i then add(nk, i, d) end
+		n = n + 1
+		if n >= 2000 then break end                       -- 一次最多長 2000 欄
+	end
+	-- 沒有坑在抽了、全部回到天然：清掉
+	local active = false
+	for k, h in pairs(OPEN) do if info[k].h0 - h > EPS then active = true; break end end
+	if not active then
+		local far = false
+		for k, h in pairs(H) do if info[k].h0 - h > EPS then far = true; break end end
+		if not far then
+			for k in pairs(info) do drop(k) end
+			BND, ROCK = {}, {}
+		end
+	end
+end
 
 local function deliver()
-	for k in pairs(OPEN) do
-		local q = inflow(k)
-		if q > 0 then
-			local a = (acc[k] or 0) + q * IN_DT * NL
-			local add = math.floor(a)
-			if add > 0 then
-				local x, z = cxz(k)
-				local i = info[k]
-				local p = {x = x, y = i.low, z = z}
-				for _ = 1, 64 do                          -- 坑裡最低、還有空間的那一格
-					local r, w = cell(p)
-					if not r then p = nil; break end
-					if w < rockmech.liquid_cap(r) then break end
-					p.y = p.y + 1
-				end
-				if p then
-					local left = rockmech.slurry_add_at(p, add, WATER)
-					a = a - (add - left)
-					if left < add then rockmech.slurry_schedule(p); rockmech.slurry_wake(p) end
-				end
-				if a > 1 then a = 1 end
-				local ni = scan(x, z)
-				if ni ~= false then update(k, ni) end
+	for k, a in pairs(acc) do
+		local add_n = math.floor(a)
+		if add_n > 0 and OPEN[k] then
+			local x, z = cxz(k)
+			local i = info[k]
+			local p = {x = x, y = i.low, z = z}
+			for _ = 1, 64 do                          -- 坑裡最低、還有空間的那一格
+				local r, w = cell(p)
+				if not r then p = nil; break end
+				if w < rockmech.liquid_cap(r) then break end
+				p.y = p.y + 1
 			end
+			if p and core.get_node(p).name ~= "ignore" then
+				local left = rockmech.slurry_add_at(p, add_n, WATER)
+				a = a - (add_n - left)
+				if left < add_n then rockmech.slurry_schedule(p); rockmech.slurry_wake(p) end
+			end
+			if a > 1 then a = 1 end
 			acc[k] = a
-		end
+			dirty[k] = true                            -- 水面變了：重看坑的水頭
+		elseif not OPEN[k] then acc[k] = nil end
 	end
 end
 
@@ -254,77 +278,40 @@ function rockmech.groundwater_poke(p)
 	dirty[ckey(p.x, p.z)] = true
 end
 
--- Gauss-Seidel（超鬆弛）一段
-local function relax(t_end)
-	local n = #dom
-	while cursor <= n do
-		local k = dom[cursor]
-		local hi, bi = H[k], B[k]
-		local ti = math.max(hi - bi, 0.05)
-		local num, den = 0, 0
-		for _, nk in ipairs(NB[k]) do
-			local hj = H[nk] or FH[nk]
-			local t = (ti + math.max(hj - B[nk], 0.05)) / 2
-			num = num + t * hj; den = den + t
-		end
-		if den > 0 then
-			local nh = hi + OMEGA * (num / den - hi)
-			local h0 = info[k].h0
-			if nh > h0 then nh = h0 elseif nh < bi then nh = bi end
-			local d = math.abs(nh - hi)
-			if d > maxd then maxd = d end
-			H[k] = nh
-		end
-		cursor = cursor + 1
-		if cursor % 64 == 0 and core.get_us_time() > t_end then return end
-	end
-	if maxd < 1e-3 then converged = true end
-	cursor, maxd = 1, 0
-end
-
-local t_dirty, t_in, t_build = 0, 0, 0
+local t_acc = 0
 if rockmech.GROUNDWATER_DEPTH then
 	core.register_globalstep(function(dt)
-		local t_end = core.get_us_time() + BUDGET
-		t_dirty, t_in, t_build = t_dirty + dt, t_in + dt, t_build + dt
-		if t_dirty >= 1 then
-			t_dirty = 0
-			for k in pairs(dirty) do
-				local x, z = cxz(k)
-				local i = scan(x, z)
-				if i ~= false then dirty[k] = nil; update(k, i) end
-			end
+		t_acc = t_acc + dt
+		if t_acc < STEP_DT then return end
+		local step_dt = math.min(t_acc, 5)
+		t_acc = 0
+		for k in pairs(dirty) do
+			local x, z = cxz(k)
+			local i = scan(x, z)
+			if i ~= false then dirty[k] = nil; update(k, i) end
 		end
-		if building then
-			while core.get_us_time() < t_end do
-				local ok, err = coroutine.resume(building)
-				if not ok then core.log("error", "[rockmech] groundwater build: " .. tostring(err)); building = nil; break end
-				if coroutine.status(building) == "dead" then building = nil; break end
-			end
-			return
-		end
-		if need_build and t_build >= 2 then
-			need_build, t_build = false, 0
-			if idle() then
-				info, H, FH, B, OPEN, NB, dom, acc = {}, {}, {}, {}, {}, {}, {}, {}
-				converged = true
-			else
-				building = coroutine.create(build)
-			end
-			return
-		end
-		if not converged then
-			while not converged and core.get_us_time() < t_end do relax(t_end) end
-		end
-		if t_in >= IN_DT then t_in = 0; deliver() end
+		if not next(info) then return end
+		advance(step_dt)
+		deliver()
+		grow()
 	end)
-	-- 洩降中的坑：關遊戲時記下來，下次開重看
-	local saved = core.deserialize(storage:get_string("gw_sinks")) or {}
-	for k in pairs(saved) do dirty[k] = true end
-	core.register_on_shutdown(function() storage:set_string("gw_sinks", core.serialize(sinks)) end)
+	-- 關遊戲時記下每一欄的水位，下次接著算
+	local saved = core.deserialize(storage:get_string("gw_state")) or {}
+	for k, v in pairs(saved.H or {}) do
+		info[k] = {h0 = v[2], base = v[3]}; H[k] = v[1]; DIST[k] = v[4]
+	end
+	for k in pairs(saved.OPEN or {}) do dirty[k] = true end
+	core.register_on_shutdown(function()
+		local h, o = {}, {}
+		for k, v in pairs(H) do h[k] = {v, info[k].h0, info[k].base, DIST[k]} end
+		for k in pairs(OPEN) do o[k] = true end
+		storage:set_string("gw_state", core.serialize({H = h, OPEN = o}))
+	end)
 end
 rockmech.groundwater_state = function()
-	return {sinks = sinks, dom = #dom, converged = converged, building = building ~= nil, H = H, FH = FH, OPEN = OPEN, info = info}
+	local n = 0
+	for _ in pairs(H) do n = n + 1 end
+	return {dom = n, H = H, OPEN = OPEN, info = info}
 end
 
 -- 排水溝 -------------------------------------------------------------------
