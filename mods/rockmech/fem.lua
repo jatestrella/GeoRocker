@@ -27,6 +27,9 @@
 -- job.soil（可選）= {[格] = true}：土（表土）。勁度比例 job.soil_e（沒有就用 job.soft_e），跟岩石一樣有現地應力、受重力
 --   （job.soft 裡也要有這一格）。
 -- job.gam（可選）= {[格] = γ}：這一格的單位重（沒有就用 job.gamma）。
+-- job.pu（可選）= {[格] = u}：土的孔隙水壓（kPa，地下水）。有效應力法：這一格的 σ0 是有效應力 σ′0，
+--   不平衡力用總應力 σ′0 + u·I（F = F_重力 − ∫Bᵀ(σ′0 + u·I) dV），解出來的 σ = σ′0 + D·B·Δu 是有效應力（塑性照這個判）。
+--   浮力、滲流力、推在牆和岩石上的水壓（共用節點）、水位下降造成的有效應力增加，都從這一項來。
 -- ## 輸出
 -- {sxx, syy, szz, sxy, syz, szx（總應力，kPa）, u, iters, res（相對殘差）, ms}
 
@@ -298,7 +301,8 @@ function fem.solve(job)
 	for cz = 0, nz - 1 do for cy = 0, ny - 1 do for cx = 0, nx - 1 do
 		local c = 1 + cx + cy * nx + cz * nx * ny
 		if solid[c] and (not soft[c] or (job.soil and job.soil[c])) then
-			local txx, tyy, tzz, txz = -job.sxx[c], -job.syy[c], -job.szz[c], -job.sxz[c]
+			local pu = job.pu and job.pu[c] or 0          -- 孔隙水壓：總應力 = 有效應力 + u
+			local txx, tyy, tzz, txz = -(job.sxx[c] + pu), -(job.syy[c] + pu), -(job.szz[c] + pu), -job.sxz[c]
 			local g8 = (job.gam and job.gam[c] or gam) / 8
 			for a = 1, 8 do
 				local cr = cs[a]
@@ -606,7 +610,7 @@ function fem.natural_job(job)
 	return {nx = job.nx, ny = job.ny, nz = job.nz, solid = n.solid, soft = n.soft, soil = n.soil, gam = n.gam,
 		sxx = n.sxx, syy = n.syy, szz = n.szz, sxz = n.sxz, gamma = job.gamma, nu = job.nu, tol = job.tol,
 		max_iter = job.max_iter, soft_e = job.soft_e, soil_e = job.soil_e, blend = job.blend, u0 = n.u0, press = n.press,
-		plastic = job.plastic,
+		plastic = job.plastic, pu = n.pu,
 		coarse = job.coarse}     -- 外緣用同一個粗網格的解：兩個解只差在局部的開挖（外緣不同的話，陡的谷地兩個解差很多）
 end
 

@@ -337,7 +337,37 @@ function rockmech.groundwater_poke(p)
 	dirty[ckey(p.x, p.z)] = true
 end
 
-local t_acc = 0
+-- 現在的水位（水面高程，浮點數）：範圍內照算的，其他照天然；沒有地下水 nil（femstress.lua 算孔隙水壓）
+rockmech.groundwater_head = function(x, z)
+	local h0 = H0(x, z)
+	if not h0 then return nil end
+	local k = ckey(x, z)
+	local h = H[k] or OPEN[k] or (WELL[k] and WELL[k].h)
+	if h and h < h0 then return h end
+	return h0
+end
+
+-- 水位變了，土的孔隙水壓跟著變：同一區（應力解範圍的一半）有一欄比上次排應力解時差 FEM_DH 以上，就排一次
+local FEM_DH, FEM_DT = 0.5, 5
+local HQ = {}            -- 欄 → 上次排應力解時的水位
+local function fem_check()
+	local fc = rockmech.cfg and rockmech.cfg.fem
+	if not rockmech.fem_queue or not fc or not fc.drive then return end
+	local s = math.max(1, math.floor(fc.radius / 2))
+	local function region(k) local x, z = cxz(k); return math.floor(x / s) .. "," .. math.floor(z / s) end
+	local hit = {}
+	for k, h in pairs(H) do
+		if math.abs(h - (HQ[k] or info[k].h0)) >= FEM_DH then
+			local rk = region(k)
+			if not hit[rk] then local x, z = cxz(k); hit[rk] = {x = x, y = math.floor(h), z = z} end
+		end
+	end
+	if not next(hit) then return end
+	for k, h in pairs(H) do if hit[region(k)] then HQ[k] = h end end
+	for _, p in pairs(hit) do rockmech.fem_queue(p, 1, false, true) end
+end
+
+local t_acc, t_fem = 0, 0
 if rockmech.GROUNDWATER_DEPTH then
 	core.register_globalstep(function(dt)
 		t_acc = t_acc + dt
@@ -349,10 +379,12 @@ if rockmech.GROUNDWATER_DEPTH then
 			local i = scan(x, z)
 			if i ~= false then dirty[k] = nil; update(k, i) end
 		end
-		if not next(info) then return end
+		if not next(info) then HQ = {}; return end
 		advance(step_dt)
 		deliver()
 		grow()
+		t_fem = t_fem + step_dt
+		if t_fem >= FEM_DT then t_fem = 0; fem_check() end
 	end)
 	-- 關遊戲時記下每一欄的水位，下次接著算
 	local saved = core.deserialize(storage:get_string("gw_state")) or {}

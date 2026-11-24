@@ -556,7 +556,12 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <li><b>液壓</b>：液體推在溝壁、坑壁、牆上的壓力 = 單位重 × 深度（K = 1，各方向一樣大）。深度量到<b>連通的自由液面</b>：被頂板蓋住的液體（側面的洞、鐘形空洞）照連通過去的液面算，頂板底下受上浮的壓力。</li>
 <li><b>泡在液體裡的碎石</b>用有效應力：顆粒的重量扣掉浮力，孔隙液壓另外加。所以槽底有沉渣，溝壁照樣受滿滿的液壓。</li>
 <li><b>重算</b>：同一區的液體變動累積到 1 m³，靜止 1 秒（最多等 5 秒）後重解應力，牆受的力跟著液面變。</li>
-<li>地下水位以下土的水壓、浮單位重還沒算進應力解（下一步）。</li>
+<li><b>土裡的地下水</b>用<b>有效應力法</b>：土的顆粒骨架受的力（有效應力）= 總應力 − 孔隙水壓。孔隙水壓照算出來的水位：水位以下每深 1 m 加 9.81 kPa。所以：
+<ul><li>水位以下的土有浮力，顆粒之間壓得比較鬆，強度（摩擦）比較低。</li>
+<li>坑壁在水位以下：土裡的水往坑面推（滲流），坑壁比較容易剝落。例：直立 5 m 的坑、坑底在水位下 3 m，破壞的格子比乾的多四成，往上多壞一層。</li>
+<li>鋼板樁、連續壁、岩面擋著水位以下的土：除了土壓，還受水壓。坑裡抽乾了，牆前面沒有水撐著。</li>
+<li>抽水把水位降下來：浮力沒了，有效應力變大，土被壓密，地面會沉陷（看<a href="#i-survey_prism">監測稜鏡</a>）。</li></ul></li>
+<li>水位變動：同一區有一欄水位比上次重算時差 0.5 m 以上，每 5 秒檢查一次，就重解應力。</li>
 </ul><h2>計算公式</h2>
 <h3>液壓</h3>
 <div class="formula"><math display="block"><mrow><mi>u</mi><mo>=</mo><msub><mi>γ</mi><mi>f</mi></msub><mspace width="0.167em"></mspace><mi>z</mi><mspace width="2em"></mspace><msub><mi>γ</mi><mi>f</mi></msub><mo>=</mo><mn>9.81</mn><mo>+</mo><mi>b</mi><mspace width="0.167em"></mspace><mo stretchy="false">(</mo><mn>11</mn><mo>−</mo><mn>9.81</mn><mo stretchy="false">)</mo><mspace width="0.278em"></mspace><mspace width="0.278em"></mspace><msup><mtext>kN/m</mtext><mrow><mn>3</mn></mrow></msup></mrow></math></div>
@@ -574,6 +579,18 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <ul>
 <li>顯式時間積分，每秒推進一次；穩定條件 <math><mrow><mi mathvariant="normal">Δ</mi><mi>t</mi><mo>≤</mo><msub><mi>S</mi><mi>y</mi></msub><mo>/</mo><mo stretchy="false">(</mo><mn>4</mn><mi>k</mi><mspace width="0.167em"></mspace><msub><mi>b</mi><mi mathvariant="normal">max</mi></msub><mo stretchy="false">)</mo></mrow></math>，不夠就切小步。</li>
 <li>水位不高於天然水位、不低於含水層底。</li>
+</ul>
+<h3>有效應力（土的元素）</h3>
+<div class="formula"><math display="block"><mrow><mi>σ</mi><mo>=</mo><msup><mi>σ</mi><mrow><mo>′</mo></mrow></msup><mo>+</mo><mi>u</mi><mspace width="0.167em"></mspace><mi mathvariant="bold">I</mi><mspace width="2em"></mspace><mi>u</mi><mo>=</mo><msub><mi>γ</mi><mi>w</mi></msub><mrow><mspace width="0.167em"></mspace><mi>max</mi><mo>&#x2061;</mo></mrow><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mspace width="0.278em"></mspace><mi>H</mi><mo>−</mo><mi>z</mi><mo stretchy="false">)</mo></mrow></math></div>
+<div class="formula"><math display="block"><mrow><msubsup><mi>σ</mi><mrow><mi>v</mi><mn>0</mn></mrow><mrow><mo>′</mo></mrow></msubsup><mo>=</mo><mo largeop="true" movablelimits="true">∑</mo><mi>γ</mi><mi>h</mi><mo>−</mo><msub><mi>u</mi><mn>0</mn></msub><mspace width="2em"></mspace><msubsup><mi>σ</mi><mrow><mi>h</mi><mn>0</mn></mrow><mrow><mo>′</mo></mrow></msubsup><mo>=</mo><msub><mi>K</mi><mn>0</mn></msub><mspace width="0.167em"></mspace><msubsup><mi>σ</mi><mrow><mi>v</mi><mn>0</mn></mrow><mrow><mo>′</mo></mrow></msubsup></mrow></math></div>
+<div class="formula"><math display="block"><mrow><mi mathvariant="bold">K</mi><mspace width="0.167em"></mspace><mi mathvariant="normal">Δ</mi><mi mathvariant="bold">d</mi><mo>=</mo><msub><mi mathvariant="bold">F</mi><mtext>重力</mtext></msub><mo>−</mo><mo largeop="true" movablelimits="true">∫</mo><msup><mi mathvariant="bold">B</mi><mrow><mi mathvariant="normal">T</mi></mrow></msup><mrow><mo stretchy="true">(</mo><mrow><msubsup><mi>σ</mi><mn>0</mn><mrow><mo>′</mo></mrow></msubsup><mo>+</mo><mi>u</mi><mspace width="0.167em"></mspace><mi mathvariant="bold">I</mi></mrow><mo stretchy="true">)</mo></mrow><mi>d</mi><mi>V</mi><mspace width="2em"></mspace><msup><mi>σ</mi><mrow><mo>′</mo></mrow></msup><mo>=</mo><msubsup><mi>σ</mi><mn>0</mn><mrow><mo>′</mo></mrow></msubsup><mo>+</mo><mi mathvariant="bold">D</mi><mi mathvariant="bold">B</mi><mspace width="0.167em"></mspace><mi mathvariant="normal">Δ</mi><mi mathvariant="bold">d</mi></mrow></math></div>
+<p class="wh">式中：</p><dl class="where"><dt><math><mrow><mi>σ</mi><mo>,</mo><mspace width="0.278em"></mspace><msup><mi>σ</mi><mrow><mo>′</mo></mrow></msup></mrow></math></dt><dd>總應力、有效應力（壓為正）</dd><dt><math><mrow><mi>u</mi><mo>,</mo><mspace width="0.278em"></mspace><msub><mi>u</mi><mn>0</mn></msub></mrow></math></dt><dd>現在的孔隙水壓、天然水位的孔隙水壓</dd>
+<dt><math><mi>H</mi></math></dt><dd>那一欄算出來的水位（見上面）</dd><dt><math><mi>z</mi></math></dt><dd>元素中心的高程</dd><dt><math><msub><mi>γ</mi><mi>w</mi></msub></math></dt><dd>水的單位重 9.81 kN/m³</dd>
+<dt><math><mi>γ</mi></math></dt><dd>土的單位重 18 kN/m³（水位上下都用這個）</dd><dt><math><msub><mi>K</mi><mn>0</mn></msub></math></dt><dd>1 − sin 35° ≈ 0.43</dd><dt><math><mrow><mi mathvariant="normal">Δ</mi><mi mathvariant="bold">d</mi></mrow></math></dt><dd>開挖、水位變動造成的節點位移</dd></dl>
+<ul>
+<li>初始狀態（天然水位）重力和 σ′₀ + u₀ 平衡，不平衡力只來自開挖和水位變動。土的 Mohr–Coulomb 塑性用有效應力判定。</li>
+<li>岩石、混凝土、鋼板樁不透水，沒有孔隙水壓；土的水壓經過共用的節點推在它們上面。</li>
+<li>天然地形那一解用天然水位：只有開挖、抽水造成的「穩定 → 不穩定」才算破壞。</li>
 </ul>
 <h3>冒水量與抽水井</h3>
 <div class="formula"><math display="block"><mrow><msub><mi>Q</mi><mi>p</mi></msub><mo>=</mo><munder><mo largeop="true" movablelimits="true">∑</mo><mi>j</mi></munder><mi>k</mi><mspace width="0.167em"></mspace><msub><mover accent="true"><mi>b</mi><mo>¯</mo></mover><mrow><mi>p</mi><mi>j</mi></mrow></msub><mspace width="0.167em"></mspace><mo stretchy="false">(</mo><msub><mi>H</mi><mi>j</mi></msub><mo>−</mo><msub><mi>h</mi><mi>p</mi></msub><mo stretchy="false">)</mo><mspace width="2em"></mspace><mo stretchy="false">(</mo><msub><mi>H</mi><mi>j</mi></msub><mo>&gt;</mo><msub><mi>h</mi><mi>p</mi></msub><mo stretchy="false">)</mo></mrow></math></div>

@@ -321,6 +321,12 @@ local function loose_col(g, gx, ly, gz, only_nat)
 	end
 	return h, q, u, qm, um
 end
+-- 地下水：水的單位重、天然水位的水面高程（slurry.lua 的天然水位是 y ≤ 那一格都飽和，水面在那一格頂）
+local GAMMA_W = 9.81
+local function gw_nat(x, z)
+	local w = rockmech.water_table_natural and rockmech.water_table_natural(x, z)
+	return w and w + 0.5
+end
 -- 組工作：box 內的岩石格、每格的現地應力（kPa，壓為正）。
 -- 現地應力是開挖前的狀態，由座標算（挖掉的算回去，所以開挖才會放出應力）；
 -- 開挖過的位置上的岩石是回填，從沒受過上覆荷重，現地應力為 0
@@ -373,6 +379,10 @@ local function make_job(pos)
 			soil_m = soil_m + f
 		end
 		local sv_soil = gam_soil * soil_m                                                      -- 天然表土的重量 (kPa)
+		-- 地下水（groundwater.lua）：天然水位 H0、現在的水位 H（坑、井周圍降下來的漏斗）。土的 σ0 是有效應力（扣掉天然水位的
+		-- 孔隙水壓），job.pu 給現在的孔隙水壓、天然地形那一解給天然的（fem.lua 的有效應力法）
+		local H0c = gw_nat(a.x + x, a.z + z)
+		local Hc = H0c and math.min(H0c, rockmech.groundwater_head and rockmech.groundwater_head(a.x + x, a.z + z) or H0c)
 		for y = 0, n - 1 do
 			local wy = a.y + y
 			local gi = 1 + gx + (wy - g.oy) * gsy + gz * gsz
@@ -395,6 +405,12 @@ local function make_job(pos)
 			if solid then gam_sum, gam_n = gam_sum + gamma, gam_n + 1 end
 			local sv = gamma * math.max(0, top + 0.5 - wy) + (wy <= top and sv_soil or 0)     -- kPa
 			if soil then sv = gam_soil * math.max(0, top + 0.5 + soil_m - wy) end           -- 土：從開挖前的土面算
+			local u0w = H0c and GAMMA_W * math.max(0, H0c - wy) or 0                         -- 天然水位的孔隙水壓
+			if soil then
+				sv = math.max(0, sv - u0w)                                                   -- 有效應力
+				local uw = Hc and GAMMA_W * math.max(0, Hc - wy) or 0
+				if uw > 0 then job.pu = job.pu or {}; job.pu[c] = uw end
+			end
 			job.solid[c] = solid or (soft and true) or false
 			job.soft[c] = soft or nil
 			if (soft and not soil) or ((solid or soil) and is_excavated_at(a.x + x, wy, a.z + z)) then
@@ -414,8 +430,10 @@ local function make_job(pos)
 				elseif not dug then
 					nat.solid[c], nat.soft[c], nat.soil[c], nat.gam[c] = job.solid[c], job.soft[c], job.soil[c], job.gam[c]
 					nat.sxx[c], nat.syy[c], nat.szz[c], nat.sxz[c] = job.sxx[c], job.syy[c], job.szz[c], job.sxz[c]
+					if job.soil[c] and u0w > 0 then nat.pu = nat.pu or {}; nat.pu[c] = u0w end
 				elseif wy > top then             -- 挖掉的土
-					local s0 = gam_soil * math.max(0, top + 0.5 + soil_m - wy)
+					local s0 = math.max(0, gam_soil * math.max(0, top + 0.5 + soil_m - wy) - u0w)
+					if u0w > 0 then nat.pu = nat.pu or {}; nat.pu[c] = u0w end
 					nat.solid[c], nat.soft[c], nat.soil[c], nat.gam[c] = true, true, true, gam_soil
 					nat.syy[c], nat.sxz[c], nat.sxx[c], nat.szz[c] = s0, 0, K0_SOIL * s0, K0_SOIL * s0
 				else                              -- 挖掉的岩石

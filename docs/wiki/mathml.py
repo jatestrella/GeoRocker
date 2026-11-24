@@ -59,8 +59,13 @@ class _P:
 	def raw_group(self):
 		# {…} 的原文（不解析）
 		self._ws()
-		if self.peek() != "{":
-			raise ValueError("要 { ：" + self.s[self.i:self.i + 20])
+		if self.peek() != "{":                  # 沒有大括號：只取一個字（\mathsf T）
+			if self.i >= len(self.s):
+				raise ValueError("少了參數")
+			if self.s[self.i] == "\\":
+				return "\\" + self.cmd()
+			self.i += 1
+			return self.s[self.i - 1]
 		depth, j = 0, self.i
 		while j < len(self.s):
 			if self.s[j] == "{": depth += 1
@@ -144,9 +149,13 @@ class _P:
 				return (f"<msqrt>{self.arg_plain()}</msqrt>", False)
 			if name == "text":
 				return (f"<mtext>{_esc(self.raw_group())}</mtext>", False)
-			if name in ("mathrm", "operatorname", "rm"):
+			if name in ("mathrm", "operatorname", "rm", "mathsf"):
+				return (f'<mi mathvariant="normal">{_esc(self.raw_group())}</mi>', False)
+			if name in ("mathbf", "bf", "boldsymbol"):
 				t = self.raw_group()
-				return (f'<mi mathvariant="normal">{_esc(t)}</mi>' if t.isalpha() or len(t) > 1 else f'<mi mathvariant="normal">{_esc(t)}</mi>', False)
+				if t.startswith("\\") and t[1:] in GREEK:
+					t = GREEK[t[1:]]
+				return (f'<mi mathvariant="bold">{_esc(t)}</mi>', False)
 			if name in ("left", "right"):
 				self._ws()
 				d = self.s[self.i]
