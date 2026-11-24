@@ -679,6 +679,21 @@ step = function(p)
 		schedule(p)
 		return
 	end
+	-- 邊緣落下：旁邊是空格、它底下接得住液體（懸空、台階往下），差 1 級也流過去，之後往下掉
+	for j = 0, 3 do
+		local d = DIRS[(s + j - 1) % 4 + 1]
+		local q = {x = p.x + d[1], y = p.y, z = p.z + d[2]}
+		if level_at(q) == 0 then
+			local rd, wd = cell({x = q.x, y = q.y - 1, z = q.z})
+			if rd and wd < cap_of(rd) then
+				move(p, 0, k, c, q, 0, 0, WATER_C, 1)
+				schedule(q)
+				wake_around(p)
+				schedule(p)
+				return
+			end
+		end
+	end
 	-- 旁邊是碎石：液面比它的高就滲過去
 	for j = 0, 3 do
 		local d = DIRS[(s + j - 1) % 4 + 1]
