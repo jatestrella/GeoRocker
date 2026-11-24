@@ -18,7 +18,7 @@
 --     灌進籠子裡的混凝土就是鋼筋混凝土：開裂不要緊（鋼筋接手拉力），檢查改成極限彎矩
 --     M_u = A_s·f_y·(d − a/2)（每面 D32@150、SD420、d = 0.9 m；concretecurve.lua），EI 取有效勁度 RC_EI × 全斷面；
 --     M > M_u（÷ 相似比）→ 鋼筋降伏，整欄勁度剩 1/10。
---   導溝（物品）：對著地面按右鍵，沿你看的方向（x 或 z）在溝槽線兩側各放一道 GUIDE_D m 深的混凝土牆（1 m 一段），
+--   導溝（物品）：對著地面按右鍵，那一格往下變成 GUIDE_D m 深的混凝土（一次一格）；沿溝槽線兩側、頭尾自己排，
 --     中間那一欄留給抓斗挖。槽口兩側有導溝，混凝土就能灌到槽口（沒有的話停在槽口下 TOP_GAP m）。
 --     應力解裡是勁度比 CONC_R 的元素（跟硬化的混凝土一樣）。
 
@@ -867,7 +867,7 @@ local function soft_ground(n)
 		or (rockmech.is_rubble and rockmech.is_rubble(n))
 end
 core.register_node(GUIDE, {
-	description = S("Guide wall\nRight-click the ground: builds a 1 m length of guide walls on both sides of the trench line, along the way you look. With guide walls at the mouth, concrete can be poured right up to the top"),
+	description = S("Guide wall\nRight-click the ground: turns that spot into a 2 m deep guide wall. Lay them along both sides of the trench and across its ends. With guide walls at the mouth, concrete can be poured right up to the top"),
 	short_description = S("Guide wall"),
 	tiles = {TEX .. "^[fill:16x2:0,0:#8e8e88^[fill:16x2:0,14:#8e8e88", TEX, TEX},
 	inventory_image = "[fill:16x16:#00000000^[fill:4x12:2,3:#a3a39c^[fill:4x12:10,3:#a3a39c^[fill:4x2:2,3:#8e8e88^[fill:4x2:10,3:#8e8e88",
@@ -889,22 +889,17 @@ core.register_node(GUIDE, {
 			rockmech.notify(name, S("Point at the top of the ground where the trench will be"))
 			return itemstack
 		end
-		-- 溝槽線沿你看的方向；導溝在兩側（法向 ±1）、從地面往下 GUIDE_D 格
-		local d = placer:get_look_dir()
-		local nx, nz = 0, 0
-		if math.abs(d.x) >= math.abs(d.z) then nz = 1 else nx = 1 end
+		-- 一格：指著的那一格地面往下 GUIDE_D 格（排成溝槽兩側、頭尾、轉角都由玩家自己放）
 		local cells = {}
-		for _, s in ipairs({1, -1}) do
-			for dy = 0, GUIDE_D - 1 do
-				local q = {x = G.x + s * nx, y = G.y - dy, z = G.z + s * nz}
-				local n = name_at(q)
-				if n ~= GUIDE then
-					if not soft_ground(n) or core.is_protected(q, name) then
-						rockmech.notify(name, S("Guide walls go in soil, not rock"))
-						return itemstack
-					end
-					cells[#cells + 1] = q
+		for dy = 0, GUIDE_D - 1 do
+			local q = {x = G.x, y = G.y - dy, z = G.z}
+			local n = name_at(q)
+			if n ~= GUIDE then
+				if not soft_ground(n) or core.is_protected(q, name) then
+					rockmech.notify(name, S("Guide walls go in soil, not rock"))
+					return itemstack
 				end
+				cells[#cells + 1] = q
 			end
 		end
 		if #cells == 0 then return itemstack end

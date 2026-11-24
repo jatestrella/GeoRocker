@@ -145,7 +145,7 @@ Rebar cage=鋼筋籠
 Point into a trench: the cage hangs from its mouth=要對著溝槽：籠子從槽口吊下去
 This trench column already has a cage=這一格溝槽已經有鋼筋籠了
 Rebar cage lowered: @1 m=鋼筋籠放好了：@1 m
-Guide wall@nRight-click the ground: builds a 1 m length of guide walls on both sides of the trench line, along the way you look. With guide walls at the mouth, concrete can be poured right up to the top=導溝@n對地面按右鍵：沿你看的方向，在溝槽線兩側各蓋 1 m 長的導溝。槽口有導溝，混凝土就能灌到頂
+Guide wall@nRight-click the ground: turns that spot into a 2 m deep guide wall. Lay them along both sides of the trench and across its ends. With guide walls at the mouth, concrete can be poured right up to the top=導溝@n對著地面按右鍵：那一格往下變成 2 m 深的導溝。沿溝槽兩側排、頭尾也封起來。槽口有導溝，混凝土就能灌到頂
 Guide wall=導溝
 Point at the top of the ground where the trench will be=要對著溝槽位置的地面
 Guide walls go in soil, not rock=導溝要蓋在土裡，不是岩盤
@@ -2114,6 +2114,7 @@ Warning: the face has daylighting joints @1, so the face may slide.=注意：正
 The face has no daylighting joints.=正面沒有順向的節理。
 
 ##### not used anymore #####
+Guide wall@nRight-click the ground: builds a 1 m length of guide walls on both sides of the trench line, along the way you look. With guide walls at the mouth, concrete can be poured right up to the top=導溝@n對地面按右鍵：沿你看的方向，在溝槽線兩側各蓋 1 m 長的導溝。槽口有導溝，混凝土就能灌到頂
 Right-click to get in; Space orders concrete. Shift + E aims the chute; point at a tremie frame behind the truck and press E to pour=右鍵上車；空白鍵叫料。Shift＋E 瞄準溜槽，準星對準車尾後方的特密管支架按 E 灌
 Point at a tremie frame=準星要對準特密管支架
 Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench level topped up. Shift + right-click turns it=出液口@n管子朝向你：站在溝邊、往外放，管口就垂在溝槽上方。用穩定液管接到儲槽，自動把液面補到設定高度。Shift＋右鍵轉向

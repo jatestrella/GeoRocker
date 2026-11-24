@@ -267,7 +267,7 @@ config.shop = {
 	-- 水中混凝土（concrete.lua）：特密管支架；混凝土由預拌車叫料（車上付錢，每 m³ $300）
 	{key = "tremie_frame", shop = "tools", item = "rockmech:tremie_frame", label = TR("Tremie frame"), price = 3000},
 	{key = "rebar_cage", shop = "tools", item = "rockmech:rebar_cage", label = TR("Rebar cage"), price = 3000},              -- 一片 1 m 寬、整欄深
-	{key = "guide_wall", shop = "tools", item = "rockmech:guide_wall", label = TR("Guide wall"), price = 3000, count = 10},  -- 每個 1 m 長（兩側）
+	{key = "guide_wall", shop = "tools", item = "rockmech:guide_wall", label = TR("Guide wall"), price = 3000, count = 20},  -- 每個一格（1 m 見方、2 m 深）
 	{key = "strut", shop = "tools", item = "rockmech:strut", label = TR("Heavy H-beam"), price = 4000, count = 10},      -- H300（原本的內支撐）
 	{key = "steel_arch", shop = "tools", item = "rockmech:steel_arch", label = TR("Steel arch"), price = 1500, count = 10},   -- H150 鋼拱支保（steelarch.lua）
 	{key = "timber_plank", shop = "tools", item = "rockmech:timber_plank", label = TR("Timber plank"), price = 100, count = 10},
