@@ -8,7 +8,19 @@
 --   第一次進世界在出生點旁蓋好帳篷（供應商）和一座破碎站。
 
 local cfg = rockmech.cfg
-if not cfg.career then return end
+-- 拆東西的規則（所有地圖）：rockmech_by_hand 群組（工具、小設備、木料）徒手敲 3 秒；rockmech_by_pick（小的鋼鐵件）
+-- 要十字鎬敲 3 秒。經營模式的徒手、十字鎬、鏟子在下面定義；其他地圖（沒有經營模式）把這兩個群組加進原本的手
+if not cfg.career then
+	core.register_on_mods_loaded(function()
+		local hand = core.registered_items[""]
+		local caps = table.copy(hand and hand.tool_capabilities or {groupcaps = {}})
+		caps.groupcaps = caps.groupcaps or {}
+		caps.groupcaps.rockmech_by_hand = {times = {[1] = 3}, uses = 0, maxlevel = 1}
+		caps.groupcaps.rockmech_by_pick = {times = {[1] = 3}, uses = 0, maxlevel = 1}
+		core.override_item("", {tool_capabilities = caps})
+	end)
+	return
+end
 local S = rockmech.S
 
 local V = rockmech.vehicles
@@ -409,6 +421,8 @@ core.register_tool(PICK, {
 		groupcaps = {
 			cracky = {times = times(cfg.pick_rock_time), uses = 0, maxlevel = 1},
 			crumbly = {times = {[1] = cfg.pick_rubble_time, [2] = cfg.pick_rubble_time, [3] = cfg.pick_rubble_time}, uses = 0, maxlevel = 1},
+			rockmech_by_hand = {times = {[1] = 3}, uses = 0, maxlevel = 1},
+			rockmech_by_pick = {times = {[1] = 3}, uses = 0, maxlevel = 1},
 		},
 		damage_groups = {fleshy = 2},
 	},
@@ -458,7 +472,8 @@ core.register_tool(SHOVEL, {
 	inventory_image = "default_tool_steelshovel.png",
 	tool_capabilities = {
 		full_punch_interval = 0.6, max_drop_level = 0,
-		groupcaps = {crumbly = {times = {[1] = cfg.shovel_time, [2] = cfg.shovel_time, [3] = cfg.shovel_time}, uses = 0, maxlevel = 1}},
+		groupcaps = {crumbly = {times = {[1] = cfg.shovel_time, [2] = cfg.shovel_time, [3] = cfg.shovel_time}, uses = 0, maxlevel = 1},
+			rockmech_by_hand = {times = {[1] = 3}, uses = 0, maxlevel = 1}},
 		damage_groups = {fleshy = 1},
 	},
 	on_place = place,
@@ -473,7 +488,7 @@ function rockmech.hand_first(player)
 	return own_rightclick[player:get_wielded_item():get_name()] == true
 end
 
--- 徒手：只敲得動礦石，碎石拿得起來
+-- 徒手：只敲得動礦石，碎石拿得起來；rockmech_by_hand 群組（堆置處告示牌這類小東西）敲 3 秒拔起來（十字鎬、鏟子也一樣）
 core.register_on_mods_loaded(function()
 	local t = cfg.hand_rubble_time
 	core.override_item("", {
@@ -481,6 +496,7 @@ core.register_on_mods_loaded(function()
 			groupcaps = {
 				rockmech_ore = {times = {[1] = cfg.hand_ore_time}, uses = 0, maxlevel = 1},
 				crumbly = {times = {[1] = t, [2] = t, [3] = t}, uses = 0, maxlevel = 1},
+				rockmech_by_hand = {times = {[1] = 3}, uses = 0, maxlevel = 1},
 			},
 			damage_groups = {fleshy = 1}},
 		on_place = place,

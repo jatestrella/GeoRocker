@@ -225,7 +225,7 @@ core.register_node(SIGN, {
 	node_box = {type = "fixed", fixed = {{-0.06, -0.5, -0.06, 0.06, 1.0, 0.06}, {-0.5, 0.8, -0.04, 0.5, 1.45, 0.04}}},
 	tiles = {"[fill:16x16:#6a4a2a^[fill:14x9:1,2:#e8d8a0^[fill:10x2:3,4:#3a2a1a^[fill:8x2:4,8:#3a2a1a"},
 	inventory_image = "[fill:16x16:#00000000^[fill:2x10:7,6:#6a4a2a^[fill:14x8:1,1:#e8d8a0^[fill:10x2:3,3:#3a2a1a^[fill:8x2:4,6:#3a2a1a",
-	groups = {choppy = 3, oddly_breakable_by_hand = 2, dig_immediate = 2},      -- 什麼工具（徒手也行）都拔得起來
+	groups = {choppy = 3, oddly_breakable_by_hand = 2, rockmech_by_hand = 1},   -- 徒手（十字鎬、鏟子也行）敲 3 秒拔起來
 	is_ground_content = false,
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" or not placer then return itemstack end

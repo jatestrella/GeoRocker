@@ -357,7 +357,7 @@ core.register_node(FAN, {
 	}},
 	tiles = {fan_side, fan_side, fan_side, fan_side, intake, grill},      -- +Z 背面進風、−Z 正面出風
 	inventory_image = grill, wield_image = grill,
-	groups = {dig_immediate = 2},
+	groups = {rockmech_by_pick = 1},                                 -- 鋼製：十字鎬敲 3 秒
 	sounds = default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil,
 	-- 右鍵：開、關；手上拿著方塊（例如風管）時照常放方塊
 	on_rightclick = function(pos, node, clicker, itemstack, pointed)
@@ -393,7 +393,7 @@ core.register_node(DUCT, {
 	},
 	connects_to = {DUCT, FAN},
 	tiles = {duct_tex},
-	groups = {dig_immediate = 3, blocks_rubble = 1},       -- 人、車可以穿過，碎石流不進來（不會把風管吃掉）
+	groups = {rockmech_by_hand = 1, blocks_rubble = 1},    -- 人、車可以穿過，碎石流不進來（不會把風管吃掉）；徒手敲 3 秒
 	after_place_node = function(pos) for ps in pairs(fan_cache) do fan_cache[ps].t = 0 end end,
 	after_destruct = function() for ps in pairs(fan_cache) do fan_cache[ps].t = 0 end end,
 })

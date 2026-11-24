@@ -155,7 +155,7 @@ core.register_node(GAUGE, {
 	-- 白色木箱，側面一條條斜百葉（深一點的灰線），屋頂白色
 	tiles = {"[fill:16x16:#f2f2ee", "[fill:16x16:#e8e8e2",
 		"[fill:16x16:#f2f2ee^[fill:16x1:0,2:#b8b8b0^[fill:16x1:0,5:#b8b8b0^[fill:16x1:0,8:#b8b8b0^[fill:16x1:0,11:#b8b8b0^[fill:16x1:0,14:#b8b8b0"},
-	is_ground_content = false, groups = {cracky = 3, oddly_breakable_by_hand = 2, dig_immediate = 2},
+	is_ground_content = false, groups = {cracky = 3, oddly_breakable_by_hand = 2, rockmech_by_hand = 1},
 	on_construct = function(pos)
 		core.get_meta(pos):set_string("infotext", gauge_text())
 		core.get_node_timer(pos):start(5)

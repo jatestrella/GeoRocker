@@ -34,7 +34,7 @@ for _, name in ipairs(BUILD) do
 	local def = core.registered_nodes[name]
 	if def then
 		local g = table.copy(def.groups or {})
-		g.rockmech_timber, g.dig_immediate = 1, 2
+		g.rockmech_timber, g.rockmech_by_hand, g.dig_immediate = 1, 1, nil
 		core.override_item(name, {groups = g})
 	end
 end
@@ -121,7 +121,7 @@ core.register_node(WALL, {
 	drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir", sunlight_propagates = true,
 	node_box = {type = "fixed", fixed = {-0.5, -0.5, 0.375, 0.5, 0.5, 0.5}},
 	tiles = {"default_wood.png"},
-	is_ground_content = false, groups = {dig_immediate = 2, rockmech_timber = 1},
+	is_ground_content = false, groups = {rockmech_by_hand = 1, rockmech_timber = 1},
 	sounds = default.node_sound_wood_defaults(),
 })
 
@@ -407,7 +407,7 @@ local function table_node(name, desc, short, boxes, tiles, form, form_fn)
 	core.register_node(name, {
 		description = desc, short_description = short, drawtype = "nodebox", paramtype = "light", paramtype2 = "facedir",
 		node_box = {type = "fixed", fixed = boxes}, selection_box = {type = "fixed", fixed = {-0.5, -0.5, -0.5, 0.5, 0.45, 0.5}},
-		tiles = tiles, is_ground_content = false, groups = {not_in_creative_inventory = 0, rockmech_timber = 1, choppy = 3},
+		tiles = tiles, is_ground_content = false, groups = {not_in_creative_inventory = 0, rockmech_timber = 1, choppy = 3, rockmech_by_hand = 1},
 		sounds = default.node_sound_wood_defaults(),
 		on_rightclick = function(pos, node, clicker, itemstack)
 			if not (clicker and clicker:is_player()) then return itemstack end

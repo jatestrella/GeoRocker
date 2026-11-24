@@ -78,7 +78,7 @@ core.register_node(PLT, {
 		{0.3, -0.12, -0.09, 0.44, 0.04, 0.09},        -- 壓力錶
 	}},
 	selection_box = {type = "fixed", fixed = {-0.35, -0.5, -0.25, 0.44, 0.38, 0.25}},
-	groups = {dig_immediate = 2},
+	groups = {rockmech_by_hand = 1},
 	is_ground_content = false, stack_max = 1,
 	sounds = default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil,
 })

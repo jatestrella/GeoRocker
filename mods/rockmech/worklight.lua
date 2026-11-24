@@ -31,7 +31,7 @@ core.register_node(ITEM, {
 	tiles = {CASE, LEG, CASE, CASE, CASE, LAMP},
 	inventory_image = "[fill:16x16:#00000000^[fill:8x6:4,2:" .. BODY .. "^[fill:6x4:5,3:#fffbe0^[fill:2x6:7,8:#3a3a3a^[fill:8x1:4,14:#3a3a3a",
 	wield_image = "[fill:16x16:#00000000^[fill:8x6:4,2:" .. BODY .. "^[fill:6x4:5,3:#fffbe0^[fill:2x6:7,8:#3a3a3a^[fill:8x1:4,14:#3a3a3a",
-	groups = {dig_immediate = 3, attached_node = 1, rubble_breaks = 1},
+	groups = {rockmech_by_hand = 1, attached_node = 1, rubble_breaks = 1},
 	is_ground_content = false,
 	sounds = default and default.node_sound_metal_defaults and default.node_sound_metal_defaults() or nil,
 })

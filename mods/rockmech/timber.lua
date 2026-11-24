@@ -181,7 +181,7 @@ local function connected(fixed, sides, connects_to)
 	return {node_box = nb, connects_to = connects_to}
 end
 local sounds = core.get_modpath("default") and default.node_sound_wood_defaults() or nil
-local G = {dig_immediate = 2, rockmech_timber = 1}
+local G = {rockmech_by_hand = 1, rockmech_timber = 1}         -- 木料：徒手敲 3 秒
 local G_HIDDEN = table.copy(G)
 G_HIDDEN.not_in_creative_inventory = 1
 local function groups(base, extra)
@@ -335,7 +335,7 @@ local function hcol(oz)
 end
 local STEEL_CAP = {-0.25, 0.44, -0.25, 0.25, 0.5, 0.25}       -- 柱頂鋼板
 local SG = groups(G, {timber_post = 1, timber_stick = 1})
-SG.dig_immediate = 2
+SG.rockmech_by_hand, SG.rockmech_by_pick = nil, 1                -- 鋼支撐：十字鎬敲 3 秒
 local SG_HIDDEN = table.copy(SG)
 SG_HIDDEN.not_in_creative_inventory = 1
 local metal = core.get_modpath("default") and default.node_sound_metal_defaults and default.node_sound_metal_defaults() or sounds
@@ -388,7 +388,7 @@ for _, v in ipairs({
 		drawtype = "nodebox", paramtype = "light", sunlight_propagates = true,
 		node_box = {type = "fixed", fixed = v[2]}, selection_box = {type = "fixed", fixed = v[3]},
 		tiles = {STEEL_TEX}, is_ground_content = false,
-		groups = groups(G_HIDDEN, {timber_stick = 1}), sounds = metal, drop = STEEL,
+		groups = (function() local g = groups(G_HIDDEN, {timber_stick = 1, rockmech_by_pick = 1}); g.rockmech_by_hand = nil; return g end)(), sounds = metal, drop = STEEL,
 	})
 end
 

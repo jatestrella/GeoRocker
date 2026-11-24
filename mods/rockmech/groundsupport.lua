@@ -205,7 +205,7 @@ do
 			selection_box = {type = "fixed", fixed = {{-0.25, -0.5, -0.25, 0.25, v[5], 0.25}}},
 			tiles = v[4],
 			walkable = false, is_ground_content = false,
-			drop = "", groups = {dig_immediate = 2, not_in_creative_inventory = 1, shotcrete = v[6]},
+			drop = "", groups = {rockmech_by_pick = 1, not_in_creative_inventory = 1, shotcrete = v[6]},     -- 鋼：十字鎬敲 3 秒
 			-- 拆掉：變回鑽孔（孔深不變；噴凝土岩栓變回噴凝土鑽孔），岩栓還給玩家
 			on_dig = function(pos, node, digger)
 				rods_remove(pos, node.param2, bolt_len(pos))

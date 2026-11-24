@@ -129,7 +129,7 @@ core.register_node(PRISM, {
 		wall_side = {-0.5, -0.15, -0.15, -0.4, 0.15, 0.15}},
 	tiles = {"[fill:16x16:#f0f0f0^[fill:8x8:4,4:#e85020^[fill:4x4:6,6:#202020"},
 	walkable = false, is_ground_content = false,
-	groups = {dig_immediate = 2, attached_node = 1},
+	groups = {rockmech_by_hand = 1, attached_node = 1},
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" or not rockmech.lith_of_node[core.get_node(pointed.under).name] then
 			if placer and placer:is_player() then rockmech.notify(placer:get_player_name(), S("[Monitor] Must be attached to a rock face")) end
