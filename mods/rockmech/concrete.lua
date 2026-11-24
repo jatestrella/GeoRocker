@@ -767,26 +767,28 @@ function rockmech.rebar_caged(p)
 	return a and p.y >= a and p.y <= b
 end
 
--- 畫面：一根格子框（主筋直的、箍筋每 0.5 m 一圈），長度照籠子。跟著區塊存檔；籠子整欄都灌好了就拿掉
+-- 畫面：一根格子框（主筋直的、箍筋每 0.5 m 一圈），從槽底到槽口再往上 CAGE_UP m（實務上籠子吊在導溝上，頂端露出槽口；
+-- 不然整根泡在不透明的穩定液裡看不到）。鏽色、微微自發光。跟著區塊存檔；籠子整欄都灌好了就拿掉
+local CAGE_UP = 1
 local function cage_tex(len)
 	local h = math.max(1, math.floor(len + 0.5)) * 16
 	local t = {("[fill:16x%d:#00000000"):format(h)}
-	for _, x in ipairs({1, 7, 14}) do t[#t + 1] = ("[fill:1x%d:%d,0:#7a5a40"):format(h, x) end
-	for y = 0, h - 1, 8 do t[#t + 1] = ("[fill:16x1:0,%d:#5a4030"):format(y) end
+	for _, x in ipairs({1, 7, 13}) do t[#t + 1] = ("[fill:2x%d:%d,0:#d07a40"):format(h, x) end
+	for y = 0, h - 1, 8 do t[#t + 1] = ("[fill:16x1:0,%d:#a05a30"):format(y) end
 	return table.concat(t, "^")
 end
 core.register_entity(CAGE_ENT, {
 	initial_properties = {
 		visual = "cube", textures = {"[fill:1x1:#00000000"}, use_texture_alpha = true, backface_culling = false,
 		physical = false, pointable = false, static_save = true, collisionbox = {0, 0, 0, 0, 0, 0},
-		visual_size = {x = 0.85, y = 1, z = 0.85},
+		visual_size = {x = 0.85, y = 1, z = 0.85}, glow = 4,
 	},
 	setup = function(self, x, z, a, b)
 		self.cx, self.cz, self.ya, self.yb = x, z, a, b
-		local len = b - a + 1
+		local len = b - a + 1 + CAGE_UP
 		local t = cage_tex(len)
 		self.object:set_properties({visual_size = {x = 0.85, y = len, z = 0.85}, textures = {"[fill:1x1:#00000000", "[fill:1x1:#00000000", t, t, t, t}})
-		self.object:set_pos({x = x, y = (a + b) / 2, z = z})
+		self.object:set_pos({x = x, y = (a + b + CAGE_UP) / 2, z = z})
 	end,
 	get_staticdata = function(self) return core.write_json({x = self.cx, z = self.cz, a = self.ya, b = self.yb}) end,
 	on_activate = function(self, sd)
@@ -834,9 +836,8 @@ core.register_craftitem(CAGE, {
 		if cage_of(F.x, F.z) then rockmech.notify(name, S("This trench column already has a cage")); return itemstack end
 		if core.is_protected(F, name) then return itemstack end
 		storage:set_string(cage_key(F.x, F.z), bot .. "," .. top)
-		local o = core.add_entity({x = F.x, y = (bot + top) / 2, z = F.z}, CAGE_ENT)
-		local e = o and o:get_luaentity()
-		if e then e:setup(F.x, F.z, bot, top) end
+		-- 位置資料要在建立時就給（on_activate 拿不到資料會把自己刪掉）
+		core.add_entity({x = F.x, y = (bot + top) / 2, z = F.z}, CAGE_ENT, core.write_json({x = F.x, z = F.z, a = bot, b = top}))
 		core.sound_play("default_place_node_metal", {pos = F, gain = 0.8}, true)
 		rockmech.notify(name, S("Rebar cage lowered: @1 m", top - bot + 1))
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
