@@ -20,14 +20,14 @@ local TANK = "rockmech:slurry_tank"            -- 物品，也是控制格
 local SHELL = "rockmech:slurry_tank_shell"     -- 儲槽的其他格
 local PIPE = "rockmech:slurry_pipe"
 local OUTLET = "rockmech:slurry_outlet"
-local TICK = 2                -- 幾秒檢查一次 (s)
-local RATE = 16               -- 每次最多補幾級（2 m³ / 2 s）
+local TICK = 1                -- 幾秒檢查一次 (s)
+local RATE = 8                -- 每次最多補幾級（1 m³ / 1 s，泵的能力不變）
 local DEPTH = 42              -- 管口往下找多深 (格)
 local CAP = 40 * NL           -- 一個儲槽的容量（40 m³）
 local L, H3 = 6, 3            -- 儲槽長、高（格；寬 3）
 local NET_MAX = 400           -- 管線最多找幾格
 local OFF_DEFAULT = 0.5
-local RECOVER_TOL = 2         -- 液面比目標高幾級以上就抽回儲槽（灌混凝土時被擠上來的）
+local RECOVER_TOL = 1         -- 液面比目標高幾級以上就抽回儲槽（灌混凝土時被擠上來的；反應慢的話擠上來的會從槽口溢出）
 
 local function m3(lv) return ("%.1f"):format(lv / NL) end
 local function may(pos, name)

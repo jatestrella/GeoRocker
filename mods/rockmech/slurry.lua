@@ -784,15 +784,19 @@ equalize = function(p)
 		if c.y > ymax then ymax = c.y end
 		if #cells > EQ_MAX then return end
 		for _, d in ipairs(NB6) do
-			local n = {x = c.x + d[1], y = c.y + d[2], z = c.z + d[3]}
-			local h = core.hash_node_position(n)
-			if not seen[h] then
-				local kn = level_at(n)
-				if kn and kn > 0 then seen[h] = true; queue[#queue + 1] = n end
+			-- 液面那一層（不滿格）不往下連：溢過槽口、流下外面的那一道薄薄的水，跟外面的水池不算同一個容器
+			-- （不然由下往上填，會把槽口以下的液體搬到外面更低的地方；翻出去的交給一格一格的局部流動）
+			if not (d[2] < 0 and k < NL) then
+				local n = {x = c.x + d[1], y = c.y + d[2], z = c.z + d[3]}
+				local h = core.hash_node_position(n)
+				if not seen[h] then
+					local kn = level_at(n)
+					if kn and kn > 0 then seen[h] = true; queue[#queue + 1] = n end
+				end
 			end
 		end
 	end
-	-- 第二遍：片內比最高液面低（或同一層）的空格，從有液的格往外、往下找
+	-- 第二遍：片內比最高液面低（或同一層）的空格，從有液的格往旁邊、往上找（不往下：往下是掉落，交給局部流動）
 	i = 1
 	local q2 = {}
 	for _, c in ipairs(cells) do q2[#q2 + 1] = c.p end
@@ -801,7 +805,7 @@ equalize = function(p)
 		for _, d in ipairs(NB6) do
 			local n = {x = c.x + d[1], y = c.y + d[2], z = c.z + d[3]}
 			local h = core.hash_node_position(n)
-			if not seen[h] and n.y <= ymax then
+			if d[2] >= 0 and not seen[h] and n.y <= ymax then
 				seen[h] = true
 				if level_at(n) == 0 then
 					cells[#cells + 1] = {p = n, k = 0}
