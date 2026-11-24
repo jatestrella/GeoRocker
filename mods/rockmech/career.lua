@@ -564,21 +564,49 @@ local function shop_form(name, kind)
 		or (rockmech.has_account(name) or not cfg.teacher) and S("@1   Funds $@2", who, money)      -- 不是教學地圖：沒有「等老師分組」
 		or S("@1   You are not in a team yet; you will have funds once the teacher assigns you to a team", who)
 	local out = {"formspec_version[6]size[13.5,13.2]", ("label[0.5,0.6;%s]"):format(core.formspec_escape(head))}
-	local col, row = 0, 0
+	local list = {}
 	for i, it in ipairs(cfg.shop) do
 		if (not kind or it.shop == kind) and not (it.sell_crusher and not cfg.sell_crusher) and not (it.needs_yard and not cfg.stockyard) and not (it.needs_gold and not (cfg.strata and (cfg.strata.body or cfg.strata.cu))) then
-			local x, y = 0.5 + col * 6.5, 1.2 + row * 0.95
-			local p = rockmech.shop_price(it)      -- 炸藥、鋼材跟著市場走（market.lua）
-			local price = p == 0 and S("Free") or ("$%d"):format(p)
-			out[#out + 1] = ("item_image[%g,%g;0.8,0.8;%s]"):format(x, y, it.item)
-			out[#out + 1] = ("label[%g,%g;%s%s]"):format(x + 1, y + 0.4, core.formspec_escape(S(it.label)), it.count and (" ×" .. it.count) or "")
-			out[#out + 1] = ("button[%g,%g;2.2,0.8;buy_%d;%s]"):format(x + 3.9, y, i, core.formspec_escape(price))
-			row = row + 1
-			if row >= 12 then col, row = col + 1, 0 end
+			list[#list + 1] = i
 		end
 	end
+	-- 24 樣以內：兩欄、每欄 12 樣（由上往下）；更多：兩欄由左到右排，整片可以上下捲動（不然排到視窗外面看不到）
+	local scroll = #list > 24
+	local y0 = scroll and 0 or 1.2
+	if scroll then
+		local rows = math.ceil(#list / 2)
+		local view = 11.6
+		out[#out + 1] = ("scrollbaroptions[max=%d;smallstep=10;largestep=60]"):format(math.max(0, math.ceil((rows * 0.95 - view) / 0.1)))
+		out[#out + 1] = ("scrollbar[13.0,1.2;0.35,%g;vertical;shop_scroll;0]"):format(view)
+		out[#out + 1] = ("scroll_container[0,1.2;12.9,%g;shop_scroll;vertical;0.1]"):format(view)
+	end
+	for n, i in ipairs(list) do
+		local it = cfg.shop[i]
+		local col, row
+		if scroll then col, row = (n - 1) % 2, math.floor((n - 1) / 2)
+		else col, row = math.floor((n - 1) / 12), (n - 1) % 12 end
+		local x, y = 0.5 + col * 6.5, y0 + row * 0.95
+		local p = rockmech.shop_price(it)      -- 炸藥、鋼材跟著市場走（market.lua）
+		local price = p == 0 and S("Free") or ("$%d"):format(p)
+		out[#out + 1] = ("item_image[%g,%g;0.8,0.8;%s]"):format(x, y, it.item)
+		out[#out + 1] = ("label[%g,%g;%s%s]"):format(x + 1, y + 0.4, core.formspec_escape(S(it.label)), it.count and (" ×" .. it.count) or "")
+		out[#out + 1] = ("button[%g,%g;2.2,0.8;buy_%d;%s]"):format(x + 3.9, y, i, core.formspec_escape(price))
+	end
+	if scroll then out[#out + 1] = "scroll_container_end[]" end
 	return table.concat(out)
 end
+rockmech.shop_form = shop_form       -- 測試用
+-- 商店賣的東西，創造模式的物品欄（/god）都要找得到（有的方塊為了別的變體標了 not_in_creative_inventory）
+core.register_on_mods_loaded(function()
+	for _, it in ipairs(cfg.shop) do
+		local d = core.registered_items[it.item]
+		if d and d.groups and (d.groups.not_in_creative_inventory or 0) > 0 then
+			local g = table.copy(d.groups)
+			g.not_in_creative_inventory = nil
+			core.override_item(it.item, {groups = g})
+		end
+	end
+end)
 
 core.register_on_player_receive_fields(function(player, formname, fields)
 	if formname ~= SHOP then return end
