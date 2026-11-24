@@ -598,6 +598,17 @@ end
 rockmech.shop_form = shop_form       -- 測試用
 -- 商店賣的東西，創造模式的物品欄（/god）都要找得到（有的方塊為了別的變體標了 not_in_creative_inventory）
 core.register_on_mods_loaded(function()
+	-- 教學地圖（上課的世界）維持原本的拆法：工具、木料、小鋼件什麼工具一下就拆（新的 3 秒規則只給單機地圖）
+	if cfg.teacher then
+		for name, d in pairs(core.registered_nodes) do
+			local g = d.groups or {}
+			if ((g.rockmech_by_hand or 0) > 0 or (g.rockmech_by_pick or 0) > 0) and not g.dig_immediate then
+				local ng = table.copy(g)
+				ng.dig_immediate = 2
+				core.override_item(name, {groups = ng})
+			end
+		end
+	end
 	for _, it in ipairs(cfg.shop) do
 		local d = core.registered_items[it.item]
 		if d and d.groups and (d.groups.not_in_creative_inventory or 0) > 0 then
