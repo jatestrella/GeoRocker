@@ -15,6 +15,12 @@
 --   岩石不透水、先不冒水（之後照節理）。關遊戲時記下每一欄的水位，下次接著算。
 -- 抽水井：抽水機放在往下鑽的岩芯孔套管上。井那一欄的水頭壓到孔底（不低於含水層底）；周圍流進來的比抽水機抽得多，
 --   水頭就停在剛好抽得完的高度（Σ k·b·(H_鄰 − h) = 抽水量）。抽出來的水倒在機器後面（排水溝就排掉）；出水擋住就停。
+-- 降雨入滲（weather.lua 的時雨量 I）：只算在計算範圍裡（漏斗）。天然水位當作已經跟平常的雨平衡，範圍外不動，
+--   所以水位最多回到天然水位、不會漲得更高（下雨時孔隙水壓變大、邊坡變弱還是照 weather.lua 的摩擦角規則）。
+--   土欄：地面是露天（正午陽光照得到）的土，每秒補 α·I 進水位（入滲係數 α = rockmech_rain_infiltration），水位升 α·I·dt/Sy。
+--     地面鋪了混凝土、蓋了東西、在隧道裡：不入滲。
+--   坑：露天的坑整個 I 都接到（每欄 1 m²），加進坑裡的水。
+--   露天與否每 SKY_DT 秒重看一次（只在下雨時、一次最多 SKY_MAX 欄）。
 -- 排水溝：液體流到旁邊、上面就沒了（每步 DRAIN 級）。給深開挖的地圖把抽出來的水排掉。
 -- 抽水機：放在坑邊，吸管朝前伸進坑裡（跟出液口一樣朝放的人那一側）；每秒從前面那一欄的液面抽 PUMP_RATE 級，
 --   倒在機器後面那一格（守恆）；後面那一格是排水溝就直接排掉。
@@ -34,6 +40,8 @@ local STEP_DT = 1                                                               
 local PUMP_RATE = tonumber(setting("rockmech_pump_rate") or "") or 1             -- 級／秒
 local HOSE = 30                                                                   -- 吸管長（m）
 local DRAIN = 8                                                                   -- 排水溝每步吃掉幾級
+local ALPHA = tonumber(setting("rockmech_rain_infiltration") or "") or 0.3       -- 入滲係數（雨量進到地下水的比例）
+local SKY_DT, SKY_MAX = 60, 500                                                   -- 露天重看的間隔（秒）、一次最多幾欄
 
 -- 滲流 -------------------------------------------------------------------
 local storage = core.get_mod_storage()
@@ -100,6 +108,7 @@ local BND = {}          -- 範圍外緣的欄 → 天然水位
 local dirty = {}        -- 要重看的欄
 local WELL = {}         -- 抽水井的欄 → {bot = 孔底高程, cap = 抽水量 m³/s, h = 井的水頭, out = 累積抽出的 m³, seen = 上次抽的時間}
 local acc = {}          -- 坑 → 累積的級數
+local SKY = {}          -- 欄 → {露天, 上次看的時間}
 local D4 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 
 -- 算出來的水位：範圍內照算的，其他照天然
@@ -122,7 +131,7 @@ local function add(k, i, d)
 	if i.low then OPEN[k] = math.min(i.hs, i.h0); H[k] = nil
 	elseif not H[k] then H[k] = i.h0 end
 end
-local function drop(k) info[k], H[k], OPEN[k], DIST[k], acc[k] = nil, nil, nil, nil, nil end
+local function drop(k) info[k], H[k], OPEN[k], DIST[k], acc[k], SKY[k] = nil, nil, nil, nil, nil, nil end
 -- 坑旁邊的土欄要在範圍裡（不然坑收不到水）
 local function add_ring(k)
 	local x, z = cxz(k)
@@ -168,6 +177,35 @@ local function nb_head(nk)
 	return h, nil, false
 end
 
+-- 露天：土欄從天然水位往上穿過土、碎石到地面，地面上那一格正午有直射陽光；坑從水面往上找第一格空氣
+local function sky_of(k)
+	local x, z = cxz(k)
+	local i = info[k]
+	local p = {x = x, y = i.low and math.floor(i.hs + 0.5) or math.floor(i.h0 - 0.5) + 1, z = z}
+	for _ = 1, 48 do
+		local n = core.get_node(p).name
+		if n == "ignore" then return false end
+		if n == "air" then
+			local l = core.get_node_light(p, 0.5)
+			return l ~= nil and l >= core.LIGHT_MAX
+		end
+		if not soil_frac[n] and not cell(p) then return false end          -- 混凝土、岩石、建物：不透水
+		p.y = p.y + 1
+	end
+	return false
+end
+local function sky_refresh(now)
+	local n = 0
+	for k in pairs(info) do
+		local s = SKY[k]
+		if not s or now - s[2] > SKY_DT * 1e6 then
+			SKY[k] = {sky_of(k), now}
+			n = n + 1
+			if n >= SKY_MAX then return end
+		end
+	end
+end
+
 -- 推進 dt 秒（顯式：先算每一欄的淨流量再一起改；坑收到的累積起來）
 local inflow_now = {}   -- 坑 → 最近一步的流量（m³/s）
 local function advance(dt)
@@ -177,6 +215,9 @@ local function advance(dt)
 	local n = math.max(1, math.ceil(dt / (0.8 * SY / (4 * tmax))))
 	local h_dt = dt / n
 	local q_open = {}
+	-- 下雨：I（mm/h → m/s）
+	local I = (rockmech.raining_now and rockmech.rain_i_now or 0) / 3.6e6
+	local R = ALPHA * I
 	-- 井的水頭：壓到孔底；周圍流進來的比抽水量多就停在 Σ k·t·(H_鄰 − h) = 抽水量 的高度
 	local now = core.get_us_time()
 	for k, w in pairs(WELL) do
@@ -224,6 +265,7 @@ local function advance(dt)
 					end
 				end
 			end
+			if R > 0 and SKY[k] and SKY[k][1] then net = net + R end
 			dH[k] = net * h_dt / SY
 		end
 		for k, d in pairs(dH) do
@@ -231,6 +273,11 @@ local function advance(dt)
 			local h = H[k] + d
 			if h > i.h0 then h = i.h0 elseif h < i.base then h = i.base end
 			H[k] = h
+		end
+	end
+	if I > 0 then                                              -- 露天的坑直接接雨
+		for k in pairs(OPEN) do
+			if SKY[k] and SKY[k][1] then acc[k] = (acc[k] or 0) + I * dt * NL end
 		end
 	end
 	inflow_now = {}
@@ -378,9 +425,9 @@ local function fem_check()
 end
 
 -- 效能統計（微秒）：最近一次每一段花的時間、開機以來最久的一次、累計；n_dom 範圍內的土欄數
--- max_advance、max_grow：那一段最久的一次；fem_queued：水位變動排了幾次應力解
+-- max_advance、max_grow、max_sky：那一段最久的一次（sky：下雨時重看露天）；fem_queued：水位變動排了幾次應力解
 stats = {dirty = 0, advance = 0, deliver = 0, grow = 0, fem = 0, total = 0, max = 0, sum = 0, n = 0, n_dom = 0,
-	max_advance = 0, max_grow = 0, fem_queued = 0}
+	max_advance = 0, max_grow = 0, fem_queued = 0, sky = 0, max_sky = 0}
 rockmech.groundwater_stats = stats
 local t_acc, t_fem = 0, 0
 if rockmech.GROUNDWATER_DEPTH then
@@ -403,6 +450,10 @@ if rockmech.GROUNDWATER_DEPTH then
 			stats.advance, stats.deliver, stats.grow, stats.fem, stats.total, stats.n_dom = 0, 0, 0, 0, t1 - t0, 0
 			return
 		end
+		local ts = us()
+		if rockmech.raining_now and (rockmech.rain_i_now or 0) > 0 then sky_refresh(ts) end
+		stats.sky = us() - ts
+		if stats.sky > stats.max_sky then stats.max_sky = stats.sky end
 		advance(step_dt)
 		local t2 = us()
 		deliver()
@@ -437,7 +488,7 @@ end
 rockmech.groundwater_state = function()
 	local n = 0
 	for _ in pairs(H) do n = n + 1 end
-	return {dom = n, H = H, OPEN = OPEN, info = info, WELL = WELL}
+	return {dom = n, H = H, OPEN = OPEN, info = info, WELL = WELL, SKY = SKY}
 end
 
 -- 排水溝 -------------------------------------------------------------------
