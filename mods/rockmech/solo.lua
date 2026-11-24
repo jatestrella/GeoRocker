@@ -10,6 +10,18 @@ if not cfg.career then return end
 if core.settings:get_bool("rockmech_dev", false) and tonumber(core.settings:get("time_speed") or "") == 0 then
 	core.after(0, function() core.set_timeofday(0.5) end)
 end
+-- 地圖設定 rockmech_daynight = false（試驗場這類地圖）：一直是中午。不改 time_speed（那是整台電腦的設定，會存回
+-- minetest.conf、別張地圖也跟著停），每秒把時間拉回中午
+local dn = (rockmech.get_setting or function(k) return core.settings:get(k) end)("rockmech_daynight")
+if dn == "false" or dn == false then
+	local t = 0
+	core.register_globalstep(function(dtime)
+		t = t + dtime
+		if t < 1 then return end
+		t = 0
+		core.set_timeofday(0.5)
+	end)
+end
 local SOLO_PRIVS = {interact = true, shout = true}
 if cfg.solo and not core.settings:get_bool("rockmech_dev", false) then
 	core.register_on_mods_loaded(function()
