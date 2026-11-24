@@ -4,7 +4,7 @@
 # Started by the update .bat in the package root (written by make_package.ps1):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File games\georocker\standalone\update.ps1 -Root <package root>
 #
-# Reads <Root>\update.txt (branch = release, class = 0, installed = <commit sha>), asks GitHub for the newest commit
+# Reads <Root>\update.txt (branch = release, class = 0, dev = 0, installed = <commit sha>), asks GitHub for the newest commit
 # of that branch, and if it is new downloads only the game (a few MB), never the engine.
 # Keeps worlds\ (saves) and minetest.conf (settings). The old game folder is kept as games\georocker_backup.
 # Lives inside the game folder, so the updater updates itself too.
@@ -22,15 +22,15 @@ $game = Join-Path $Root "games\georocker"
 $backup = Join-Path $Root "games\georocker_backup"
 $conf = Join-Path $Root "update.txt"
 
-# Settings: branch, class maps, installed commit
-$set = @{ branch = "release"; class = "0"; installed = "" }
+# Settings: branch, class maps, dev maps (dev = 1 keeps dev-only maps on a release package), installed commit
+$set = @{ branch = "release"; class = "0"; dev = "0"; installed = "" }
 if (Test-Path $conf) {
 	foreach ($l in Get-Content $conf) {
 		if ($l -match '^\s*([a-z]+)\s*=\s*(.*?)\s*$') { $set[$matches[1]] = $matches[2] }
 	}
 }
 function Save-Conf {
-	$lines = @(("branch = " + $set.branch), ("class = " + $set.class), ("installed = " + $set.installed))
+	$lines = @(("branch = " + $set.branch), ("class = " + $set.class), ("dev = " + $set.dev), ("installed = " + $set.installed))
 	[System.IO.File]::WriteAllLines($conf, $lines)
 }
 
@@ -85,7 +85,7 @@ if ($set.class -ne "1") {
 		}
 	}
 }
-if ($set.branch -eq "release") {
+if ($set.branch -eq "release" -and $set.dev -ne "1") {
 	# Development test maps (map.conf: dev = true) only in dev packages
 	$maps = Join-Path $src "standalone\maps"
 	if (Test-Path $maps) {
