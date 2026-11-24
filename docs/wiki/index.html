@@ -544,7 +544,7 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <li><b>冒水</b>：坑邊每一欄收到的流量每秒加進坑裡最低、還有空間的那一格，之後照上面的規則守恆地流。坑裡的水漲到地下水位就停（不往回灌進含水層）；被抽走、流走，又開始冒。</li>
 <li><b>計算範圍</b>：離坑 64 m 以內、水位降了 1 cm 以上的欄；再外面當天然水位（無限的含水層）。關遊戲時記下每一欄的水位，下次接著算。</li>
 <li>漏斗裡、降下來的水位以上的土不再飽和，坑裡的積水會滲進去一些。</li>
-<li><b>降雨入滲</b>：下雨時，漏斗裡地面是露天的土（正午陽光照得到），時雨量的 30 %（<b>入滲係數</b>）補進地下水，水位慢慢回升；鋪了混凝土、蓋了東西、在隧道裡就不入滲。露天的坑整個時雨量都接到，加進坑裡的水。</li>
+<li><b>降雨入滲</b>：下雨時，漏斗裡地面是露天的土（正午陽光照得到），時雨量的 30 %（<b>入滲係數</b>）補進地下水，水位慢慢回升；鋪了混凝土、蓋了東西、在隧道裡就不入滲。</li>
 <li>天然水位當作已經跟平常的雨平衡：計算範圍外的水位不動，範圍裡的水位最多回到天然水位，不會漲得更高。下雨時邊坡變弱照<a href="#m-rain">降雨</a>的規則。</li>
 </ul>
 <h3>6. 抽水與排水</h3>
@@ -582,11 +582,10 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <ul>
 <li>顯式時間積分，每秒推進一次；穩定條件 <math><mrow><mi mathvariant="normal">Δ</mi><mi>t</mi><mo>≤</mo><msub><mi>S</mi><mi>y</mi></msub><mo>/</mo><mo stretchy="false">(</mo><mn>4</mn><mi>k</mi><mspace width="0.167em"></mspace><msub><mi>b</mi><mi mathvariant="normal">max</mi></msub><mo stretchy="false">)</mo></mrow></math>，不夠就切小步。</li>
 <li>水位不高於天然水位、不低於含水層底。</li>
-<li>露天的坑直接接雨：每秒加 <math><mrow><mi>I</mi><mspace width="0.167em"></mspace><mi mathvariant="normal">Δ</mi><mi>t</mi></mrow></math>（每欄 1 m²）的水進坑。</li>
 </ul>
 <p>下雨讓水位回升有多快：</p>
 <div class="formula"><math display="block"><mrow><mfrac><mrow><mi mathvariant="normal">Δ</mi><mi>H</mi></mrow><mrow><mi mathvariant="normal">Δ</mi><mi>t</mi></mrow></mfrac><mo>≈</mo><mfrac><mrow><mi>α</mi><mspace width="0.167em"></mspace><mi>I</mi></mrow><msub><mi>S</mi><mi>y</mi></msub></mfrac></mrow></math></div>
-<p>例：颱風 100 mm/h，水位每小時回升約 0.3 × 100 / 0.27 ≈ 110 mm（還沒扣掉流向坑的）。一場 30 分鐘的颱風雨，水位大約回升 5 cm；同時 20 × 20 的露天坑直接接到 20 m³ 的雨水。</p>
+<p>例：颱風 100 mm/h，水位每小時回升約 0.3 × 100 / 0.27 ≈ 110 mm（還沒扣掉流向坑的）。一場 30 分鐘的颱風雨，水位大約回升 5 cm。</p>
 <h3>有效應力（土的元素）</h3>
 <div class="formula"><math display="block"><mrow><mi>σ</mi><mo>=</mo><msup><mi>σ</mi><mrow><mo>′</mo></mrow></msup><mo>+</mo><mi>u</mi><mspace width="0.167em"></mspace><mi mathvariant="bold">I</mi><mspace width="2em"></mspace><mi>u</mi><mo>=</mo><msub><mi>γ</mi><mi>w</mi></msub><mrow><mspace width="0.167em"></mspace><mi>max</mi><mo>&#x2061;</mo></mrow><mo stretchy="false">(</mo><mn>0</mn><mo>,</mo><mspace width="0.278em"></mspace><mi>H</mi><mo>−</mo><mi>z</mi><mo stretchy="false">)</mo></mrow></math></div>
 <div class="formula"><math display="block"><mrow><msubsup><mi>σ</mi><mrow><mi>v</mi><mn>0</mn></mrow><mrow><mo>′</mo></mrow></msubsup><mo>=</mo><mo largeop="true" movablelimits="true">∑</mo><mi>γ</mi><mi>h</mi><mo>−</mo><msub><mi>u</mi><mn>0</mn></msub><mspace width="2em"></mspace><msubsup><mi>σ</mi><mrow><mi>h</mi><mn>0</mn></mrow><mrow><mo>′</mo></mrow></msubsup><mo>=</mo><msub><mi>K</mi><mn>0</mn></msub><mspace width="0.167em"></mspace><msubsup><mi>σ</mi><mrow><mi>v</mi><mn>0</mn></mrow><mrow><mo>′</mo></mrow></msubsup></mrow></math></div>
@@ -623,8 +622,18 @@ table { border-collapse: collapse; margin: 10px 0; font-size: 15px; }
 <li>下雨時，剛好穩住的鬆土坡開始流；表土陡壁超過當下的自立高度就鬆掉，可能連成邊坡滑動。</li>
 <li>岩石碎石透水、不受影響；崩積土照土的比例弱化。</li>
 <li>用<a href="#i-rain_gauge">氣象站</a>看目前的時雨量和這場雨的累積雨量。</li>
-<li>有地下水的地圖：雨水滲進抽水漏斗、落進露天的坑，見<a href="#m-water">液體與地下水</a>。</li>
+<li><b>積水</b>：雨落在挖過、蓋過的地方會留下來：挖開的坑、台階，混凝土地坪、屋頂，已經有水的地方。天然地面不積水：雨落在土上滲掉（土的透水係數比颱風雨大得多，沒有地表逕流），天然岩面不管。
+<ul><li>落在岩石、混凝土上的雨往最陡的下坡流，流到低處停，所以台階、坑壁上的雨會流進坑底、集水井。</li>
+<li>只在玩家周圍 48 m 內下（跟畫面上的雨一樣），被東西遮著的地方（隧道、屋簷下）接不到。</li>
+<li><b>蒸發</b>：雨停 5 分鐘後，只剩一層薄水膜（1/8 m、旁邊也沒有更深的水）的地方會乾掉；窪地、坑底的積水留著，要抽掉或排掉。</li></ul></li>
+<li>量級：100 mm/h 下 30 分鐘，每 m² 只有 0.05 m³（不到半級）。看得到的積水是周圍台階、岩壁的雨匯到低處。</li>
+<li>有地下水的地圖：雨水也會滲進抽水漏斗，讓水位回升，見<a href="#m-water">液體與地下水</a>。</li>
 </ul><h2>計算公式</h2>
+<h3>雨滴</h3>
+<div class="formula"><math display="block"><mrow><mover accent="true"><mi>N</mi><mo>˙</mo></mover><mo>=</mo><mfrac><mi>I</mi><mrow><mn>3.6</mn><mo>×</mo><msup><mn>10</mn><mrow><mn>6</mn></mrow></msup></mrow></mfrac><mo>·</mo><mo stretchy="false">(</mo><mn>2</mn><mi>R</mi><mo>+</mo><mn>1</mn><msup><mo stretchy="false">)</mo><mrow><mn>2</mn></mrow></msup><mo>·</mo><mn>8</mn></mrow></math></div>
+<p class="wh">式中：</p><dl class="where"><dt><math><mover accent="true"><mi>N</mi><mo>˙</mo></mover></math></dt><dd>每秒丟幾滴（每滴 1 級 = 1/8 m³ 的水，落點隨機）</dd><dt><math><mi>I</mi></math></dt><dd>時雨量（mm/h）</dd><dt><math><mi>R</mi></math></dt><dd>玩家周圍的範圍 48 m</dd></dl>
+<p>100 mm/h 時一個玩家周圍每秒約 2 滴。幾個玩家的範圍重疊，重疊的地方照人數打折，總量不重複算。</p>
+<h3>弱化</h3>
 <div class="formula"><math display="block"><mrow><mi>L</mi><mo>=</mo><mrow><mspace width="0.167em"></mspace><mi>min</mi><mo>&#x2061;</mo></mrow><mrow><mo stretchy="true">(</mo><mrow><mn>1</mn><mo>,</mo><mspace width="0.278em"></mspace><mfrac><mi>I</mi><mrow><mn>100</mn><mspace width="0.278em"></mspace><mtext>mm/h</mtext></mrow></mfrac></mrow><mo stretchy="true">)</mo></mrow><mspace width="2em"></mspace><msub><mi>ϕ</mi><mi>r</mi></msub><mo>=</mo><mn>35</mn><mo>°</mo><mo>−</mo><mn>10</mn><mo>°</mo><mo>·</mo><mi>L</mi><mo>·</mo><msub><mi>f</mi><mi>s</mi></msub><mspace width="2em"></mspace><msub><mi>c</mi><mi>L</mi></msub><mo>=</mo><mi>c</mi><mspace width="0.167em"></mspace><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mn>0.35</mn><mspace width="0.167em"></mspace><mi>L</mi><mo stretchy="false">)</mo></mrow></math></div>
 <p class="wh">式中：</p><dl class="where"><dt><math><mi>I</mi></math></dt><dd>時雨量</dd><dt><math><msub><mi>f</mi><mi>s</mi></msub></math></dt><dd>那一格裡土的比例</dd><dt><math><msub><mi>ϕ</mi><mi>r</mi></msub></math></dt><dd>鬆土的殘餘摩擦角</dd><dt><math><msub><mi>c</mi><mi>L</mi></msub></math></dt><dd>下雨時表土的凝聚力</dd></dl></article>
 <article class="page mech" id="m-air"><p class="crumb"><a href="#home">首頁</a> › 機制 › 碎石、土、天氣</p><h1>空氣品質</h1>

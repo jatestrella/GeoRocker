@@ -19,8 +19,13 @@
 --   所以水位最多回到天然水位、不會漲得更高（下雨時孔隙水壓變大、邊坡變弱還是照 weather.lua 的摩擦角規則）。
 --   土欄：地面是露天（正午陽光照得到）的土，每秒補 α·I 進水位（入滲係數 α = rockmech_rain_infiltration），水位升 α·I·dt/Sy。
 --     地面鋪了混凝土、蓋了東西、在隧道裡：不入滲。
---   坑：露天的坑整個 I 都接到（每欄 1 m²），加進坑裡的水。
 --   露天與否每 SKY_DT 秒重看一次（只在下雨時、一次最多 SKY_MAX 欄）。
+-- 雨滴（降雨落地）：每個玩家周圍 DROP_R m 內，照時雨量隨機丟「一級水」（1/8 m³），平均總量 = I × 面積 × 時間。
+--   從天空往下找第一格不像空氣的；那一格上面正午有直射陽光才算露天。
+--   只有挖過、蓋過的地方接雨：上面那一格是挖開的、落在液面上、或落在混凝土上。天然地面不接（土會滲掉、天然岩坡不管）。
+--   落在土上：滲掉（土的透水係數遠大於時雨量，沒有地表逕流；漏斗裡照上面的入滲係數補地下水）。
+--   落在岩石、混凝土上：往最陡的下坡走（地表逕流，最多 RUN_MAX 步），停在低處或流進液體；落在碎石上先進孔隙。
+-- 蒸發：雨停 EVAP_DELAY 秒後，下過雨的地方只剩一級、四周也沒有更深的水（薄水膜）就蒸發掉。窪地裡的積水留著。
 -- 排水溝：液體流到旁邊、上面就沒了（每步 DRAIN 級）。給深開挖的地圖把抽出來的水排掉。
 -- 抽水機：放在坑邊，吸管朝前伸進坑裡（跟出液口一樣朝放的人那一側）；每秒從前面那一欄的液面抽 PUMP_RATE 級，
 --   倒在機器後面那一格（守恆）；後面那一格是排水溝就直接排掉。
@@ -177,6 +182,7 @@ local function nb_head(nk)
 	return h, nil, false
 end
 
+local SUN = 15                                                                    -- 直射陽光的亮度
 -- 露天：土欄從天然水位往上穿過土、碎石到地面，地面上那一格正午有直射陽光；坑從水面往上找第一格空氣
 local function sky_of(k)
 	local x, z = cxz(k)
@@ -187,7 +193,7 @@ local function sky_of(k)
 		if n == "ignore" then return false end
 		if n == "air" then
 			local l = core.get_node_light(p, 0.5)
-			return l ~= nil and l >= core.LIGHT_MAX
+			return l ~= nil and l >= SUN
 		end
 		if not soil_frac[n] and not cell(p) then return false end          -- 混凝土、岩石、建物：不透水
 		p.y = p.y + 1
@@ -273,11 +279,6 @@ local function advance(dt)
 			local h = H[k] + d
 			if h > i.h0 then h = i.h0 elseif h < i.base then h = i.base end
 			H[k] = h
-		end
-	end
-	if I > 0 then                                              -- 露天的坑直接接雨
-		for k in pairs(OPEN) do
-			if SKY[k] and SKY[k][1] then acc[k] = (acc[k] or 0) + I * dt * NL end
 		end
 	end
 	inflow_now = {}
@@ -490,6 +491,143 @@ rockmech.groundwater_state = function()
 	for _ in pairs(H) do n = n + 1 end
 	return {dom = n, H = H, OPEN = OPEN, info = info, WELL = WELL, SKY = SKY}
 end
+
+-- 雨滴 -------------------------------------------------------------------
+local DROP_R, RUN_MAX, EVAP_DELAY, EVAP_MAX = 48, 32, 300, 2000
+local level_of_n = rockmech.slurry_level
+local air_like = rockmech.air_like
+local function paved(n) return n:sub(1, 17) == "rockmech:concrete" end
+local RAINED = core.deserialize(storage:get_string("rain_cells")) or {}   -- 下過雨的格（位置 hash）→ true
+local drop_stats = {n = 0, kept = 0}
+rockmech.rain_drop_stats = drop_stats
+local function gname(p) return core.get_node(p).name end
+-- p 是空格：往下掉到有東西撐著的那一格；回傳撐著的那一格和它的方塊名稱（掉太深、沒載入 nil）
+local function fall(p)
+	local q = {x = p.x, y = p.y - 1, z = p.z}
+	for _ = 1, 32 do
+		local n = gname(q)
+		if n == "ignore" then return nil end
+		if not air_like(n) then return q, n end
+		q.y = q.y - 1
+	end
+end
+local function put(p)
+	RAINED[core.hash_node_position(p)] = true
+	rockmech.slurry_schedule(p); rockmech.slurry_wake(p)
+	drop_stats.kept = drop_stats.kept + 1
+end
+-- 一滴雨落在 (x, z)：從 y0 往下找
+local function drop_at(x, z, y0)
+	local p = {x = x, y = y0, z = z}
+	if not air_like(gname(p)) then return end                -- 起點就在山裡
+	local n
+	p, n = fall(p)
+	if not p then return end
+	local up = {x = x, y = p.y + 1, z = z}
+	if (core.get_node_light(up, 0.5) or 0) < SUN then return end      -- 有東西遮著
+	if not (level_of_n[n] or paved(n) or is_excavated(up)) then return end
+	-- 地表逕流：往最陡的下坡走（液面上不走）
+	for _ = 1, RUN_MAX do
+		if level_of_n[n] then break end
+		local best, bn, by = nil, nil, p.y
+		for _, dd in ipairs(D4) do
+			local q = {x = p.x + dd[1], y = up.y, z = p.z + dd[2]}
+			local qn = gname(q)
+			local s, sn, sy
+			if level_of_n[qn] then s, sn, sy = q, qn, p.y - 0.5          -- 旁邊同一層有水：流進去
+			elseif qn ~= "ignore" and air_like(qn) then
+				s, sn = fall(q)
+				sy = s and s.y
+			end
+			if s and sy < by then best, bn, by = s, sn, sy end
+		end
+		if not best then break end
+		p, n = best, bn
+		up = {x = p.x, y = p.y + 1, z = p.z}
+	end
+	if soil_frac[n] then return end                           -- 落在土上：滲掉
+	if rockmech.liquid_drains[n] then return end
+	if level_of_n[n] then
+		if rockmech.slurry_add_up(p, 1, nil, WATER) == 0 then put(p) end
+		return
+	end
+	local r = cell(p)
+	if r and r > 0 and rockmech.slurry_add_at(p, 1, WATER) == 0 then put(p); return end      -- 碎石的孔隙
+	if rockmech.slurry_add_up(up, 1, nil, WATER) == 0 then put(up) end
+end
+-- 薄水膜：一級、底下撐著（不是液體、不是空的）、四周沒有更深的水、是水（不是穩定液）
+local function film(p)
+	local n = gname(p)
+	if level_of_n[n] ~= 1 then return false end
+	local bn = gname({x = p.x, y = p.y - 1, z = p.z})
+	if bn == "ignore" or air_like(bn) or level_of_n[bn] then return false end
+	if (gname({x = p.x, y = p.y + 1, z = p.z}) ~= "air") then return false end
+	for _, dd in ipairs(D4) do
+		local k = level_of_n[gname({x = p.x + dd[1], y = p.y, z = p.z + dd[2]})]
+		if k and k > 1 then return false end
+	end
+	return ((rockmech.liquid_comp(p).b or 0) < 0.05)
+end
+-- 從下過雨的格出發，沿著相連的一級水（水膜會往旁邊攤開）找，一次最多看 EVAP_MAX 格
+local function evaporate()
+	local n, seen = 0, {}
+	for h in pairs(RAINED) do
+		local p = core.get_position_from_hash(h)
+		RAINED[h] = nil                                          -- 沒載入的不管（薄水膜留著）
+		local q = {p, {x = p.x, y = p.y + 1, z = p.z}}
+		local i = 1
+		while q[i] do
+			local c = q[i]
+			i = i + 1
+			local hc = core.hash_node_position(c)
+			if not seen[hc] then
+				seen[hc] = true
+				n = n + 1
+				if level_of_n[gname(c)] == 1 then
+					for _, dd in ipairs(D4) do q[#q + 1] = {x = c.x + dd[1], y = c.y, z = c.z + dd[2]} end
+					if film(c) then rockmech.slurry_set_level(c, 0) end
+				end
+			end
+		end
+		if n >= EVAP_MAX then return end
+	end
+end
+local drop_acc, evap_t = 0, 0
+core.register_globalstep(function(dt)
+	local I = rockmech.raining_now and rockmech.rain_i_now or 0
+	if I <= 0 then
+		if not next(RAINED) then return end
+		evap_t = evap_t + dt
+		if evap_t >= EVAP_DELAY then evaporate(); evap_t = EVAP_DELAY - 1 end   -- 之後每秒處理一批
+		return
+	end
+	evap_t = 0
+	local players = core.get_connected_players()
+	if #players == 0 then return end
+	local side = 2 * DROP_R + 1
+	drop_acc = drop_acc + I / 3.6e6 * side * side * NL * dt * #players
+	local m = 0
+	while drop_acc >= 1 and m < 50 do
+		drop_acc, m = drop_acc - 1, m + 1
+		local pl = players[math.random(#players)]:get_pos()
+		local x, z = math.floor(pl.x + 0.5) + math.random(-DROP_R, DROP_R), math.floor(pl.z + 0.5) + math.random(-DROP_R, DROP_R)
+		-- 幾個玩家的範圍重疊：照重疊的人數打折，總量不重複算
+		local cover = 0
+		for _, o in ipairs(players) do
+			local op = o:get_pos()
+			if math.abs(x - math.floor(op.x + 0.5)) <= DROP_R and math.abs(z - math.floor(op.z + 0.5)) <= DROP_R then cover = cover + 1 end
+		end
+		if math.random() * cover < 1 then
+			drop_stats.n = drop_stats.n + 1
+			drop_at(x, z, math.floor(pl.y + 0.5) + 32)
+		end
+	end
+	if drop_acc > 50 then drop_acc = 50 end
+end)
+core.register_on_shutdown(function() storage:set_string("rain_cells", core.serialize(RAINED)) end)
+rockmech.rain_drop_at = drop_at
+rockmech.rain_evaporate = evaporate
+rockmech.rain_cells = function() return RAINED end
 
 -- 排水溝 -------------------------------------------------------------------
 local DRAIN_NODE = "rockmech:drain"
