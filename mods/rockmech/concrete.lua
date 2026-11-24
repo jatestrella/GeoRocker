@@ -767,21 +767,21 @@ function rockmech.rebar_caged(p)
 	return a and p.y >= a and p.y <= b
 end
 
--- 畫面：一根格子框（主筋直的、箍筋每 0.5 m 一圈），從槽底到槽口再往上 CAGE_UP m（實務上籠子吊在導溝上，頂端露出槽口；
--- 不然整根泡在不透明的穩定液裡看不到）。鏽色、微微自發光。跟著區塊存檔；籠子整欄都灌好了就拿掉
-local CAGE_UP = 1
+-- 畫面：一根格子框（主筋直的、箍筋每 0.5 m 一圈），從槽底到槽口（頂端跟導溝、地面齊平），鋼筋的灰色。
+-- 跟著區塊存檔；籠子整欄都灌好了就拿掉
+local CAGE_UP = 0
 local function cage_tex(len)
 	local h = math.max(1, math.floor(len + 0.5)) * 16
 	local t = {("[fill:16x%d:#00000000"):format(h)}
-	for _, x in ipairs({1, 7, 13}) do t[#t + 1] = ("[fill:2x%d:%d,0:#d07a40"):format(h, x) end
-	for y = 0, h - 1, 8 do t[#t + 1] = ("[fill:16x1:0,%d:#a05a30"):format(y) end
+	for _, x in ipairs({1, 7, 13}) do t[#t + 1] = ("[fill:2x%d:%d,0:#7c8084"):format(h, x) end
+	for y = 0, h - 1, 8 do t[#t + 1] = ("[fill:16x1:0,%d:#5e6266"):format(y) end
 	return table.concat(t, "^")
 end
 core.register_entity(CAGE_ENT, {
 	initial_properties = {
 		visual = "cube", textures = {"[fill:1x1:#00000000"}, use_texture_alpha = true, backface_culling = false,
 		physical = false, pointable = false, static_save = true, collisionbox = {0, 0, 0, 0, 0, 0},
-		visual_size = {x = 0.85, y = 1, z = 0.85}, glow = 4,
+		visual_size = {x = 0.85, y = 1, z = 0.85},
 	},
 	setup = function(self, x, z, a, b)
 		self.cx, self.cz, self.ya, self.yb = x, z, a, b
