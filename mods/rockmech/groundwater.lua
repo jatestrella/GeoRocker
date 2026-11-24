@@ -13,6 +13,8 @@
 --     坑裡的水比旁邊的土高就不流（不往回灌進含水層；水位以上的土照 slurry.lua 慢慢滲）。
 --   rockmech.water_table_y 換成算出來的水位：漏斗裡水位以上的土不再飽和（slurry.lua 的 soil_room）。
 --   岩石不透水、先不冒水（之後照節理）。關遊戲時記下每一欄的水位，下次接著算。
+-- 抽水井：抽水機放在往下鑽的岩芯孔套管上。井那一欄的水頭壓到孔底（不低於含水層底）；周圍流進來的比抽水機抽得多，
+--   水頭就停在剛好抽得完的高度（Σ k·b·(H_鄰 − h) = 抽水量）。抽出來的水倒在機器後面（排水溝就排掉）；出水擋住就停。
 -- 排水溝：液體流到旁邊、上面就沒了（每步 DRAIN 級）。給深開挖的地圖把抽出來的水排掉。
 -- 抽水機：放在坑邊，吸管朝前伸進坑裡（跟出液口一樣朝放的人那一側）；每秒從前面那一欄的液面抽 PUMP_RATE 級，
 --   倒在機器後面那一格（守恆）；後面那一格是排水溝就直接排掉。
@@ -95,13 +97,14 @@ local DIST = {}         -- 範圍內的欄 → 離坑幾 m（4 鄰的步數）
 local ROCK = {}         -- 查過、不是含水層的欄（岩石、沒有地下水）
 local BND = {}          -- 範圍外緣的欄 → 天然水位
 local dirty = {}        -- 要重看的欄
+local WELL = {}         -- 抽水井的欄 → {bot = 孔底高程, cap = 抽水量 m³/s, h = 井的水頭, out = 累積抽出的 m³, seen = 上次抽的時間}
 local acc = {}          -- 坑 → 累積的級數
 local D4 = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}}
 
 -- 算出來的水位：範圍內照算的，其他照天然
 rockmech.water_table_y = function(x, z)
 	local k = ckey(x, z)
-	local h = H[k] or OPEN[k]
+	local h = H[k] or OPEN[k] or (WELL[k] and WELL[k].h)
 	if h then
 		local i = info[k]
 		if i and h > i.h0 then h = i.h0 end
@@ -149,6 +152,8 @@ end
 local function nb_head(nk)
 	local h = H[nk]
 	if h then return h, info[nk].base, false end
+	local w = WELL[nk]
+	if w then return w.h, info[nk].base, true end
 	h = OPEN[nk]
 	if h then return h, info[nk].base, true end
 	if ROCK[nk] then return nil end
@@ -171,6 +176,30 @@ local function advance(dt)
 	local n = math.max(1, math.ceil(dt / (0.8 * SY / (4 * tmax))))
 	local h_dt = dt / n
 	local q_open = {}
+	-- 井的水頭：壓到孔底；周圍流進來的比抽水量多就停在 Σ k·t·(H_鄰 − h) = 抽水量 的高度
+	local now = core.get_us_time()
+	for k, w in pairs(WELL) do
+		if now - w.seen > 5e6 then                       -- 抽水機沒在抽了（拿走、區塊沒載入）
+			WELL[k] = nil
+			local i = info[k]
+			if i then H[k] = math.min(w.h, i.h0) end
+		else
+			local x, z = cxz(k)
+			local base = info[k].base
+			local sk, skh = 0, 0
+			for _, dd in ipairs(D4) do
+				local hj, bj = nb_head(ckey(x + dd[1], z + dd[2]))
+				if hj and not WELL[ckey(x + dd[1], z + dd[2])] then
+					local t = K * ((hj - (bj or base)) + math.max(w.h - base, 0)) / 2
+					if t > 0 then sk = sk + t; skh = skh + t * hj end
+				end
+			end
+			local h = sk > 0 and (skh - w.cap) / sk or info[k].h0
+			if h < w.bot then h = w.bot end
+			if h > info[k].h0 then h = info[k].h0 end
+			w.h = h
+		end
+	end
 	for _ = 1, n do
 		local dH = {}
 		for k, hi in pairs(H) do
@@ -205,7 +234,9 @@ local function advance(dt)
 	end
 	inflow_now = {}
 	for k, v in pairs(q_open) do
-		acc[k] = (acc[k] or 0) + v * NL                  -- m³ → 級
+		local w = WELL[k]
+		if w then w.out = w.out + v
+		else acc[k] = (acc[k] or 0) + v * NL end          -- m³ → 級
 		inflow_now[k] = v / dt
 	end
 end
@@ -234,7 +265,7 @@ local function grow()
 		if n >= 2000 then break end                       -- 一次最多長 2000 欄
 	end
 	-- 沒有坑在抽了、全部回到天然：清掉
-	local active = false
+	local active = next(WELL) ~= nil
 	for k, h in pairs(OPEN) do if info[k].h0 - h > EPS then active = true; break end end
 	if not active then
 		local far = false
@@ -269,6 +300,34 @@ local function deliver()
 			dirty[k] = true                            -- 水面變了：重看坑的水頭
 		elseif not OPEN[k] then acc[k] = nil end
 	end
+end
+
+-- 抽水井（抽水機每秒呼叫）：(x, z, 孔底高程, 抽水量 m³/s) → 這段時間抽出來的 m³、最近一步的流量（m³/s）；抽水量 nil = 停
+function rockmech.groundwater_well(x, z, bot, cap)
+	local k = ckey(x, z)
+	local w = WELL[k]
+	if not cap then
+		if w then
+			WELL[k] = nil
+			local i = info[k]
+			if i then H[k] = math.min(w.h, i.h0) end
+		end
+		return 0
+	end
+	if not w then
+		local i = info[k] or scan(x, z)
+		if not i or i.low or not aquifer(i) then return 0 end      -- 沒有地下水、是坑
+		if math.max(bot, i.base) >= i.h0 then return 0 end         -- 孔底在水位以上（或含水層底以下的部分是岩石）
+		add(k, i, 0)
+		w = {bot = math.max(bot, i.base), h = H[k] or i.h0, out = 0}
+		H[k] = nil
+		WELL[k] = w
+		add_ring(k)
+	end
+	w.cap, w.seen = cap, core.get_us_time()
+	local o = w.out
+	w.out = 0
+	return o, inflow_now[k] or 0
 end
 
 -- 一格騰出空間、挖開（slurry.lua 呼叫）：在天然水位附近以下就重看那一欄
@@ -311,7 +370,7 @@ end
 rockmech.groundwater_state = function()
 	local n = 0
 	for _ in pairs(H) do n = n + 1 end
-	return {dom = n, H = H, OPEN = OPEN, info = info}
+	return {dom = n, H = H, OPEN = OPEN, info = info, WELL = WELL}
 end
 
 -- 排水溝 -------------------------------------------------------------------
@@ -353,9 +412,41 @@ local function may(pos, name)
 	return rockmech.owner_ok and rockmech.owner_ok(owner, name) or owner == "" or owner == name
 end
 local level_of = rockmech.slurry_level
+local CASING = "rockmech:borehole"
+-- 抽水機底下是往下鑽的岩芯孔套管：孔底那一格的 y
+local function well_bottom(pos)
+	local c = {x = pos.x, y = pos.y - 1, z = pos.z}
+	if core.get_node(c).name ~= CASING then return nil end
+	return tonumber(core.get_meta(c):get_string("bottom"))
+end
+local function well_tick(pos, bot, out)
+	local meta = core.get_meta(pos)
+	local m3, rate = rockmech.groundwater_well(pos.x, pos.z, bot - 0.5, PUMP_RATE / NL)
+	local a = meta:get_float("well_acc") + m3 * NL
+	local n = math.floor(a)
+	if n > 0 then
+		if rockmech.liquid_drains[core.get_node(out).name] then a = a - n          -- 後面接著排水溝：直接排掉
+		else
+			local left = rockmech.slurry_add_up(out, n, nil, WATER)
+			rockmech.slurry_schedule(out); rockmech.slurry_wake(out)
+			if left > 0 then                            -- 出水的地方擋住了：井停下來
+				rockmech.groundwater_well(pos.x, pos.z, nil)
+				meta:set_float("well_acc", 0)
+				pump_info(pos, S("Outlet blocked"))
+				return
+			end
+			a = a - n
+		end
+	end
+	meta:set_float("well_acc", a)
+	if (rate or 0) > 0 then pump_info(pos, S("Well") .. ": " .. S("Pumping @1 m³/h", math.floor(rate * 3600 + 0.5)))
+	else pump_info(pos, S("No water in reach")) end
+end
 local function pump_tick(pos)
 	local node = core.get_node(pos)
 	local f, b = pump_dirs(node)
+	local bot = well_bottom(pos)
+	if bot then well_tick(pos, bot, vector.add(pos, b)); return end
 	local col = vector.add(pos, f)
 	-- 吸管：往下穿過空氣、液體，找第一格有液的（最多 HOSE m）
 	local q, intake = vector.copy(col), nil
@@ -385,7 +476,8 @@ local function pump_tick(pos)
 	rockmech.slurry_schedule(out); rockmech.slurry_wake(out)
 end
 core.register_node(PUMP, {
-	description = S("Water pump\nThe suction hose points back at you: stand at the pit edge and place it on the far side. Pumps water from the pit and pours it out behind the pump; lead it into a drain"),
+	description = S("Water pump\nThe suction hose points back at you: stand at the pit edge and place it on the far side. Pumps water from the pit and pours it out behind the pump; lead it into a drain") .. "\n" ..
+		S("On a borehole casing it pumps the well and lowers the groundwater around it"),
 	short_description = S("Water pump"),
 	drawtype = "nodebox",
 	node_box = {type = "fixed", fixed = {
@@ -402,6 +494,7 @@ core.register_node(PUMP, {
 	is_ground_content = false,
 	groups = {cracky = 2},
 	on_construct = function(pos) core.get_node_timer(pos):start(1) end,
+	on_destruct = function(pos) rockmech.groundwater_well(pos.x, pos.z, nil) end,
 	after_place_node = function(pos, placer)
 		if placer and placer.get_look_dir then
 			local d = placer:get_look_dir()

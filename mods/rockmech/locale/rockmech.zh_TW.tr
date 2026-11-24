@@ -587,10 +587,12 @@ This is already sprayed to @1 layers (or the space in front of the rock face is 
 
 ### groundwater.lua
 Drain@nWater that flows into it or onto it is carried away=排水溝@n流進來、流到上面的水會被排走
-No water in reach=吸管碰不到水
-Pumping @1 m³/h=抽水中 @1 m³/h
 Outlet blocked=出水口被擋住了
+Well=抽水井
+Pumping @1 m³/h=抽水中 @1 m³/h
+No water in reach=吸管碰不到水
 Water pump@nThe suction hose points back at you: stand at the pit edge and place it on the far side. Pumps water from the pit and pours it out behind the pump; lead it into a drain=抽水機@n吸管朝向你：站在坑邊往外放，吸管就垂進坑裡。把坑裡的水抽到機器後面，接排水溝排掉
+On a borehole casing it pumps the well and lowers the groundwater around it=
 
 ### haulroad.lua
 Weighbridge office=地磅站

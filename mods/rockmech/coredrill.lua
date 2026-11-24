@@ -1255,6 +1255,7 @@ local function finish(name, d, why)
 		meta:set_string("acc", acc)
 		meta:set_int("n", n)
 		meta:set_int("depth", #d.rows)
+		if d.dir.y < 0 then meta:set_string("bottom", tostring(d.collar.y - #d.rows)) end    -- 孔底那一格（抽水井用，groundwater.lua）
 		meta:set_string("infotext", S("@1 (@2) depth @3 m\nRight-click to name it", "BH-" .. n,
 			rockmech.account_label and rockmech.account_label(acc) or acc, tostring(#d.rows)))
 	end
