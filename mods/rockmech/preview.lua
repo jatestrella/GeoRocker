@@ -171,6 +171,8 @@ core.register_globalstep(function(dtime)
 		local ent = item:sub(-5) == "_item" and core.registered_entities[item:sub(1, -6)]
 		local vdef = ent and ent.vkind and V.TYPES[ent.vkind]
 		local is_crusher, is_plant = item == "rockmech:crusher" or item == "rockmech:crusher_big", item == "rockmech:plant" and rockmech.plant_site_ok
+		local site_fn = rockmech.facility_site_ok and rockmech.facility_site_ok[item]      -- 拌合廠（batching.lua）
+		if site_fn then is_plant = true end
 		local in_view = rockmech.build_view_active and rockmech.build_view_active(name)
 		local pt = (vdef or is_crusher or is_plant) and (in_view or not player:get_attach()) and pointed_node(player)
 		if not pt then
@@ -196,7 +198,7 @@ core.register_globalstep(function(dtime)
 					local cells = rockmech.facility_cells(item, a, dx, dz)
 					local b = vector.copy(a)
 					local rec = rockmech.clear_site and rockmech.clear_site(cells, b)
-					local ok = rec ~= false and (is_plant and rockmech.plant_site_ok(b, dx, dz) or (not is_plant and H.site_ok(b, dx, dz)))
+					local ok = rec ~= false and (is_plant and (site_fn or rockmech.plant_site_ok)(b, dx, dz) or (not is_plant and H.site_ok(b, dx, dz)))
 					if rockmech.site_undo then rockmech.site_undo(rec) end
 					if ok and rockmech.cells_blocked(cells, a.y - 1, a.y + 4, player) then ok = false end
 					draw(name, cells, b.y, ok)

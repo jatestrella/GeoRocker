@@ -1475,6 +1475,8 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 				if n > 0 then rockmech.add_money(name, -n * s.buy) end
 			end
 			if n <= 0 then rockmech.notify(name, S("Not enough money")) end
+			local on_buy = TYPES[self.vkind].on_buy       -- 例如預拌車：拌筒裡的配比照體積混合（vehicle_mixer.lua）
+			if on_buy and n > 0 then on_buy(self, item, have, n) end
 			self.store[item] = have + math.max(0, n)
 		elseif fields["fill_" .. i] and have < cap then
 			local fill = TYPES[self.vkind].store_fill      -- 自訂裝法（例如 ANFO 要記比例）

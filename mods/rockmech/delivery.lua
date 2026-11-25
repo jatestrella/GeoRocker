@@ -216,6 +216,7 @@ local ORDERS = {      -- 施工單 → 原本的物品、標籤顏色、名稱�
 	{order = "rockmech:order_crusher", item = "rockmech:crusher", color = "#b08a20", label = S("Crusher"), hopper = true},
 	{order = "rockmech:order_crusher_big", item = "rockmech:crusher_big", color = "#4a5058", label = S("Large crusher"), hopper = true},
 	{order = "rockmech:order_plant", item = "rockmech:plant", color = "#3a7ab0", label = S("Pre-sorting plant"), hopper = true, plant = true},
+	{order = "rockmech:order_batch_plant", item = "rockmech:batch_plant", color = "#c8782a", label = S("Batching plant"), hopper = true, plant = true},
 	{order = "rockmech:order_gold_plant", item = "rockmech:gold_plant", color = "#c9a227", label = S("Gold plant"),
 		how = S("3×3 m flat ground, 7 m clear above; a conveyor belt feeds the grating on top, tailings come out the side away from you")},
 	{order = "rockmech:order_belt", item = "rockmech:belt", color = "#262626", label = S("Conveyor belt"),
@@ -247,6 +248,8 @@ function rockmech.facility_cells(item, a, dx, dz)
 	if item == "rockmech:plant" and rockmech.plant_towers then
 		for _, tc in ipairs((rockmech.plant_towers(a, dx, dz))) do square(cells, tc.x, tc.z, 1) end
 	end
+	local tw = rockmech.facility_towers and rockmech.facility_towers[item]      -- 拌合廠（batching.lua）
+	if tw then for _, tc in ipairs((tw(a, dx, dz))) do square(cells, tc.x, tc.z, 1) end end
 	return cells
 end
 

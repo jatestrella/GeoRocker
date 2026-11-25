@@ -26,4 +26,12 @@ function M.mu(fc, As, fy, d)
 	return T * (d - a / 2)
 end
 
+-- 水灰比（拌合廠，batching.lua）：Abrams 定律 f_c = A / B^(w/c)。取 w/c 0.50 → 28 MPa（跟預拌車一樣）、0.40 → 38 MPa，
+-- 回傳相對於 w/c 0.50 的強度比例（0.40 約 1.36、0.70 約 0.54）。用水量固定 WATER m³/m³ → 水泥 WATER/(w/c) t/m³
+M.WATER = 0.18
+M.WC_REF = 0.5
+local AB = 38 / 28          -- 水灰比每少 0.1 強度乘幾倍
+function M.abrams(wc) return AB ^ ((M.WC_REF - wc) / 0.1) end
+function M.cement_per_m3(wc) return M.WATER / wc end
+
 return M

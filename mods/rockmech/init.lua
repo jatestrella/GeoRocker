@@ -174,6 +174,7 @@ dofile(modpath .. "/impact.lua")
 dofile(modpath .. "/economy.lua")          -- 錢和市場：帳戶、資金、礦價、賣礦計價、研究係數
 dofile(modpath .. "/crusher.lua")
 dofile(modpath .. "/plant.lua")
+dofile(modpath .. "/batching.lua")         -- 拌合廠（單機版）：自己的碎石＋水泥＋水拌混凝土，預拌車在出料口裝
 dofile(modpath .. "/goldplant.lua")       -- 提金廠（褐鐵礦的金：碳浸法），營地的貴金屬商
 dofile(modpath .. "/conveyor.lua")
 dofile(modpath .. "/beltswitch.lua")   -- 輸送帶控制箱：運轉／停止／依礦價

@@ -808,6 +808,12 @@ local function may(pos, name)
 end
 local level_of = rockmech.slurry_level
 local CASING = "rockmech:borehole"
+-- 出水口對著收水的設施（拌合廠的水箱，batching.lua）：rockmech.water_sinks[方塊名](pos, 級數) → 收了幾級
+local function to_sink(out, n)
+	local f = rockmech.water_sinks and rockmech.water_sinks[core.get_node(out).name]
+	if not f then return nil end
+	return f(out, n)
+end
 -- 抽水機底下是往下鑽的岩芯孔套管：孔底那一格的 y
 local function well_bottom(pos)
 	local c = {x = pos.x, y = pos.y - 1, z = pos.z}
@@ -820,7 +826,16 @@ local function well_tick(pos, bot, out)
 	local a = meta:get_float("well_acc") + m3 * NL
 	local n = math.floor(a)
 	if n > 0 then
+		local sunk = to_sink(out, n)
 		if rockmech.liquid_drains[core.get_node(out).name] then a = a - n          -- 後面接著排水溝：直接排掉
+		elseif sunk then
+			if sunk < n then                            -- 水箱滿了：井停下來
+				rockmech.groundwater_well(pos.x, pos.z, nil)
+				meta:set_float("well_acc", 0)
+				pump_info(pos, S("The tank it pumps into is full"))
+				return
+			end
+			a = a - n
 		else
 			local left = rockmech.slurry_add_up(out, n, nil, WATER)
 			rockmech.slurry_schedule(out); rockmech.slurry_wake(out)
@@ -859,6 +874,12 @@ local function pump_tick(pos)
 	local out = vector.add(pos, b)
 	if rockmech.liquid_drains[core.get_node(out).name] then       -- 後面接著排水溝：直接排掉
 		pump_info(pos, S("Pumping @1 m³/h", math.floor(took / NL * 3600 + 0.5)))
+		return
+	end
+	local sunk = to_sink(out, took)
+	if sunk then                                    -- 打進拌合廠的水箱；滿了放回去
+		if sunk < took then rockmech.slurry_add_up(intake, took - sunk, nil, c) end
+		pump_info(pos, sunk > 0 and S("Pumping @1 m³/h", math.floor(sunk / NL * 3600 + 0.5)) or S("The tank it pumps into is full"))
 		return
 	end
 	local left = rockmech.slurry_add_up(out, took, nil, c)

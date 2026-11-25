@@ -202,6 +202,8 @@ config.shop = {
 	{key = "crusher", shop = "civil", item = "rockmech:crusher", label = TR("Crusher"), price = 20000, sell_crusher = true},
 	{key = "crusher_big", shop = "civil", item = "rockmech:crusher_big", label = TR("Large crusher"), price = 300000, sell_crusher = true},
 	{key = "plant", shop = "civil", item = "rockmech:plant", label = TR("Pre-sorting plant"), price = 30000},
+	-- 拌合廠（batching.lua，單機版）：自己的碎石＋水泥＋水拌混凝土
+	{key = "batch_plant", shop = "civil", item = "rockmech:batch_plant", label = TR("Batching plant"), price = 60000, solo = true},
 	-- 提金廠：先關掉（2026-11-14，鐵帽的金直接在破碎站算錢；以後改做堆浸場）。要開回來：取消註解，並把 goldplant.lua 的 ENABLED 設成 true
 	-- {key = "gold_plant", shop = "civil", item = "rockmech:gold_plant", label = TR("Gold plant"), price = 120000, needs_gold = true},
 	{key = "belt", shop = "civil", item = "rockmech:belt", label = TR("Conveyor belt"), price = 1000, count = 10},
@@ -261,6 +263,7 @@ config.shop = {
 	{key = "slurry", shop = "tools", item = "rockmech:slurry_m3", label = TR("Bentonite slurry"), price = 500, solo_price = 800, count = 10},
 	{key = "bentonite", shop = "tools", item = "rockmech:bentonite", label = TR("Bentonite"), price = 300, count = 10, solo = true},
 	{key = "water_pipe", shop = "tools", item = "rockmech:water_pipe", label = TR("Water pipe"), price = 500, count = 10, solo = true},
+	{key = "cement", shop = "tools", item = "rockmech:cement", label = TR("Cement"), price = 4000, count = 10, solo = true},      -- 每包 1 t（$400/t）
 	{key = "slurry_tank", shop = "tools", item = "rockmech:slurry_tank", label = TR("Slurry tank"), price = 20000},
 	{key = "slurry_pipe", shop = "tools", item = "rockmech:slurry_pipe", label = TR("Slurry pipe"), price = 500, count = 10},
 	{key = "slurry_outlet", shop = "tools", item = "rockmech:slurry_outlet", label = TR("Slurry outlet"), price = 3000},
@@ -1347,6 +1350,7 @@ function config.load(get, opts)
 			cfg.shop[#cfg.shop + 1] = it
 		end
 	end
+	cfg.aggregate_ucs = math.max(0, tonumber(get("rockmech_aggregate_ucs")) or 50)   -- 拌合廠收的骨材：岩石單壓強度至少幾 MPa（batching.lua）
 	cfg.water_fee = math.max(0, tonumber(get("rockmech_water_fee")) or 5)     -- 自來水費（$/m³，slurrytank.lua 皂土調漿）
 	-- 無人卡車綁定怪手（vehicle_ahs.lua）：車尾離怪手車身、倒車的距離、怪手移動多遠要重新停車、離路線起點多遠就不去
 	cfg.ahs_tail_gap = math.max(0.6, tonumber(get("rockmech_ahs_tail_gap")) or 1.5)

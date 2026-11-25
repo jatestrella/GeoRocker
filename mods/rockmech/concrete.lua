@@ -104,15 +104,18 @@ local LABEL = {}
 
 -- 硬化的混凝土：齡期、強度（還有應力解算的彎矩，meta mtxt）
 -- 強度的比例（夾泥：溜槽直接倒進水裡的，DIRTY_Q；照體積加權）
+-- 配比的強度比例 wq（拌合廠的水灰比，batching.lua；預拌車是 1）也照體積加權；q 是配比 × 夾泥，強度照 q
 local function quality(meta) return meta:contains("q") and meta:get_float("q") or 1 end
+local function mixq(meta) return meta:contains("wq") and meta:get_float("wq") or 1 end
+local function off1(x) return math.abs(x - 1) > 0.001 end
 local function hard_info(pos)
 	local meta = core.get_meta(pos)
 	local t = age_of(meta)
-	local q = quality(meta)
-	local fc = CC.fc(FC28, t) * q
+	local q, wq = quality(meta), mixq(meta)
+	local fc, design = CC.fc(FC28, t) * q, FC28 * wq
 	local s = (LABEL[core.get_node(pos).name] or S("Concrete")) .. "\n"
-		.. S("Age @1 days, strength @2 / @3 MPa (@4%)", ("%.1f"):format(t), ("%.1f"):format(fc), d0(FC28), d0(fc / FC28 * 100))
-	if q < 0.999 then s = s .. "\n" .. S("Poured through water: segregated, strength × @1", ("%.2f"):format(q)) end
+		.. S("Age @1 days, strength @2 / @3 MPa (@4%)", ("%.1f"):format(t), ("%.1f"):format(fc), d0(design), d0(fc / design * 100))
+	if q / wq < 0.999 then s = s .. "\n" .. S("Poured through water: segregated, strength × @1", ("%.2f"):format(q / wq)) end
 	local m = meta:get_string("mtxt")
 	if m ~= "" then s = s .. "\n" .. m end
 	meta:set_string("infotext", s)
@@ -429,7 +432,7 @@ local function displace(c, F, k, lc)
 end
 
 local fem_wait = {}
-function rockmech.tremie_pour(F)
+function rockmech.tremie_pour(F, wq)
 	if name_at(F) ~= FRAME then return false, S("The tremie frame is gone") end
 	local meta = core.get_meta(F)
 	local c = find_cell(F, meta:get_string("owner"))
@@ -440,6 +443,7 @@ function rockmech.tremie_pour(F)
 	local k, lc = rockmech.slurry_replace(c, {name = FRESH})
 	local cm = core.get_meta(c)
 	cm:set_float("t0", now())
+	if wq and off1(wq) then cm:set_float("q", wq); cm:set_float("wq", wq) end
 	if rockmech.rebar_caged(c) then cm:set_int("rc", 1) end
 	core.get_node_timer(c):start(SET_DAYS * day_s())
 	displace(c, F, k, lc)
@@ -474,7 +478,7 @@ local function open(n)
 end
 local function fresh_meta(p)
 	local m = core.get_meta(p)
-	return m:contains("t0") and m:get_float("t0") or now(), quality(m)
+	return m:contains("t0") and m:get_float("t0") or now(), quality(m), mixq(m)
 end
 local function wake(p)
 	if rockmech.slurry_schedule then rockmech.slurry_schedule(p) end
@@ -495,8 +499,9 @@ local function displace_liquid(p, k, comp)
 	if left > 0 then left = rockmech.slurry_add_up({x = p.x, y = p.y + 1, z = p.z}, left, nil, comp) end
 	if left > 0 then core.log("warning", ("[rockmech] 新拌混凝土擠掉的液體 %d 級沒地方放（%s）"):format(left, core.pos_to_string(p))) end
 end
--- 把 a 級（齡期起點 t0、強度比例 q）加進 c 那一格（空格、液體、不滿的混凝土）：回傳放不下的級數
-local function put(c, a, t0, q)
+-- 把 a 級（齡期起點 t0、強度比例 q、其中配比的比例 wq）加進 c 那一格（空格、液體、不滿的混凝土）：回傳放不下的級數
+local function put(c, a, t0, q, wq)
+	wq = wq or 1
 	local n = name_at(c)
 	local k = FRESH_K[n]
 	if not k then
@@ -515,14 +520,17 @@ local function put(c, a, t0, q)
 		end
 		m = core.get_meta(c)
 		m:set_float("t0", t0)
-		if q < 0.999 then m:set_float("q", q) end
+		if off1(q) then m:set_float("q", q) end
+		if off1(wq) then m:set_float("wq", wq) end
 	else
-		local t1, q1 = fresh_meta(c)
+		local t1, q1, w1 = fresh_meta(c)
 		core.swap_node(c, {name = fresh_name(k + add)})
 		m = core.get_meta(c)
 		m:set_float("t0", (t1 * k + t0 * add) / (k + add))
 		local qq = (q1 * k + q * add) / (k + add)
-		if qq < 0.999 then m:set_float("q", qq) else m:set_string("q", "") end
+		if off1(qq) then m:set_float("q", qq) else m:set_string("q", "") end
+		local ww = (w1 * k + wq * add) / (k + add)
+		if off1(ww) then m:set_float("wq", ww) else m:set_string("wq", "") end
 	end
 	local left = SET_DAYS - (now() - m:get_float("t0")) / day_s()
 	core.get_node_timer(c):start(math.max(0.1, left * day_s() + 0.1))
@@ -562,14 +570,14 @@ end
 local function fresh_step(p)
 	local k = FRESH_K[name_at(p)]
 	if not k then return end
-	local t0, q = fresh_meta(p)
+	local t0, q, wq = fresh_meta(p)
 	-- 往下：底下是空格、液體 → 掉下去；不滿的混凝土 → 補滿
 	local b = {x = p.x, y = p.y - 1, z = p.z}
 	local bn = name_at(b)
 	local kb = FRESH_K[bn]
 	if (kb and kb < 8) or (not kb and open(bn)) then
 		local t = take(p, math.min(k, kb and 8 - kb or 8))
-		put(b, t, t0, q)
+		put(b, t, t0, q, wq)
 		wake(p); wake(b)
 		return
 	end
@@ -590,7 +598,7 @@ local function fresh_step(p)
 	local a = math.min(k, math.ceil(bx / 2), 8 - (FRESH_K[name_at(best)] or 0))
 	if a <= 0 then return end
 	take(p, a)
-	put(best, a, t0, q)
+	put(best, a, t0, q, wq)
 	wake(p); wake(best)
 end
 rockmech.fluid_step_hooks = rockmech.fluid_step_hooks or {}
@@ -599,7 +607,8 @@ for name in pairs(FRESH_K) do rockmech.fluid_step_hooks[name] = fresh_step end
 -- 從 (x, ytop, z) 往下倒 a 級新拌混凝土（預拌車的溜槽口）：穿過空氣、液體往下掉，落在第一個撐得住的地方，之後照上面的規則流。
 -- 掉下去穿過 0.5 m 以上的水、穩定液（不是用特密管從底下灌）：夾泥，凝固後強度 × DIRTY_Q。
 -- 回傳 倒進去的級數、落點、有沒有夾泥
-function rockmech.concrete_pour_at(x, ytop, z, a, owner)
+function rockmech.concrete_pour_at(x, ytop, z, a, owner, wq)
+	wq = wq or 1
 	local p = {x = x, y = ytop, z = z}
 	if not open(name_at(p)) and not FRESH_K[name_at(p)] then return 0 end
 	local wet = 0
@@ -617,8 +626,9 @@ function rockmech.concrete_pour_at(x, ytop, z, a, owner)
 	end
 	if owner and core.is_protected(p, owner) then return 0 end
 	local dirty = wet >= 4
-	local left = put(p, a, now(), dirty and DIRTY_Q or 1)
-	if left > 0 then left = put({x = p.x, y = p.y + 1, z = p.z}, left, now(), dirty and DIRTY_Q or 1) end
+	local q = (dirty and DIRTY_Q or 1) * wq
+	local left = put(p, a, now(), q, wq)
+	if left > 0 then left = put({x = p.x, y = p.y + 1, z = p.z}, left, now(), q, wq) end
 	wake(p)
 	return a - left, p, dirty
 end

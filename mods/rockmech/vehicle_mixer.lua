@@ -8,6 +8,8 @@
 --     其他地方：從溜槽口直接倒（每 POUR_TIME/8 秒 1 級），新拌混凝土照安息角流（concrete.lua）；WASD 照視線方向移動溜槽口，
 --       一邊倒一邊攤。穿過水、穩定液倒下去會夾泥（凝固後強度打折），水中要用特密管。
 --     灌的時候不能開車。
+--   拌合廠（batching.lua）：倒車到出料口旁邊按空白鍵，就從拌合廠裝料（每 m³ POUR_TIME 秒，不付錢），再按一次停。
+--     拌合廠的混凝土帶著水灰比的強度比例（drum_q，跟叫的預拌混凝土照體積混合），灌下去記在每一格上。
 
 local S = rockmech.S
 local V = rockmech.vehicles
@@ -106,15 +108,31 @@ local function pick_at(self, P)
 end
 rockmech.vehicle_mixer_pick = pick_at     -- 測試用
 
+-- 拌筒裡混凝土的強度比例（拌合廠的水灰比；叫的預拌混凝土是 1），沒料了就回到 1
+local function drum_q(self)
+	if V.store_count(self, ITEM) < 1 then self.drum_q = nil end
+	return self.drum_q or 1
+end
+local function add_concrete(self, have, n, q)
+	self.drum_q = (drum_q(self) * have + q * n) / math.max(1, have + n)
+	if math.abs(self.drum_q - 1) < 0.001 then self.drum_q = nil end
+end
+function def.on_buy(self, item, have, n) if item == ITEM then add_concrete(self, have, n, 1) end end
+function def.on_save(self, data) data.drum_q = self.drum_q end
+function def.on_load(self, data) self.drum_q = data.drum_q end
+
 function def.hud(self)
 	local s = "\n" .. S("Concrete @1 / @2 m³", ("%d"):format(V.store_count(self, ITEM)), CAP)
+	local q = drum_q(self)
+	if q ~= 1 then s = s .. "  " .. S("(@1 MPa)", ("%.0f"):format(28 * q)) end
 	if self.pouring then s = s .. "  " .. S("Pouring (@1 m³)", ("%d"):format(self.pouring.done)) end
+	if self.loading then s = s .. "  " .. S("Loading at the batching plant (@1 m³)", ("%d"):format(self.loading.done)) end
 	return s
 end
 function def.keys(self)
 	local k = {{"Shift+E", S("Aim the chute"), on = self.aiming == true}, {"E", S("Pour where you point"), on = self.pouring ~= nil}}
 	if self.pouring and self.pouring.open then k[#k + 1] = {"WASD", S("Move the chute")} end
-	k[#k + 1] = {S("Space"), S("Order concrete")}
+	k[#k + 1] = {S("Space"), S("Order concrete / load at a batching plant"), on = self.loading ~= nil}
 	return k
 end
 -- 瞄準、灌的時候 WASD 給溜槽用（不開車、Shift 不下車）
@@ -175,7 +193,7 @@ local function open_step(self, ctx, pm)
 	if V.store_count(self, ITEM) < 1 then
 		return finish(self, S("The truck is empty (poured @1 m³)", ("%d"):format(pm.done)))
 	end
-	local n, land, dirty = rockmech.concrete_pour_at(x, math.floor(tip.y + 0.5), z, 1, d and d:get_player_name())
+	local n, land, dirty = rockmech.concrete_pour_at(x, math.floor(tip.y + 0.5), z, 1, d and d:get_player_name(), drum_q(self))
 	if n <= 0 then return finish(self, S("Something is in the way of the chute") .. " " .. S("(poured @1 m³)", ("%d"):format(pm.done))) end
 	pm.land = land and land.y
 	if dirty and not pm.warned then
@@ -191,7 +209,29 @@ local function open_step(self, ctx, pm)
 	end
 end
 
+-- 在拌合廠裝料：每 POUR_TIME 秒 1 m³；車開走、拌筒滿了、材料不夠就停
+local function load_step(self, ctx)
+	local L = self.loading
+	L.t = L.t + ctx.dtime
+	if L.t < POUR_TIME then return end
+	L.t = 0
+	local have = V.store_count(self, ITEM)
+	local done = function(msg) self.loading = nil; self.msg = msg; update_hud(self) end
+	if have >= CAP then return done(S("The drum is full (loaded @1 m³)", ("%d"):format(L.done))) end
+	local b = rockmech.batch_near and rockmech.batch_near(V.to_world(self, CHUTE))
+	if not b or not vector.equals(b, L.plant) then return done(S("Moved away from the batching plant (loaded @1 m³)", ("%d"):format(L.done))) end
+	local q, why = rockmech.batch_make(b)
+	if not q then return done(why .. " " .. S("(loaded @1 m³)", ("%d"):format(L.done))) end
+	add_concrete(self, have, 1, q)
+	self.store[ITEM] = have + 1
+	L.done = L.done + 1
+	local sp = select(2, rockmech.batch_near(V.to_world(self, CHUTE)))
+	if sp then pour_fx(self, {x = sp.x, y = sp.y - 0.3, z = sp.z}, V.to_world(self, CHUTE), POUR_TIME) end
+	update_hud(self)
+end
+
 function def.step(self, ctx)
+	if self.loading then return load_step(self, ctx) end
 	local pm = self.pouring
 	if not pm then
 		local d = ctx.d
@@ -228,7 +268,7 @@ function def.step(self, ctx)
 	end
 	local fn = rockmech.pour_targets[core.get_node(F).name]
 	local ok, why
-	if fn then ok, why = fn(F) else why = S("The tremie frame is gone") end
+	if fn then ok, why = fn(F, drum_q(self)) else why = S("The tremie frame is gone") end
 	if not ok then return finish(self, why .. " " .. S("(poured @1 m³)", ("%d"):format(pm.done))) end
 	V.store_take(self, ITEM, 1)
 	pm.done = pm.done + 1
@@ -274,6 +314,20 @@ function def.action(self, ctx)
 		finish(self, S("Stopped (poured @1 m³)", ("%d"):format(self.pouring.done)))
 	elseif ctrl.jump and d and not self.pouring then
 		self.t_act = 0.5
+		if self.loading then
+			self.msg = S("Stopped loading (@1 m³)", ("%d"):format(self.loading.done))
+			self.loading = nil
+			update_hud(self)
+			return
+		end
+		-- 倒車到拌合廠的出料口旁邊：從拌合廠裝；不然向預拌廠叫料
+		local b = rockmech.batch_near and rockmech.batch_near(V.to_world(self, CHUTE))
+		if b then
+			self.loading = {plant = b, t = POUR_TIME, done = 0}
+			self.msg = nil
+			update_hud(self)
+			return
+		end
 		V.open_store(self, d)
 	end
 end

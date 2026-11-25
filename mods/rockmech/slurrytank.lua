@@ -598,7 +598,7 @@ do
 			connect_right = {r, lo, -r, 0.5, hi, r},
 			connect_top = {-r, lo, -r, r, 0.5, r},
 		},
-		connects_to = {WPIPE, TANK, HYDRANT},
+		connects_to = {WPIPE, TANK, HYDRANT, "rockmech:batch_tower", "rockmech:batch_silo"},
 		is_ground_content = false,
 		walkable = false,
 		groups = {cracky = 3, rockmech_by_hand = 1, not_in_creative_inventory = 1},
@@ -632,9 +632,11 @@ core.register_node(HYDRANT, {
 	end,
 })
 
--- 儲槽接得到給水栓嗎（從控制格沿著水管找）
+-- 接得到給水栓嗎：從 c（儲槽控制格）或一串水管格（拌合廠附近的水管，batching.lua）沿著水管找
 local function hydrant_of(c)
-	local seen, queue = {[core.hash_node_position(c)] = true}, {c}
+	local seeds = c[1] and c or {c}
+	local seen, queue = {}, {}
+	for _, q in ipairs(seeds) do seen[core.hash_node_position(q)] = true; queue[#queue + 1] = q end
 	local i = 1
 	while queue[i] and #queue < NET_MAX * 4 do
 		local q = queue[i]; i = i + 1
