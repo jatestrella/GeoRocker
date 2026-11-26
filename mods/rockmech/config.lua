@@ -221,6 +221,10 @@ config.shop = {
 	{key = "mixer", shop = "vehicle", item = "rockmech:mixer_item", label = TR("Concrete mixer truck"), price = 50000},
 	{key = "drillrig", shop = "blast", item = "rockmech:drillrig_item", label = TR("Surface drill rig"), price = 50000},
 	{key = "jumbo", shop = "blast", item = "rockmech:jumbo_item", label = TR("Drill jumbo"), price = 60000},
+	{key = "bolter", shop = "vehicle", item = "rockmech:bolter_item", label = TR("Rock bolter"), price = 60000, solo = true},
+	{key = "sprayer", shop = "vehicle", item = "rockmech:sprayer_item", label = TR("Shotcrete sprayer"), price = 50000, solo = true},
+	{key = "erector", shop = "vehicle", item = "rockmech:erector_item", label = TR("Steel set erector"), price = 40000, solo = true},
+	{key = "support_rig", shop = "vehicle", item = "rockmech:support_rig_item", label = TR("Multi-purpose support rig"), price = 250000, solo = true},
 	{key = "haul", shop = "vehicle", item = "rockmech:haul_item", label = TR("Haul truck"), price = 150000},
 	{key = "excavator_big", shop = "vehicle", item = "rockmech:excavator_big_item", label = TR("Mining excavator"), price = 200000},
 	{key = "loadout", shop = "civil", item = "rockmech:loadout", label = TR("Loadout bin"), price = 25000},
@@ -295,7 +299,7 @@ config.shop = {
 -- 引擎額定功率（kW，fuel.lua 算油耗）：沒列的車不耗油（手推車靠人推）
 config.engine_kw = {suv = 150, truck = 300, haul = 1000, bulktruck = 250, anfotruck = 250, lowboy = 400, dozer = 250,
 	excavator = 120, excavator_big = 500, drillrig = 200, corerig = 100, jumbo = 150, charger = 100, miner = 500,
-	aerial = 150, crane = 250, heavyhaul = 500, masago = 250, mixer = 250}
+	aerial = 150, crane = 250, heavyhaul = 500, masago = 250, mixer = 250, bolter = 110, sprayer = 110, erector = 110, support_rig = 150}
 
 -- 化學成分（碎石的 metadata：assay.lua，質量比例 0..1）。有 chem 的岩性（褐鐵礦）挖下來就帶著這些成分，
 -- 混到廢石照體積稀釋。破碎站照成分計價（config.element_value）：

@@ -116,6 +116,9 @@ local function face_point(above, under, k)
 	return vector.add(above, vector.multiply(vector.subtract(under, above), k or 0.5))
 end
 
+-- 支撐台車（vehicle_support.lua）共用同一款底盤
+V.jumbo_carrier, V.jumbo_carrier_move = carrier, carrier_move
+
 ---------------------------------------------------------------- 鑽堡
 do
 	local HOLE_TIME = 0.5      -- 一支鑽臂鑽一個孔 (s)

@@ -240,6 +240,19 @@ do
 	end
 end
 
+-- 把岩栓裝進鑽孔 p（孔那一格）：成功回傳 true（手裝、岩栓台車 vehicle_support.lua 共用）
+function rockmech.install_bolt(p)
+	local node = core.get_node(p)
+	if rockmech.hole_kind(node.name) ~= HOLE then return false end
+	local layers = core.get_item_group(node.name, "shotcrete")
+	core.swap_node(p, {name = layers > 0 and BOLTS_SC[layers] or BOLT, param2 = node.param2})
+	local meta = core.get_meta(p)
+	local len = meta:get_float("depth")
+	if len <= 0 then len = rockmech.cfg.blast.hole_depth end
+	meta:set_string("infotext", S("Rock bolt (length @1 m, anchorage capacity @2 kN)", ("%g"):format(len), ("%d"):format(math.floor(capacity(len, p)))))
+	return true
+end
+
 -- 岩栓：對鑽孔按右鍵裝進去
 core.register_craftitem(BOLT_ITEM, {
 	description = S("Rock bolt\nRight-click a drill hole"),
@@ -248,17 +261,10 @@ core.register_craftitem(BOLT_ITEM, {
 	on_place = function(itemstack, placer, pointed)
 		if pointed.type ~= "node" then return itemstack end
 		local p = pointed.under
-		local node = core.get_node(p)
-		if rockmech.hole_kind(node.name) ~= HOLE then
+		if not rockmech.install_bolt(p) then
 			tell(placer, S("Rock bolts go into drill holes (drill a hole with the rock drill first, then right-click the hole)"))
 			return itemstack
 		end
-		local layers = core.get_item_group(node.name, "shotcrete")
-		core.swap_node(p, {name = layers > 0 and BOLTS_SC[layers] or BOLT, param2 = node.param2})
-		local meta = core.get_meta(p)
-		local len = meta:get_float("depth")
-		if len <= 0 then len = rockmech.cfg.blast.hole_depth end
-		meta:set_string("infotext", S("Rock bolt (length @1 m, anchorage capacity @2 kN)", ("%g"):format(len), ("%d"):format(math.floor(capacity(len, p)))))
 		if not creative(placer) then itemstack:take_item() end
 		resolve(p)
 		return itemstack
@@ -341,6 +347,32 @@ core.register_craftitem(SHOTCRETE, {
 		return itemstack
 	end,
 })
+
+-- 噴凝土台車（vehicle_support.lua）：噴 a 這一格（岩面前面那格）一層。空氣格貼著岩石 → 第一層；
+-- 已經噴過的、鋼拱、貼著岩面的孔或岩栓 → 再加一層（滿了就不噴）。回傳 true 表示噴了（用掉 1/9 袋）
+function rockmech.spray_cell(a)
+	local an = core.get_node(a)
+	local rock_dirs = {}
+	for _, d in ipairs({{x = 1, y = 0, z = 0}, {x = -1, y = 0, z = 0}, {x = 0, y = 1, z = 0},
+			{x = 0, y = -1, z = 0}, {x = 0, y = 0, z = 1}, {x = 0, y = 0, z = -1}}) do
+		if is_rock(core.get_node(vector.add(a, d)).name) then rock_dirs[#rock_dirs + 1] = d end
+	end
+	if #rock_dirs == 0 then return false end
+	if an.name == "air" then
+		core.set_node(a, {name = LINING})
+		return true
+	end
+	local nxt = rockmech.spray_next[an.name]
+	if not nxt then return false end
+	local here = core.get_item_group(an.name, "shotcrete_lining") > 0 or core.get_item_group(an.name, "rockmech_steelarch") > 0
+	if not here then
+		local def = core.registered_nodes[an.name]
+		if def and def.paramtype2 == "wallmounted" and is_rock(core.get_node(vector.add(a, core.wallmounted_to_dir(an.param2))).name) then here = true end
+	end
+	if not here then return false end
+	core.swap_node(a, {name = nxt, param2 = an.param2})
+	return true
+end
 
 -- 後面的岩石沒了：噴凝土（周圍沒有岩面）、岩栓（貼著的那格不是岩石）跟著消失；
 -- 岩栓經過的格子被挖空 → 岩面上畫岩栓斷面；找不到自己的岩栓的斷面消失

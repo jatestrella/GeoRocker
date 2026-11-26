@@ -1123,7 +1123,7 @@ end
 
 -- 車輛的自重 (t)，車種沒列的用 20
 V.MASS = {cart = 0.2, truck = 15, haul = 70, bulktruck = 30, anfotruck = 25, dozer = 20, excavator = 20, excavator_big = 100,
-	jumbo = 30, charger = 20, drillrig = 25, suv = 2.5, miner = 120, mixer = 30}   -- 露天採礦機約 100–200 t：只有重型拖車載得動
+	jumbo = 30, charger = 20, drillrig = 25, suv = 2.5, miner = 120, mixer = 30, bolter = 25, sprayer = 20, erector = 20, support_rig = 35}   -- 露天採礦機約 100–200 t：只有重型拖車載得動
 
 -- 接地壓力 (kPa) = (自重 + 車上的碎石) / 兩條輪跡的面積（各寬 1 m、長 = 車長），g 取 10。
 -- 重量都在輪子或履帶下面，不能平均到整個車身
@@ -2121,6 +2121,7 @@ dofile(rockmech.modpath .. "/vehicle_haul.lua")
 dofile(rockmech.modpath .. "/vehicle_cart.lua")
 dofile(rockmech.modpath .. "/vehicle_dozer.lua")
 dofile(rockmech.modpath .. "/vehicle_jumbo.lua")
+dofile(rockmech.modpath .. "/vehicle_support.lua")   -- 岩栓台車、噴凝土台車、鋼支保安裝台車、多功能支撐台車
 dofile(rockmech.modpath .. "/vehicle_op.lua")        -- 重機操作員開鑽機、裝藥車
 dofile(rockmech.modpath .. "/vehicle_drillrig.lua")
 dofile(rockmech.modpath .. "/vehicle_bulktruck.lua")

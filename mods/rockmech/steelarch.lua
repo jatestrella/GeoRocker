@@ -146,6 +146,13 @@ local function pick_axis(p, normal, placer)
 	return math.abs(look.x) > math.abs(look.z) and "x" or "z"
 end
 
+-- 在 p 放一格鋼拱（axis = 隧道方向 "x"／"z"）；噴凝土層留著。手放、鋼支保安裝台車（vehicle_support.lua）共用
+function rockmech.steelarch_place(p, axis)
+	local layers = core.get_item_group(core.get_node(p).name, "shotcrete_lining")
+	core.set_node(p, {name = arch_name(axis, false, math.min(layers, MAX_LAYERS))})
+	core.get_meta(p):set_string("infotext", S("Steel arch"))
+end
+
 core.register_craftitem(ITEM, {
 	description = S("Steel arch (H150)\nRight-click a rock face: places 1 m of steel arch against it. Build a full ring and it works in compression"),
 	short_description = S("Steel arch"),
@@ -160,9 +167,7 @@ core.register_craftitem(ITEM, {
 		if core.is_protected(p, name) then return itemstack end
 		local axis = pick_axis(p, vector.subtract(pointed.above, pointed.under), placer)
 		-- 放在噴凝土層上：噴凝土留著（鋼拱貼著噴凝土，之後再噴就包起來）
-		local layers = core.get_item_group(nm, "shotcrete_lining")
-		core.set_node(p, {name = arch_name(axis, false, math.min(layers, MAX_LAYERS))})
-		core.get_meta(p):set_string("infotext", S("Steel arch"))
+		rockmech.steelarch_place(p, axis)
 		if rockmech.fem_queue then rockmech.fem_queue(p, 1, false, false) end
 		if not core.is_creative_enabled(name) then itemstack:take_item() end
 		return itemstack

@@ -13,6 +13,41 @@ Gas detector=
 Ventilation fan=
 Ventilation duct=
 
+### batching.lua
+Aggregate @1 / @2 m³=
+Cement @1 / @2 t=
+Water: on the town supply ($@1/m³)=
+Water @1 / @2 m³ (pump water in, or connect a water pipe)=
+w/c @1: strength @2 MPa, cement @3 t/m³=
+Rejected (not fit for aggregate): @1 t=
+Batching plant, stopped. Right-click to view=
+Batching plant. Right-click to view=
+[Batching plant] Not fit for aggregate (soil, coal, construction waste): thrown away, disposal fee $@1 per t=
+The batching plant is gone=
+The batching plant is stopped=
+Not enough aggregate: dump crushed rock into the hopper=
+Not enough cement: right-click the silo with cement=
+Not enough money for the water=
+No water: connect a water pipe from the water supply, or pump water into the plant=
+[Batching plant] The cement silo is full=
+Batching plant   Stopped=
+Batching plant   Running=
+Start=
+Stop=
+w/c @1=
+Less water: stronger, but more cement per m³=
+Back a concrete mixer truck up to the spout and press Space to load=
+Done=
+Batching plant spout: back a concrete mixer truck up here and press Space=
+Cement silo=
+Batching tower=
+Batching plant spout=
+Cement@n1 t. Right-click a batching plant to fill its silo=
+Cement=
+Batching plant@nRight-click on flat ground to build. Dump crushed rock into the hopper, fill the silo with cement, bring water by pipe or pump; mixer trucks load at the spout=
+Batching plant=
+[Batching plant] Place it on flat ground: the 3×3 m machine, the @1×@2 m receiving hopper in front and the two towers on the sides (each 3×3 m, @3 m tall) need level ground, solid rock below and clear space above=
+
 ### beltswitch.lua
 Stopped=
 Runs when the price is at least @1=
@@ -20,7 +55,6 @@ Running=
 Conveyor control box=
 Today's @1 price @2=
 Run=
-Stop=
 By ore price=
 Run at or above $/t=
 Set price=
@@ -200,6 +234,10 @@ Diaphragm wall grab=
 Concrete mixer truck=
 Surface drill rig=
 Drill jumbo=
+Rock bolter=
+Shotcrete sprayer=
+Steel set erector=
+Multi-purpose support rig=
 Haul truck=
 Mining excavator=
 Loadout bin=
@@ -235,6 +273,8 @@ Timber post=
 Light H-beam=
 Sheet pile=
 Bentonite slurry=
+Bentonite=
+Water pipe=
 Slurry tank=
 Slurry pipe=
 Slurry outlet=
@@ -552,7 +592,6 @@ $@1/L=
 ### goldplant.lua
 Gold (1 g)=
 Tailings pile full: clear it behind the plant=
-Start=
 Feed: a conveyor belt onto the grating on top   On the grating @1 t=
 Recovery @1%   Running cost $@2/t   Reagents +$@3/t per 1% harmful impurities=
 Processed @1 t, average gold @2 g/t=
@@ -588,6 +627,7 @@ This is already sprayed to @1 layers (or the space in front of the rock face is 
 
 ### groundwater.lua
 Drain@nWater that flows into it or onto it is carried away=
+The tank it pumps into is full=
 Outlet blocked=
 Well=
 Pumping @1 m³/h=
@@ -1190,7 +1230,6 @@ Connect a slurry pipe to the valve on the blue side=
 Put in all slurry=
 Take 1 m³=
 Take 10 m³=
-Done=
 The slurry tank is full=
 Slurry tank@n40 m³ steel tank, 3 × 6 × 3 m, built in the direction you look. Connect it to a slurry outlet with slurry pipes. Right-click with slurry to fill it=
 [Slurry tank] Needs 3 × 6 m of level, clear ground (3 m high)=
@@ -1207,6 +1246,14 @@ Out of slurry: the level is dropping=
 Pumping=
 Turn the pipe=
 Slurry outlet@nThe pipe points back at you: stand at the trench edge and place it on the far side. Connect it to slurry tanks with slurry pipes; keeps the trench at the target level and pumps any excess back. Shift + right-click turns it=
+Water pipe@nConnects the town water supply to slurry tanks=
+Water supply@nLay water pipes from here to your slurry tanks=
+Water supply=
+Lay water pipes from here to your slurry tanks=
+[Slurry tank] No water: lay water pipes from the water supply in town to this tank=
+[Slurry tank] Not enough money for the water ($@1/m³)=
+[Slurry tank] Mixed @1 m³ of slurry (water $@2)=
+Bentonite@nOne bag makes 1 m³ of slurry. Right-click a slurry tank connected to the water supply=
 
 ### steelarch.lua
 Steel arch (yielded)=
@@ -1973,17 +2020,23 @@ The chute only reaches behind the truck=
 Out of chute reach (@1 m, chute @2 m)=
 The chute cannot reach that height=
 Concrete @1 / @2 m³=
+(@1 MPa)=
 Pouring (@1 m³)=
+Loading at the batching plant (@1 m³)=
 Aim the chute=
 Pour where you point=
 Move the chute=
-Order concrete=
+Order concrete / load at a batching plant=
 The truck is empty (poured @1 m³)=
 Something is in the way of the chute=
 (poured @1 m³)=
 Poured through water: the concrete segregates and will be weak (use a tremie pipe)=
+The drum is full (loaded @1 m³)=
+Moved away from the batching plant (loaded @1 m³)=
+(loaded @1 m³)=
 The drum is empty: press Space to order concrete=
 Stopped (poured @1 m³)=
+Stopped loading (@1 m³)=
 
 ### vehicle_op.lua
 Operator: @1=
@@ -1999,6 +2052,32 @@ Already on the list=
 The list is full (@1 jobs)=
 Copy, @1 at (@2, @3, @4); @5 jobs queued=
 [Operator] This vehicle's operator is waiting beside it: right-click him to send him in=
+
+### vehicle_support.lua
+Rock bolting=
+Steel sets=
+Out of rock bolts=
+Out of shotcrete=
+Out of steel arches=
+Right-click to get in; E works on the tunnel section ahead, Space chooses the job=
+Right-click to get in; E works on the tunnel section ahead, Space for settings=
+Bolt length @1 m, spacing @2 m=
+Steel set spacing @1 m=
+@1 in inventory=
+Working @1 / @2=
+Choose job=
+Settings=
+Installed @1 rock bolts=
+Sprayed @1 m² of shotcrete=
+Erected @1 m of steel arch=
+Job=
+Bolt length @1 m=
+Spacing=
+@1 m=
+Each press sprays one more layer (max @1)=
+No tunnel wall or roof to work on in the @1 m ahead=
+Nothing to bolt in the @1 m ahead (bolts go between steel arches)=
+Already done in the @1 m ahead=
 
 ### vehicle_suv.lua
 4WD SUV=
