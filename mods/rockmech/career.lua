@@ -19,6 +19,7 @@ if not cfg.career then
 		caps.groupcaps.rockmech_by_pick = {times = {[1] = 3}, uses = 0, maxlevel = 1}
 		core.override_item("", {tool_capabilities = caps})
 	end)
+	rockmech.career_npcs = {}     -- 攤主表：market、orders、research 載入時會登記（沒有經營模式就沒人用）
 	return
 end
 local S = rockmech.S
