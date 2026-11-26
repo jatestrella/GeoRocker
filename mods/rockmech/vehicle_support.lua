@@ -1,13 +1,14 @@
 -- rockmech/vehicle_support.lua
 -- 隧道支撐台車（由 vehicles.lua 載入，單機版商店才有）。底盤同鑽堡（vehicle_jumbo.lua 的 carrier）。
 -- 實務上通常分成三台，也有合成一台的多功能台車：
---   岩栓台車（rock bolter）：E 在前方斷面的頂拱、側牆自己鑽孔再插岩栓。空白鍵設定長度 2～6 m、間距 1／2 m。
---   噴凝土台車（shotcrete sprayer）：E 把前方斷面露出的岩面噴一層（最多 3 層，按幾次噴幾層）。用量同手噴：一袋 9 格。
---   鋼支保安裝台車（steel set erector）：E 在前方斷面沿岩面架整圈鋼拱（從牆腳往頂拱）。空白鍵設定間距 1／2 m。
---   多功能支撐台車：三種都會，空白鍵選工作。比三台貴：省掉在隧道裡換車的功夫。
+--   岩栓台車（rock bolter）：E 在前方斷面的頂拱、側牆自己鑽孔再插岩栓。設定長度 2～6 m、間距 1／2 m。
+--   噴凝土台車（shotcrete sprayer）：E 把前方斷面露出的岩面噴 1～3 層（設定；最多 3 層）。用量同手噴：一袋 9 格。
+--   鋼支保安裝台車（steel set erector）：E 在前方斷面沿岩面架整圈鋼拱（從牆腳往頂拱）。設定間距 1／2 m。
+--   多功能支撐台車：三種都會，設定畫面選工作。比三台貴：省掉在隧道裡換車的功夫。
+-- 空白鍵：設定畫面＝安裝設定＋車上材料（V.store_rows：從背包裝滿／卸回背包，收車時還給玩家）。
 -- 前方斷面：車頭外第 2～4 m 三個斷面，橫向車身中心線左右各 SIDE m、高度從地面那層往上 HIGH m；
 -- 從車頭正前方的空間往外找（同一個開挖空間），貼著岩石的頂拱、側牆格（地板、工作面不算）。
--- 材料從駕駛的物品欄扣（創造模式不扣）：岩栓、噴凝土、鋼拱都是五金行、大地工程顧問的商品。
+-- 材料放在車上（CAP）：岩栓、噴凝土、鋼拱都是五金行、大地工程顧問的商品，先買好再裝上車。
 -- 手做照舊（鑿岩機鑽孔再一支一支插、噴凝土一次 3×3、鋼拱一格一格放）：機器省事才有市場。
 
 local S = rockmech.S
@@ -21,6 +22,8 @@ local BOLT_ITEM, SHOT, ARCH = "rockmech:rock_bolt", "rockmech:shotcrete", "rockm
 local TIME = {bolt = 1.5, arch = 0.3, spray = 0.07}   -- 一支岩栓（鑽孔＋插）、一格鋼拱、一格噴凝土（一袋 9 格約 0.6 s）
 local ITEM_OF = {bolt = BOLT_ITEM, spray = SHOT, arch = ARCH}
 local SPRAY_PER_BAG = 9
+local CAP = {bolt = 100, arch = 100, spray = 30}     -- 車上最多載幾支岩栓、幾支鋼拱、幾袋噴凝土
+local LAYERS = 3                                     -- 噴凝土最多 3 層（groundsupport.lua）
 
 local BOOM_BASE = {x = 0, y = 0.3, z = 1.2}       -- 作業臂根部（車身座標）
 local HEAD_REST = {x = 0, y = 0.2, z = 2.2}       -- 收起時臂端
@@ -84,6 +87,12 @@ local function section_cells(pos, s, half)
 end
 rockmech.vehicle_support_cells = section_cells    -- 測試用
 
+-- 設定（各工作分開，多功能台車換工作不會洗掉）
+local function blen(self) return self.blen or 4 end      -- 岩栓長度
+local function bsp(self) return self.bsp or 2 end        -- 岩栓間距
+local function asp(self) return self.asp or 1 end        -- 鋼拱間距
+local function slay(self) return self.slay or 1 end      -- 噴凝土一次噴幾層
+
 -- 間距 2 m：沿隧道、斷面內都隔一格
 local function on_grid(c, spacing) return spacing == 1 or (c.t % 2 == 0 and c.c % 2 == 0) end
 local function on_ring(c, spacing) return spacing == 1 or c.t % 2 == 0 end
@@ -105,12 +114,12 @@ local function task_list(self, mode, pos, s, half)
 		for _, c in ipairs(cells) do
 			local n = core.get_node(c.p)
 			local under = vector.add(c.p, c.dir)
-			if on_grid(c, self.spacing or 2) and not is_arch(n.name) then        -- 岩栓打在兩支鋼拱之間
+			if on_grid(c, bsp(self)) and not is_arch(n.name) then        -- 岩栓打在兩支鋼拱之間
 				local hk = rockmech.hole_kind(n.name)
 				if hk == "rockmech:drill_hole" then
 					list[#list + 1] = {kind = "bolt", p = c.p, hole = true}
 				elseif rockmech.air_like(n.name) and rockmech.lith_of_node[core.get_node(under).name] then
-					local depth = rock_run(under, c.dir, self.len or 4)
+					local depth = rock_run(under, c.dir, blen(self))
 					list[#list + 1] = {kind = "bolt", p = c.p, under = under, depth = depth}
 				end
 			end
@@ -119,42 +128,31 @@ local function task_list(self, mode, pos, s, half)
 		local axis = s.x ~= 0 and "x" or "z"
 		for _, c in ipairs(cells) do
 			local n = core.get_node(c.p).name
-			if on_ring(c, self.spacing or 1) and (n == "air" or core.get_item_group(n, "shotcrete_lining") > 0) then
+			if on_ring(c, asp(self)) and (n == "air" or core.get_item_group(n, "shotcrete_lining") > 0) then
 				list[#list + 1] = {kind = "arch", p = c.p, axis = axis}
 			end
 		end
 	else
-		for _, c in ipairs(cells) do list[#list + 1] = {kind = "spray", p = c.p} end
+		for _ = 1, slay(self) do      -- 一層一層噴：整個斷面噴完一層再噴下一層
+			for _, c in ipairs(cells) do list[#list + 1] = {kind = "spray", p = c.p} end
+		end
 	end
 	return list
 end
 
--- 駕駛物品欄裡有幾個 item（創造模式不限）
-local function stock(d, item)
-	if not d then return 0 end
-	if core.is_creative_enabled(d:get_player_name()) then return math.huge end
-	local n = 0
-	for _, st in ipairs(d:get_inventory():get_list("main") or {}) do
-		if st:get_name() == item then n = n + st:get_count() end
-	end
-	return n
-end
-local function take(d, item)
-	if core.is_creative_enabled(d:get_player_name()) then return end
-	d:get_inventory():remove_item("main", ItemStack(item))
-end
-
 local MODE_NAME = {bolt = S("Rock bolting"), spray = S("Shotcrete"), arch = S("Steel sets")}
-local OUT_OF = {bolt = S("Out of rock bolts"), spray = S("Out of shotcrete"), arch = S("Out of steel arches")}
+local OUT_OF = {bolt = S("Out of rock bolts (Space to load)"), spray = S("Out of shotcrete (Space to load)"),
+	arch = S("Out of steel arches (Space to load)")}
+local STORE = {bolt = {BOLT_ITEM, CAP.bolt, S("Rock bolts")}, arch = {ARCH, CAP.arch, S("Steel arches")},
+	spray = {SHOT, CAP.spray, S("Shotcrete (bags)")}}
 
 -- 一台支撐台車：kind、名稱、顏色、會做的工作（第一個是預設）、價格寫在 config.lua 的商店
 local function make(kind, desc, color, modes)
-	local def = {desc = desc, color = color, cap = 0}
+	local def = {desc = desc, color = color, cap = 0, store = {}}
 	local multi = #modes > 1
 	local can = {}
-	for _, m in ipairs(modes) do can[m] = true end
-	def.item_desc = multi and S("Right-click to get in; E works on the tunnel section ahead, Space chooses the job")
-		or S("Right-click to get in; E works on the tunnel section ahead, Space for settings")
+	for _, m in ipairs(modes) do can[m] = true; def.store[#def.store + 1] = STORE[m] end
+	def.item_desc = S("Right-click to get in; E works on the tunnel section ahead, Space for settings and materials")
 	do   -- 圖示：輪式車身、往前上方伸的作業臂、臂端的工具
 		local r = {}
 		r[#r + 1] = {2, 17, 19, 7, color}; r[#r + 1] = {2, 10, 8, 7, color}; r[#r + 1] = {3, 11, 6, 4, "#2a2a2a"}
@@ -185,21 +183,20 @@ local function make(kind, desc, color, modes)
 
 	function def.hud(self)
 		local m = mode_of(self)
-		local d = self.driver and core.get_player_by_name(self.driver)
 		local s = "\n" .. (multi and (MODE_NAME[m] .. "  ") or "")
-		if m == "bolt" then s = s .. S("Bolt length @1 m, spacing @2 m", ("%d"):format(self.len or 4), ("%d"):format(self.spacing or 2))
-		elseif m == "arch" then s = s .. S("Steel set spacing @1 m", ("%d"):format(self.spacing or 1)) end
-		local n = stock(d, ITEM_OF[m])
-		s = s .. "  " .. (n == math.huge and S("(not used up in creative mode)") or S("@1 in inventory", ("%d"):format(n)))
+		if m == "bolt" then s = s .. S("Bolt length @1 m, spacing @2 m", ("%d"):format(blen(self)), ("%d"):format(bsp(self)))
+		elseif m == "arch" then s = s .. S("Steel set spacing @1 m", ("%d"):format(asp(self)))
+		else s = s .. S("@1 layer(s) per pass", ("%d"):format(slay(self))) end
+		s = s .. "  " .. S("On board @1 / @2", ("%d"):format(V.store_count(self, ITEM_OF[m])), ("%d"):format(CAP[m]))
 		local w = self.work
 		if w then s = s .. "  " .. S("Working @1 / @2", ("%d"):format(w.i - 1), ("%d"):format(#w.list)) end
 		return s
 	end
 	function def.keys(self)
-		return {{"E", MODE_NAME[mode_of(self)], on = self.work ~= nil}, {S("Space"), multi and S("Choose job") or S("Settings")}}
+		return {{"E", MODE_NAME[mode_of(self)], on = self.work ~= nil}, {S("Space"), S("Settings, materials")}}
 	end
-	function def.on_load(self, data) self.mode, self.len, self.spacing = data.mode, data.len, data.spacing end
-	function def.on_save(self, data) data.mode, data.len, data.spacing = self.mode, self.len, self.spacing end
+	function def.on_load(self, data) self.mode, self.blen, self.bsp, self.asp, self.slay = data.mode, data.blen, data.bsp, data.asp, data.slay end
+	function def.on_save(self, data) data.mode, data.blen, data.bsp, data.asp, data.slay = self.mode, self.blen, self.bsp, self.asp, self.slay end
 	function def.on_spawn(self) place_head(self, HEAD_REST) end
 	carrier_move(def, FRONT, function(self) return self.work ~= nil end)
 
@@ -220,8 +217,7 @@ local function make(kind, desc, color, modes)
 	function def.step(self, ctx)
 		local w = self.work
 		if not w then return end
-		local d = ctx.d
-		if not d then return end           -- 沒人開：停著等
+		if not ctx.d then return end       -- 沒人開：停著等
 		local tk = w.list[w.i]
 		if not tk then return finish(self, DONE[w.mode](w.done)) end
 		if w.t == 0 then
@@ -235,13 +231,12 @@ local function make(kind, desc, color, modes)
 		local item = ITEM_OF[w.mode]
 		if w.mode == "spray" then
 			if w.credit <= 0 then
-				if stock(d, item) <= 0 then return finish(self, OUT_OF.spray .. " (" .. DONE.spray(w.done) .. ")") end
-				take(d, item)
+				if V.store_take(self, item, 1) < 1 then return finish(self, OUT_OF.spray .. "  " .. DONE.spray(w.done)) end
 				w.credit = SPRAY_PER_BAG
 			end
 			if rockmech.spray_cell(tk.p) then w.credit = w.credit - 1; w.done = w.done + 1 end
 		else
-			if stock(d, item) <= 0 then return finish(self, OUT_OF[w.mode] .. " (" .. DONE[w.mode](w.done) .. ")") end
+			if V.store_count(self, item) < 1 then return finish(self, OUT_OF[w.mode] .. "  " .. DONE[w.mode](w.done)) end
 			local ok = false
 			if w.mode == "bolt" then
 				if tk.hole then ok = rockmech.install_bolt(tk.p)
@@ -256,43 +251,52 @@ local function make(kind, desc, color, modes)
 					ok = true
 				end
 			end
-			if ok then take(d, item); w.done = w.done + 1 end
+			if ok then V.store_take(self, item, 1); w.done = w.done + 1 end
 		end
 		if w.i % 4 == 0 then update_hud(self) end
 	end
 
-	-- 設定畫面
+	-- 設定畫面：上面是安裝設定（多功能台車三種都列出來，先選工作），下面是車上材料
 	local editing = {}
 	local FORM = "rockmech:support_" .. kind
+	local E = core.formspec_escape
+	local function row(fs, y, label, btns)
+		fs[#fs + 1] = ("label[0.5,%.2f;%s]"):format(y + 0.35, E(label))
+		fs[#fs + 1] = btns
+	end
 	local function formspec(self)
 		local m = mode_of(self)
-		local fs = {"formspec_version[6]size[8.5,5.2]"}
-		local y = 0.5
+		local fs = {}
+		local y = 0.4
 		if multi then
-			fs[#fs + 1] = ("label[0.5,%.2f;%s]"):format(y + 0.1, core.formspec_escape(S("Job")))
 			for i, mm in ipairs(modes) do
-				fs[#fs + 1] = ("button[%.2f,%.2f;2.4,0.8;m_%s;%s]"):format(0.5 + (i - 1) * 2.55, y + 0.4, mm,
-					core.formspec_escape((mm == m and "▶ " or "") .. MODE_NAME[mm]))
+				fs[#fs + 1] = ("button[%.2f,%.2f;2.4,0.8;m_%s;%s]"):format(0.5 + (i - 1) * 2.55, y, mm, E((mm == m and "▶ " or "") .. MODE_NAME[mm]))
 			end
-			y = y + 1.6
+			y = y + 1.1
 		end
-		if m == "bolt" then
-			fs[#fs + 1] = ("label[0.5,%.2f;%s]button[4.2,%.2f;0.8,0.7;l_dec;−]button[5.1,%.2f;0.8,0.7;l_inc;+]"):format(y + 0.35,
-				core.formspec_escape(S("Bolt length @1 m", ("%d"):format(self.len or 4))), y, y)
-			y = y + 0.9
+		for _, mm in ipairs(modes) do
+			if multi then
+				fs[#fs + 1] = ("label[0.3,%.2f;%s]"):format(y + 0.2, E(MODE_NAME[mm])); y = y + 0.5
+			end
+			if mm == "bolt" then
+				row(fs, y, S("Bolt length @1 m", ("%d"):format(blen(self))), ("button[4.5,%.2f;0.8,0.7;l_dec;−]button[5.4,%.2f;0.8,0.7;l_inc;+]"):format(y, y))
+				y = y + 0.8
+				row(fs, y, S("Spacing"), ("button[4.5,%.2f;1.7,0.7;bsp;%s]"):format(y, E(S("@1 m", ("%d"):format(bsp(self))))))
+				y = y + 0.8
+			elseif mm == "arch" then
+				row(fs, y, S("Spacing"), ("button[4.5,%.2f;1.7,0.7;asp;%s]"):format(y, E(S("@1 m", ("%d"):format(asp(self))))))
+				y = y + 0.8
+			else
+				row(fs, y, S("Layers per pass"), ("button[4.5,%.2f;0.8,0.7;s_dec;−]button[5.4,%.2f;0.8,0.7;s_inc;+]label[6.5,%.2f;%d]"):format(y, y, y + 0.35, slay(self)))
+				y = y + 0.8
+			end
 		end
-		if m == "bolt" or m == "arch" then
-			local sp = self.spacing or (m == "bolt" and 2 or 1)
-			fs[#fs + 1] = ("label[0.5,%.2f;%s]button[4.2,%.2f;1.7,0.7;sp;%s]"):format(y + 0.35,
-				core.formspec_escape(S("Spacing")), y, core.formspec_escape(S("@1 m", ("%d"):format(sp))))
-			y = y + 0.9
-		end
-		if m == "spray" then
-			fs[#fs + 1] = ("label[0.5,%.2f;%s]"):format(y + 0.35, core.formspec_escape(S("Each press sprays one more layer (max @1)", ("%d"):format(rockmech.SHOTCRETE_LAYERS or 3))))
-			y = y + 0.9
-		end
-		fs[#fs + 1] = ("button_exit[5.8,%.2f;2.2,0.8;ok;%s]"):format(math.max(y + 0.2, 4.1), core.formspec_escape(S("Done")))
-		return table.concat(fs)
+		fs[#fs + 1] = ("box[0.3,%.2f;7.6,0.03;#888888]label[0.3,%.2f;%s]"):format(y + 0.15, y + 0.5, E(S("Materials on board")))
+		y = y + 0.9
+		fs[#fs + 1] = V.store_rows(self, y)
+		y = y + #modes * 1.2
+		fs[#fs + 1] = ("button_exit[5.8,%.2f;2.2,0.8;ok;%s]"):format(y + 0.1, E(S("Done")))
+		return ("formspec_version[6]size[8.5,%.2f]"):format(y + 1.3) .. table.concat(fs)
 	end
 	core.register_on_player_receive_fields(function(player, formname, fields)
 		if formname ~= FORM then return end
@@ -300,12 +304,15 @@ local function make(kind, desc, color, modes)
 		local self = editing[name]
 		if not self or not self.object:get_pos() then return true end
 		for _, mm in ipairs(modes) do
-			if fields["m_" .. mm] and mm ~= self.mode then self.mode = mm; self.spacing = nil end
+			if fields["m_" .. mm] then self.mode = mm end
 		end
-		local m = mode_of(self)
-		if fields.l_dec then self.len = math.max(2, (self.len or 4) - 1) end
-		if fields.l_inc then self.len = math.min(6, (self.len or 4) + 1) end
-		if fields.sp then self.spacing = (self.spacing or (m == "bolt" and 2 or 1)) == 1 and 2 or 1 end
+		if fields.l_dec then self.blen = math.max(2, blen(self) - 1) end
+		if fields.l_inc then self.blen = math.min(6, blen(self) + 1) end
+		if fields.bsp then self.bsp = 3 - bsp(self) end
+		if fields.asp then self.asp = 3 - asp(self) end
+		if fields.s_dec then self.slay = math.max(1, slay(self) - 1) end
+		if fields.s_inc then self.slay = math.min(LAYERS, slay(self) + 1) end
+		if not self.work then V.store_fields(self, player, fields) end   -- 作業中不能裝卸
 		if fields.quit or fields.ok then editing[name] = nil
 		else core.show_formspec(name, FORM, formspec(self)) end
 		update_hud(self)
@@ -323,7 +330,7 @@ local function make(kind, desc, color, modes)
 			elseif #list == 0 then
 				self.msg = m == "bolt" and S("Nothing to bolt in the @1 m ahead (bolts go between steel arches)", ("%d"):format(D1 - D0 + 1))
 					or S("Already done in the @1 m ahead", ("%d"):format(D1 - D0 + 1))
-			elseif stock(d, ITEM_OF[m]) <= 0 then
+			elseif V.store_count(self, ITEM_OF[m]) < 1 then
 				self.msg = OUT_OF[m]
 			else
 				local c = list[math.ceil(#list / 2)].p
@@ -331,7 +338,7 @@ local function make(kind, desc, color, modes)
 				self.msg = nil
 			end
 			update_hud(self)
-		elseif ctrl.jump and d and not self.work then
+		elseif ctrl.jump and d then
 			self.t_act = 0.5
 			editing[d:get_player_name()] = self
 			core.show_formspec(d:get_player_name(), FORM, formspec(self))

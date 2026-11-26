@@ -1435,11 +1435,12 @@ function V.store_take(self, item, n)
 	return n
 end
 local store_open = {}
-local function store_formspec(self)
+-- 存放那幾列（formspec 片段，每列 1.2 高、寬 8.2），從 y0 開始。支撐台車（vehicle_support.lua）放進自己的設定畫面
+function V.store_rows(self, y0)
 	local list = TYPES[self.vkind].store
-	local fs = {("formspec_version[6]size[8.2,%.1f]"):format(1.5 + #list * 1.2)}
+	local fs = {}
 	for i, s in ipairs(list) do
-		local y = 0.4 + (i - 1) * 1.2
+		local y = y0 + (i - 1) * 1.2
 		if s.buy then
 			local room = s[2] - V.store_count(self, s[1])
 			fs[#fs + 1] = ("item_image[0.4,%.1f;0.9,0.9;%s]label[1.5,%.2f;%s  %d / %d]button[4.5,%.1f;3.3,0.9;fill_%d;%s]")
@@ -1451,8 +1452,12 @@ local function store_formspec(self)
 				core.formspec_escape(S("Fill")), y, i, core.formspec_escape(S("Unload")))
 		end
 	end
-	fs[#fs + 1] = ("button_exit[5.8,%.1f;2,0.7;ok;%s]"):format(0.5 + #list * 1.2, core.formspec_escape(S("Done")))
 	return table.concat(fs)
+end
+local function store_formspec(self)
+	local list = TYPES[self.vkind].store
+	return ("formspec_version[6]size[8.2,%.1f]"):format(1.5 + #list * 1.2) .. V.store_rows(self, 0.4)
+		.. ("button_exit[5.8,%.1f;2,0.7;ok;%s]"):format(0.5 + #list * 1.2, core.formspec_escape(S("Done")))
 end
 function V.open_store(self, player)
 	store_open[player:get_player_name()] = self
@@ -1463,6 +1468,15 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 	local name = player:get_player_name()
 	local self = store_open[name]
 	if not self or not self.object:get_pos() then return true end
+	V.store_fields(self, player, fields)
+	if fields.quit or fields.ok then store_open[name] = nil
+	else core.show_formspec(name, "rockmech:store", store_formspec(self)) end
+	update_hud(self)
+	return true
+end)
+-- 存放畫面的按鈕（fill_i 裝滿／叫料、out_i 卸下）
+function V.store_fields(self, player, fields)
+	local name = player:get_player_name()
 	local inv = player:get_inventory()
 	for i, s in ipairs(TYPES[self.vkind].store) do
 		local item, cap = s[1], s[2]
@@ -1488,11 +1502,7 @@ core.register_on_player_receive_fields(function(player, formname, fields)
 			self.store[item] = inv:add_item("main", V.store_stack(self, item, have)):get_count()
 		end
 	end
-	if fields.quit or fields.ok then store_open[name] = nil
-	else core.show_formspec(name, "rockmech:store", store_formspec(self)) end
-	update_hud(self)
-	return true
-end)
+end
 
 -- 駕駛的姿勢（有 player_api 時）：上車坐著、下車恢復
 local function set_seated(player, on, pose)
